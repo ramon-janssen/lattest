@@ -1,0 +1,49 @@
+
+unit test example for automata
+
+examples
+- examples that use non-determinism / conjunction
+
+resolve compiler warnings
+
+Add adapters
+- stdin/stdout
+- socket
+
+update Simulator.hs to use new style automata
+
+alphabets
+- internal
+- input failures
+-- also in adapters
+- timed
+- symbolic
+-- use generics to infer random test selection from testing (beware of non-termination with recursive data structures)
+--- https://github.com/lysxia/generic-random
+
+error handling in adapter
+- some form of exceptions that propagate to test result as "inconclusive"
+-- documentation of System.IO.Streams.Attoparsec.parserToInputStream: "Upon a parse error, parserToInputStream will throw a ParseException."
+
+refinement checking
+
+DSL
+- grammar
+- parsers
+- examples
+
+test selection
+- n-complete
+- test purposes
+- fancy combinators to alternate/interleave different selectors/coverage
+-- coverage A before coverage B
+-- selectors that start with basic tests and then continue with more detailed coverage (e.g. branch coverage -> pairwise coverage)
+
+symbolic specs
+- environments, variable mappings
+- SMT-solving
+- symbolic execution
+-- refinement checking
+
+timed things
+- ???

@@ -1,0 +1,314 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Adapter.Adapter</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-2"></span><span class="annot"><span class="hs-comment">-- * Definition</span></span><span>
+</span><span id="line-3"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier">Adapter</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-4"></span><span class="annot"><span class="hs-comment">-- * Interaction </span></span><span>
+</span><span id="line-5"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#send"><span class="hs-identifier">send</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-6"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#observe"><span class="hs-identifier">observe</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-7"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#tryObserve"><span class="hs-identifier">tryObserve</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-8"></span><span class="annot"><span class="hs-comment">-- * Transformations</span></span><span>
+</span><span id="line-9"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#map"><span class="hs-identifier">map</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-10"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#mapInputCommands"><span class="hs-identifier">mapInputCommands</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-11"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#mapActionsFromSut"><span class="hs-identifier">mapActionsFromSut</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-12"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#parseActionsFromSut"><span class="hs-identifier">parseActionsFromSut</span></a></span><span>
+</span><span id="line-13"></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">map</span></span><span class="hs-special">)</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-comment">--import Lattest.Util.ReadynessInputStream (ReadynessInputStream(..), duplicate, forkEagerInputStream)</span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">void</span></span><span class="hs-special">)</span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Extra</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(||^)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent.STM.TQueue</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">newTQueueIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeTQueue</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">readTQueue</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">isEmptyTQueue</span></span><span class="hs-special">)</span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent.STM.TVar</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">TVar</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">newTVarIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeTVar</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">readTVar</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Attoparsec.ByteString</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Parser</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ByteString</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.STM</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">atomically</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">retry</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">check</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO.Streams</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">InputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">OutputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">makeInputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">makeOutputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">connect</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">System.IO.Streams</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Streams</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">write</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeTo</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html"><span class="hs-identifier">System.IO.Streams.Synchronized</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Streams</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier">read</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html"><span class="hs-identifier">System.IO.Streams.Synchronized</span></a></span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier">TInputStream</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#makeTInputStream"><span class="hs-identifier">makeTInputStream</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromInputStreamBuffered"><span class="hs-identifier">fromInputStreamBuffered</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#duplicate"><span class="hs-identifier">duplicate</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryReadIO"><span class="hs-identifier">tryReadIO</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryReadIO%27"><span class="hs-identifier">tryReadIO'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromBuffer"><span class="hs-identifier">fromBuffer</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#mergeBufferedWith"><span class="hs-identifier">mergeBufferedWith</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#mapUnbuffered"><span class="hs-identifier">mapUnbuffered</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromTMVar"><span class="hs-identifier">fromTMVar</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#readAll"><span class="hs-identifier">readAll</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier">hasInput</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier">Streamed</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html"><span class="hs-identifier">System.IO.Streams.Synchronized</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Streams</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#map"><span class="hs-identifier">map</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.Attoparsec.html"><span class="hs-identifier">System.IO.Streams.Synchronized.Attoparsec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.Attoparsec.html#parserToInputStream"><span class="hs-identifier">parserToInputStream</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO.Streams.Combinators</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">contramap</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="annot"><span class="hs-comment">-- | An adapter to a (usually external) system. Uses two channels for interaction: one to send input commands, and one to receive outputs.</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">data</span><span> </span><span id="Adapter"><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-var">Adapter</span></a></span></span><span> </span><span id="local-6989586621679101010"><span class="annot"><a href="#local-6989586621679101010"><span class="hs-identifier hs-type">act</span></a></span></span><span> </span><span id="local-6989586621679101011"><span class="annot"><a href="#local-6989586621679101011"><span class="hs-identifier hs-type">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Adapter"><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-var">Adapter</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-36"></span><span>    </span><span id="inputCommandsToSut"><span class="annot"><span class="annottext">forall act i. Adapter act i -&gt; OutputStream i
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var hs-var">inputCommandsToSut</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">OutputStream</span></span><span> </span><span class="annot"><a href="#local-6989586621679101011"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-comment">-- ^ Channel for sending input commands.</span></span><span>
+</span><span id="line-37"></span><span>    </span><span id="actionsFromSut"><span class="annot"><span class="annottext">forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var hs-var">actionsFromSut</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101010"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-comment">-- ^ Channel for receiving outputs.</span></span><span>
+</span><span id="line-38"></span><span>    </span><span>
+</span><span id="line-39"></span><span>    </span><span class="hs-comment">-- TODO should calling close somehow also automatically send a Nothing to the inputCommandsToSut?</span><span>
+</span><span id="line-40"></span><span>    </span><span id="close"><span class="annot"><span class="annottext">forall act i. Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var hs-var">close</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-comment">-- ^ Close the (channels of this) adapter.</span></span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-comment">{-instance AbstractAdapter BlockingAdapter where
+    inputCommandsToSut = blockingInputCommandsToSut
+    actionsFromSut = blockingActionsFromSut
+    unblockedActionsFromSut adap = do
+        unblockedActions &lt;- forkEagerInputStream $ blockingActionsFromSut adap
+        return $ Adapter {
+            readyInputCommandsToSut = blockingInputCommandsToSut adap,
+            readyActionsFromSut = unblockedActions,
+            readyClose = close adap
+        }
+    close = blockingClose
+-}</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="annot"><span class="hs-comment">{-|
+    Try to observe, without blocking, with three possible outcomes:
+
+    * An observation is made,
+    * no observation was ready, so no observation was made but another attempt may make an observation,
+    * The stream has closed, and any further attempts will give the same result.
+-}</span></span><span>
+</span><span id="line-63"></span><span id="local-6989586621679101021"><span id="local-6989586621679101022"><span class="annot"><a href="Lattest.Adapter.Adapter.html#tryObserve"><span class="hs-identifier hs-type">tryObserve</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101021"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101022"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier hs-type">Streamed</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101021"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-64"></span><span id="tryObserve"><span class="annot"><span class="annottext">tryObserve :: forall act i. Adapter act i -&gt; IO (Streamed act)
+</span><a href="Lattest.Adapter.Adapter.html#tryObserve"><span class="hs-identifier hs-var hs-var">tryObserve</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream act -&gt; IO (Streamed act)
+forall a. TInputStream a -&gt; IO (Streamed a)
+</span><a href="System.IO.Streams.Synchronized.html#tryReadIO"><span class="hs-identifier hs-var">tryReadIO</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream act -&gt; IO (Streamed act))
+-&gt; (Adapter act i -&gt; TInputStream act)
+-&gt; Adapter act i
+-&gt; IO (Streamed act)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; TInputStream act
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span id="local-6989586621679101030"><span id="local-6989586621679101031"><span class="annot"><a href="Lattest.Adapter.Adapter.html#tryObserve%27"><span class="hs-identifier hs-type">tryObserve'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101030"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101031"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679101030"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-67"></span><span id="tryObserve%27"><span class="annot"><span class="annottext">tryObserve' :: forall act i. Adapter act i -&gt; IO (Maybe act)
+</span><a href="Lattest.Adapter.Adapter.html#tryObserve%27"><span class="hs-identifier hs-var hs-var">tryObserve'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream act -&gt; IO (Maybe act)
+forall a. TInputStream a -&gt; IO (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tryReadIO%27"><span class="hs-identifier hs-var">tryReadIO'</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream act -&gt; IO (Maybe act))
+-&gt; (Adapter act i -&gt; TInputStream act)
+-&gt; Adapter act i
+-&gt; IO (Maybe act)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; TInputStream act
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="annot"><span class="hs-comment">-- | Send an input to the adapter.</span></span><span>
+</span><span id="line-70"></span><span id="local-6989586621679101035"><span id="local-6989586621679101036"><span class="annot"><a href="Lattest.Adapter.Adapter.html#send"><span class="hs-identifier hs-type">send</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101035"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101036"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101035"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-71"></span><span id="send"><span class="annot"><span class="annottext">send :: forall i act. i -&gt; Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#send"><span class="hs-identifier hs-var hs-var">send</span></a></span></span><span> </span><span id="local-6989586621679101138"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101138"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span id="local-6989586621679101139"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101139"><span class="hs-identifier hs-var">adap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe i -&gt; OutputStream i -&gt; IO ()
+forall a. Maybe a -&gt; OutputStream a -&gt; IO ()
+</span><span class="hs-identifier hs-var">Streams.write</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">i -&gt; Maybe i
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101138"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Adapter act i -&gt; OutputStream i
+forall act i. Adapter act i -&gt; OutputStream i
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101139"><span class="hs-identifier hs-var">adap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span id="local-6989586621679101041"><span id="local-6989586621679101042"><span class="annot"><a href="Lattest.Adapter.Adapter.html#sendMaybe"><span class="hs-identifier hs-type">sendMaybe</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679101041"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101042"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101041"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-74"></span><span id="sendMaybe"><span class="annot"><span class="annottext">sendMaybe :: forall i act. Maybe i -&gt; Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#sendMaybe"><span class="hs-identifier hs-var hs-var">sendMaybe</span></a></span></span><span> </span><span class="annot"><span class="annottext">Maybe i
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span id="local-6989586621679101141"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101141"><span class="hs-identifier hs-var">adap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; IO ()
+forall act i. Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101141"><span class="hs-identifier hs-var">adap</span></a></span><span> </span><span class="hs-comment">-- TODO does this close adaps too eagerly?</span><span>
+</span><span id="line-75"></span><span class="annot"><a href="Lattest.Adapter.Adapter.html#sendMaybe"><span class="hs-identifier hs-var">sendMaybe</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679101142"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101142"><span class="hs-identifier hs-var">i</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679101143"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101143"><span class="hs-identifier hs-var">adap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">i -&gt; Adapter act i -&gt; IO ()
+forall i act. i -&gt; Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#send"><span class="hs-identifier hs-var">send</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101142"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101143"><span class="hs-identifier hs-var">adap</span></a></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="annot"><span class="hs-comment">{-|
+    Observe in a blocking manner, with two possible outcomes:
+
+    * An observation is made,
+    * The stream has closed, and any further attempts will give the same result.
+-}</span></span><span>
+</span><span id="line-83"></span><span id="local-6989586621679101144"><span id="local-6989586621679101145"><span class="annot"><a href="Lattest.Adapter.Adapter.html#observe"><span class="hs-identifier hs-type">observe</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101144"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101145"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679101144"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-comment">-- TODO get rid of the maybe</span><span>
+</span><span id="line-84"></span><span id="observe"><span class="annot"><span class="annottext">observe :: forall act i. Adapter act i -&gt; IO (Maybe act)
+</span><a href="Lattest.Adapter.Adapter.html#observe"><span class="hs-identifier hs-var hs-var">observe</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">STM (Maybe act) -&gt; IO (Maybe act)
+forall a. STM a -&gt; IO a
+</span><span class="hs-identifier hs-var">atomically</span></span><span> </span><span class="annot"><span class="annottext">(STM (Maybe act) -&gt; IO (Maybe act))
+-&gt; (Adapter act i -&gt; STM (Maybe act))
+-&gt; Adapter act i
+-&gt; IO (Maybe act)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TInputStream act -&gt; STM (Maybe act)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var">Streams.read</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream act -&gt; STM (Maybe act))
+-&gt; (Adapter act i -&gt; TInputStream act)
+-&gt; Adapter act i
+-&gt; STM (Maybe act)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; TInputStream act
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="hs-comment">--------------------</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- transformations --</span><span>
+</span><span id="line-88"></span><span class="hs-comment">---------------------</span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span class="annot"><span class="hs-comment">-- | Map a function over the inputs sent to the adapter.</span></span><span>
+</span><span id="line-91"></span><span id="local-6989586621679101050"><span id="local-6989586621679101051"><span id="local-6989586621679101052"><span class="annot"><a href="Lattest.Adapter.Adapter.html#mapInputCommands"><span class="hs-identifier hs-type">mapInputCommands</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101050"><span class="hs-identifier hs-type">i'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101051"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101052"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101051"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101052"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101050"><span class="hs-identifier hs-type">i'</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-92"></span><span id="mapInputCommands"><span class="annot"><span class="annottext">mapInputCommands :: forall i' i act. (i' -&gt; i) -&gt; Adapter act i -&gt; IO (Adapter act i')
+</span><a href="Lattest.Adapter.Adapter.html#mapInputCommands"><span class="hs-identifier hs-var hs-var">mapInputCommands</span></a></span></span><span> </span><span id="local-6989586621679101149"><span class="annot"><span class="annottext">i' -&gt; i
+</span><a href="#local-6989586621679101149"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679101150"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101150"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-93"></span><span>    </span><span id="local-6989586621679101151"><span class="annot"><span class="annottext">OutputStream i'
+</span><a href="#local-6989586621679101151"><span class="hs-identifier hs-var">inputCommandsToSut'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(i' -&gt; i) -&gt; OutputStream i -&gt; IO (OutputStream i')
+forall a b. (a -&gt; b) -&gt; OutputStream b -&gt; IO (OutputStream a)
+</span><span class="hs-identifier hs-var">contramap</span></span><span> </span><span class="annot"><span class="annottext">i' -&gt; i
+</span><a href="#local-6989586621679101149"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(OutputStream i -&gt; IO (OutputStream i'))
+-&gt; OutputStream i -&gt; IO (OutputStream i')
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; OutputStream i
+forall act i. Adapter act i -&gt; OutputStream i
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101150"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-94"></span><span>    </span><span class="annot"><span class="annottext">Adapter act i' -&gt; IO (Adapter act i')
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Adapter act i' -&gt; IO (Adapter act i'))
+-&gt; Adapter act i' -&gt; IO (Adapter act i')
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-95"></span><span>        </span><span class="annot"><span class="annottext">inputCommandsToSut :: OutputStream i'
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">OutputStream i'
+</span><a href="#local-6989586621679101151"><span class="hs-identifier hs-var">inputCommandsToSut'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-96"></span><span>        </span><span class="annot"><span class="annottext">actionsFromSut :: TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; TInputStream act
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101150"><span class="hs-identifier hs-var">adapter</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-97"></span><span>        </span><span class="annot"><span class="annottext">close :: IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; IO ()
+forall act i. Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101150"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-98"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="annot"><span class="hs-comment">-- | Map a function over the outputs received from the adapter.</span></span><span>
+</span><span id="line-101"></span><span id="local-6989586621679101063"><span id="local-6989586621679101064"><span id="local-6989586621679101065"><span class="annot"><a href="Lattest.Adapter.Adapter.html#mapActionsFromSut"><span class="hs-identifier hs-type">mapActionsFromSut</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101063"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101064"><span class="hs-identifier hs-type">act'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101063"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101065"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101064"><span class="hs-identifier hs-type">act'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101065"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-102"></span><span id="mapActionsFromSut"><span class="annot"><span class="annottext">mapActionsFromSut :: forall act act' i.
+(act -&gt; act') -&gt; Adapter act i -&gt; IO (Adapter act' i)
+</span><a href="Lattest.Adapter.Adapter.html#mapActionsFromSut"><span class="hs-identifier hs-var hs-var">mapActionsFromSut</span></a></span></span><span> </span><span id="local-6989586621679101154"><span class="annot"><span class="annottext">act -&gt; act'
+</span><a href="#local-6989586621679101154"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679101155"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101155"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-103"></span><span>    </span><span id="local-6989586621679101156"><span class="annot"><span class="annottext">TInputStream act'
+</span><a href="#local-6989586621679101156"><span class="hs-identifier hs-var">actionsFromSut'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(act -&gt; act') -&gt; TInputStream act -&gt; IO (TInputStream act')
+forall a b. (a -&gt; b) -&gt; TInputStream a -&gt; IO (TInputStream b)
+</span><a href="System.IO.Streams.Synchronized.html#map"><span class="hs-identifier hs-var">Streams.map</span></a></span><span> </span><span class="annot"><span class="annottext">act -&gt; act'
+</span><a href="#local-6989586621679101154"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream act -&gt; IO (TInputStream act'))
+-&gt; TInputStream act -&gt; IO (TInputStream act')
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; TInputStream act
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101155"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-104"></span><span>    </span><span class="annot"><span class="annottext">Adapter act' i -&gt; IO (Adapter act' i)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Adapter act' i -&gt; IO (Adapter act' i))
+-&gt; Adapter act' i -&gt; IO (Adapter act' i)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-105"></span><span>        </span><span class="annot"><span class="annottext">inputCommandsToSut :: OutputStream i
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; OutputStream i
+forall act i. Adapter act i -&gt; OutputStream i
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101155"><span class="hs-identifier hs-var">adapter</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-106"></span><span>        </span><span class="annot"><span class="annottext">actionsFromSut :: TInputStream act'
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream act'
+</span><a href="#local-6989586621679101156"><span class="hs-identifier hs-var">actionsFromSut'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-107"></span><span>        </span><span class="annot"><span class="annottext">close :: IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; IO ()
+forall act i. Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101155"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-108"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="annot"><span class="hs-comment">-- | Map function over both the inputs sent to, and the outputs received from, the adapter.</span></span><span>
+</span><span id="line-111"></span><span id="local-6989586621679101071"><span id="local-6989586621679101072"><span id="local-6989586621679101073"><span id="local-6989586621679101074"><span class="annot"><a href="Lattest.Adapter.Adapter.html#map"><span class="hs-identifier hs-type">map</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101071"><span class="hs-identifier hs-type">i'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101072"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101073"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101074"><span class="hs-identifier hs-type">act'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101073"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101072"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101074"><span class="hs-identifier hs-type">act'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101071"><span class="hs-identifier hs-type">i'</span></a></span><span class="hs-special">)</span></span></span></span></span><span>
+</span><span id="line-112"></span><span id="map"><span class="annot"><span class="annottext">map :: forall i' i act act'.
+(i' -&gt; i) -&gt; (act -&gt; act') -&gt; Adapter act i -&gt; IO (Adapter act' i')
+</span><a href="Lattest.Adapter.Adapter.html#map"><span class="hs-identifier hs-var hs-var">map</span></a></span></span><span> </span><span id="local-6989586621679101160"><span class="annot"><span class="annottext">i' -&gt; i
+</span><a href="#local-6989586621679101160"><span class="hs-identifier hs-var">f1</span></a></span></span><span> </span><span id="local-6989586621679101161"><span class="annot"><span class="annottext">act -&gt; act'
+</span><a href="#local-6989586621679101161"><span class="hs-identifier hs-var">f2</span></a></span></span><span> </span><span id="local-6989586621679101162"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101162"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-113"></span><span>    </span><span id="local-6989586621679101163"><span class="annot"><span class="annottext">OutputStream i'
+</span><a href="#local-6989586621679101163"><span class="hs-identifier hs-var">inputCommandsToSut'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(i' -&gt; i) -&gt; OutputStream i -&gt; IO (OutputStream i')
+forall a b. (a -&gt; b) -&gt; OutputStream b -&gt; IO (OutputStream a)
+</span><span class="hs-identifier hs-var">contramap</span></span><span> </span><span class="annot"><span class="annottext">i' -&gt; i
+</span><a href="#local-6989586621679101160"><span class="hs-identifier hs-var">f1</span></a></span><span> </span><span class="annot"><span class="annottext">(OutputStream i -&gt; IO (OutputStream i'))
+-&gt; OutputStream i -&gt; IO (OutputStream i')
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; OutputStream i
+forall act i. Adapter act i -&gt; OutputStream i
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101162"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-114"></span><span>    </span><span id="local-6989586621679101164"><span class="annot"><span class="annottext">TInputStream act'
+</span><a href="#local-6989586621679101164"><span class="hs-identifier hs-var">actionsFromSut'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(act -&gt; act') -&gt; TInputStream act -&gt; IO (TInputStream act')
+forall a b. (a -&gt; b) -&gt; TInputStream a -&gt; IO (TInputStream b)
+</span><a href="System.IO.Streams.Synchronized.html#map"><span class="hs-identifier hs-var">Streams.map</span></a></span><span> </span><span class="annot"><span class="annottext">act -&gt; act'
+</span><a href="#local-6989586621679101161"><span class="hs-identifier hs-var">f2</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream act -&gt; IO (TInputStream act'))
+-&gt; TInputStream act -&gt; IO (TInputStream act')
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; TInputStream act
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101162"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-115"></span><span>    </span><span class="annot"><span class="annottext">Adapter act' i' -&gt; IO (Adapter act' i')
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Adapter act' i' -&gt; IO (Adapter act' i'))
+-&gt; Adapter act' i' -&gt; IO (Adapter act' i')
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-116"></span><span>        </span><span class="annot"><span class="annottext">inputCommandsToSut :: OutputStream i'
+</span><a href="Lattest.Adapter.Adapter.html#inputCommandsToSut"><span class="hs-identifier hs-var">inputCommandsToSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">OutputStream i'
+</span><a href="#local-6989586621679101163"><span class="hs-identifier hs-var">inputCommandsToSut'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-117"></span><span>        </span><span class="annot"><span class="annottext">actionsFromSut :: TInputStream act'
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream act'
+</span><a href="#local-6989586621679101164"><span class="hs-identifier hs-var">actionsFromSut'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-118"></span><span>        </span><span class="annot"><span class="annottext">close :: IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; IO ()
+forall act i. Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101162"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-119"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="annot"><span class="hs-comment">-- | Transform a raw adapter which receives ByteStrings to an adapter which receives objects, parsing the bytestrings with the given parser.</span></span><span>
+</span><span id="line-122"></span><span id="local-6989586621679101079"><span id="local-6989586621679101082"><span class="annot"><a href="Lattest.Adapter.Adapter.html#parseActionsFromSut"><span class="hs-identifier hs-type">parseActionsFromSut</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Parser</span></span><span> </span><span class="annot"><a href="#local-6989586621679101079"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ByteString</span></span><span> </span><span class="annot"><a href="#local-6989586621679101082"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101079"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101082"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-123"></span><span id="parseActionsFromSut"><span class="annot"><span class="annottext">parseActionsFromSut :: forall act i.
+Parser act -&gt; Adapter ByteString i -&gt; IO (Adapter act i)
+</span><a href="Lattest.Adapter.Adapter.html#parseActionsFromSut"><span class="hs-identifier hs-var hs-var">parseActionsFromSut</span></a></span></span><span> </span><span id="local-6989586621679101169"><span class="annot"><span class="annottext">Parser act
+</span><a href="#local-6989586621679101169"><span class="hs-identifier hs-var">parser</span></a></span></span><span> </span><span id="local-6989586621679101170"><span class="annot"><span class="annottext">Adapter ByteString i
+</span><a href="#local-6989586621679101170"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-124"></span><span>    </span><span id="local-6989586621679101171"><span class="annot"><span class="annottext">TInputStream act
+</span><a href="#local-6989586621679101171"><span class="hs-identifier hs-var">actionStream</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Parser (Maybe act)
+-&gt; TInputStream ByteString -&gt; IO (TInputStream act)
+forall r.
+Parser (Maybe r) -&gt; TInputStream ByteString -&gt; IO (TInputStream r)
+</span><a href="System.IO.Streams.Synchronized.Attoparsec.html#parserToInputStream"><span class="hs-identifier hs-var">parserToInputStream</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">act -&gt; Maybe act
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(act -&gt; Maybe act) -&gt; Parser act -&gt; Parser (Maybe act)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Parser act
+</span><a href="#local-6989586621679101169"><span class="hs-identifier hs-var">parser</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Adapter ByteString i -&gt; TInputStream ByteString
+forall act i. Adapter act i -&gt; TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter ByteString i
+</span><a href="#local-6989586621679101170"><span class="hs-identifier hs-var">adapter</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>    </span><span class="annot"><span class="annottext">Adapter act i -&gt; IO (Adapter act i)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Adapter act i -&gt; IO (Adapter act i))
+-&gt; Adapter act i -&gt; IO (Adapter act i)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Adapter ByteString i
+</span><a href="#local-6989586621679101170"><span class="hs-identifier hs-var">adapter</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">actionsFromSut :: TInputStream act
+</span><a href="Lattest.Adapter.Adapter.html#actionsFromSut"><span class="hs-identifier hs-var">actionsFromSut</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream act
+</span><a href="#local-6989586621679101171"><span class="hs-identifier hs-var">actionStream</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-126"></span><span>
+</span><span id="line-127"></span></pre></body></html>

@@ -1,0 +1,8 @@
+= Library description
+
+Welcome to Lattest, the latest attested lattice testing tech!
+
+The purpose of Lattest to assist in model-based testing: set up a test for external systems, where the expected behaviour of that system
+is expressed as a specification model in the form of an automaton.
+
+For details on setting up such a test, see "Lattest.Exec.Testing",

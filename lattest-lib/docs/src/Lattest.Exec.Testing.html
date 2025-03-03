@@ -1,0 +1,899 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE RankNTypes #-}</span><span>
+</span><span id="line-4"></span><span>
+</span><span id="line-5"></span><span class="annot"><span class="hs-comment">{- |
+    This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
+    experiments.
+    
+    For an experiment, we assume that we have an 'Adapter', which serves as an interface to send inputs to a system under test,
+    and observe actions shown by that system. The experiment is controlled by an 'ActionController'. Specifically for a testing
+    experiment, we also assume that we have a specification model that dictates which observations are allowed and forbidden, and a test
+    controller that steers the testing.
+    
+    To get started with testing experiments quickly, use the 'runTester' function, and to get the required ingredients, see the following modules:
+    
+    * &quot;Lattest.Adapter.StandardAdapters&quot; to create adapters,
+    * &quot;Lattest.Exec.StandardTestControllers&quot; to create test controllers, and
+    * &quot;Lattest.Model.StandardAutomata&quot; to create specification models.
+-}</span></span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Exec.Testing</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-22"></span><span class="annot"><span class="hs-comment">-- * Generic Experiments</span></span><span>
+</span><span id="line-23"></span><span class="annot"><span class="hs-comment">-- | Can be used to let an action controller communicate with a system under test, resulting in some arbitrary result.</span></span><span>
+</span><span id="line-24"></span><span class="annot"><a href="Lattest.Exec.Testing.html#ActionController"><span class="hs-identifier">ActionController</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span class="annot"><a href="Lattest.Exec.Testing.html#runExperiment"><span class="hs-identifier">runExperiment</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span class="annot"><span class="hs-comment">-- * Testing Experiments</span></span><span>
+</span><span id="line-27"></span><span class="annot"><span class="hs-comment">{- |
+    Specific form of experiments, in which an automaton specification model describes the intended behaviour that the system under
+    test should adhere to, and the test controller sends inputs to observe whether the system under test actually conforms to that
+    specification model.
+    
+    This is also known as /Model based testing/, see e.g.
+    
+    * [/Jan Tretmans/, Model based testing with labelled transition systems (Formal Methods and Testing), 2008](https://repository.ubn.ru.nl/bitstream/handle/2066/72680/72680.pdf)
+-}</span></span><span>
+</span><span id="line-36"></span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier">TestController</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span class="annot"><a href="Lattest.Exec.Testing.html#makeTester"><span class="hs-identifier">makeTester</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-38"></span><span class="annot"><a href="Lattest.Exec.Testing.html#runTester"><span class="hs-identifier">runTester</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-39"></span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier">Verdict</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html"><span class="hs-identifier">Lattest.Model.Alphabet</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#InputCommand"><span class="hs-identifier">InputCommand</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#Refusable"><span class="hs-identifier">Refusable</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#isAccepted"><span class="hs-identifier">isAccepted</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html"><span class="hs-identifier">Lattest.Model.Automaton</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutomatonSemantics"><span class="hs-identifier">AutomatonSemantics</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier">AutSem</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html#after"><span class="hs-identifier">after</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier">stateConf</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html"><span class="hs-identifier">Lattest.Model.StateConfiguration</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier">PermissionConfiguration</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#isConclusive"><span class="hs-identifier">isConclusive</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#isForbidden"><span class="hs-identifier">isForbidden</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html"><span class="hs-identifier">Lattest.Adapter.Adapter</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier">Adapter</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#send"><span class="hs-identifier">send</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#tryObserve"><span class="hs-identifier">tryObserve</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html"><span class="hs-identifier">System.IO.Streams.Synchronized</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier">Streamed</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="annot"><span class="hs-comment">-- | The controller of an experiment.</span></span><span>
+</span><span id="line-51"></span><span class="hs-keyword">data</span><span> </span><span id="ActionController"><span class="annot"><a href="Lattest.Exec.Testing.html#ActionController"><span class="hs-identifier hs-var">ActionController</span></a></span></span><span> </span><span id="local-6989586621679101173"><span class="annot"><a href="#local-6989586621679101173"><span class="hs-identifier hs-type">act</span></a></span></span><span> </span><span id="local-6989586621679101174"><span class="annot"><a href="#local-6989586621679101174"><span class="hs-identifier hs-type">i</span></a></span></span><span> </span><span id="local-6989586621679101175"><span class="annot"><a href="#local-6989586621679101175"><span class="hs-identifier hs-type">r</span></a></span></span><span> </span><span id="local-6989586621679101176"><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ActionController"><span class="annot"><a href="Lattest.Exec.Testing.html#ActionController"><span class="hs-identifier hs-var">ActionController</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-52"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Any state that the controller needs for its decision making duties.</span></span><span>
+</span><span id="line-53"></span><span>    </span><span id="controllerState"><span class="annot"><span class="annottext">forall act i r state. ActionController act i r state -&gt; state
+</span><a href="Lattest.Exec.Testing.html#controllerState"><span class="hs-identifier hs-var hs-var">controllerState</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-54"></span><span>     </span><span class="annot"><span class="hs-comment">-- | Select an input and compute the new state, /or/ decide to stop the experiment and return a result.</span></span><span>
+</span><span id="line-55"></span><span>    </span><span id="select"><span class="annot"><span class="annottext">forall act i r state.
+ActionController act i r state -&gt; state -&gt; IO (Either (i, state) r)
+</span><a href="Lattest.Exec.Testing.html#select"><span class="hs-identifier hs-var hs-var">select</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101174"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679101175"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-56"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Provided an observed action, compute the new state /or/ stop the experiment and return a result.</span></span><span>
+</span><span id="line-57"></span><span>    </span><span id="update"><span class="annot"><span class="annottext">forall act i r state.
+ActionController act i r state
+-&gt; state -&gt; act -&gt; IO (Either state r)
+</span><a href="Lattest.Exec.Testing.html#update"><span class="hs-identifier hs-var hs-var">update</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101173"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101175"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-58"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.</span></span><span>
+</span><span id="line-59"></span><span>    </span><span id="handleClose"><span class="annot"><span class="annottext">forall act i r state.
+ActionController act i r state -&gt; state -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#handleClose"><span class="hs-identifier hs-var hs-var">handleClose</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101176"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679101175"><span class="hs-identifier hs-type">r</span></a></span><span>
+</span><span id="line-60"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><span class="hs-comment">-- | The verdict resulting from a testing experiment: did the system under test pass the test?</span></span><span>
+</span><span id="line-63"></span><span class="hs-keyword">data</span><span> </span><span id="Verdict"><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-var">Verdict</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Pass"><span class="annot"><a href="Lattest.Exec.Testing.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Fail"><span class="annot"><a href="Lattest.Exec.Testing.html#Fail"><span class="hs-identifier hs-var">Fail</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679101441"><span id="local-6989586621679101443"><span id="local-6989586621679101445"><span id="local-6989586621679101449"><span id="local-6989586621679101452"><span id="local-6989586621679101455"><span id="local-6989586621679101458"><span class="annot"><span class="annottext">Eq Verdict
+Eq Verdict
+-&gt; (Verdict -&gt; Verdict -&gt; Ordering)
+-&gt; (Verdict -&gt; Verdict -&gt; Bool)
+-&gt; (Verdict -&gt; Verdict -&gt; Bool)
+-&gt; (Verdict -&gt; Verdict -&gt; Bool)
+-&gt; (Verdict -&gt; Verdict -&gt; Bool)
+-&gt; (Verdict -&gt; Verdict -&gt; Verdict)
+-&gt; (Verdict -&gt; Verdict -&gt; Verdict)
+-&gt; Ord Verdict
+Verdict -&gt; Verdict -&gt; Bool
+Verdict -&gt; Verdict -&gt; Ordering
+Verdict -&gt; Verdict -&gt; Verdict
+forall a.
+Eq a
+-&gt; (a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: Verdict -&gt; Verdict -&gt; Ordering
+compare :: Verdict -&gt; Verdict -&gt; Ordering
+$c&lt; :: Verdict -&gt; Verdict -&gt; Bool
+&lt; :: Verdict -&gt; Verdict -&gt; Bool
+$c&lt;= :: Verdict -&gt; Verdict -&gt; Bool
+&lt;= :: Verdict -&gt; Verdict -&gt; Bool
+$c&gt; :: Verdict -&gt; Verdict -&gt; Bool
+&gt; :: Verdict -&gt; Verdict -&gt; Bool
+$c&gt;= :: Verdict -&gt; Verdict -&gt; Bool
+&gt;= :: Verdict -&gt; Verdict -&gt; Bool
+$cmax :: Verdict -&gt; Verdict -&gt; Verdict
+max :: Verdict -&gt; Verdict -&gt; Verdict
+$cmin :: Verdict -&gt; Verdict -&gt; Verdict
+min :: Verdict -&gt; Verdict -&gt; Verdict
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101462"><span id="local-6989586621679101464"><span class="annot"><span class="annottext">Verdict -&gt; Verdict -&gt; Bool
+(Verdict -&gt; Verdict -&gt; Bool)
+-&gt; (Verdict -&gt; Verdict -&gt; Bool) -&gt; Eq Verdict
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Verdict -&gt; Verdict -&gt; Bool
+== :: Verdict -&gt; Verdict -&gt; Bool
+$c/= :: Verdict -&gt; Verdict -&gt; Bool
+/= :: Verdict -&gt; Verdict -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101468"><span id="local-6989586621679101470"><span id="local-6989586621679101474"><span class="annot"><span class="annottext">Int -&gt; Verdict -&gt; ShowS
+[Verdict] -&gt; ShowS
+Verdict -&gt; String
+(Int -&gt; Verdict -&gt; ShowS)
+-&gt; (Verdict -&gt; String) -&gt; ([Verdict] -&gt; ShowS) -&gt; Show Verdict
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Verdict -&gt; ShowS
+showsPrec :: Int -&gt; Verdict -&gt; ShowS
+$cshow :: Verdict -&gt; String
+show :: Verdict -&gt; String
+$cshowList :: [Verdict] -&gt; ShowS
+showList :: [Verdict] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101478"><span id="local-6989586621679101482"><span id="local-6989586621679101485"><span id="local-6989586621679101490"><span class="annot"><span class="annottext">ReadPrec [Verdict]
+ReadPrec Verdict
+Int -&gt; ReadS Verdict
+ReadS [Verdict]
+(Int -&gt; ReadS Verdict)
+-&gt; ReadS [Verdict]
+-&gt; ReadPrec Verdict
+-&gt; ReadPrec [Verdict]
+-&gt; Read Verdict
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+$creadsPrec :: Int -&gt; ReadS Verdict
+readsPrec :: Int -&gt; ReadS Verdict
+$creadList :: ReadS [Verdict]
+readList :: ReadS [Verdict]
+$creadPrec :: ReadPrec Verdict
+readPrec :: ReadPrec Verdict
+$creadListPrec :: ReadPrec [Verdict]
+readListPrec :: ReadPrec [Verdict]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="annot"><span class="hs-comment">{- |
+    The controller of a testing experiment. The tester may return a result at the end of a testing experiment. Note that it does
+    /not/ need to return a verdict 'Pass' or 'Fail', this verdict is automatically inferred based on the specification model.
+    Results can be used to record additional information that the tester is interested in, depending on the controller implementation.
+    For example, the actions observed during a testing experiment, or whether certain coverage criteria were achieved during the experiment.
+-}</span></span><span> </span><span>
+</span><span id="line-71"></span><span class="hs-keyword">data</span><span> </span><span id="TestController"><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-var">TestController</span></a></span></span><span> </span><span id="local-6989586621679101202"><span class="annot"><a href="#local-6989586621679101202"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span id="local-6989586621679101203"><span class="annot"><a href="#local-6989586621679101203"><span class="hs-identifier hs-type">loc</span></a></span></span><span> </span><span id="local-6989586621679101204"><span class="annot"><a href="#local-6989586621679101204"><span class="hs-identifier hs-type">q</span></a></span></span><span> </span><span id="local-6989586621679101205"><span class="annot"><a href="#local-6989586621679101205"><span class="hs-identifier hs-type">t</span></a></span></span><span> </span><span id="local-6989586621679101206"><span class="annot"><a href="#local-6989586621679101206"><span class="hs-identifier hs-type">tloc</span></a></span></span><span> </span><span id="local-6989586621679101207"><span class="annot"><a href="#local-6989586621679101207"><span class="hs-identifier hs-type">act</span></a></span></span><span> </span><span id="local-6989586621679101208"><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span></span><span> </span><span id="local-6989586621679101209"><span class="annot"><a href="#local-6989586621679101209"><span class="hs-identifier hs-type">i</span></a></span></span><span> </span><span id="local-6989586621679101210"><span class="annot"><a href="#local-6989586621679101210"><span class="hs-identifier hs-type">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TestController"><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-var">TestController</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-72"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Any state that the controller needs for its decision making duties.</span></span><span>
+</span><span id="line-73"></span><span>    </span><span id="testControllerState"><span class="annot"><span class="annottext">forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var hs-var">testControllerState</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-74"></span><span>    </span><span class="annot"><span class="hs-comment">{- |
+        Select a test based on test controller state, the specification (in its current state), and previous specification configuration.
+        Either select a new controller state and a input, /or/ stop testing and return a result from the controller.
+    -}</span></span><span>
+</span><span id="line-78"></span><span>    </span><span id="selectTest"><span class="annot"><span class="annottext">forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r
+-&gt; InputCommand i act =&gt;
+   state
+   -&gt; AutSem m loc q t tloc act -&gt; m q -&gt; IO (Either (i, state) r)
+</span><a href="Lattest.Exec.Testing.html#selectTest"><span class="hs-identifier hs-var hs-var">selectTest</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#InputCommand"><span class="hs-identifier hs-type">InputCommand</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101209"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101207"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101202"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101203"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101204"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101205"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101206"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101207"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101202"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101204"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101209"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679101210"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-79"></span><span>    </span><span class="annot"><span class="hs-comment">{- |
+        Select a test based on test controller state, the specification (in its current state), an observed action, and previous specification
+        configuration. Either select a new controller state, /or/ stop testing and return a result from the controller.
+    -}</span></span><span>
+</span><span id="line-83"></span><span>    </span><span id="updateTestController"><span class="annot"><span class="annottext">forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r
+-&gt; state
+-&gt; AutSem m loc q t tloc act
+-&gt; act
+-&gt; m q
+-&gt; IO (Either state r)
+</span><a href="Lattest.Exec.Testing.html#updateTestController"><span class="hs-identifier hs-var hs-var">updateTestController</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101202"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101203"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101204"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101205"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101206"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101207"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101207"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101202"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101204"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101210"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-84"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.</span></span><span>
+</span><span id="line-85"></span><span>    </span><span id="handleTestClose"><span class="annot"><span class="annottext">forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#handleTestClose"><span class="hs-identifier hs-var hs-var">handleTestClose</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679101208"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679101210"><span class="hs-identifier hs-type">r</span></a></span><span>
+</span><span id="line-86"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span class="annot"><span class="hs-comment">{- |
+    From a test controller and a specification model, create an action controller. The test controller is used to decide which inputs
+    are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
+    observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
+-}</span></span><span>
+</span><span id="line-93"></span><span id="local-6989586621679101250"><span id="local-6989586621679101251"><span id="local-6989586621679101252"><span id="local-6989586621679101253"><span id="local-6989586621679101254"><span id="local-6989586621679101255"><span id="local-6989586621679101257"><span id="local-6989586621679101259"><span id="local-6989586621679101260"><span class="annot"><a href="Lattest.Exec.Testing.html#makeTester"><span class="hs-identifier hs-type">makeTester</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutomatonSemantics"><span class="hs-identifier hs-type">AutomatonSemantics</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101250"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101251"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101252"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101253"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101254"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#InputCommand"><span class="hs-identifier hs-type">InputCommand</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101257"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101250"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span>
+</span><span id="line-94"></span><span>    </span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101250"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101251"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101252"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101253"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101254"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101250"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101251"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101252"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101253"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101254"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101259"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101257"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101260"><span class="hs-identifier hs-type">r</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#ActionController"><span class="hs-identifier hs-type">ActionController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101257"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101260"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101250"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101251"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101252"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101253"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101254"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101250"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101251"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101252"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101253"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101254"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101255"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101259"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101257"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101260"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span></span></span></span></span></span></span></span></span></span><span>
+</span><span id="line-95"></span><span id="makeTester"><span class="annot"><span class="annottext">makeTester :: forall (m :: * -&gt; *) loc q t tloc act i state r.
+(AutomatonSemantics m loc q t tloc act, InputCommand i act,
+ PermissionConfiguration m) =&gt;
+AutSem m loc q t tloc act
+-&gt; TestController m loc q t tloc act state i r
+-&gt; ActionController
+     act
+     i
+     (Verdict, r)
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+</span><a href="Lattest.Exec.Testing.html#makeTester"><span class="hs-identifier hs-var hs-var">makeTester</span></a></span></span><span> </span><span id="local-6989586621679101511"><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101511"><span class="hs-identifier hs-var">initSpec</span></a></span></span><span> </span><span id="local-6989586621679101512"><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101512"><span class="hs-identifier hs-var">initTestController</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#ActionController"><span class="hs-identifier hs-type">ActionController</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-96"></span><span>    </span><span class="annot"><span class="annottext">controllerState :: (AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+</span><a href="Lattest.Exec.Testing.html#controllerState"><span class="hs-identifier hs-var">controllerState</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101511"><span class="hs-identifier hs-var">initSpec</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101512"><span class="hs-identifier hs-var">initTestController</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-97"></span><span>    </span><span class="annot"><span class="annottext">select :: (AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+</span><a href="Lattest.Exec.Testing.html#select"><span class="hs-identifier hs-var">select</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+forall i act (m :: * -&gt; *) loc q t tloc state r.
+(InputCommand i act, PermissionConfiguration m) =&gt;
+(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+</span><a href="#local-6989586621679101513"><span class="hs-identifier hs-var">makeSelect</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-98"></span><span>    </span><span class="annot"><span class="annottext">update :: (AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; act
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+</span><a href="Lattest.Exec.Testing.html#update"><span class="hs-identifier hs-var">update</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; act
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+(AutomatonSemantics m loc q t tloc act, PermissionConfiguration m,
+ Refusable act) =&gt;
+(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; act
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+</span><a href="#local-6989586621679101514"><span class="hs-identifier hs-var">makeUpdate</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-99"></span><span>    </span><span class="annot"><span class="annottext">handleClose :: (AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO (Verdict, r)
+</span><a href="Lattest.Exec.Testing.html#handleClose"><span class="hs-identifier hs-var">handleClose</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO (Verdict, r)
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+PermissionConfiguration m =&gt;
+(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO (Verdict, r)
+</span><a href="#local-6989586621679101515"><span class="hs-identifier hs-var">makeHandleClose</span></a></span><span>
+</span><span id="line-100"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-101"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-102"></span><span>        </span><span id="local-6989586621679101273"><span id="local-6989586621679101274"><span id="local-6989586621679101275"><span id="local-6989586621679101276"><span id="local-6989586621679101277"><span id="local-6989586621679101278"><span id="local-6989586621679101279"><span id="local-6989586621679101280"><span id="local-6989586621679101281"><span class="annot"><a href="#local-6989586621679101513"><span class="hs-identifier hs-type">makeSelect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#InputCommand"><span class="hs-identifier hs-type">InputCommand</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101273"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101274"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101275"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-103"></span><span>            </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101275"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101276"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101277"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101278"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101279"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101274"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101275"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101276"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101277"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101278"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101279"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101274"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101280"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101273"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101281"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101273"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101275"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101276"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101277"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101278"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101279"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101274"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101275"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101276"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101277"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101278"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101279"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101274"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101280"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101273"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101281"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101281"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span></span></span></span></span></span></span></span></span><span>
+</span><span id="line-105"></span><span>        </span><span id="local-6989586621679101513"><span class="annot"><span class="annottext">makeSelect :: forall i act (m :: * -&gt; *) loc q t tloc state r.
+(InputCommand i act, PermissionConfiguration m) =&gt;
+(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+</span><a href="#local-6989586621679101513"><span class="hs-identifier hs-var hs-var">makeSelect</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679101524"><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101524"><span class="hs-identifier hs-var">spec</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101525"><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101525"><span class="hs-identifier hs-var">testController</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-106"></span><span>            </span><span id="local-6989586621679101526"><span class="annot"><span class="annottext">Either (i, state) r
+</span><a href="#local-6989586621679101526"><span class="hs-identifier hs-var">next</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+-&gt; InputCommand i act =&gt;
+   state
+   -&gt; AutSem m loc q t tloc act -&gt; m q -&gt; IO (Either (i, state) r)
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r
+-&gt; InputCommand i act =&gt;
+   state
+   -&gt; AutSem m loc q t tloc act -&gt; m q -&gt; IO (Either (i, state) r)
+</span><a href="Lattest.Exec.Testing.html#selectTest"><span class="hs-identifier hs-var">selectTest</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101525"><span class="hs-identifier hs-var">testController</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r -&gt; state
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101525"><span class="hs-identifier hs-var">testController</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101524"><span class="hs-identifier hs-var">spec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; m q
+forall {k} (m :: * -&gt; *) loc q t tloc (act :: k).
+AutSem m loc q t tloc act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101524"><span class="hs-identifier hs-var">spec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>            </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Either (i, state) r
+</span><a href="#local-6989586621679101526"><span class="hs-identifier hs-var">next</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-108"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679101527"><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101527"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Either
+  (i,
+   (AutSem m loc q t tloc act,
+    TestController m loc q t tloc act state i r))
+  (Verdict, r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either
+   (i,
+    (AutSem m loc q t tloc act,
+     TestController m loc q t tloc act state i r))
+   (Verdict, r)
+ -&gt; IO
+      (Either
+         (i,
+          (AutSem m loc q t tloc act,
+           TestController m loc q t tloc act state i r))
+         (Verdict, r)))
+-&gt; Either
+     (i,
+      (AutSem m loc q t tloc act,
+       TestController m loc q t tloc act state i r))
+     (Verdict, r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Verdict, r)
+-&gt; Either
+     (i,
+      (AutSem m loc q t tloc act,
+       TestController m loc q t tloc act state i r))
+     (Verdict, r)
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">m q -&gt; Verdict
+forall {k} (m :: k -&gt; *) (x :: k).
+PermissionConfiguration m =&gt;
+m x -&gt; Verdict
+</span><a href="#local-6989586621679101528"><span class="hs-identifier hs-var">pToVerd</span></a></span><span> </span><span class="annot"><span class="annottext">(m q -&gt; Verdict) -&gt; m q -&gt; Verdict
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; m q
+forall {k} (m :: * -&gt; *) loc q t tloc (act :: k).
+AutSem m loc q t tloc act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101524"><span class="hs-identifier hs-var">spec</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101527"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679101529"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101529"><span class="hs-identifier hs-var">i</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101530"><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101530"><span class="hs-identifier hs-var">state'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Either
+  (i,
+   (AutSem m loc q t tloc act,
+    TestController m loc q t tloc act state i r))
+  (Verdict, r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either
+   (i,
+    (AutSem m loc q t tloc act,
+     TestController m loc q t tloc act state i r))
+   (Verdict, r)
+ -&gt; IO
+      (Either
+         (i,
+          (AutSem m loc q t tloc act,
+           TestController m loc q t tloc act state i r))
+         (Verdict, r)))
+-&gt; Either
+     (i,
+      (AutSem m loc q t tloc act,
+       TestController m loc q t tloc act state i r))
+     (Verdict, r)
+-&gt; IO
+     (Either
+        (i,
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r))
+        (Verdict, r))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(i,
+ (AutSem m loc q t tloc act,
+  TestController m loc q t tloc act state i r))
+-&gt; Either
+     (i,
+      (AutSem m loc q t tloc act,
+       TestController m loc q t tloc act state i r))
+     (Verdict, r)
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101529"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101524"><span class="hs-identifier hs-var">spec</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101525"><span class="hs-identifier hs-var">testController</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">testControllerState :: state
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101530"><span class="hs-identifier hs-var">state'</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-110"></span><span class="hs-comment">--            return $ case next of</span><span>
+</span><span id="line-111"></span><span class="hs-comment">--                Right r -&gt; Right (pToVerd $ stateConf spec, r)</span><span>
+</span><span id="line-112"></span><span class="hs-comment">--                Left (i, state') -&gt; Left (i, (spec, testController { testControllerState = state' }))</span><span>
+</span><span id="line-113"></span><span>        </span><span id="local-6989586621679101282"><span id="local-6989586621679101283"><span id="local-6989586621679101284"><span id="local-6989586621679101285"><span id="local-6989586621679101286"><span id="local-6989586621679101287"><span id="local-6989586621679101288"><span id="local-6989586621679101289"><span id="local-6989586621679101290"><span class="annot"><a href="#local-6989586621679101514"><span class="hs-identifier hs-type">makeUpdate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutomatonSemantics"><span class="hs-identifier hs-type">AutomatonSemantics</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101282"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101283"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101284"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101285"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101286"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101282"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#Refusable"><span class="hs-identifier hs-type">Refusable</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span>
+</span><span id="line-114"></span><span>            </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101282"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101283"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101284"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101285"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101286"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101282"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101283"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101284"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101285"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101286"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101288"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101289"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101290"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101282"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101283"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101284"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101285"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101286"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101282"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101283"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101284"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101285"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101286"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101287"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101288"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101289"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101290"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101290"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span></span></span></span></span></span></span></span></span><span>
+</span><span id="line-115"></span><span>        </span><span id="local-6989586621679101514"><span class="annot"><span class="annottext">makeUpdate :: forall (m :: * -&gt; *) loc q t tloc act state i r.
+(AutomatonSemantics m loc q t tloc act, PermissionConfiguration m,
+ Refusable act) =&gt;
+(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; act
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+</span><a href="#local-6989586621679101514"><span class="hs-identifier hs-var hs-var">makeUpdate</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679101560"><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101560"><span class="hs-identifier hs-var">spec</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101561"><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101561"><span class="hs-identifier hs-var">testController</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679101562"><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101562"><span class="hs-identifier hs-var">act</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-116"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679101577"><span class="annot"><span class="annottext">spec' :: AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101577"><span class="hs-identifier hs-var hs-var">spec'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101560"><span class="hs-identifier hs-var">spec</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; act -&gt; AutSem m loc q t tloc act
+forall (m :: * -&gt; *) loc q t tloc act.
+AutomatonSemantics m loc q t tloc act =&gt;
+AutSem m loc q t tloc act -&gt; act -&gt; AutSem m loc q t tloc act
+</span><a href="Lattest.Model.Automaton.html#after"><span class="hs-operator hs-var">`after`</span></a></span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101562"><span class="hs-identifier hs-var">act</span></a></span><span>
+</span><span id="line-117"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679101580"><span class="annot"><span class="annottext">verdict :: Verdict
+</span><a href="#local-6989586621679101580"><span class="hs-identifier hs-var hs-var">verdict</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">m q -&gt; act -&gt; Verdict
+forall {k} (m :: k -&gt; *) act (x :: k).
+(PermissionConfiguration m, Refusable act) =&gt;
+m x -&gt; act -&gt; Verdict
+</span><a href="#local-6989586621679101581"><span class="hs-identifier hs-var">actToVerd</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; m q
+forall {k} (m :: * -&gt; *) loc q t tloc (act :: k).
+AutSem m loc q t tloc act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101577"><span class="hs-identifier hs-var">spec'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101562"><span class="hs-identifier hs-var">act</span></a></span><span>
+</span><span id="line-118"></span><span>            </span><span id="local-6989586621679101582"><span class="annot"><span class="annottext">Either state r
+</span><a href="#local-6989586621679101582"><span class="hs-identifier hs-var">next</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+-&gt; state
+-&gt; AutSem m loc q t tloc act
+-&gt; act
+-&gt; m q
+-&gt; IO (Either state r)
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r
+-&gt; state
+-&gt; AutSem m loc q t tloc act
+-&gt; act
+-&gt; m q
+-&gt; IO (Either state r)
+</span><a href="Lattest.Exec.Testing.html#updateTestController"><span class="hs-identifier hs-var">updateTestController</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101561"><span class="hs-identifier hs-var">testController</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r -&gt; state
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101561"><span class="hs-identifier hs-var">testController</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101577"><span class="hs-identifier hs-var">spec'</span></a></span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101562"><span class="hs-identifier hs-var">act</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; m q
+forall {k} (m :: * -&gt; *) loc q t tloc (act :: k).
+AutSem m loc q t tloc act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101560"><span class="hs-identifier hs-var">spec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-119"></span><span>            </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Either state r
+</span><a href="#local-6989586621679101582"><span class="hs-identifier hs-var">next</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-120"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679101583"><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101583"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Either
+  (AutSem m loc q t tloc act,
+   TestController m loc q t tloc act state i r)
+  (Verdict, r)
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either
+   (AutSem m loc q t tloc act,
+    TestController m loc q t tloc act state i r)
+   (Verdict, r)
+ -&gt; IO
+      (Either
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r)
+         (Verdict, r)))
+-&gt; Either
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+     (Verdict, r)
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Verdict, r)
+-&gt; Either
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+     (Verdict, r)
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Verdict
+</span><a href="#local-6989586621679101580"><span class="hs-identifier hs-var">verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101583"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679101584"><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101584"><span class="hs-identifier hs-var">state'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">m q -&gt; Bool
+forall {k} (m :: k -&gt; *) (t :: k).
+PermissionConfiguration m =&gt;
+m t -&gt; Bool
+</span><a href="Lattest.Model.StateConfiguration.html#isConclusive"><span class="hs-identifier hs-var">isConclusive</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; m q
+forall {k} (m :: * -&gt; *) loc q t tloc (act :: k).
+AutSem m loc q t tloc act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101577"><span class="hs-identifier hs-var">spec'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="#local-6989586621679101580"><span class="hs-identifier hs-var">verdict</span></a></span><span> </span><span class="annot"><span class="annottext">Verdict -&gt; Verdict -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Fail"><span class="hs-identifier hs-var">Fail</span></a></span><span>
+</span><span id="line-122"></span><span>                    </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-123"></span><span>                        </span><span id="local-6989586621679101586"><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101586"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r -&gt; state -&gt; IO r
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#handleTestClose"><span class="hs-identifier hs-var">handleTestClose</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101561"><span class="hs-identifier hs-var">testController</span></a></span><span> </span><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101584"><span class="hs-identifier hs-var">state'</span></a></span><span>
+</span><span id="line-124"></span><span>                        </span><span class="annot"><span class="annottext">Either
+  (AutSem m loc q t tloc act,
+   TestController m loc q t tloc act state i r)
+  (Verdict, r)
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either
+   (AutSem m loc q t tloc act,
+    TestController m loc q t tloc act state i r)
+   (Verdict, r)
+ -&gt; IO
+      (Either
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r)
+         (Verdict, r)))
+-&gt; Either
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+     (Verdict, r)
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Verdict, r)
+-&gt; Either
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+     (Verdict, r)
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Verdict
+</span><a href="#local-6989586621679101580"><span class="hs-identifier hs-var">verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101586"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>                    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Either
+  (AutSem m loc q t tloc act,
+   TestController m loc q t tloc act state i r)
+  (Verdict, r)
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either
+   (AutSem m loc q t tloc act,
+    TestController m loc q t tloc act state i r)
+   (Verdict, r)
+ -&gt; IO
+      (Either
+         (AutSem m loc q t tloc act,
+          TestController m loc q t tloc act state i r)
+         (Verdict, r)))
+-&gt; Either
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+     (Verdict, r)
+-&gt; IO
+     (Either
+        (AutSem m loc q t tloc act,
+         TestController m loc q t tloc act state i r)
+        (Verdict, r))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; Either
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+     (Verdict, r)
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101577"><span class="hs-identifier hs-var">spec'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101561"><span class="hs-identifier hs-var">testController</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">testControllerState :: state
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101584"><span class="hs-identifier hs-var">state'</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span>
+</span><span id="line-126"></span><span>        </span><span id="local-6989586621679101291"><span id="local-6989586621679101292"><span id="local-6989586621679101293"><span id="local-6989586621679101294"><span id="local-6989586621679101295"><span id="local-6989586621679101296"><span id="local-6989586621679101297"><span id="local-6989586621679101298"><span id="local-6989586621679101299"><span class="annot"><a href="#local-6989586621679101515"><span class="hs-identifier hs-type">makeHandleClose</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101291"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101291"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101292"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101293"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101294"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101295"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101296"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101291"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101292"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101293"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101294"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101295"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101296"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101297"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101298"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101299"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101299"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span></span></span></span></span></span></span></span></span></span><span>
+</span><span id="line-127"></span><span>        </span><span id="local-6989586621679101515"><span class="annot"><span class="annottext">makeHandleClose :: forall (m :: * -&gt; *) loc q t tloc act state i r.
+PermissionConfiguration m =&gt;
+(AutSem m loc q t tloc act,
+ TestController m loc q t tloc act state i r)
+-&gt; IO (Verdict, r)
+</span><a href="#local-6989586621679101515"><span class="hs-identifier hs-var hs-var">makeHandleClose</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679101591"><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101591"><span class="hs-identifier hs-var">spec</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101592"><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101592"><span class="hs-identifier hs-var">testController</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-128"></span><span>            </span><span id="local-6989586621679101593"><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101593"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r -&gt; state -&gt; IO r
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#handleTestClose"><span class="hs-identifier hs-var">handleTestClose</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101592"><span class="hs-identifier hs-var">testController</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r -&gt; state
+forall (m :: * -&gt; *) loc q t tloc act state i r.
+TestController m loc q t tloc act state i r -&gt; state
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101592"><span class="hs-identifier hs-var">testController</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>            </span><span class="annot"><span class="annottext">(Verdict, r) -&gt; IO (Verdict, r)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">m q -&gt; Verdict
+forall {k} (m :: k -&gt; *) (x :: k).
+PermissionConfiguration m =&gt;
+m x -&gt; Verdict
+</span><a href="#local-6989586621679101528"><span class="hs-identifier hs-var">pToVerd</span></a></span><span> </span><span class="annot"><span class="annottext">(m q -&gt; Verdict) -&gt; m q -&gt; Verdict
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act -&gt; m q
+forall {k} (m :: * -&gt; *) loc q t tloc (act :: k).
+AutSem m loc q t tloc act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101591"><span class="hs-identifier hs-var">spec</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101593"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span>
+</span><span id="line-130"></span><span>        </span><span id="local-6989586621679101324"><span id="local-6989586621679101325"><span class="annot"><a href="#local-6989586621679101528"><span class="hs-identifier hs-type">pToVerd</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101324"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101324"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101325"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span></span></span><span>
+</span><span id="line-131"></span><span>        </span><span id="local-6989586621679101528"><span class="annot"><span class="annottext">pToVerd :: forall {k} (m :: k -&gt; *) (x :: k).
+PermissionConfiguration m =&gt;
+m x -&gt; Verdict
+</span><a href="#local-6989586621679101528"><span class="hs-identifier hs-var hs-var">pToVerd</span></a></span></span><span> </span><span id="local-6989586621679101596"><span class="annot"><span class="annottext">m x
+</span><a href="#local-6989586621679101596"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">m x -&gt; Bool
+forall (t :: k). m t -&gt; Bool
+forall {k} (m :: k -&gt; *) (t :: k).
+PermissionConfiguration m =&gt;
+m t -&gt; Bool
+</span><a href="Lattest.Model.StateConfiguration.html#isForbidden"><span class="hs-identifier hs-var">isForbidden</span></a></span><span> </span><span class="annot"><span class="annottext">m x
+</span><a href="#local-6989586621679101596"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Fail"><span class="hs-identifier hs-var">Fail</span></a></span><span>
+</span><span id="line-132"></span><span>                  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span><span>
+</span><span id="line-133"></span><span>        </span><span id="local-6989586621679101357"><span id="local-6989586621679101358"><span id="local-6989586621679101359"><span class="annot"><a href="#local-6989586621679101581"><span class="hs-identifier hs-type">actToVerd</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101357"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#Refusable"><span class="hs-identifier hs-type">Refusable</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101358"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679101357"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101359"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679101358"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span></span></span></span><span>
+</span><span id="line-134"></span><span>        </span><span id="local-6989586621679101581"><span class="annot"><span class="annottext">actToVerd :: forall {k} (m :: k -&gt; *) act (x :: k).
+(PermissionConfiguration m, Refusable act) =&gt;
+m x -&gt; act -&gt; Verdict
+</span><a href="#local-6989586621679101581"><span class="hs-identifier hs-var hs-var">actToVerd</span></a></span></span><span> </span><span id="local-6989586621679101601"><span class="annot"><span class="annottext">m x
+</span><a href="#local-6989586621679101601"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679101602"><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101602"><span class="hs-identifier hs-var">act</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">m x -&gt; Verdict
+forall {k} (m :: k -&gt; *) (x :: k).
+PermissionConfiguration m =&gt;
+m x -&gt; Verdict
+</span><a href="#local-6989586621679101528"><span class="hs-identifier hs-var">pToVerd</span></a></span><span> </span><span class="annot"><span class="annottext">m x
+</span><a href="#local-6989586621679101601"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-keyword">of</span><span> </span><span class="hs-comment">-- this is effectively just &amp;&amp; between two verdicts, one from the observed action and one from the state configuration</span><span>
+</span><span id="line-135"></span><span>            </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Fail"><span class="hs-identifier hs-var">Fail</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Fail"><span class="hs-identifier hs-var">Fail</span></a></span><span>
+</span><span id="line-136"></span><span>            </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">act -&gt; Bool
+forall act. Refusable act =&gt; act -&gt; Bool
+</span><a href="Lattest.Model.Alphabet.html#isAccepted"><span class="hs-identifier hs-var">isAccepted</span></a></span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101602"><span class="hs-identifier hs-var">act</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="Lattest.Exec.Testing.html#Fail"><span class="hs-identifier hs-var">Fail</span></a></span><span> </span><span>
+</span><span id="line-137"></span><span>
+</span><span id="line-138"></span><span class="annot"><span class="hs-comment">{- |
+    Run an experiment by interacting with the given adapter, controlled by the given action controller. The experiment
+    stops when the action controller decides to. Returns the result returned by the action controller.
+-}</span></span><span>
+</span><span id="line-142"></span><span id="local-6989586621679101383"><span id="local-6989586621679101384"><span id="local-6989586621679101385"><span id="local-6989586621679101386"><span class="annot"><a href="Lattest.Exec.Testing.html#runExperiment"><span class="hs-identifier hs-type">runExperiment</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#ActionController"><span class="hs-identifier hs-type">ActionController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101383"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101384"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101385"><span class="hs-identifier hs-type">r</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101386"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101383"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101384"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679101385"><span class="hs-identifier hs-type">r</span></a></span></span></span></span></span><span>
+</span><span id="line-143"></span><span id="runExperiment"><span class="annot"><span class="annottext">runExperiment :: forall act i r state.
+ActionController act i r state -&gt; Adapter act i -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#runExperiment"><span class="hs-identifier hs-var hs-var">runExperiment</span></a></span></span><span> </span><span id="local-6989586621679101606"><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span></span><span> </span><span id="local-6989586621679101607"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101607"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-144"></span><span>    </span><span id="local-6989586621679101608"><span class="annot"><span class="annottext">Streamed act
+</span><a href="#local-6989586621679101608"><span class="hs-identifier hs-var">streamedAction</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Adapter act i -&gt; IO (Streamed act)
+forall act i. Adapter act i -&gt; IO (Streamed act)
+</span><a href="Lattest.Adapter.Adapter.html#tryObserve"><span class="hs-identifier hs-var">tryObserve</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101607"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-145"></span><span>    </span><span id="local-6989586621679101609"><span class="annot"><span class="annottext">Either state r
+</span><a href="#local-6989586621679101609"><span class="hs-identifier hs-var">stateOrResult</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Streamed act
+</span><a href="#local-6989586621679101608"><span class="hs-identifier hs-var">streamedAction</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-146"></span><span>        </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Available"><span class="hs-identifier hs-type">Available</span></a></span><span> </span><span id="local-6989586621679101611"><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101611"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">act -&gt; IO (Either state r)
+</span><a href="#local-6989586621679101612"><span class="hs-identifier hs-var">handleUpdate</span></a></span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101611"><span class="hs-identifier hs-var">action</span></a></span><span>
+</span><span id="line-147"></span><span>        </span><span class="annot"><span class="annottext">Streamed act
+</span><a href="System.IO.Streams.Synchronized.html#Unavailable"><span class="hs-identifier hs-var">Unavailable</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO (Either state r)
+</span><a href="#local-6989586621679101614"><span class="hs-identifier hs-var">handleSelect</span></a></span><span>
+</span><span id="line-148"></span><span>        </span><span class="annot"><span class="annottext">Streamed act
+</span><a href="System.IO.Streams.Synchronized.html#StreamClosed"><span class="hs-identifier hs-var">StreamClosed</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO (Either state r)
+forall {a}. IO (Either a r)
+</span><a href="#local-6989586621679101616"><span class="hs-identifier hs-var">handleClosed</span></a></span><span>
+</span><span id="line-149"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Either state r
+</span><a href="#local-6989586621679101609"><span class="hs-identifier hs-var">stateOrResult</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-150"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679101617"><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101617"><span class="hs-identifier hs-var">state</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">ActionController act i r state -&gt; Adapter act i -&gt; IO r
+forall act i r state.
+ActionController act i r state -&gt; Adapter act i -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#runExperiment"><span class="hs-identifier hs-var">runExperiment</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">controllerState :: state
+</span><a href="Lattest.Exec.Testing.html#controllerState"><span class="hs-identifier hs-var">controllerState</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101617"><span class="hs-identifier hs-var">state</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101607"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-151"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679101618"><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101618"><span class="hs-identifier hs-var">result</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">r -&gt; IO r
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101618"><span class="hs-identifier hs-var">result</span></a></span><span>
+</span><span id="line-152"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span>
+</span><span id="line-153"></span><span>    </span><span id="local-6989586621679101612"><span class="annot"><span class="annottext">handleUpdate :: act -&gt; IO (Either state r)
+</span><a href="#local-6989586621679101612"><span class="hs-identifier hs-var hs-var">handleUpdate</span></a></span></span><span> </span><span id="local-6989586621679101619"><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101619"><span class="hs-identifier hs-var">act</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ActionController act i r state
+-&gt; state -&gt; act -&gt; IO (Either state r)
+forall act i r state.
+ActionController act i r state
+-&gt; state -&gt; act -&gt; IO (Either state r)
+</span><a href="Lattest.Exec.Testing.html#update"><span class="hs-identifier hs-var">update</span></a></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ActionController act i r state -&gt; state
+forall act i r state. ActionController act i r state -&gt; state
+</span><a href="Lattest.Exec.Testing.html#controllerState"><span class="hs-identifier hs-var">controllerState</span></a></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679101619"><span class="hs-identifier hs-var">act</span></a></span><span>
+</span><span id="line-154"></span><span>    </span><span id="local-6989586621679101614"><span class="annot"><span class="annottext">handleSelect :: IO (Either state r)
+</span><a href="#local-6989586621679101614"><span class="hs-identifier hs-var hs-var">handleSelect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-155"></span><span>        </span><span id="local-6989586621679101624"><span class="annot"><span class="annottext">Either (i, state) r
+</span><a href="#local-6989586621679101624"><span class="hs-identifier hs-var">selection</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ActionController act i r state -&gt; state -&gt; IO (Either (i, state) r)
+forall act i r state.
+ActionController act i r state -&gt; state -&gt; IO (Either (i, state) r)
+</span><a href="Lattest.Exec.Testing.html#select"><span class="hs-identifier hs-var">select</span></a></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ActionController act i r state -&gt; state
+forall act i r state. ActionController act i r state -&gt; state
+</span><a href="Lattest.Exec.Testing.html#controllerState"><span class="hs-identifier hs-var">controllerState</span></a></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Either (i, state) r
+</span><a href="#local-6989586621679101624"><span class="hs-identifier hs-var">selection</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-157"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679101625"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101625"><span class="hs-identifier hs-var">inputCmd</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679101626"><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101626"><span class="hs-identifier hs-var">state</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-158"></span><span>                 </span><span class="hs-comment">-- TODO if an action is ready *after computing the input command* (because race condition between the adapter and controller), maybe don't send the input command.</span><span>
+</span><span id="line-159"></span><span>                </span><span class="annot"><span class="annottext">i -&gt; Adapter act i -&gt; IO ()
+forall i act. i -&gt; Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#send"><span class="hs-identifier hs-var">send</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679101625"><span class="hs-identifier hs-var">inputCmd</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101607"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-160"></span><span>                </span><span class="annot"><span class="annottext">Either state r -&gt; IO (Either state r)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either state r -&gt; IO (Either state r))
+-&gt; Either state r -&gt; IO (Either state r)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">state -&gt; Either state r
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">state
+</span><a href="#local-6989586621679101626"><span class="hs-identifier hs-var">state</span></a></span><span>
+</span><span id="line-161"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679101627"><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101627"><span class="hs-identifier hs-var">result</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Either state r -&gt; IO (Either state r)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either state r -&gt; IO (Either state r))
+-&gt; Either state r -&gt; IO (Either state r)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">r -&gt; Either state r
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679101627"><span class="hs-identifier hs-var">result</span></a></span><span>
+</span><span id="line-162"></span><span>    </span><span id="local-6989586621679101616"><span class="annot"><span class="annottext">handleClosed :: IO (Either a r)
+</span><a href="#local-6989586621679101616"><span class="hs-identifier hs-var hs-var">handleClosed</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">r -&gt; Either a r
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">(r -&gt; Either a r) -&gt; IO r -&gt; IO (Either a r)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state -&gt; state -&gt; IO r
+forall act i r state.
+ActionController act i r state -&gt; state -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#handleClose"><span class="hs-identifier hs-var">handleClose</span></a></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ActionController act i r state -&gt; state
+forall act i r state. ActionController act i r state -&gt; state
+</span><a href="Lattest.Exec.Testing.html#controllerState"><span class="hs-identifier hs-var">controllerState</span></a></span><span> </span><span class="annot"><span class="annottext">ActionController act i r state
+</span><a href="#local-6989586621679101606"><span class="hs-identifier hs-var">controller</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-163"></span><span>
+</span><span id="line-164"></span><span class="annot"><span class="hs-comment">{- |
+    Running a tester requires:
+    
+    * a specification model in the form of an automaton, as defined in &quot;Lattest.Model.Automaton&quot;
+    * a 'TestController', defined in this module itself, and
+    * an adapter, as defined in &quot;Lattest.Adapter.Adapter&quot;.
+
+    Running a testing experiment is done by interacting with the given adapter, controlled by the given test controller. The experiment
+    stops when the action controller decides to, or when an observation is made that is forbidden or underspecified according
+    to the specification model. Returns the test verdict according to the specification model and the additional
+    result returned by the test controller.
+-}</span></span><span>
+</span><span id="line-176"></span><span id="local-6989586621679101401"><span id="local-6989586621679101402"><span id="local-6989586621679101403"><span id="local-6989586621679101404"><span id="local-6989586621679101405"><span id="local-6989586621679101406"><span id="local-6989586621679101407"><span id="local-6989586621679101408"><span id="local-6989586621679101409"><span class="annot"><a href="Lattest.Exec.Testing.html#runTester"><span class="hs-identifier hs-type">runTester</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutomatonSemantics"><span class="hs-identifier hs-type">AutomatonSemantics</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101401"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101402"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101403"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101404"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101405"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101406"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#InputCommand"><span class="hs-identifier hs-type">InputCommand</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101407"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101406"><span class="hs-identifier hs-type">act</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StateConfiguration.html#PermissionConfiguration"><span class="hs-identifier hs-type">PermissionConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101401"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span>
+</span><span id="line-177"></span><span>    </span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSem"><span class="hs-identifier hs-type">AutSem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101401"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101402"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101403"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101404"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101405"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101406"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101401"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101402"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101403"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101404"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101405"><span class="hs-identifier hs-type">tloc</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101406"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101408"><span class="hs-identifier hs-type">state</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101407"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101409"><span class="hs-identifier hs-type">r</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101406"><span class="hs-identifier hs-type">act</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679101407"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679101409"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span></span></span></span></span></span></span></span></span></span><span>
+</span><span id="line-178"></span><span id="runTester"><span class="annot"><span class="annottext">runTester :: forall (m :: * -&gt; *) loc q t tloc act i state r.
+(AutomatonSemantics m loc q t tloc act, InputCommand i act,
+ PermissionConfiguration m) =&gt;
+AutSem m loc q t tloc act
+-&gt; TestController m loc q t tloc act state i r
+-&gt; Adapter act i
+-&gt; IO (Verdict, r)
+</span><a href="Lattest.Exec.Testing.html#runTester"><span class="hs-identifier hs-var hs-var">runTester</span></a></span></span><span> </span><span id="local-6989586621679101637"><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101637"><span class="hs-identifier hs-var">spec</span></a></span></span><span> </span><span id="local-6989586621679101638"><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101638"><span class="hs-identifier hs-var">testSelection</span></a></span></span><span> </span><span id="local-6989586621679101639"><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101639"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ActionController
+  act
+  i
+  (Verdict, r)
+  (AutSem m loc q t tloc act,
+   TestController m loc q t tloc act state i r)
+-&gt; Adapter act i -&gt; IO (Verdict, r)
+forall act i r state.
+ActionController act i r state -&gt; Adapter act i -&gt; IO r
+</span><a href="Lattest.Exec.Testing.html#runExperiment"><span class="hs-identifier hs-var">runExperiment</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+-&gt; TestController m loc q t tloc act state i r
+-&gt; ActionController
+     act
+     i
+     (Verdict, r)
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+forall (m :: * -&gt; *) loc q t tloc act i state r.
+(AutomatonSemantics m loc q t tloc act, InputCommand i act,
+ PermissionConfiguration m) =&gt;
+AutSem m loc q t tloc act
+-&gt; TestController m loc q t tloc act state i r
+-&gt; ActionController
+     act
+     i
+     (Verdict, r)
+     (AutSem m loc q t tloc act,
+      TestController m loc q t tloc act state i r)
+</span><a href="Lattest.Exec.Testing.html#makeTester"><span class="hs-identifier hs-var">makeTester</span></a></span><span> </span><span class="annot"><span class="annottext">AutSem m loc q t tloc act
+</span><a href="#local-6989586621679101637"><span class="hs-identifier hs-var">spec</span></a></span><span> </span><span class="annot"><span class="annottext">TestController m loc q t tloc act state i r
+</span><a href="#local-6989586621679101638"><span class="hs-identifier hs-var">testSelection</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Adapter act i
+</span><a href="#local-6989586621679101639"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-179"></span><span>
+</span><span id="line-180"></span><span class="hs-comment">--runStepper :: (Automaton aut c act) =&gt; aut -&gt; ActionController (Path aut c act) act r state  -&gt; IO r</span><span>
+</span><span id="line-181"></span><span class="hs-comment">--runStepper spec controller = runExperiment controller (simulateSpec spec)</span><span>
+</span><span id="line-182"></span><span>
+</span><span id="line-183"></span><span>
+</span><span id="line-184"></span><span>
+</span><span id="line-185"></span><span>
+</span><span id="line-186"></span><span>
+</span><span id="line-187"></span><span>
+</span><span id="line-188"></span></pre></body></html>

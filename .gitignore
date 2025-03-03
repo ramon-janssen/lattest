@@ -1,0 +1,7 @@
+dist-newstyle
+.stack-work/
+**/*.lock
+**/*.cabal
+**/*.prof
+**/Main
+*~
