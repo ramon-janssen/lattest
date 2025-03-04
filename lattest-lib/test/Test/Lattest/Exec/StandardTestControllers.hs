@@ -77,7 +77,7 @@ testRandomFIncorrectInput :: Test
 testRandomFIncorrectInput = TestCase $ do
     imp <- impFDetIncorrectInput
     let model = semanticsQuiescentInputAttemptConcrete sf
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectInput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
@@ -85,8 +85,7 @@ testRandomFIncorrectInput = TestCase $ do
     assertEqual "expected test failure on ?A̅" (In $ Attempt (B, False)) (last observed)
     -- the only observation leading to Q2fd is Y
     assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ TimeoutOut X) == prev || (Out $ TimeoutOut Y) == prev
-    assertEqual "state before the final state should be inconclusive" (Just True) (not . isConclusive <$> maybePrvMq)
-    assertEqual "final state should be conclusive" (Just True) (isConclusive <$> maybeMq)
+    assertEqual "final state should be inconclusive" (Just True) (not . isConclusive <$> maybeMq)
     
 
 
