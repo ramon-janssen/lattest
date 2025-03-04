@@ -25,7 +25,8 @@ import qualified Data.Set as Set (toList, fromList)
 import Lattest.Adapter.StandardAdapters(Adapter,pureAdapter,acceptingInputs)
 
 nrSteps = 50
-testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` traceObserver `andObserving` stateObserver
+testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
 
 x = Out X
 y = Out Y
@@ -42,10 +43,10 @@ testRandomFCorrect :: Test
 testRandomFCorrect = TestCase $ do
     imp <- impFDetCorrect
     let model = semanticsQuiescentInputAttemptConcrete sf
-    (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
     assertEqual "testRandomFCorrect should pass" Pass verdict
     assertEqual "incorrect number of observations made" nrSteps (length observed)
-    assertEqual "final state should be definite" (Just True) (isConclusive <$> maybeMq)
+    assertEqual "final state should be inconclusive" (Just True) (not . isConclusive <$> maybeMq)
 
 tFDetIncorrectOutput Q0fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q0fd)]
 tFDetIncorrectOutput Q1fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q2fd)]
@@ -56,7 +57,7 @@ testRandomFIncorrectOutput :: Test
 testRandomFIncorrectOutput = TestCase $ do
     imp <- impFDetIncorrectOutput
     let model = semanticsQuiescentInputAttemptConcrete sf
-    (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectOutput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
@@ -64,7 +65,8 @@ testRandomFIncorrectOutput = TestCase $ do
     assertEqual "expected test failure on !Y" (Out $ TimeoutOut X) (last observed)
     -- the only observations leading to Q2fd are X and Y
     assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ TimeoutOut X) == prev || (Out $ TimeoutOut Y) == prev
-    assertEqual "final state should be definite" (Just True) (isConclusive <$> maybeMq)
+    assertEqual "state before the final state should be inconclusive" (Just True) (not . isConclusive <$> maybePrvMq)
+    assertEqual "final state should be conclusive" (Just True) (isConclusive <$> maybeMq)
 
 tFDetIncorrectInput Q0fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q0fd)]
 tFDetIncorrectInput Q1fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q2fd)]
@@ -75,7 +77,7 @@ testRandomFIncorrectInput :: Test
 testRandomFIncorrectInput = TestCase $ do
     imp <- impFDetIncorrectInput
     let model = semanticsQuiescentInputAttemptConcrete sf
-    (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectInput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
@@ -83,7 +85,8 @@ testRandomFIncorrectInput = TestCase $ do
     assertEqual "expected test failure on ?A̅" (In $ Attempt (B, False)) (last observed)
     -- the only observation leading to Q2fd is Y
     assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ TimeoutOut X) == prev || (Out $ TimeoutOut Y) == prev
-    assertEqual "final state should be definite" (Just True) (isConclusive <$> maybeMq)
+    assertEqual "state before the final state should be inconclusive" (Just True) (not . isConclusive <$> maybePrvMq)
+    assertEqual "final state should be conclusive" (Just True) (isConclusive <$> maybeMq)
     
 
 

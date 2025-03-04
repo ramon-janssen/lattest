@@ -38,6 +38,7 @@ andObserving,
 observingOnly,
 traceObserver,
 stateObserver,
+inconclusiveStateObserver,
 -- * Test Side Effects
 TestSideEffect,
 withSideEffect,
@@ -49,7 +50,8 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(InputCommand, IOAct(..), TimeoutIO, Timeout(..), asTimeout, actToInputChoice)
-import Lattest.Model.Automaton(AutSem(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu)
+import Lattest.Model.Automaton(AutSem(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Model.StateConfiguration(isConclusive, PermissionConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Data.Either(isLeft)
@@ -237,10 +239,23 @@ traceObserver = observer [] (\trace _ act _ -> return $ act : trace) (pure . rev
 
 -- FIXME get rid of the Maybe
 {- |
-    A 'TestObserver' that returns the last state configuration of the specification model.
+    A 'TestObserver' that returns the last state configuration of the specification model. This may be a conclusive state. For example,
+    during a failed test, this observer returns 'forbidden'.
 -}
 stateObserver :: TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
-stateObserver = observer Nothing (\_ _ _ mq -> return $ Just mq) return
+stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) return
+
+{- |
+    A 'TestObserver' that returns the last inconclusive state configuration of the specification model. For example, during a failing test,
+    this observer returns the last state before the failure.
+    
+-}
+inconclusiveStateObserver :: PermissionConfiguration m => TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
+inconclusiveStateObserver = observer Nothing makeSelection return
+    where
+    makeSelection _ aut _ mq = 
+        let mq' = stateConf aut
+        in return $ Just $ if isConclusive mq' then mq else mq'
 
 {- |
     'TestSideEffect's perform side effects during testing, but have no impact on the testing itself, nor on the result.
