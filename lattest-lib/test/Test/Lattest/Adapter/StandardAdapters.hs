@@ -62,9 +62,11 @@ testJSONSocketAdapterByte = TestCase $ withSocketsDo $ do
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "6" -- the SUT sends 6
     assertObserveBytes (C8.pack "6") adap -- the adapter observes 6 from the SUT
 
+    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
     close adap
     Socket.gracefulClose listenConn 1000
     Socket.gracefulClose listenSock 1000
+    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
 
 testAdapterAcceptingInput :: Test
 testAdapterAcceptingInput = TestCase $ do
@@ -146,9 +148,11 @@ testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "6\n" -- the SUT sends 6
     assertObserve 6 adap -- the adapter observes 6 from the SUT
 
+    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
     close adap
     Socket.gracefulClose listenConn 1000
     Socket.gracefulClose listenSock 1000
+    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
 
 _assertRecv :: String -> String -> Socket -> IO ()
 _assertRecv name s sock = void $ assertRecv name s sock
@@ -246,9 +250,11 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
         "{\"comment\":\"seventh!\",\"element\":7,\"tag\":\"Cons\",\"tail\":{\"comment\":\"eighth!\",\"element\":8,\"tag\":\"Cons\",\"tail\":{\"tag\":\"Nil\"}}}\n" -- the SUT sends [7,8].
     assertObserve list78 adap -- the adapter observes [7,8] from the SUT
 
+    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
     close adap
     Socket.gracefulClose listenConn 1000
     Socket.gracefulClose listenSock 1000
+    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
 
 
 

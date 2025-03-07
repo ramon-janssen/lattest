@@ -42,7 +42,7 @@ main :: IO ()
 main = do
     -- unit tests, for fully written out scenarios
     putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
-    void $ timeout (durationSeconds * 1000000) $ runTestTT tests
+    void $ timeout (durationSeconds * 10000000) $ runTestTT tests
     -- property tests
     putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
     void $ runQuickCheckTests
