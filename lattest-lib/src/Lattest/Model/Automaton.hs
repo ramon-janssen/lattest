@@ -154,35 +154,36 @@ class (StateSemantics loc q, TransitionSemantics t act) => StepSemantics loc q t
     -}
     move :: q -> act -> Maybe (t, tloc) -> loc -> q
 
+-- | Take a transition for the given action.
+after :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+after autRun act' = autRun { stateConf = stateConf autRun >>= after' (transRel $ syntacticAutomaton autRun) act' }
+
 {- |
     Automaton semantics expresses that we can take steps, according to the step semantics to move from one state configuration
     to another.
 -}
 class (StepSemantics loc q t tloc act, StateConfiguration m) => AutomatonSemantics m loc q t tloc act where
     -- | Take a transition for the given action.
-    after :: AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
-    after autRun act' = autRun { stateConf = stateConf autRun >>= after' (transRel $ syntacticAutomaton autRun) act' }
+    after' :: (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+    after' = after'' Nothing -- TODO this function was introduced purely because the call to 'move' in 'moveWithinLocation' below would not accept a plain
+                             -- (Nothing :: Maybe (t, tloc)), since it would not identify the t/tloc with the top-level t/tloc, despite my commented out attempts
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> [act] -> AutSem m loc q t tloc act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
-after' :: (StepSemantics loc q t tloc act, StateConfiguration m) => (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-after' = after'' Nothing -- TODO this function was introduced purely because the call to 'move' in 'moveWithinLocation' below would not accept a plain
-                         -- (Nothing :: Maybe (t, tloc)), since it would not identify the t/tloc with the top-level t/tloc, despite my commented out attempts
-    where
-    --after' :: forall loc. forall q. forall t. forall tloc. forall act. forall m. (StepSemantics loc q t tloc act, StateConfiguration m) => (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-    after'' :: (StepSemantics loc q t tloc act, StateConfiguration m) => Maybe (t, tloc) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-    after'' nottloc transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
-        Nothing -> implicitDestination act
-        Just (LocationMove mloc) -> moveWithinLocation q act nottloc <$> mloc
-            where
-            --moveWithinLocation :: (StepSemantics loc q t tloc act) => q -> act -> (Maybe (t, tloc)) -> m loc -> q
-            moveWithinLocation q act nottloc loc = move q act nottloc loc
-        Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
-            where
-            moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
+--after' :: forall loc. forall q. forall t. forall tloc. forall act. forall m. (StepSemantics loc q t tloc act, StateConfiguration m) => (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+after'' :: (StepSemantics loc q t tloc act, StateConfiguration m) => Maybe (t, tloc) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+after'' nottloc transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
+    Nothing -> implicitDestination act
+    Just (LocationMove mloc) -> moveWithinLocation q act nottloc <$> mloc
+        where
+        --moveWithinLocation :: (StepSemantics loc q t tloc act) => q -> act -> (Maybe (t, tloc)) -> m loc -> q
+        moveWithinLocation q act nottloc loc = move q act nottloc loc
+    Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
+        where
+        moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
 
 ------------------------------------------------------------------
 -- utility function to obtain the menu of outgoing transitions --
