@@ -140,6 +140,7 @@ tests = TestList [
     testTraceFailsWithQuiescence,
     testSpecF,
     testSpecG,
+    testSpecGQuiescent,
     testRandomFCorrect,
     testRandomFIncorrectOutput,
     testRandomFIncorrectInput

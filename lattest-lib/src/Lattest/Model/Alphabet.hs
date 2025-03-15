@@ -25,6 +25,7 @@ fromOutput,
     * [/Jan Tretmans/, Model based testing with labelled transition systems (Formal Methods and Testing), 2008](https://repository.ubn.ru.nl/bitstream/handle/2066/72680/72680.pdf)
 -}
 Timeout (..),
+δ,
 TimeoutIO,
 asTimeout,
 fromTimeout,
@@ -136,6 +137,9 @@ instance Show o => Show (Timeout o) where
     Add observation of timeouts to the observed inputs and outputs.
 -}
 type TimeoutIO i o = IOAct i (Timeout o)
+
+δ :: IOAct i (Timeout o)
+δ = Out Timeout
 
 {- |
     Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to a timeout.

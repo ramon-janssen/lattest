@@ -7,16 +7,17 @@ IG(..),
 OG(..),
 sg,
 testSpecF,
-testSpecG
+testSpecG,
+testSpecGQuiescent
 )
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 
-import Lattest.Model.Automaton(after, stateConf)
-import Lattest.Model.StandardAutomata(aiaWithAlphabet, semanticsConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..))
+import Lattest.Model.Automaton(after, afters, stateConf)
+import Lattest.Model.StandardAutomata(aiaWithAlphabet, semanticsConcrete, semanticsQuiescentConcrete)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
 
@@ -74,7 +75,7 @@ tg Q0g = Map.fromList [(on, q1g /\ q3g /\ q5g /\ q8g)]
 tg Q1g = Map.fromList [(ag, q2g)]
 tg Q2g = Map.fromList [(c, top)]
 tg Q3g = Map.fromList [(bg, q4g)]
-tg Q4g = Map.fromList [(t, top)]
+tg Q4g = Map.fromList [(t, top), (tm, top)]
 tg Q5g = Map.fromList [(bg, q6g \/ q7g)]
 tg Q6g = Map.fromList [(cm, top)]
 tg Q7g = Map.fromList [(tm, top)]
@@ -87,4 +88,12 @@ testSpecG :: Test
 testSpecG = TestCase $ do
     let rg = semanticsConcrete sg
     assertEqual "sg after ?On ?B !T" bot (stateConf $ rg `after` on `after` bg `after` t)
-    assertEqual "sg after ?On ?B !TM" bot (stateConf $ rg `after` on `after` bg `after` tm)
+    assertEqual "sg after ?On ?B !TM" q10g (stateConf $ rg `after` on `after` bg `after` tm)
+
+testSpecGQuiescent :: Test
+testSpecGQuiescent = TestCase $ do
+    let rg = semanticsQuiescentConcrete sg
+    assertEqual "Δ(sg) after δ ?On δ ?B !T" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout t])
+    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
+    assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout tm])
+    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
