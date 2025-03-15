@@ -143,34 +143,24 @@ class StateSemantics loc q where
     asLoc :: q -> loc
 
 {- |
-    StepSemantics expresses that we can move through an automaton run with state semantics by applying the transition semantics
-    The transition consists of two parts: one global part outside the configuration monad (e.g. describing the action that applies to that transition),
-    described by the transition semantics, and a local part inside the monad, bound to the destination state (e.g. to update symbolic variables for a state).
+    Automaton semantics expresses that we can take steps, to move from one state configuration to another. 
 -}
-class (StateSemantics loc q, TransitionSemantics t act) => StepSemantics loc q t tloc act where
-    {- |
-        Given the current state, an action and the transition matching that action, and a new location and local transition, produce the new state
-        The case of no transition (i.e. no transition applies in the TransitionSemantics) can be used to move within a location.
-    -}
-    move :: q -> act -> Maybe (t, tloc) -> loc -> q
+class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
+    -- | Take a transition using the given transition mapping, for the given action, from the given state.
+    after' :: (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
 
 {- |
-    Automaton semantics expresses that we can take steps, according to the step semantics to move from one state configuration
-    to another.
+    Default implementation of the 'after\'' function: find the transition corresponding to the given action, and take a monadic step from the current
+    state configuration. For every state in the current state configuration, the given function is used to compute the new states, based on the new
+    (syntactical) locations that are found inside the transition.
+    
+    If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-class (StepSemantics loc q t tloc act, StateConfiguration m) => AutomatonSemantics m loc q t tloc act where
-    -- | Take a transition for the given action.
-    after' :: (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-    after' = defaultAfter Nothing -- TODO this function was introduced purely because the call to 'move' in 'moveWithinLocation' below would not accept a plain
-                             -- (Nothing :: Maybe (t, tloc)), since it would not identify the t/tloc with the top-level t/tloc, despite my commented out attempts
-
---after' :: forall loc. forall q. forall t. forall tloc. forall act. forall m. (StepSemantics loc q t tloc act, StateConfiguration m) => (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-defaultAfter :: (StepSemantics loc q t tloc act, StateConfiguration m) => Maybe (t, tloc) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-defaultAfter nottloc transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
+defaultAfter :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+defaultAfter move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
-    Just (LocationMove mloc) -> moveWithinLocation q act nottloc <$> mloc
+    Just (LocationMove mloc) -> moveWithinLocation q act Nothing <$> mloc
         where
-        --moveWithinLocation :: (StepSemantics loc q t tloc act) => q -> act -> (Maybe (t, tloc)) -> m loc -> q
         moveWithinLocation q act nottloc loc = move q act nottloc loc
     Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
         where
@@ -227,10 +217,9 @@ instance (Ord act) => FiniteMenu act act where
 instance StateSemantics q q where
     asLoc = id
 
-instance (TransitionSemantics t act) => StepSemantics q q t () act where
-    move _ _ _ q = q
-
 instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
+    where
+    after' = defaultAfter (\_ _ _ q -> q)
 
 ----------------
 -- quiescence --
