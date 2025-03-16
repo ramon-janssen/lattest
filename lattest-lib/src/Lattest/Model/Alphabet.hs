@@ -47,7 +47,11 @@ fromInputAttempt,
 -- ** Combined Input Refusals and Timeouts
 TimeoutIF,
 asTimeoutInputAttempt,
-fromTimeoutInputAttempt
+fromTimeoutInputAttempt,
+-- ** Unobservable actions
+Internal(..),
+vis,
+τ
 )
 where
 
@@ -244,3 +248,15 @@ asTimeoutInputAttempt (Out o) = Out (TimeoutOut o)
 fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
 fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
 fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
+
+{- |
+    Internal transitions
+-}
+data Internal act = Internal | Visible act deriving (Eq, Ord)
+
+τ = Internal
+vis = Visible
+
+instance Show act => Show (Internal act) where
+    show Internal = "τ"
+    show (Visible act) = show act

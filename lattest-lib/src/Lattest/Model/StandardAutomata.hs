@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
@@ -56,7 +57,7 @@ semanticsQuiescentInputAttemptConcrete
 where
 
 import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF)
-import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination)
+import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination, TransitionSemantics, AutomatonSemantics)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\))
 
 import Data.Foldable (toList)
@@ -246,7 +247,7 @@ aiaWithAlphabet' = iaWithAlphabet'
 type ConcreteAutSem m q act = AutSem m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-semanticsConcrete :: (StateConfiguration m, Ord t) => AutSyn m loc t () -> ConcreteAutSem m loc t
+semanticsConcrete :: (TransitionSemantics t t, StateConfiguration m, Ord t, AutomatonSemantics m loc loc t () t) => AutSyn m loc t () -> ConcreteAutSem m loc t
 semanticsConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.

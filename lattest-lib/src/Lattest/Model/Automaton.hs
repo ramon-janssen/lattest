@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {-|
     This module contains the definitions and semantics of automata models.
@@ -40,10 +41,10 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt)
+import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified, NonDetStateConfiguration, join)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,Internal(..))
 import Lattest.Util.Utils((&&&))
-import Data.Map (Map)
+import Data.Map (Map, filterWithKey, mapKeys)
 import qualified Data.Map as Map (keys, lookup, toList)
 import Data.Set (Set)
 import qualified Data.Set as Set (fromList, unions, toList, map)
@@ -104,6 +105,7 @@ semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyn m loc t tloc -> (
 semantics aut initState = AutomatonRun { stateConf = initState <$> locConf aut, syntacticAutomaton = aut }
 
 -- | The Observable typeclass defines which types can be used as labels on transitions.
+-- FIXME this is a bad name, internal transitions are now also Observable
 class Observable act where
     {- |
         Defines the implicit state configuration reached by a given transition label if that label is omitted from 
@@ -146,18 +148,24 @@ class StateSemantics loc q where
     Automaton semantics expresses that we can take steps, to move from one state configuration to another. 
 -}
 class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
-    -- | Take a transition using the given transition mapping, for the given action, from the given state.
-    after' :: (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+    -- | Take a transition for the given action.
+    after :: AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
 
 {- |
-    Default implementation of the 'after\'' function: find the transition corresponding to the given action, and take a monadic step from the current
-    state configuration. For every state in the current state configuration, the given function is used to compute the new states, based on the new
-    (syntactical) locations that are found inside the transition.
+    Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
+    produce a new state configuration from the transition relation, the action taken, and the previous state.
+-}
+monadicAfter :: StateConfiguration m => ((loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter step autRun act' = autRun { stateConf = stateConf autRun >>= step (transRel $ syntacticAutomaton autRun) act' }
+
+{- |
+    Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
+    take a monadic step from the current state configuration.
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-defaultAfter :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-defaultAfter move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> moveWithinLocation q act Nothing <$> mloc
         where
@@ -165,10 +173,6 @@ defaultAfter move transMap act q = case takeTransition (asLoc q) act (transMap $
     Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
-
--- | Take a transition for the given action.
-after :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
-after autRun act' = autRun { stateConf = stateConf autRun >>= after' (transRel $ syntacticAutomaton autRun) act' }
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> [act] -> AutSem m loc q t tloc act
@@ -219,7 +223,7 @@ instance StateSemantics q q where
 
 instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
     where
-    after' = defaultAfter (\_ _ _ q -> q)
+    after = monadicAfter $ withStep (\_ _ _ q -> q)
 
 ----------------
 -- quiescence --
@@ -274,3 +278,49 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
     asActions t = [asTimeoutInputAttempt t]
     locationActions _ = [Out Timeout]
+
+--------------------------
+-- internal transitions --
+--------------------------
+instance Observable act => Observable (Internal act) where
+    implicitDestination Internal = forbidden
+    implicitDestination (Visible act) = implicitDestination act
+
+instance TransitionSemantics t act => TransitionSemantics (Internal t) act where
+    asTransition loc act = Visible <$> asTransition loc act
+
+instance {-# OVERLAPPING #-} (AutomatonSemantics m q q t () act, NonDetStateConfiguration m, Ord t, Eq (m q)) => AutomatonSemantics m q q (Internal t) () act
+    where
+         -- TODO requires translating the eClosure to an automaton which doesn't contain internal
+         -- transitions in order to make `after` take the AutomatonSemantics from the class constraint
+    after aut act = aut { stateConf = stateConf $ (withoutInternal eClosure) `after` act }
+        where
+        eClosure = expandEClosure aut
+        expandEClosure aut' =
+            -- find the least fix point of the state configuration, expanding via internal transitions
+            let conf' = stateConf aut'
+                aut'' = afterInternal aut'
+                conf'' = stateConf aut'' `join` conf'
+            in if conf' == conf''
+                then aut {stateConf = conf'}
+                else expandEClosure $ aut {stateConf = conf''}
+        afterInternal aut = aut { stateConf = stateConf aut >>= stepInternal (transRel $ syntacticAutomaton aut) }
+        stepInternal t q = case Map.lookup Internal (t $ asLoc q) of
+            Nothing -> forbidden
+            Just mq -> snd <$> mq
+        withoutInternal :: AutomatonSemantics m q q (Internal t) () act => AutSem m q q (Internal t) () act -> AutSem m q q t () act
+        withoutInternal aut = aut { syntacticAutomaton = withoutInternal' $ syntacticAutomaton aut }
+        -- AutSyn m loc t tloc
+        withoutInternal' :: AutomatonSemantics m loc loc (Internal t) () act => AutSyn m loc (Internal t) () -> AutSyn m loc t ()
+        withoutInternal' aut = aut { transRel = withoutInternal'' $ transRel aut }
+        withoutInternal'' :: AutomatonSemantics m loc loc (Internal t) () act => (loc -> Map (Internal t) (m ((), loc))) -> (loc -> Map t (m ((), loc)))
+        withoutInternal'' t q = (mapKeys fromInternal . filterKeys isVisible) (t q) -- mapKeysMonotonic may also suffice
+        filterKeys f = filterWithKey (\k _ -> f k) -- could be replaced by the filterKeys in Data.Map if collections is bumped to version >= 0.8
+        isVisible Internal = False
+        isVisible (Visible _) = True
+        fromInternal (Visible t) = t
+
+
+
+
+

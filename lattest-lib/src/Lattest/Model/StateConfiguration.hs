@@ -58,6 +58,9 @@ isConclusive,
 StateConfiguration,
 PermissionApplicative,
 PermissionFunctor,
+-- ** General non-determinism
+NonDetStateConfiguration,
+join
 )
 where
 
@@ -108,6 +111,7 @@ instance Show a => Show (DetState a) where
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDetState q = NonDet [q] | UnderspecNonDet
+-- TODO implement set-equality
 
 instance PermissionConfiguration NonDetState where
     isForbidden (NonDet []) = True
@@ -128,11 +132,7 @@ instance Applicative NonDetState where
     _ <*> UnderspecNonDet = UnderspecNonDet
     
 instance Monad NonDetState where
-    NonDet ss >>= f = foldr disj (NonDet []) $ fmap f ss  
-        where
-        disj :: NonDetState q -> NonDetState q -> NonDetState q
-        disj (NonDet s) (NonDet s') = NonDet (s' ++ s)
-        disj _ _ = UnderspecNonDet -- either argument is underspecified, so the disjunction (binary non-deterministic combinator) is underspecified
+    NonDet ss >>= f = foldr join (NonDet []) $ fmap f ss  
     UnderspecNonDet >>= _ = UnderspecNonDet
 
 instance Foldable NonDetState where
@@ -142,6 +142,10 @@ instance Foldable NonDetState where
 instance Show a => Show (NonDetState a) where
     show (NonDet a) = show a
     show UnderspecNonDet = "-underspecified-"
+
+instance NonDetStateConfiguration NonDetState where
+    join (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
+    join _ _ = UnderspecNonDet -- either argument is underspecified, so the disjunction (binary non-deterministic combinator) is underspecified
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
@@ -198,6 +202,9 @@ instance Show a => Show (FDL a) where
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
+instance NonDetStateConfiguration FDL where
+    join = (\/)
+
 {-|
     Permissions describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
     behaviour is not allowed, not is any subsequent behaviour. 'Underspecified' describes that behaviour is allowed and any subsequent
@@ -246,5 +253,7 @@ type PermissionApplicative m = (PermissionConfiguration m, Applicative m)
 -- | Abbreviation for types which are both permission configurations and Functors.
 type PermissionFunctor m = (PermissionConfiguration m, Functor m)
 
-
+-- | 
+class NonDetStateConfiguration m where
+    join :: m a -> m a -> m a
 
