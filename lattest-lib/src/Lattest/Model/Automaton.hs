@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {-|
     This module contains the definitions and semantics of automata models.
@@ -146,18 +147,24 @@ class StateSemantics loc q where
     Automaton semantics expresses that we can take steps, to move from one state configuration to another. 
 -}
 class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
-    -- | Take a transition using the given transition mapping, for the given action, from the given state.
-    after' :: (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+    -- | Take a transition for the given action.
+    after :: AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
 
 {- |
-    Default implementation of the 'after\'' function: find the transition corresponding to the given action, and take a monadic step from the current
-    state configuration. For every state in the current state configuration, the given function is used to compute the new states, based on the new
-    (syntactical) locations that are found inside the transition.
+    Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
+    produce a new state configuration from the transition relation, the action taken, and the previous state.
+-}
+monadicAfter :: StateConfiguration m => ((loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter step autRun act' = autRun { stateConf = stateConf autRun >>= step (transRel $ syntacticAutomaton autRun) act' }
+
+{- |
+    Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
+    take a monadic step from the current state configuration.
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-defaultAfter :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-defaultAfter move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> moveWithinLocation q act Nothing <$> mloc
         where
@@ -165,10 +172,6 @@ defaultAfter move transMap act q = case takeTransition (asLoc q) act (transMap $
     Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
-
--- | Take a transition for the given action.
-after :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
-after autRun act' = autRun { stateConf = stateConf autRun >>= after' (transRel $ syntacticAutomaton autRun) act' }
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> [act] -> AutSem m loc q t tloc act
@@ -219,7 +222,7 @@ instance StateSemantics q q where
 
 instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
     where
-    after' = defaultAfter (\_ _ _ q -> q)
+    after = monadicAfter $ withStep (\_ _ _ q -> q)
 
 ----------------
 -- quiescence --
