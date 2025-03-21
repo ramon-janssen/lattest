@@ -35,14 +35,14 @@ after,
 afters,
 -- ** Finite Transition Labels
 FiniteMenu,
-specifiedMenu
+specifiedMenu,
 )
 where
 
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,SymInteract(..),GateValue(..),Value)
 import Lattest.Util.Utils((&&&))
 import Data.Map (Map)
 import qualified Data.Map as Map (keys, lookup, toList)
@@ -50,6 +50,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set (fromList, unions, toList, map)
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
+import Grisette.Core as Grisette
 
 ------------
 -- syntax --
@@ -277,3 +278,15 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
     asActions t = [asTimeoutInputAttempt t]
     locationActions _ = [Out Timeout]
+
+--------------------------------
+-- STS interpretation --
+--------------------------------
+
+data IntrpState a = IntrpState a (Map Grisette.Identifier Value)
+
+instance StateSemantics a (IntrpState a) where
+    asLoc (IntrpState l _) = l
+
+instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o) where
+    asTransition _ (GateValue gate values) = Just (SymInteract gate []) -- need label set for params!

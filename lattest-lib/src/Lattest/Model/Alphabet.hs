@@ -47,9 +47,18 @@ fromInputAttempt,
 -- ** Combined Input Refusals and Timeouts
 TimeoutIF,
 asTimeoutInputAttempt,
-fromTimeoutInputAttempt
+fromTimeoutInputAttempt,
+-- * STS
+SymInteract(..),
+SymGuard,
+SymAssign,
+GateValue(..),
+Value
 )
 where
+
+import Grisette.Core as Grisette
+import qualified Data.Map as Map (Map, fromList)
 
 {- |
     The class of observable actions for which it is possible to derive whether the actions are accepted or refused. For types where refusal does not
@@ -244,3 +253,20 @@ asTimeoutInputAttempt (Out o) = Out (TimeoutOut o)
 fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
 fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
 fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
+
+
+-- STS data types
+
+data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
+
+data SymInteract i o = SymInteract (Gate i o) [Grisette.Identifier] deriving (Eq, Ord)
+
+type SymGuard = Grisette.SExpr
+
+type SymAssign  = Map.Map Grisette.Identifier Grisette.SExpr
+
+type Value = SExpr
+
+data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
+
+

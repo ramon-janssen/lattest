@@ -51,11 +51,11 @@ semanticsConcrete,
 ConcreteTimeoutAutSem,
 semanticsQuiescentConcrete,
 ConcreteTimeoutInputAttemptAutSem,
-semanticsQuiescentInputAttemptConcrete
+semanticsQuiescentInputAttemptConcrete,
 )
 where
 
-import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF)
+import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign)
 import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\))
 
@@ -76,7 +76,7 @@ type NDIA loc i o = IA NonDetState loc i o
 -- | alternating IA
 type AIA loc i o = IA FDL loc i o
 
-
+type STS m loc i o = AutSyn m loc (SymInteract i o) ((SymGuard,SymAssign))
 
 ---------------------------------
 -- instantiations of alphabets --
