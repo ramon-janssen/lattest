@@ -53,7 +53,9 @@ SymInteract(..),
 SymGuard,
 SymAssign,
 GateValue(..),
-Value
+Value,
+Gate(..),
+Variable
 )
 where
 
@@ -259,11 +261,13 @@ fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
 
-data SymInteract i o = SymInteract (Gate i o) [Grisette.Identifier] deriving (Eq, Ord)
+type Variable = Grisette.Identifier
+
+data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 
 type SymGuard = Grisette.SExpr
 
-type SymAssign  = Map.Map Grisette.Identifier Grisette.SExpr
+type SymAssign  = Map.Map Variable Grisette.SExpr
 
 type Value = SExpr
 

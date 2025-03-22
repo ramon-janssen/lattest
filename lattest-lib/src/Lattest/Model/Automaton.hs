@@ -42,11 +42,13 @@ where
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,SymInteract(..),GateValue(..),Value)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
+    SymInteract(..),GateValue(..),Value, SymGuard, SymAssign,Variable)
 import Lattest.Util.Utils((&&&))
 import Data.Map (Map)
-import qualified Data.Map as Map (keys, lookup, toList)
+import qualified Data.Map as Map (keys, lookup, toList,map,foldrWithKey,mapWithKey)
 import Data.Set (Set)
+import Data.List as List
 import qualified Data.Set as Set (fromList, unions, toList, map)
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
@@ -164,7 +166,7 @@ monadicAfter step autRun act' = autRun { stateConf = stateConf autRun >>= step (
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
 withStep move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> moveWithinLocation q act Nothing <$> mloc
@@ -223,7 +225,7 @@ instance StateSemantics q q where
 
 instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
     where
-    after = monadicAfter $ withStep (\_ _ _ q -> q)
+    after = monadicAfter $ withStep (\_ _ _ q -> pure q)
 
 ----------------
 -- quiescence --
@@ -283,10 +285,27 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a (Map Grisette.Identifier Value)
+data IntrpState a = IntrpState a (Map Variable Value)
 
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
 instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o) where
     asTransition _ (GateValue gate values) = Just (SymInteract gate []) -- need label set for params!
+
+
+instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
+    where --  (q -> act -> Maybe (t, tloc) -> loc -> q)
+    after = monadicAfter $ withStep (\(IntrpState l1 varMap) (GateValue g ws) (Just (SymInteract g2 ps, (phi,psi))) l2 ->
+        if List.length ws /= List.length ps
+            then forbidden
+            else
+                let pwzip = (zip ps ws)
+                    pmodel = List.foldr (\(p,w) m -> Grisette.insertValue p w m) Grisette.emptyModel pwzip
+                    model = Map.foldrWithKey (\x xval m -> Grisette.insertValue x xval m) pmodel varMap
+                in if not (evalSym False model phi) -- guard is false
+                    then forbidden
+                    else let varMap2 = Map.mapWithKey (\(x,xval) -> case Map.lookup x psi of
+                                                            Nothing -> xval
+                                                            Just psiExpr -> evalSym False model psiExpr) varMap
+                         in return (l2, varMap2))

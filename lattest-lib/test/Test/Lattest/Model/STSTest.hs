@@ -7,7 +7,7 @@ import Test.HUnit
 
 import Lattest.Model.Automaton(after, afters, stateConf,automaton)
 import Lattest.Model.StandardAutomata(aiaWithAlphabet, semanticsConcrete, semanticsQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..))
+import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..))
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..))
 import qualified Data.Map as Map (empty, fromList)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))

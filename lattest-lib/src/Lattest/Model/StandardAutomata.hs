@@ -76,7 +76,7 @@ type NDIA loc i o = IA NonDetState loc i o
 -- | alternating IA
 type AIA loc i o = IA FDL loc i o
 
-type STS m loc i o = AutSyn m loc (SymInteract i o) ((SymGuard,SymAssign))
+type STS m loc i o = AutSyn m loc (SymInteract i o) (SymGuard,SymAssign)
 
 ---------------------------------
 -- instantiations of alphabets --
