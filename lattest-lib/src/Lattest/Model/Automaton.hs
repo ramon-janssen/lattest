@@ -163,13 +163,13 @@ monadicAfter step autRun act' = autRun { stateConf = stateConf autRun >>= step (
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
 withStep move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
-    Just (LocationMove mloc) -> moveWithinLocation q act Nothing <$> mloc
+    Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
         where
         moveWithinLocation q act nottloc loc = move q act nottloc loc
-    Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
+    Just (TransitionMove (t, mloc)) -> mloc >>= moveAlongTransition q act t
         where
         moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
 
@@ -222,7 +222,7 @@ instance StateSemantics q q where
 
 instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
     where
-    after = monadicAfter $ withStep (\_ _ _ q -> q)
+    after = monadicAfter $ withStep (\_ _ _ q -> pure q)
 
 ----------------
 -- quiescence --
