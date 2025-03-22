@@ -46,7 +46,7 @@ import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),
     SymInteract(..),GateValue(..),Value, SymGuard, SymAssign,Variable)
 import Lattest.Util.Utils((&&&))
 import Data.Map (Map)
-import qualified Data.Map as Map (keys, lookup, toList,map,foldrWithKey,mapWithKey)
+import qualified Data.Map as Map (keys, lookup, toList,map,foldrWithKey,mapWithKey,mapKeys)
 import Data.Set (Set)
 import Data.List as List
 import qualified Data.Set as Set (fromList, unions, toList, map)
@@ -300,12 +300,11 @@ instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m l
         if List.length ws /= List.length ps
             then forbidden
             else
-                let pwzip = (zip ps ws)
-                    pmodel = List.foldr (\(p,w) m -> Grisette.insertValue p w m) Grisette.emptyModel pwzip
+                let pmodel = List.foldr (\(p,w) m -> Grisette.insertValue p w m) Grisette.emptyModel (zip ps ws)
                     model = Map.foldrWithKey (\x xval m -> Grisette.insertValue x xval m) pmodel varMap
-                in if not (evalSym False model phi) -- guard is false
+                in if not $ Grisette.con $ Grisette.evalSym False model phi -- guard is false
                     then forbidden
-                    else let varMap2 = Map.mapWithKey (\(x,xval) -> case Map.lookup x psi of
+                    else let varMap2 = Map.mapWithKey (\x xval -> case Map.lookup x psi of
                                                             Nothing -> xval
-                                                            Just psiExpr -> evalSym False model psiExpr) varMap
-                         in return (l2, varMap2))
+                                                            Just psiExpr -> Grisette.evalSym False model psiExpr) varMap
+                         in return $ IntrpState l2 varMap2)

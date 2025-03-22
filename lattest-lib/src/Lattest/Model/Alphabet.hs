@@ -269,7 +269,7 @@ type SymGuard = Grisette.SExpr
 
 type SymAssign  = Map.Map Variable Grisette.SExpr
 
-type Value = SExpr
+type Value = Grisette.SExpr
 
 data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
 
