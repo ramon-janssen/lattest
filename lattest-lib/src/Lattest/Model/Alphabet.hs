@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DataKinds #-}
 
 {-|
     This module contains the definitions and semantics of different forms of observable actions, and inputs used in testing experiments.
@@ -55,11 +56,13 @@ SymAssign,
 GateValue(..),
 Value,
 Gate(..),
-Variable
+Variable,
+getTypedVar
 )
 where
 
 import Grisette.Core as Grisette
+import Grisette.SymPrim as GSymPrim
 import qualified Data.Map as Map (Map, fromList)
 
 {- |
@@ -261,11 +264,16 @@ fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
 
-type Variable = Grisette.Identifier
+getTypedVar :: (GSymPrim.SupportedPrim t0) => Variable -> TypedSymbol 'ConstantKind t0
+getTypedVar v = case v of
+    IntVar x -> GSymPrim.typedConstantSymbol x
+    BoolVar x -> GSymPrim.typedConstantSymbol x
+
+data Variable = IntVar Grisette.Symbol | BoolVar Grisette.Symbol deriving (Eq, Ord)
 
 data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 
-type SymGuard = Grisette.SExpr
+type SymGuard = GSymPrim.SymBool
 
 type SymAssign  = Map.Map Variable Grisette.SExpr
 

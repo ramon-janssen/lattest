@@ -43,7 +43,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
-    SymInteract(..),GateValue(..),Value, SymGuard, SymAssign,Variable)
+    SymInteract(..),GateValue(..),Value, SymGuard, SymAssign,Variable,getTypedVar)
 import Lattest.Util.Utils((&&&))
 import Data.Map (Map)
 import qualified Data.Map as Map (keys, lookup, toList,map,foldrWithKey,mapWithKey,mapKeys)
@@ -300,8 +300,8 @@ instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m l
         if List.length ws /= List.length ps
             then forbidden
             else
-                let pmodel = List.foldr (\(p,w) m -> Grisette.insertValue p w m) Grisette.emptyModel (zip ps ws)
-                    model = Map.foldrWithKey (\x xval m -> Grisette.insertValue x xval m) pmodel varMap
+                let pmodel = List.foldr (\(p,w) m -> Grisette.insertValue (getTypedVar p) w m) Grisette.emptyModel (zip ps ws)
+                    model = Map.foldrWithKey (\x xval m -> Grisette.insertValue (getTypedVar x) xval m) pmodel varMap
                 in if not $ Grisette.con $ Grisette.evalSym False model phi -- guard is false
                     then forbidden
                     else let varMap2 = Map.mapWithKey (\x xval -> case Map.lookup x psi of
