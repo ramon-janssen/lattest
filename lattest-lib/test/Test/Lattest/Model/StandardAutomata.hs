@@ -16,9 +16,9 @@ import Prelude hiding (take)
 import Test.HUnit
 
 import Lattest.Model.Automaton(after, afters, stateConf)
-import Lattest.Model.StandardAutomata(aiaWithAlphabet, semanticsConcrete, semanticsQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
-import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
+import Lattest.Model.StandardAutomata(aiaWithAlphabet, ndia, semanticsConcrete, semanticsQuiescentConcrete, semanticsConcreteH)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, τ, vis)
+import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, forbidden, underspecified)
 import qualified Data.Map as Map (toList, insert, fromList)
 
 data IF = A | B deriving (Show, Eq, Ord)
@@ -28,9 +28,9 @@ x = Out X
 y = Out Y
 af = In A
 bf = In B
-q0f = atom Q0f
-q1f = atom Q1f
-q2f = atom Q2f
+q0f = pure Q0f
+q1f = pure Q1f
+q2f = pure Q2f
 menuf = [af, bf, x, y]
 tf Q0f = Map.fromList [(af, q0f /\ (q1f \/ q2f)), (x, q0f), (y, q0f)]
 tf Q1f = Map.fromList [(x, top)]
@@ -59,17 +59,28 @@ on = In On
 take = In Take
 menug = [c, t, cm, tm, ag, bg, on, take]
 
-q0g = atom Q0g
-q1g = atom Q1g
-q2g = atom Q2g
-q3g = atom Q3g
-q4g = atom Q4g
-q5g = atom Q5g
-q6g = atom Q6g
-q7g = atom Q7g
-q8g = atom Q8g
-q9g = atom Q9g
-q10g = atom Q10g
+q0g :: Applicative m => m StateG
+q0g = pure Q0g
+q1g :: Applicative m => m StateG
+q1g = pure Q1g
+q2g :: Applicative m => m StateG
+q2g = pure Q2g
+q3g :: Applicative m => m StateG
+q3g = pure Q3g
+q4g :: Applicative m => m StateG
+q4g = pure Q4g
+q5g :: Applicative m => m StateG
+q5g = pure Q5g
+q6g :: Applicative m => m StateG
+q6g = pure Q6g
+q7g :: Applicative m => m StateG
+q7g = pure Q7g
+q8g :: Applicative m => m StateG
+q8g = pure Q8g
+q9g :: Applicative m => m StateG
+q9g = pure Q9g
+q10g :: Applicative m => m StateG
+q10g = pure Q10g
 
 tg Q0g = Map.fromList [(on, q1g /\ q3g /\ q5g /\ q8g)]
 tg Q1g = Map.fromList [(ag, q2g)]
@@ -97,3 +108,15 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
+
+tHidden Q0g = Map.fromList [(τ, q1g), (vis x, q2g), (vis y, forbidden), (vis af, q2g), (vis bf, underspecified)]
+tHidden Q1g = Map.fromList [(τ, forbidden), (vis x, q3g), (vis y, q3g), (vis af, q3g), (vis bf, q3g)]
+tHidden Q2g = Map.fromList [(τ, forbidden), (vis x, q3g), (vis y, forbidden), (vis af, underspecified), (vis bf, underspecified)]
+tHidden Q3g = Map.fromList [(τ, forbidden), (vis x, q3g), (vis y, forbidden), (vis af, underspecified), (vis bf, underspecified)]
+tHidden Q4g = Map.fromList [(τ, q4g), (vis x, forbidden), (vis y, forbidden), (vis af, underspecified), (vis bf, underspecified)]
+sHidden = ndia q0g tHidden
+
+testSpectHidden :: Test
+testSpectHidden = TestCase $ do
+    let rHidden = semanticsConcreteH sHidden
+    assertEqual "TODO" 1 2

@@ -289,7 +289,7 @@ instance Observable act => Observable (Internal act) where
 instance TransitionSemantics t act => TransitionSemantics (Internal t) act where
     asTransition loc act = Visible <$> asTransition loc act
 
-instance {-# OVERLAPPING #-} (AutomatonSemantics m q q t () act, JoinSemiLattice m, Ord t, Eq (m q)) => AutomatonSemantics m q q (Internal t) () act
+instance {-# OVERLAPPING #-} (AutomatonSemantics m q q t () act, JoinSemiLattice (m q), Ord t, Eq (m q)) => AutomatonSemantics m q q (Internal t) () act
     where
          -- TODO requires translating the eClosure to an automaton which doesn't contain internal
          -- transitions in order to make `after` take the AutomatonSemantics from the class constraint
