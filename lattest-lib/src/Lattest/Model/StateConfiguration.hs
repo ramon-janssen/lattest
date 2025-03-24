@@ -59,7 +59,7 @@ StateConfiguration,
 PermissionApplicative,
 PermissionFunctor,
 -- ** General non-determinism
-NonDetStateConfiguration,
+JoinSemiLattice,
 join
 )
 where
@@ -143,7 +143,7 @@ instance Show a => Show (NonDetState a) where
     show (NonDet a) = show a
     show UnderspecNonDet = "-underspecified-"
 
-instance NonDetStateConfiguration NonDetState where
+instance JoinSemiLattice NonDetState where
     join (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
     join _ _ = UnderspecNonDet -- either argument is underspecified, so the disjunction (binary non-deterministic combinator) is underspecified
 
@@ -202,7 +202,7 @@ instance Show a => Show (FDL a) where
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
-instance NonDetStateConfiguration FDL where
+instance JoinSemiLattice FDL where
     join = (\/)
 
 {-|
@@ -253,7 +253,7 @@ type PermissionApplicative m = (PermissionConfiguration m, Applicative m)
 -- | Abbreviation for types which are both permission configurations and Functors.
 type PermissionFunctor m = (PermissionConfiguration m, Functor m)
 
--- | 
-class NonDetStateConfiguration m where
+-- | Because the lattices-library doesn't support this
+class JoinSemiLattice m where
     join :: m a -> m a -> m a
 
