@@ -54,10 +54,12 @@ SymInteract(..),
 SymGuard,
 SymAssign,
 GateValue(..),
-Value,
+Value(..),
 Gate(..),
-Variable,
-getTypedVar
+Variable(..),
+addTypedVar,
+Type(..),
+SymExpr(..)
 )
 where
 
@@ -264,20 +266,23 @@ fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
 
-getTypedVar :: (GSymPrim.SupportedPrim t0) => Variable -> TypedSymbol 'ConstantKind t0
-getTypedVar v = case v of
-    IntVar x -> GSymPrim.typedConstantSymbol x
-    BoolVar x -> GSymPrim.typedConstantSymbol x
+data Type = IntType | BoolType deriving (Eq, Ord)
 
-data Variable = IntVar Grisette.Symbol | BoolVar Grisette.Symbol deriving (Eq, Ord)
+addTypedVar :: Variable -> Value -> Model -> Model
+addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Bool) w m
+addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Integer) w m
+
+data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord)
 
 data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 
 type SymGuard = GSymPrim.SymBool
 
-type SymAssign  = Map.Map Variable Grisette.SExpr
+data SymExpr = BoolExpr SymBool | IntExpr SymInteger
 
-type Value = Grisette.SExpr
+type SymAssign  = Map.Map Variable SymExpr
+
+data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord)
 
 data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
 

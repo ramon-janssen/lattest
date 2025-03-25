@@ -43,7 +43,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
-    SymInteract(..),GateValue(..),Value, SymGuard, SymAssign,Variable,getTypedVar)
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..))
 import Lattest.Util.Utils((&&&))
 import Data.Map (Map)
 import qualified Data.Map as Map (keys, lookup, toList,map,foldrWithKey,mapWithKey,mapKeys)
@@ -53,6 +53,7 @@ import qualified Data.Set as Set (fromList, unions, toList, map)
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
 import Grisette.Core as Grisette
+import Grisette.SymPrim as GSymPrim
 
 ------------
 -- syntax --
@@ -285,7 +286,13 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a (Map Variable Value)
+data IntrpState a = IntrpState a Valuation
+
+type Valuation = (Map Variable Value)
+
+evaluate :: SymExpr -> GSymPrim.Model -> Value
+evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
+evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
 
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
@@ -296,15 +303,25 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
 
 instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
     where --  (q -> act -> Maybe (t, tloc) -> loc -> q)
-    after = monadicAfter $ withStep (\(IntrpState l1 varMap) (GateValue g ws) (Just (SymInteract g2 ps, (phi,psi))) l2 ->
-        if List.length ws /= List.length ps
+    after = monadicAfter $ withStep (\(IntrpState l1 varMap) (GateValue g ws) (Just (SymInteract g2 ps, (guard,assign))) l2 ->
+        if List.length ws /= List.length ps && g == g2
             then forbidden
             else
-                let pmodel = List.foldr (\(p,w) m -> Grisette.insertValue (getTypedVar p) w m) Grisette.emptyModel (zip ps ws)
-                    model = Map.foldrWithKey (\x xval m -> Grisette.insertValue (getTypedVar x) xval m) pmodel varMap
-                in if not $ Grisette.con $ Grisette.evalSym False model phi -- guard is false
+                let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
+                    valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
+                in if not $ Grisette.evalSymToCon valuation guard -- guard is false
                     then forbidden
-                    else let varMap2 = Map.mapWithKey (\x xval -> case Map.lookup x psi of
+                    else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case Map.lookup v assign of
                                                             Nothing -> xval
-                                                            Just psiExpr -> Grisette.evalSym False model psiExpr) varMap
+                                                            Just assignExpr -> evaluate assignExpr valuation) varMap
                          in return $ IntrpState l2 varMap2)
+
+
+
+
+
+
+
+
+
+
