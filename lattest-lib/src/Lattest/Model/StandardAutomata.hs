@@ -8,34 +8,17 @@
 
 module Lattest.Model.StandardAutomata (
 -- * Syntactical automata
--- ** Standard automata types
-IA,
-DIA,
-NDIA,
-AIA,
--- ** Auxiliary Functions for Constructing Automata
--- *** Interface Automata
--- | Functions for constructing Interface Automata, with arbitrary state configurations.
-ia,
-iaWithMenu,
-iaWithAlphabet,
--- *** Deterministic Interface Automata
-dia,
-diaWithMenu,
-diaWithAlphabet,
-dia',
-diaWithMenu',
-diaWithAlphabet',
--- *** Non-Deterministic Interface Automata
-ndia,
-ndiaWithMenu,
-ndiaWithAlphabet,
--- *** Alternating Interface Automata
-aia,
-aiaWithMenu,
-aiaWithMenu',
-aiaWithAlphabet,
-aiaWithAlphabet',
+-- ** Auxiliary Functions for Transitions
+-- *** Inputs/Outputs
+ioAlphabet,
+-- *** Deterministic Transition Relations
+detConcTransFromRel,
+detConcTransFromMRel,
+detConcTransFromMRel,
+-- *** Non-Deterministic Transition Relations
+nonDetConcTransFromRel,
+nonDetConcTransFromRel,
+nonDetConcTransFromListRel,
 -- **** Alternating state configurations
 -- Re-exports, so that test scripts don't need to import StateConfiguration separately
 FDL,
@@ -55,9 +38,9 @@ semanticsQuiescentInputAttemptConcrete
 )
 where
 
-import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF)
-import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination)
-import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\))
+import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF)
+import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination)
+import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), join)
 
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -65,178 +48,68 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Lazy (mapWithKey)
 import qualified Data.Map.Lazy as LMap
+import qualified Data.Set as Set
 
--- TODO IA should have internal transitions
--- | Interface Automaton (for now, without internal transitions)
-type IA m loc i o = AutSyn m loc (IOAct i o) ()
--- | deterministic IA
-type DIA loc i o = IA DetState loc i o
--- | non-deterministic IA
-type NDIA loc i o = IA NonDetState loc i o
--- | alternating IA
-type AIA loc i o = IA FDL loc i o
+ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
+ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
+-- | To a transition relation without tloc, add vacuous tlocs ().
+concreteTrans :: (Functor m, Observable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
+concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
+detConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromRel = detTransFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
----------------------------------
--- instantiations of alphabets --
----------------------------------
+detConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMRel = detTransFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
--- | From a (literal) list, create a transition relation without tloc (destination location specific parts of a location).
-createTrans :: (Ord loc, Ord t, Applicative m) => [(loc, t, loc)] -> (loc -> Map t (m loc))
-createTrans = createTrans' . fmap (third3 pure)
+detConcTransFromMaybeRel :: (Observable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMaybeRel = detTransFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
+    Just loc -> vacuousLoc <$> Det loc
+    Nothing -> implicitDestination t
 
-createTrans' :: (Ord loc, Ord t, Applicative m) => [(loc, t, m loc)] -> (loc -> Map t (m loc))
-createTrans' list =
-    let mapOfLists = foldr (\(loc, t, mloc') -> LMap.insertWith (++) loc [(t, mloc')]) LMap.empty list
-        mapOfMaps = LMap.map LMap.fromList mapOfLists
-    in \loc -> mapOfMaps LMap.! loc
+nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromRel = detTransFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
 
--- | Construct an IA from transitions expressed as maps from actions to state configurations.
-ia :: Functor m => m loc -> (loc -> Map (IOAct i o) (m loc)) -> IA m loc i o
-ia loc t = automaton loc $ (Map.map (fmap ((),)) <$> t)
+nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, NonDetState loc)] -> Maybe (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromMRel = detTransFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
--- | Construct a deterministic IA from a list of transitions
-dia' :: (Ord loc, Ord i, Ord o) => loc -> [(loc, IOAct i o, loc)] -> DIA loc i o
-dia' loc trans = ia (Det loc) (createTrans trans)
+nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> Maybe (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromListRel = detTransFromRelWith combineNonDet vacuousTrans $ \mLoc () t -> case mLoc of
+    list@(_:_) -> vacuousLoc <$> NonDet list
+    [] -> implicitDestination t
 
--- | Construct a deterministic IA from transitions expressed as maps from actions to Just states, or Nothing for actions that are not enabled.
-dia :: loc -> (loc -> Map (IOAct i o) (Maybe loc)) -> DIA loc i o
-dia loc t = ia (Det loc) (\loc' -> mapWithKey maybeToDetState $ t loc')
+combineNonDet x y = Just $ join x y
+
+combineDet _ _ = Nothing
+
+vacuousTrans (a,b,c) = (a,b,(),c)
+
+vacuousLoc l = ((), l)
+
+detTransFromRelWith :: (Observable t, Ord loc, Ord t) =>
+    (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
+    -> (te -> (loc, t, tloc, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
+    -> (loc' -> tloc -> t -> m (tloc, loc)) -- the way of creating a monadic transition result from the transition info of a list element
+    -> [te] -- the transition relation in a list representation
+    -> Maybe (loc -> Map t (m (tloc, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
+detTransFromRelWith c' fe' f' trans = do
+    tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to DetStates
+    Just $ \loc -> case loc `Map.lookup` tMapMap of
+        Just tMap -> tMap
+        Nothing -> Map.empty
     where
-    maybeToDetState _ (Just q) = Det q
-    maybeToDetState act Nothing = implicitDestination act
-
--- | Construct an non-deterministic IA from transitions expressed as maps from actions to lists of states, or the empty list for actions that are not enabled.
-ndia :: [loc] -> (loc -> Map (IOAct i o) [loc]) -> NDIA loc i o
-ndia loc t = ia (NonDet loc) (\loc' -> mapWithKey maybeToNonDetState $ t loc')
-    where
-    maybeToNonDetState act qs = if null qs then implicitDestination act else NonDet qs
-
--- | Construct an alternating IA from transitions expressed as maps from actions to logical expressions over states, or top or bottom for actions that are not enabled.
-aia :: FDL loc -> (loc -> Map (IOAct i o) (FDL loc)) -> AIA loc i o
-aia = ia
-
-{- |
-    Construct an IA from transitions expressed as maps from actions to state configurations. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-iaWithMenu :: (PermissionFunctor m, Foldable fld, Ord i, Ord o) => m loc -> (loc -> fld (IOAct i o)) -> (loc -> Map (IOAct i o) (m loc)) -> IA m loc i o
-iaWithMenu loc menu t = 
-    let t' = \loc' -> LMap.fromList $ fmap (\act -> (act,implicitDestination act)) $ toList $ menu loc' 
-    in ia loc $ \loc' -> t loc' `Map.union` t' loc'
-
-{- |
-    Construct an IA from transitions expressed as maps from actions to state configurations. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-iaWithMenu' :: (PermissionApplicative m, Foldable fld, Ord i, Ord o, Ord loc) => m loc -> (loc -> fld (IOAct i o)) -> [(loc, IOAct i o, m loc)] -> IA m loc i o
-iaWithMenu' loc menu t = iaWithMenu loc menu (createTrans' t)
-
-{- |
-    Construct a deterministic IA from a list of transitions. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit list of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-diaWithMenu' :: (Ord loc, Ord i, Ord o, Foldable fld) => loc -> (loc -> fld (IOAct i o)) -> [(loc, IOAct i o, loc)] -> DIA loc i o
-diaWithMenu' loc menu trans = iaWithMenu (Det loc) menu (createTrans trans)
-
-{- |
-    Construct a deterministic IA from transitions expressed as maps from actions to Just states. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-diaWithMenu :: (Ord i, Ord o, Foldable fld) => loc -> (loc -> fld (IOAct i o)) -> (loc -> Map (IOAct i o) (Maybe loc)) -> DIA loc i o
-diaWithMenu loc menu t = iaWithMenu (Det loc) menu (\loc' -> mapWithKey maybeToDetState $ t loc')
-    where
-    maybeToDetState _ (Just q) = Det q
-    maybeToDetState act Nothing = implicitDestination act
-
-{- |
-    Construct an non-deterministic IA from transitions expressed as maps from actions to lists of states. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-ndiaWithMenu :: (Ord i, Ord o, Foldable fld) => [loc] -> (loc -> fld (IOAct i o)) -> (loc -> Map (IOAct i o) [loc]) -> NDIA loc i o
-ndiaWithMenu loc menu t = iaWithMenu (NonDet loc) menu (\loc' -> mapWithKey maybeToNonDetState $ t loc')
-    where
-    maybeToNonDetState act qs = if null qs then implicitDestination act else NonDet qs
-
-{- |
-    Construct an alternating IA from transitions expressed as maps from actions to logical expressions over states. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-aiaWithMenu :: (Foldable fld, Ord i, Ord o) => FDL loc -> (loc -> fld (IOAct i o)) -> (loc -> Map (IOAct i o) (FDL loc)) -> AIA loc i o
-aiaWithMenu = iaWithMenu
-
-{- |
-    Construct an alternating IA from a list of transitions to logical expressions over states. Also accepts a /menu/ of actions that defines, per state,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-aiaWithMenu' :: (Foldable fld, Ord i, Ord o, Ord loc) => FDL loc -> (loc -> fld (IOAct i o)) -> [(loc, IOAct i o, FDL loc)] -> IA FDL loc i o
-aiaWithMenu' = iaWithMenu'
-
-{- |
-    Construct an IA from transitions expressed as maps from actions to state configurations. Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-iaWithAlphabet :: (PermissionFunctor m, Foldable fld, Ord i, Ord o) => m loc -> fld (IOAct i o) -> (loc -> Map (IOAct i o) (m loc)) -> IA m loc i o
-iaWithAlphabet mloc alphabet t = iaWithMenu mloc (const alphabet) t
-
-{- |
-    Construct an IA from transitions expressed as maps from actions to state configurations. Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-iaWithAlphabet' :: (PermissionApplicative m, Foldable fld, Ord i, Ord o, Ord loc) => m loc -> fld (IOAct i o) -> [(loc, IOAct i o, m loc)] -> IA m loc i o
-iaWithAlphabet' mloc alphabet t = iaWithAlphabet mloc alphabet (createTrans' t)
-
-{- |
-    Construct a deterministic IA from a list of transitions. Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit list of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-diaWithAlphabet' :: (Ord loc, Ord i, Ord o, Foldable fld) => loc -> fld (IOAct i o) -> [(loc, IOAct i o, loc)] -> DIA loc i o
-diaWithAlphabet' mloc alphabet t = diaWithMenu' mloc (const alphabet) t
-
-{- |
-    Construct a deterministic IA from transitions expressed as maps from actions to Just states. Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-diaWithAlphabet :: (Ord i, Ord o, Foldable fld) => loc -> fld (IOAct i o) -> (loc -> Map (IOAct i o) (Maybe loc)) -> DIA loc i o
-diaWithAlphabet mloc alphabet t = diaWithMenu mloc (const alphabet) t
-
-{- |
-    Construct an non-deterministic IA from transitions expressed as maps from actions to lists of states. Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-ndiaWithAlphabet :: (Ord i, Ord o, Foldable fld) => [loc] -> fld (IOAct i o) -> (loc -> Map (IOAct i o) [loc]) -> NDIA loc i o
-ndiaWithAlphabet mloc alphabet t = ndiaWithMenu mloc (const alphabet) t
-
-{- |
-    Construct an alternating IA from transitions expressed as maps from actions to logical expressions over states.
-    Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-aiaWithAlphabet :: (Foldable fld, Ord i, Ord o) => FDL loc -> fld (IOAct i o) -> (loc -> Map (IOAct i o) (FDL loc)) -> AIA loc i o
-aiaWithAlphabet = iaWithAlphabet
-
-{- |
-    Construct an alternating IA from a list of transitions to logical expressions over states.
-    Also accepts an /alphabet/ of actions that defines, globally for the entire automaton,
-    which actions are (at least) implicitly defined. Actions that are in the menu but not in the explicit map of transitions are mapped to 'underspecified'
-    (for inputs) or 'forbidden' (for outputs).
--}
-aiaWithAlphabet' :: (Foldable fld, Ord i, Ord o, Ord loc) => FDL loc -> fld (IOAct i o) -> [(loc, IOAct i o, FDL loc)] -> AIA loc i o
-aiaWithAlphabet' = iaWithAlphabet'
+    addToMap :: (Observable t, Ord loc, Ord t) => (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -> (te -> (loc, t, tloc, loc')) -> (loc' -> tloc -> t -> m (tloc, loc)) -> te -> Maybe (Map loc (Map t (m (tloc, loc)))) -> Maybe (Map loc (Map t (m (tloc, loc))))
+    addToMap c fe f te maybeTMapMap = do
+        tMapMap <- maybeTMapMap
+        let (loc, t, tloc, loc') = fe te
+        case loc `Map.lookup` tMapMap of
+            Just tMap -> case t `Map.lookup` tMap of
+                Nothing -> Just $ Map.insert loc (Map.insert t (f loc' tloc t) tMap) tMapMap
+                Just prevLoc -> do
+                    combinedLoc <- c prevLoc $ f loc' tloc t
+                    Just $ Map.insert loc (Map.insert t combinedLoc tMap) tMapMap
+            Nothing -> Just $ Map.insert loc (Map.singleton t (f loc' tloc t)) tMapMap
 
 ---------------------------------
 -- instantiations of locations --
