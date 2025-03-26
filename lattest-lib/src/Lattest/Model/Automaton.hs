@@ -36,6 +36,8 @@ afters,
 -- ** Finite Transition Labels
 FiniteMenu,
 specifiedMenu,
+IntrpState(..),
+Valuation
 )
 where
 
