@@ -56,7 +56,7 @@ semanticsQuiescentInputAttemptConcrete
 where
 
 import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF)
-import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination)
+import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\))
 
 import Data.Foldable (toList)
@@ -81,6 +81,38 @@ type AIA loc i o = IA FDL loc i o
 ---------------------------------
 -- instantiations of alphabets --
 ---------------------------------
+
+-- | To a transition relation without tloc, add vacuous tlocs ().
+concreteTrans :: (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
+concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
+
+detTransFromRel :: [(loc, t, loc)] -> Maybe (loc -> Map t (DetState loc))
+detTransFromRel = detTransFromRelWith (\l _ -> Det l)
+
+detTransFromMRel :: [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState loc))
+detTransFromMRel = detTransFromRelWith const
+
+detTransFromMaybeRel :: (Observable t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState loc))
+detTransFromMaybeRel = detTransFromRelWith $ \mLoc t -> case mLoc of
+    Just loc -> Det loc
+    Nothing -> implicitDestination t
+
+detTransFromRelWith :: (loc' -> t -> DetState loc) -> [(loc, t, loc')] -> Maybe (loc -> Map t (DetState loc))
+detTransFromRelWith f' trans = do
+    tMapMap <- foldr (addToMap f') (Just Map.empty) trans -- map from locations to a map from transitions to DetStates
+    Just $ \loc -> case loc `Map.lookup` tMapMap of
+        Just tMap -> tMap
+        Nothing -> Map.empty
+    where
+    addToMap :: (loc' -> t -> DetState loc) -> (loc, t, loc') -> Maybe (Map loc (Map t (DetState loc))) -> Maybe (Map loc (Map t (DetState loc)))
+    addToMap f (loc, t, loc') maybeTMapMap = do
+        tMapMap <- maybeTMapMap
+        case loc `Map.lookup` tMapMap of
+            Just tMap -> case t `Map.lookup` tMap of
+                Nothing -> Just $ Map.insert loc (Map.insert t (f loc' t) tMap) tMapMap
+                Just _ -> Nothing -- if there is already a transition (loc, t, _), then this cannot be encoded in a deterministic transition relation
+            Nothing -> Just $ Map.insert loc (Map.singleton t (f loc' t)) tMapMap
+
 
 -- | From a (literal) list, create a transition relation without tloc (destination location specific parts of a location).
 createTrans :: (Ord loc, Ord t, Applicative m) => [(loc, t, loc)] -> (loc -> Map t (m loc))
