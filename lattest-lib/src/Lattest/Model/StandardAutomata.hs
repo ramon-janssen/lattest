@@ -19,6 +19,9 @@ detConcTransFromMRel,
 nonDetConcTransFromRel,
 nonDetConcTransFromRel,
 nonDetConcTransFromListRel,
+-- *** Transition Functions
+transFromFunc,
+concTransFromFunc,
 -- **** Alternating state configurations
 -- Re-exports, so that test scripts don't need to import StateConfiguration separately
 FDL,
@@ -44,6 +47,7 @@ import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, Per
 
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
+import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Lazy (mapWithKey)
@@ -58,24 +62,24 @@ concreteTrans :: (Functor m, Observable t) => (loc -> Map t (m loc)) -> (loc -> 
 concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
 detConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
-detConcTransFromRel = detTransFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
+detConcTransFromRel = transFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
 detConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
-detConcTransFromMRel = detTransFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
+detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
 detConcTransFromMaybeRel :: (Observable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
-detConcTransFromMaybeRel = detTransFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
+detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
     Just loc -> vacuousLoc <$> Det loc
     Nothing -> implicitDestination t
 
 nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromRel = detTransFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
+nonDetConcTransFromRel = transFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
 
 nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, NonDetState loc)] -> Maybe (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromMRel = detTransFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
+nonDetConcTransFromMRel = transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
 nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> Maybe (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromListRel = detTransFromRelWith combineNonDet vacuousTrans $ \mLoc () t -> case mLoc of
+nonDetConcTransFromListRel = transFromRelWith combineNonDet vacuousTrans $ \mLoc () t -> case mLoc of
     list@(_:_) -> vacuousLoc <$> NonDet list
     [] -> implicitDestination t
 
@@ -87,13 +91,13 @@ vacuousTrans (a,b,c) = (a,b,(),c)
 
 vacuousLoc l = ((), l)
 
-detTransFromRelWith :: (Observable t, Ord loc, Ord t) =>
+transFromRelWith :: (Observable t, Ord loc, Ord t) =>
     (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
     -> (te -> (loc, t, tloc, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
     -> (loc' -> tloc -> t -> m (tloc, loc)) -- the way of creating a monadic transition result from the transition info of a list element
     -> [te] -- the transition relation in a list representation
     -> Maybe (loc -> Map t (m (tloc, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
-detTransFromRelWith c' fe' f' trans = do
+transFromRelWith c' fe' f' trans = do
     tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to DetStates
     Just $ \loc -> case loc `Map.lookup` tMapMap of
         Just tMap -> tMap
@@ -110,6 +114,17 @@ detTransFromRelWith c' fe' f' trans = do
                     combinedLoc <- c prevLoc $ f loc' tloc t
                     Just $ Map.insert loc (Map.insert t combinedLoc tMap) tMapMap
             Nothing -> Just $ Map.insert loc (Map.singleton t (f loc' tloc t)) tMapMap
+
+transFromFunc :: (Foldable fld, Ord t) => (loc -> t -> m (tloc, loc)) -> fld t -> (loc -> Map t (m (tloc, loc)))
+transFromFunc fTrans alph loc = Map.fromSet (fTrans loc) (foldableAsSet alph)
+
+concTransFromFunc :: (Foldable fld, Functor m, Ord t) => (loc -> t -> m loc) -> fld t -> (loc -> Map t (m ((), loc)))
+concTransFromFunc fTrans alph loc = Map.fromSet (fTransConc) (foldableAsSet alph)
+    where
+    fTransConc t = (\x -> ((), x)) <$> fTrans loc t
+
+foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
+foldableAsSet fld = Set.fromList $ Foldable.toList fld
 
 ---------------------------------
 -- instantiations of locations --
