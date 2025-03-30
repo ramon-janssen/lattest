@@ -19,6 +19,8 @@ detConcTransFromMRel,
 nonDetConcTransFromRel,
 nonDetConcTransFromRel,
 nonDetConcTransFromListRel,
+-- *** Alternating Transition Relations
+alternatingConcTransFromMRel,
 -- *** Transition Functions
 transFromFunc,
 concTransFromFunc,
@@ -52,6 +54,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Lazy (mapWithKey)
 import qualified Data.Map.Lazy as LMap
+import  Data.Maybe as Maybe
 import qualified Data.Set as Set
 
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -72,16 +75,21 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
     Just loc -> vacuousLoc <$> Det loc
     Nothing -> implicitDestination t
 
-nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromRel = transFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
+nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
 
-nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, NonDetState loc)] -> Maybe (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromMRel = transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
+nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, NonDetState loc)] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
-nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> Maybe (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromListRel = transFromRelWith combineNonDet vacuousTrans $ \mLoc () t -> case mLoc of
-    list@(_:_) -> vacuousLoc <$> NonDet list
-    [] -> implicitDestination t
+nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
+    where
+    listToNonDet (list@(_:_)) () t = vacuousLoc <$> NonDet list
+    listToNonDet [] () t = implicitDestination t
+
+alternatingConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, FDL loc)] -> (loc -> Map t (FDL ((), loc)))
+alternatingConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
+
 
 combineNonDet x y = Just $ join x y
 
