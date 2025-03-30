@@ -44,6 +44,7 @@ import Prelude hiding (lookup)
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt)
 import Lattest.Util.Utils((&&&))
+import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -71,10 +72,11 @@ data AutSyn m loc t tloc = Automaton {
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (PermissionConfiguration m, Observable t, Ord t) => m loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
-automaton mqi alph trans = Automaton mqi alph trans'
+automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
+automaton mqi alphFld trans = Automaton mqi alph trans'
     where -- FIXME t is now Observable, in other functions we expect actions instead of transitions to be Observable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
+    alph = Set.fromList $ Foldable.toList alphFld
     trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
