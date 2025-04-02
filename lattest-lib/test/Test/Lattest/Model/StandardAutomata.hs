@@ -32,24 +32,35 @@ q0f = atom Q0f
 q1f = atom Q1f
 q2f = atom Q2f
 menuf = [af, bf, x, y]
-tf Q0f af = q0f /\ (q1f \/ q2f)
-tf Q0f x = q0f
-tf Q0f y = q0f
-tf Q1f x = top
-tf Q2f bf = q0f
-tf Q2f y = q2f
+tf Q0f (Out X) = q0f /\ (q1f \/ q2f)
+tf Q0f (Out Y) = top
+tf Q0f (In A) = q0f
+tf Q0f (In B) = q0f
+tf Q1f (Out X) = top
+tf Q1f (Out Y) = bot
+tf Q1f (In A) = top
+tf Q1f (In B) = top
+tf Q2f (In B) = top
+tf Q2f (In B) = q0f
+tf Q2f (Out Y) = q2f
+tf Q2f (Out X) = bot
 sf = automaton q0f menuf (concTransFromFunc tf menuf)
 
 testSpecF :: Test
 testSpecF = TestCase $ do
+    putStrLn "Hallo!"
+    putStrLn $ show $ tf Q0f af
+    putStrLn $ show $ tf Q0f bf
+    putStrLn $ show $ tf Q0f x
+    putStrLn $ show $ tf Q0f y
     let rf = semanticsConcrete sf
     assertEqual "sf after ?A !X" q0f (stateConf $ rf `after` af `after` x)
     assertEqual "sf after ?A !Y" (q0f /\ q2f) (stateConf $ rf `after` af `after` y)
     assertEqual "sf after ?A !A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
     assertEqual "sf after ?A !B" top (stateConf $ rf `after` af `after` bf)
 
-data IG = A2 | B2 | On | Take deriving (Eq, Ord)
-data OG = C | T | CM | TM deriving (Eq, Ord)
+data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
+data OG = C | T | CM | TM deriving (Show, Eq, Ord)
 data StateG = Q0g | Q1g | Q2g | Q3g | Q4g | Q5g | Q6g | Q7g | Q8g | Q9g | Q10g deriving (Show, Eq, Ord)
 
 c = Out C

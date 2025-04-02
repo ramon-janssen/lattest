@@ -53,6 +53,7 @@ import qualified Data.Map as Map
 import Data.Map.Lazy (mapWithKey)
 import qualified Data.Map.Lazy as LMap
 import qualified Data.Set as Set
+import qualified Debug.Trace as Dt
 
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
@@ -118,10 +119,11 @@ transFromRelWith c' fe' f' trans = do
 transFromFunc :: (Foldable fld, Ord t) => (loc -> t -> m (tloc, loc)) -> fld t -> (loc -> Map t (m (tloc, loc)))
 transFromFunc fTrans alph loc = Map.fromSet (fTrans loc) (foldableAsSet alph)
 
-concTransFromFunc :: (Foldable fld, Functor m, Ord t) => (loc -> t -> m loc) -> fld t -> (loc -> Map t (m ((), loc)))
-concTransFromFunc fTrans alph loc = Map.fromSet (fTransConc) (foldableAsSet alph)
-    where
-    fTransConc t = (\x -> ((), x)) <$> fTrans loc t
+concTransFromFunc :: (Foldable fld, Functor m, Ord t, Show loc, Show t, Show (m loc), Show (m ((), loc))) => (loc -> t -> m loc) -> fld t -> (loc -> Map t (m ((), loc)))
+concTransFromFunc fTrans alph loc = 
+    let locMap = Map.fromSet (\t -> fTrans loc t) (foldableAsSet alph)
+        debugPrint = show loc ++ "[" ++ (show $ Set.toList $ foldableAsSet alph) ++ "]" ++ ": " ++ show locMap
+    in Dt.trace debugPrint (Map.map (fmap ((),)) $ locMap)
 
 foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld

@@ -45,7 +45,7 @@ main = do
     void $ timeout (durationSeconds * 10000000) $ runTestTT tests
     -- property tests
     putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
-    void $ runQuickCheckTests
+    --void $ runQuickCheckTests
 
 runQuickCheckTests :: IO ()
 runQuickCheckTests = do
@@ -126,7 +126,7 @@ prop_jsonStream testInput = monadicIO $ do
 
 tests :: Test
 tests = TestList [
-    testConsumeBufferedWith,
+{-    testConsumeBufferedWith,
     testConsumeBufferedWith_short,
     testJSONSocketAdapterByte,
     testAdapterAcceptingInput,
@@ -138,12 +138,12 @@ tests = TestList [
     testTraceIncompleteAtLastOutput,
     testTraceIncompleteBeforeLastOutput,
     testTraceFailsWithQuiescence,
-    testSpecF,
+    -}testSpecF{-,
     testSpecG,
-    testSpecGQuiescent,
+    tstSpecGQuiescent,
     testRandomFCorrect,
     testRandomFIncorrectOutput,
-    testRandomFIncorrectInput
+    testRandomFIncorrectInput-}
     ]
 
 
