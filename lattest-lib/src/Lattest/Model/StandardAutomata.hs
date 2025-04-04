@@ -52,11 +52,12 @@ ConcreteTimeoutAutSem,
 semanticsQuiescentConcrete,
 ConcreteTimeoutInputAttemptAutSem,
 semanticsQuiescentInputAttemptConcrete,
+semanticsSTS
 )
 where
 
-import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign)
-import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination)
+import Lattest.Model.Alphabet (IOAct, TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign,GateValue)
+import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, implicitDestination,IntrpState(..))
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\))
 
 import Data.Foldable (toList)
@@ -269,3 +270,6 @@ type ConcreteTimeoutInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (Ti
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
 semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
 semanticsQuiescentInputAttemptConcrete = flip semantics id
+
+semanticsSTS :: (Ord i, Ord o, Ord loc, StateConfiguration m) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
+semanticsSTS = semantics

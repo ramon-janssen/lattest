@@ -266,13 +266,13 @@ fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
 
-data Type = IntType | BoolType deriving (Eq, Ord)
+data Type = IntType | BoolType deriving (Eq, Ord,Show)
 
 addTypedVar :: Variable -> Value -> Model -> Model
 addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Bool) w m
 addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Integer) w m
 
-data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord)
+data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord, Show)
 
 data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 
@@ -282,7 +282,7 @@ data SymExpr = BoolExpr SymBool | IntExpr SymInteger
 
 type SymAssign  = Map.Map Variable SymExpr
 
-data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord)
+data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord,Show)
 
 data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
 

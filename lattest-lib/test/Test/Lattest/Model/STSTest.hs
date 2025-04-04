@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest ()
+module Test.Lattest.Model.STSTest (testSTSExample)
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,IntrpState(..),Valuation)
-import Lattest.Model.StandardAutomata(aiaWithAlphabet, semanticsConcrete, semanticsQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..))
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation)
+import Lattest.Model.StandardAutomata(aiaWithAlphabet,semanticsSTS)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..))
 import qualified Data.Map as Map (empty, fromList,singleton)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
@@ -23,7 +23,7 @@ testSTSExample = TestCase $ do
         ok = SymInteract (OutputGate "ok") [pvar]
         coffee = SymInteract (OutputGate "coffee") []
         waterGuard = 1 .<= psym .&& psym .<= 10
-        waterAssign = Map.fromList [(xvar,xsym + psym)]
+        waterAssign = Map.fromList [(xvar,IntExpr $ xsym + psym)]
         okGuard = xsym .== psym
         coffeeGuard = xsym .> 15
         l0 = 0 :: Integer
@@ -35,6 +35,10 @@ testSTSExample = TestCase $ do
                                 (ok,NonDet [((okGuard,Map.empty), l0)])]
             l1 -> Map.fromList [ (coffee,NonDet [((coffeeGuard,Map.empty), l2)])]
             l2 -> Map.empty
-        initAssign = IntrpState l0 (Map.singleton xvar (IntVal 0))
+        initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
         sts = automaton locConf switches
+        intrp = semanticsSTS sts initAssign
+    putStrLn $ show $ stateConf intrp
+    let intrp2 = after intrp (GateValue (InputGate "water") [IntVal 7])
+    putStrLn $ show $ stateConf intrp2
     return ()

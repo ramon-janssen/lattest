@@ -288,7 +288,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a Valuation
+data IntrpState a = IntrpState a Valuation deriving Show
 
 type Valuation = (Map Variable Value)
 
