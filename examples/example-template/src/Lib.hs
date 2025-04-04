@@ -24,7 +24,7 @@ Just trans = detConcTransFromRel
         (Confirmed1, In 1, PickEither),
         (Confirmed2, In 2, PickEither)
     ]
-alphabet =[In 0, In 1, In 2, Out 1, Out 2]
+alphabet = ioAlphabet [0, 1, 2] [1, 2]
 initialConfiguration = pure PickEither
 
 spec = automaton initialConfiguration alphabet trans

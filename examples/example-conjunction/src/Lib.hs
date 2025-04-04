@@ -5,7 +5,7 @@ module Lib
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withTimeoutMillis)
-import Lattest.Model.StandardAutomata(automaton, alternatingConcTransFromMRel,semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
+import Lattest.Model.StandardAutomata(automaton, ioAlphabet, alternatingConcTransFromMRel,semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
 import Data.Aeson(FromJSON, ToJSON)
@@ -49,7 +49,7 @@ tG =alternatingConcTransFromMRel
         (Q9G, Out CM, q10G),
         (Q9G, Out TM, q10G)
     ]
-menuG = [In On, In A, In B, In Take, Out C, Out T, Out CM, Out TM]
+menuG = ioAlphabet [On, A, B,Take] [C, T, CM, TM]
 sG = automaton q0G menuG tG
 
 nrSteps = 50
