@@ -4,9 +4,10 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
+import qualified Data.Set as Set
 
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation)
-import Lattest.Model.StandardAutomata(aiaWithAlphabet,semanticsSTS)
+import Lattest.Model.StandardAutomata(semanticsSTS)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..))
 import qualified Data.Map as Map (empty, fromList,singleton)
@@ -36,7 +37,7 @@ testSTSExample = TestCase $ do
             l1 -> Map.fromList [ (coffee,NonDet [((coffeeGuard,Map.empty), l2)])]
             l2 -> Map.empty
         initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
-        sts = automaton locConf switches
+        sts = automaton locConf (Set.fromList [water,ok,coffee]) switches
         intrp = semanticsSTS sts initAssign
     putStrLn $ show $ stateConf intrp
     let intrp2 = after intrp (GateValue (InputGate "water") [IntVal 7])

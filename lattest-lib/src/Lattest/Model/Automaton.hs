@@ -50,7 +50,7 @@ import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),
 import Lattest.Util.Utils((&&&))
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
-import Data.Map (Map)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -310,7 +310,10 @@ instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
 instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o) where
-    asTransition _ (GateValue gate values) = Just (SymInteract gate []) -- need label set for params!
+    asTransition _ alf (GateValue gate values) =
+        case List.find (\(SymInteract g vs) -> g == gate) (Set.toList alf) of
+            Nothing -> error $ "gate not in STS alphabet"
+            Just a -> Just a
 
 
 instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)

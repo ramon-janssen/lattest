@@ -16,7 +16,7 @@ import Prelude hiding (take)
 import Test.HUnit
 
 import Lattest.Model.Automaton(after, afters, stateConf, automaton)
-import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, alternatingConcTransFromMRel)
+import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
@@ -32,7 +32,7 @@ q0f = atom Q0f
 q1f = atom Q1f
 q2f = atom Q2f
 menuf = [af, bf, x, y]
-tf = alternatingConcTransFromMRel
+tf = nonDetConcTransFromMRel
     [(Q0f, af, q0f /\ (q1f \/ q2f))
     ,(Q0f, x, q0f)
     ,(Q0f, y, q0f)
@@ -76,7 +76,7 @@ q8g = atom Q8g
 q9g = atom Q9g
 q10g = atom Q10g
 
-tg = alternatingConcTransFromMRel
+tg = nonDetConcTransFromMRel
     [(Q0g, on, q1g /\ q3g /\ q5g /\ q8g)
     ,(Q1g, ag, q2g)
     ,(Q2g, c,  top)
