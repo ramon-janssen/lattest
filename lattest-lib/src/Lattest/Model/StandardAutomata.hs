@@ -17,10 +17,10 @@ ioAlphabet,
 -- *** Deterministic Transition Relations
 detConcTransFromRel,
 detConcTransFromMRel,
-detConcTransFromMRel,
+detConcTransFromMaybeRel,
 -- *** Non-Deterministic Transition Relations
 nonDetConcTransFromRel,
-nonDetConcTransFromRel,
+nonDetConcTransFromMRel,
 nonDetConcTransFromListRel,
 -- *** Alternating Transition Relations
 alternatingConcTransFromMRel,
@@ -60,6 +60,7 @@ import qualified Data.Map.Lazy as LMap
 import  Data.Maybe as Maybe
 import qualified Data.Set as Set
 
+-- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
@@ -67,23 +68,49 @@ ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 concreteTrans :: (Functor m, Observable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
 concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
+{- |
+    Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
+    Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
+-}
 detConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
 detConcTransFromRel = transFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
+{- |
+    Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as deterministic state
+    configuration. Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
+-}
 detConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
 detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
+{- |
+    Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as Just deterministic
+    states, where `Nothing` is mapped to either `forbidden` or `underspecified`, depending on the transition label. Having multiple occurrences of a transition label is forbidden,
+    i.e., leads to a Nothing result.
+-}
 detConcTransFromMaybeRel :: (Observable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
 detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
     Just loc -> vacuousLoc <$> Det loc
     Nothing -> implicitDestination t
 
+{- |
+    Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
+    Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
+-}
 nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> (loc -> Map t (NonDetState ((), loc)))
 nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
 
+{- |
+    Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as non-deterministic state
+    configuration. Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
+-}
 nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, NonDetState loc)] -> (loc -> Map t (NonDetState ((), loc)))
 nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
+{- |
+    Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as lists of locations,
+    where the empty list is mapped to either `forbidden` or `underspecified`, depending on the transition label.
+    Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
+-}
 nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDetState ((), loc)))
 nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
     where
@@ -126,9 +153,17 @@ transFromRelWith c' fe' f' trans = do
                     Just $ Map.insert loc (Map.insert t combinedLoc tMap) tMapMap
             Nothing -> Just $ Map.insert loc (Map.singleton t (f loc' tloc t)) tMapMap
 
+{- |
+    Create a transition relation from a transition function. Warning: to use the resulting transition relation in an automaton, the function must be defined
+    for all reachable states, and for all transition labels in the alphabet of the automaton.
+-}
 transFromFunc :: (Foldable fld, Ord t) => (loc -> t -> m (tloc, loc)) -> fld t -> (loc -> Map t (m (tloc, loc)))
 transFromFunc fTrans alph loc = Map.fromSet (fTrans loc) (foldableAsSet alph)
 
+{- |
+    Create a concrete transition relation from a transition function. Warning: to use the resulting transition relation in an automaton, the function must be defined
+    for all reachable states, and for all transition labels in the alphabet of the automaton.
+-}
 concTransFromFunc :: (Foldable fld, Functor m, Ord t) => (loc -> t -> m loc) -> fld t -> (loc -> Map t (m ((), loc)))
 concTransFromFunc fTrans alph loc = Map.fromSet (fTransConc) (foldableAsSet alph)
     where
@@ -138,7 +173,7 @@ foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld
 
 ---------------------------------
--- instantiations of locations --
+-- instantiations of semantics --
 ---------------------------------
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions.
