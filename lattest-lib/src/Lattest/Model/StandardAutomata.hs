@@ -7,6 +7,9 @@
 -}
 
 module Lattest.Model.StandardAutomata (
+-- *
+-- The base function for constructing syntactical automata, re-exported for convenience.
+automaton,
 -- * Syntactical automata
 -- ** Auxiliary Functions for Transitions
 -- *** Inputs/Outputs
