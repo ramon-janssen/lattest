@@ -4,39 +4,40 @@
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
     Note that the types are no more than type aliases, so if the automata type with your favorite combination of type parameters
     is not listed, don't hesitate to construct an automaton type ('AutSyn' or 'AutSem') yourself instead of using the StandardAutomata.
+    The base function `automaton` for constructing automata is re-exported here for convenience.
 -}
 
 module Lattest.Model.StandardAutomata (
--- *
--- The base function for constructing syntactical automata, re-exported for convenience.
+-- * Automaton construction
 automaton,
--- * Syntactical automata
--- ** Auxiliary Functions for Transitions
--- *** Inputs/Outputs
+-- * Alphabets
+-- | Auxiliary functions useful for constructing alphabets, intended for creating automata via `automaton`.
 ioAlphabet,
--- *** Deterministic Transition Relations
+-- * Transition relations
+-- | Auxiliary functions useful for constructing transition relations, intended for creating automata via `automaton`.
+-- ** Deterministic Transition Relations
 detConcTransFromRel,
 detConcTransFromMRel,
 detConcTransFromMaybeRel,
--- *** Non-Deterministic Transition Relations
+-- ** Non-Deterministic Transition Relations
 nonDetConcTransFromRel,
 nonDetConcTransFromMRel,
 nonDetConcTransFromListRel,
--- *** Alternating Transition Relations
-alternatingConcTransFromMRel,
--- *** Transition Functions
-transFromFunc,
-concTransFromFunc,
--- **** Alternating state configurations
--- Re-exports, so that test scripts don't need to import StateConfiguration separately
+-- *** Alternating state configurations
+-- | Re-exports, so that test scripts don't need to import StateConfiguration separately
 FDL,
 atom,
 top,
 bot,
 (\/),
 (/\),
+-- ** Transition Functions
+transFromFunc,
+concTransFromFunc,
 
 -- * Automaton Semantics
+-- | Auxiliary functions for creating semantical automata `AutSem`. Note that most of these functions are no more than calls to `semantics`, instantiating
+-- the type of the semantical interpretation.
 ConcreteAutSem,
 semanticsConcrete,
 ConcreteTimeoutAutSem,
@@ -118,9 +119,6 @@ nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuous
     where
     listToNonDet (list@(_:_)) () t = vacuousLoc <$> NonDet list
     listToNonDet [] () t = implicitDestination t
-
-alternatingConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, FDL loc)] -> (loc -> Map t (FDL ((), loc)))
-alternatingConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
 
 combineNonDet x y = Just $ join x y
