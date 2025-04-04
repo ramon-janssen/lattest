@@ -113,7 +113,6 @@ instance Show a => Show (DetState a) where
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDetState q = NonDet [q] | UnderspecNonDet
--- TODO implement set-equality
 
 instance PermissionConfiguration NonDetState where
     isForbidden (NonDet []) = True
