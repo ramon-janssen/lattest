@@ -48,7 +48,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF)
 import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination)
-import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), join)
+import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -94,16 +94,18 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
 
 {- |
     Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
-    Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
+    The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
+    between the destinations.
 -}
-nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> (loc -> Map t (NonDetState ((), loc)))
-nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> NonDet [vacuousLoc l])
+nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> pure $ vacuousLoc l)
 
 {- |
-    Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as non-deterministic state
-    configuration. Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
+    Create a concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as non-deterministic state
+    configuration. The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted
+    as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, NonDetState loc)] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
 {- |
