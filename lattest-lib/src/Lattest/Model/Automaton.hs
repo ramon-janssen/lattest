@@ -14,6 +14,7 @@ module Lattest.Model.Automaton (
 -- ** Definition
 AutSyn,
 locConf,
+alphabet,
 transRel,
 -- ** Constructing Syntactical Automata
 automaton,
