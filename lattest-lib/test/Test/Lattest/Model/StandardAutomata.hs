@@ -15,8 +15,8 @@ where
 import Prelude hiding (take)
 import Test.HUnit
 
-import Lattest.Model.Automaton(after, afters, stateConf)
-import Lattest.Model.StandardAutomata(aiaWithAlphabet, semanticsConcrete, semanticsQuiescentConcrete)
+import Lattest.Model.Automaton(after, afters, stateConf, automaton)
+import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, alternatingConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
@@ -32,10 +32,15 @@ q0f = atom Q0f
 q1f = atom Q1f
 q2f = atom Q2f
 menuf = [af, bf, x, y]
-tf Q0f = Map.fromList [(af, q0f /\ (q1f \/ q2f)), (x, q0f), (y, q0f)]
-tf Q1f = Map.fromList [(x, top)]
-tf Q2f = Map.fromList [(bf, q0f), (y, q2f)]
-sf = aiaWithAlphabet q0f menuf tf
+tf = alternatingConcTransFromMRel
+    [(Q0f, af, q0f /\ (q1f \/ q2f))
+    ,(Q0f, x, q0f)
+    ,(Q0f, y, q0f)
+    ,(Q1f, x, top)
+    ,(Q2f, bf, q0f)
+    ,(Q2f, y, q2f)
+    ]
+sf = automaton q0f menuf tf
 
 testSpecF :: Test
 testSpecF = TestCase $ do
@@ -45,8 +50,8 @@ testSpecF = TestCase $ do
     assertEqual "sf after ?A !A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
     assertEqual "sf after ?A !B" top (stateConf $ rf `after` af `after` bf)
 
-data IG = A2 | B2 | On | Take deriving (Eq, Ord)
-data OG = C | T | CM | TM deriving (Eq, Ord)
+data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
+data OG = C | T | CM | TM deriving (Show, Eq, Ord)
 data StateG = Q0g | Q1g | Q2g | Q3g | Q4g | Q5g | Q6g | Q7g | Q8g | Q9g | Q10g deriving (Show, Eq, Ord)
 
 c = Out C
@@ -71,18 +76,25 @@ q8g = atom Q8g
 q9g = atom Q9g
 q10g = atom Q10g
 
-tg Q0g = Map.fromList [(on, q1g /\ q3g /\ q5g /\ q8g)]
-tg Q1g = Map.fromList [(ag, q2g)]
-tg Q2g = Map.fromList [(c, top)]
-tg Q3g = Map.fromList [(bg, q4g)]
-tg Q4g = Map.fromList [(t, top), (tm, top)]
-tg Q5g = Map.fromList [(bg, q6g \/ q7g)]
-tg Q6g = Map.fromList [(cm, top)]
-tg Q7g = Map.fromList [(tm, top)]
-tg Q8g = Map.fromList [(ag, q9g), (bg, q9g)]
-tg Q9g = Map.fromList [(c, q10g), (t, q10g), (cm, q10g), (tm, q10g)]
-tg Q10g = Map.fromList [(take, q1g /\ q3g /\ q5g /\ q8g)]
-sg = aiaWithAlphabet q0g menug tg
+tg = alternatingConcTransFromMRel
+    [(Q0g, on, q1g /\ q3g /\ q5g /\ q8g)
+    ,(Q1g, ag, q2g)
+    ,(Q2g, c,  top)
+    ,(Q3g, bg, q4g)
+    ,(Q4g, t,  top)
+    ,(Q4g, tm, top)
+    ,(Q5g, bg, q6g \/ q7g)
+    ,(Q6g, cm, top)
+    ,(Q7g, tm, top)
+    ,(Q8g, ag, q9g)
+    ,(Q8g, bg, q9g)
+    ,(Q9g, c,  q10g)
+    ,(Q9g, t,  q10g)
+    ,(Q9g, cm, q10g)
+    ,(Q9g, tm, q10g)
+    ,(Q10g, take, q1g /\ q3g /\ q5g /\ q8g)
+    ]
+sg = automaton q0g menug tg
 
 testSpecG :: Test
 testSpecG = TestCase $ do

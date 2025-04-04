@@ -14,6 +14,7 @@ module Lattest.Model.Automaton (
 -- ** Definition
 AutSyn,
 locConf,
+alphabet,
 transRel,
 -- ** Constructing Syntactical Automata
 automaton,
@@ -44,10 +45,11 @@ import Prelude hiding (lookup)
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt)
 import Lattest.Util.Utils((&&&))
+import qualified Data.Foldable as Foldable
 import Data.Map (Map)
-import qualified Data.Map as Map (keys, lookup, toList)
+import qualified Data.Map as Map
 import Data.Set (Set)
-import qualified Data.Set as Set (fromList, unions, toList, map)
+import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
 
@@ -66,15 +68,21 @@ import GHC.OldList(find)
 -}
 data AutSyn m loc t tloc = Automaton {
     locConf :: m loc,
+    alphabet :: Set t,
     transRel :: loc -> Map t (m (tloc, loc))
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: m loc -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
-automaton = Automaton
+automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
+automaton mqi alphFld trans = Automaton mqi alph trans'
+    where -- FIXME t is now Observable, in other functions we expect actions instead of transitions to be Observable.
+          -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
+    alph = Set.fromList $ Foldable.toList alphFld
+    trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
+    setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (Applicative m) => loc -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
+automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
 automaton' = automaton . pure
 
 ---------------
@@ -122,10 +130,10 @@ class (Ord t, Observable act) => TransitionSemantics t act where
         Map an action to a matching transition. E.g. a concrete value on some channel that matches with the symbolic representation of that channel.
         'Nothing' indicates an action that occurs within a location, without explicit transition.
     -}
-    asTransition :: loc -> act -> Maybe t
+    asTransition :: loc -> Set t -> act -> Maybe t
     -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (PermissionApplicative m, Ord t) => loc -> act -> Map t (m (tloc, loc)) -> Maybe (Move m t tloc loc)
-    takeTransition loc act tmap = case asTransition loc act of
+    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> Map t (m (tloc, loc)) -> Maybe (Move m t tloc loc)
+    takeTransition loc alph act tmap = case asTransition loc alph act of
         Nothing -> Just $ LocationMove $ pure loc
         Just t -> TransitionMove . (t,) <$> Map.lookup t tmap
 
@@ -154,8 +162,10 @@ class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: StateConfiguration m => ((loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
-monadicAfter step autRun act' = autRun { stateConf = stateConf autRun >>= step (transRel $ syntacticAutomaton autRun) act' }
+monadicAfter :: StateConfiguration m => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter step autRun act' =
+    let aut = syntacticAutomaton autRun 
+    in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (transRel aut) act' }
 
 {- |
     Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
@@ -163,8 +173,8 @@ monadicAfter step autRun act' = autRun { stateConf = stateConf autRun >>= step (
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-withStep move transMap act q = case takeTransition (asLoc q) act (transMap $ asLoc q) of
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
         where
@@ -211,7 +221,7 @@ instance (Observable act) where
     implicitDestination _ = forbidden
 
 instance (Ord act) => TransitionSemantics act act where
-    asTransition _ = Just
+    asTransition _ _ = Just
 
 instance (Ord act) => FiniteMenu act act where
     asActions t = [t] 
@@ -232,11 +242,11 @@ instance (Observable (IOAct i o)) where
     implicitDestination _ = underspecified
 
 instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIO i o) where
-    asTransition loc (Out Timeout) = Nothing
-    asTransition _ other = Just $ fromTimeout other
+    asTransition loc _ (Out Timeout) = Nothing
+    asTransition _ _ other = Just $ fromTimeout other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc (Out Timeout) m = Just . LocationMove $ if hasQuiescence m then forbidden else pure loc
-    takeTransition _ act m = TransitionMove . (fromTimeout act,) <$> Map.lookup (fromTimeout act) m
+    takeTransition loc _ (Out Timeout) m = Just . LocationMove $ if hasQuiescence m then forbidden else pure loc
+    takeTransition _ _ act m = TransitionMove . (fromTimeout act,) <$> Map.lookup (fromTimeout act) m
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIO i o) where
     asActions t = [asTimeout t]
@@ -250,11 +260,11 @@ hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m
 -------------------
 
 instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) where
-    asTransition loc (In (Attempt (i, False))) = Nothing
-    asTransition _ other = Just $ fromInputAttempt other
+    asTransition loc _ (In (Attempt (i, False))) = Nothing
+    asTransition _ _ other = Just $ fromInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
-    takeTransition _ act m = TransitionMove . (fromInputAttempt act,) <$> Map.lookup (fromInputAttempt act) m
+    takeTransition loc _ (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
+    takeTransition _ _ act m = TransitionMove . (fromInputAttempt act,) <$> Map.lookup (fromInputAttempt act) m
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
     asActions t = [asInputAttempt t]
@@ -266,13 +276,13 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 -- Ideally this would just be the above two semantics stacked to avoid the boilerplate below, but that is a hassle
 
 instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
-    asTransition loc (In (Attempt (i, False))) = Nothing
-    asTransition loc (Out Timeout) = Nothing
-    asTransition _ other = Just $ fromTimeoutInputAttempt other
+    asTransition loc _ (In (Attempt (i, False))) = Nothing
+    asTransition loc _ (Out Timeout) = Nothing
+    asTransition _ _ other = Just $ fromTimeoutInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
-    takeTransition loc (Out Timeout) m = Just . LocationMove $ if hasQuiescence m then forbidden else pure loc
-    takeTransition _ act m = TransitionMove . (fromTimeoutInputAttempt act,) <$> Map.lookup (fromTimeoutInputAttempt act) m
+    takeTransition loc _ (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
+    takeTransition loc _ (Out Timeout) m = Just . LocationMove $ if hasQuiescence m then forbidden else pure loc
+    takeTransition _ _ act m = TransitionMove . (fromTimeoutInputAttempt act,) <$> Map.lookup (fromTimeoutInputAttempt act) m
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
     asActions t = [asTimeoutInputAttempt t]

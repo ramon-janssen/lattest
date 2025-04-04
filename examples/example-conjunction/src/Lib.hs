@@ -5,7 +5,7 @@ module Lib
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withTimeoutMillis)
-import Lattest.Model.StandardAutomata(aiaWithAlphabet', semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
+import Lattest.Model.StandardAutomata(automaton, ioAlphabet, alternatingConcTransFromMRel,semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
 import Data.Aeson(FromJSON, ToJSON)
@@ -30,9 +30,7 @@ data GOut = C | T | CM | TM deriving (Eq, Ord, Show, Generic)
 instance FromJSON GOut
 instance ToJSON GOut
 
-sG = aiaWithAlphabet'
-    q0G
-    [In On, In A, In B, In Take, Out C, Out T, Out CM, Out TM]
+tG =alternatingConcTransFromMRel
     [   (Q0G, In On, q1G /\ q3G /\ q5G /\ q8G),
         (Q1G, In A, q2G),
         (Q3G, In B, q4G),
@@ -51,6 +49,8 @@ sG = aiaWithAlphabet'
         (Q9G, Out CM, q10G),
         (Q9G, Out TM, q10G)
     ]
+menuG = ioAlphabet [On, A, B,Take] [C, T, CM, TM]
+sG = automaton q0G menuG tG
 
 nrSteps = 50
 testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `withSideEffect` printState `withSideEffect` printActions `observingOnly` traceObserver `andObserving` stateObserver
