@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {- |
     A /state configuration/ is a type constructor which represents the observable perspective on the state of an automaton. A
@@ -58,6 +59,9 @@ isConclusive,
 StateConfiguration,
 PermissionApplicative,
 PermissionFunctor,
+-- ** General non-determinism
+JoinSemiLattice,
+join
 )
 where
 
@@ -65,6 +69,7 @@ import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
 import Algebra.Lattice(Lattice)
 import qualified Algebra.Lattice as L ((/\), (\/))
+import qualified Data.Set as Set
 import Control.Monad(ap)
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
@@ -128,11 +133,7 @@ instance Applicative NonDetState where
     _ <*> UnderspecNonDet = UnderspecNonDet
     
 instance Monad NonDetState where
-    NonDet ss >>= f = foldr disj (NonDet []) $ fmap f ss  
-        where
-        disj :: NonDetState q -> NonDetState q -> NonDetState q
-        disj (NonDet s) (NonDet s') = NonDet (s' ++ s)
-        disj _ _ = UnderspecNonDet -- either argument is underspecified, so the disjunction (binary non-deterministic combinator) is underspecified
+    NonDet ss >>= f = foldr join (NonDet []) $ fmap f ss  
     UnderspecNonDet >>= _ = UnderspecNonDet
 
 instance Foldable NonDetState where
@@ -141,7 +142,21 @@ instance Foldable NonDetState where
 
 instance Show a => Show (NonDetState a) where
     show (NonDet a) = show a
-    show UnderspecNonDet = "-underspecified-"
+    show UnderspecNonDet = "⊤"
+
+instance Ord a => Eq (NonDetState a) where
+    UnderspecNonDet == UnderspecNonDet = True
+    (NonDet q1) == (NonDet q2) = Set.fromList q1 == Set.fromList q2
+    _ == _ = False
+
+instance Ord a => Ord (NonDetState a) where
+    _ <= UnderspecNonDet = True
+    UnderspecNonDet <= _ = False
+    (NonDet q1) <= (NonDet q2) = Set.fromList q1 <= Set.fromList q2
+
+instance JoinSemiLattice (NonDetState a) where
+    join (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
+    join _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
@@ -198,6 +213,9 @@ instance Show a => Show (FDL a) where
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
+instance JoinSemiLattice (FDL a) where
+    join = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
+
 {-|
     Permissions describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
     behaviour is not allowed, not is any subsequent behaviour. 'Underspecified' describes that behaviour is allowed and any subsequent
@@ -246,5 +264,11 @@ type PermissionApplicative m = (PermissionConfiguration m, Applicative m)
 -- | Abbreviation for types which are both permission configurations and Functors.
 type PermissionFunctor m = (PermissionConfiguration m, Functor m)
 
+-- | Because the lattices-library doesn't support this
+class JoinSemiLattice a where
+    join :: a -> a -> a
 
+--this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
+--instance Lattice a => JoinSemiLattice a where
+--    join = (L.\/)
 
