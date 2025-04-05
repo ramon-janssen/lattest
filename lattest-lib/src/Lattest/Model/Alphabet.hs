@@ -59,7 +59,8 @@ Gate(..),
 Variable(..),
 addTypedVar,
 Type(..),
-SymExpr(..)
+SymExpr(..),
+equalTyped
 )
 where
 
@@ -264,7 +265,7 @@ fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 -- STS data types
 
-data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
+data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord, Show)
 
 data Type = IntType | BoolType deriving (Eq, Ord,Show)
 
@@ -274,11 +275,11 @@ addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.t
 
 data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord, Show)
 
-data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
+data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord, Show)
 
 type SymGuard = GSymPrim.SymBool
 
-data SymExpr = BoolExpr SymBool | IntExpr SymInteger
+data SymExpr = BoolExpr SymBool | IntExpr SymInteger deriving (Show)
 
 type SymAssign  = Map.Map Variable SymExpr
 
@@ -286,4 +287,8 @@ data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord,Show)
 
 data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
 
+equalTyped :: Variable -> Value -> Bool
+equalTyped (Variable _ BoolType) (BoolVal _) = True
+equalTyped (Variable _ IntType) (IntVal _) = True
+equalTyped _ _ = False
 

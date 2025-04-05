@@ -37,8 +37,9 @@ afters,
 -- ** Finite Transition Labels
 FiniteMenu,
 specifiedMenu,
+-- ** STS State data types
 IntrpState(..),
-Valuation
+Valuation,
 )
 where
 
@@ -46,7 +47,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..))
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped)
 import Lattest.Util.Utils((&&&))
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
@@ -138,7 +139,7 @@ class (Ord t, Observable act) => TransitionSemantics t act where
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
     -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> Map t (m (tloc, loc)) -> Maybe (Move m t tloc loc)
+    takeTransition :: (PermissionApplicative m, Ord t, Show t) => loc -> Set t -> act -> Map t (m (tloc, loc)) -> Maybe (Move m t tloc loc)
     takeTransition loc alph act tmap = case asTransition loc alph act of
         Nothing -> Just $ LocationMove $ pure loc
         Just t -> TransitionMove . (t,) <$> Map.lookup t tmap
@@ -168,7 +169,7 @@ class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: StateConfiguration m => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter :: (StateConfiguration m) => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
     in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (transRel aut) act' }
@@ -179,7 +180,7 @@ monadicAfter step autRun act' =
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m, Show t, Show q) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
 withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
@@ -236,7 +237,7 @@ instance (Ord act) => FiniteMenu act act where
 instance StateSemantics q q where
     asLoc = id
 
-instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
+instance (TransitionSemantics t act, StateConfiguration m, Show t, Show q) => AutomatonSemantics m q q t () act
     where
     after = monadicAfter $ withStep (\_ _ _ q -> pure q)
 
@@ -298,7 +299,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a Valuation deriving Show
+data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
 
 type Valuation = (Map Variable Value)
 
@@ -306,30 +307,35 @@ evaluate :: SymExpr -> GSymPrim.Model -> Value
 evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
 evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
 
+instance (Observable (GateValue i o)) where
+    implicitDestination (GateValue (OutputGate _) _) = forbidden
+    implicitDestination _ = underspecified
+
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
 instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o) where
     asTransition _ alf (GateValue gate values) =
-        case List.find (\(SymInteract g vs) -> g == gate) (Set.toList alf) of
-            Nothing -> error $ "gate not in STS alphabet"
-            Just a -> Just a
+        case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
+            Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
+            Just i@(SymInteract g vars) ->
+                if List.length values /= List.length vars
+                    then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
+                    else if List.all (\(var,val) -> equalTyped var val) (zip vars values)
+                            then Just i
+                            else errorWithoutStackTrace "type of variable and value do not match"
 
 
-instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
-    where --  (q -> act -> Maybe (t, tloc) -> loc -> q)
-    after = monadicAfter $ withStep (\(IntrpState l1 varMap) (GateValue g ws) (Just (SymInteract g2 ps, (guard,assign))) l2 ->
-        if List.length ws /= List.length ps && g == g2
-            then forbidden
-            else
-                let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
-                    valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
-                in if not $ Grisette.evalSymToCon valuation guard -- guard is false
-                    then forbidden
-                    else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case Map.lookup v assign of
-                                                            Nothing -> xval
-                                                            Just assignExpr -> evaluate assignExpr valuation) varMap
-                         in return $ IntrpState l2 varMap2)
+instance (Ord i, Ord o, Ord loc, Show loc, StateConfiguration m, Show (m ((SymGuard, SymAssign), loc)), Show (SymInteract i o), Show (m (IntrpState loc))) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o) where
+    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, (guard,assign))) l2 ->
+        let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
+            valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
+        in if not $ Grisette.evalSymToCon valuation guard -- guard is false
+            then implicitDestination gv
+            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case Map.lookup v assign of
+                                                    Nothing -> xval
+                                                    Just assignExpr -> evaluate assignExpr valuation) varMap
+                 in return $ IntrpState l2 varMap2)
 
 
 

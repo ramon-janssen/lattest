@@ -44,7 +44,8 @@ ConcreteTimeoutAutSem,
 semanticsQuiescentConcrete,
 ConcreteTimeoutInputAttemptAutSem,
 semanticsQuiescentInputAttemptConcrete,
-semanticsSTS
+semanticsSTS,
+STSIntrp
 )
 where
 
@@ -100,6 +101,14 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
 -}
 nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> pure $ vacuousLoc l)
+
+{- |
+    Create a non-deterministic symbolic transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
+    The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
+    between the destinations.
+-}
+--nonDetSymbTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tloc, loc)] -> (loc -> Map t (m (tloc, loc)))
+--nonDetSymbTransFromRel = fromJust <$> transFromRelWith combineNonDet id (\l () _ -> pure $ vacuousLoc l)
 
 {- |
     Create a concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as non-deterministic state
@@ -179,31 +188,33 @@ foldableAsSet fld = Set.fromList $ Foldable.toList fld
 type ConcreteAutSem m q act = AutSem m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-semanticsConcrete :: (StateConfiguration m, Ord t) => AutSyn m loc t () -> ConcreteAutSem m loc t
+semanticsConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyn m loc t () -> ConcreteAutSem m loc t
 semanticsConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
 type ConcreteTimeoutAutSem m q i o = AutSem m q q (IOAct i o) () (TimeoutIO i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutAutSem m loc i o
+semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutAutSem m loc i o
 semanticsQuiescentConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
 type ConcreteInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (IFAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-semanticsInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o) => AutSyn m loc (IOAct i o) () -> ConcreteInputAttemptAutSem m loc i o
+semanticsInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteInputAttemptAutSem m loc i o
 semanticsInputAttemptConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
 type ConcreteTimeoutInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (TimeoutIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
+semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
 semanticsQuiescentInputAttemptConcrete = flip semantics id
 
 type STS m loc i o = AutSyn m loc (SymInteract i o) (SymGuard,SymAssign)
 
-semanticsSTS :: (Ord i, Ord o, Ord loc, StateConfiguration m) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
+type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
+
+semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m ((SymGuard, SymAssign), loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
 semanticsSTS = semantics
