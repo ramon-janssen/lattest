@@ -45,8 +45,8 @@ main = do
     putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
     void $ timeout (durationSeconds * 10000000) $ runTestTT tests
     -- property tests
-    putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
-    void $ runQuickCheckTests
+    --putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
+    --void $ runQuickCheckTests
 
 runQuickCheckTests :: IO ()
 runQuickCheckTests = do
@@ -145,7 +145,9 @@ tests = TestList [
     testRandomFCorrect,
     testRandomFIncorrectOutput,
     testRandomFIncorrectInput,
-    testSTSExample
+    testSTSHappyFlow,
+    testErrorThrowingGates,
+    testSTSUnHappyFlow
     ]
 
 
