@@ -19,7 +19,7 @@
 # resolver: https://example.com/snapshots/2018-01-01.yaml
 # resolver: nightly-2023-03-07
 # resolver: lts-20.13 # working version, doesn't work with attoparsec-aeson
-resolver: lts-21.19 # new version for attoparsec-aeson
+resolver: lts-23.18
 # resolver:
 #  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/6.yaml
 
@@ -42,8 +42,6 @@ packages:
 # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
-extra-deps:
-  - grisette-0.11.0.0@sha256:9daeea607f2ddaea81c0245c0919c2768d59fdb70bff497ace3e3e701af53170,21947
 #- QuickCheck-2.15.0.1@sha256:ff732606dd8b3f76e3cb87a26516583d183729bf540085228c82adf037aca8bf,8751 # for witnesses
 #- git: https://github.com/haskell/text.git
 #  commit: e815d4d9bc362f4a3a36a850931fd3504eda967e
