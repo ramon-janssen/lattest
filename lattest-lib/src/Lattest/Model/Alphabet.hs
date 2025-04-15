@@ -1,6 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DataKinds #-}
 
 {-|
     This module contains the definitions and semantics of different forms of observable actions, and inputs used in testing experiments.
