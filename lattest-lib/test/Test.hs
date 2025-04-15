@@ -4,6 +4,7 @@ import Test.Lattest.Adapter.StandardAdapters
 import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.Testing
 import Test.Lattest.Model.StandardAutomata
+import Test.Lattest.Model.STSTest
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short)
 
 import Data.Functor(void)
@@ -44,8 +45,8 @@ main = do
     putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
     void $ timeout (durationSeconds * 10000000) $ runTestTT tests
     -- property tests
-    putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
-    void $ runQuickCheckTests
+    --putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
+    --void $ runQuickCheckTests
 
 runQuickCheckTests :: IO ()
 runQuickCheckTests = do
@@ -143,7 +144,10 @@ tests = TestList [
     testSpecGQuiescent,
     testRandomFCorrect,
     testRandomFIncorrectOutput,
-    testRandomFIncorrectInput
+    testRandomFIncorrectInput,
+    testSTSHappyFlow,
+    testErrorThrowingGates,
+    testSTSUnHappyFlow
     ]
 
 

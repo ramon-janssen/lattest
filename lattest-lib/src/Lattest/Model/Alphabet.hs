@@ -47,9 +47,25 @@ fromInputAttempt,
 -- ** Combined Input Refusals and Timeouts
 TimeoutIF,
 asTimeoutInputAttempt,
-fromTimeoutInputAttempt
+fromTimeoutInputAttempt,
+-- * STS
+SymInteract(..),
+SymGuard,
+SymAssign,
+GateValue(..),
+Value(..),
+Gate(..),
+Variable(..),
+addTypedVar,
+Type(..),
+SymExpr(..),
+equalTyped
 )
 where
+
+import Grisette.Core as Grisette
+import Grisette.SymPrim as GSymPrim
+import qualified Data.Map as Map (Map, fromList)
 
 {- |
     The class of observable actions for which it is possible to derive whether the actions are accepted or refused. For types where refusal does not
@@ -244,3 +260,34 @@ asTimeoutInputAttempt (Out o) = Out (TimeoutOut o)
 fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
 fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
 fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
+
+
+-- STS data types
+
+data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord, Show)
+
+data Type = IntType | BoolType deriving (Eq, Ord,Show)
+
+addTypedVar :: Variable -> Value -> Model -> Model
+addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Bool) w m
+addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Integer) w m
+
+data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord, Show)
+
+data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord, Show)
+
+type SymGuard = GSymPrim.SymBool
+
+data SymExpr = BoolExpr SymBool | IntExpr SymInteger deriving (Show)
+
+type SymAssign  = Map.Map Variable SymExpr
+
+data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord,Show)
+
+data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
+
+equalTyped :: Variable -> Value -> Bool
+equalTyped (Variable _ BoolType) (BoolVal _) = True
+equalTyped (Variable _ IntType) (IntVal _) = True
+equalTyped _ _ = False
+

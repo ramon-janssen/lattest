@@ -36,22 +36,29 @@ after,
 afters,
 -- ** Finite Transition Labels
 FiniteMenu,
-specifiedMenu
+specifiedMenu,
+-- ** STS State data types
+IntrpState(..),
+Valuation,
 )
 where
 
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped)
 import Lattest.Util.Utils((&&&))
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
+import Grisette.Core as Grisette
+import Grisette.SymPrim as GSymPrim
 
 ------------
 -- syntax --
@@ -162,7 +169,7 @@ class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: StateConfiguration m => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter :: (StateConfiguration m) => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
     in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (transRel aut) act' }
@@ -287,3 +294,55 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
     asActions t = [asTimeoutInputAttempt t]
     locationActions _ = [Out Timeout]
+
+--------------------------------
+-- STS interpretation --
+--------------------------------
+
+data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
+
+type Valuation = (Map Variable Value)
+
+evaluate :: SymExpr -> GSymPrim.Model -> Value
+evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
+evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
+
+instance (Observable (GateValue i o)) where
+    implicitDestination (GateValue (OutputGate _) _) = forbidden
+    implicitDestination _ = underspecified
+
+instance StateSemantics a (IntrpState a) where
+    asLoc (IntrpState l _) = l
+
+instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o) where
+    asTransition _ alf (GateValue gate values) =
+        case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
+            Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
+            Just i@(SymInteract g vars) ->
+                if List.length values /= List.length vars
+                    then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
+                    else if List.all (\(var,val) -> equalTyped var val) (zip vars values)
+                            then Just i
+                            else errorWithoutStackTrace "type of variable and value do not match"
+
+
+instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o) where
+    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, (guard,assign))) l2 ->
+        let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
+            valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
+        in if not $ Grisette.evalSymToCon valuation guard -- guard is false
+            then implicitDestination gv
+            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case Map.lookup v assign of
+                                                    Nothing -> xval
+                                                    Just assignExpr -> evaluate assignExpr valuation) varMap
+                 in return $ IntrpState l2 varMap2)
+
+
+
+
+
+
+
+
+
+
