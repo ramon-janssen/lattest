@@ -15,6 +15,7 @@ module Lattest.Model.Automaton (
 AutSyn,
 locConf,
 alphabet,
+trans,
 transRel,
 -- ** Constructing Syntactical Automata
 automaton,
@@ -76,20 +77,26 @@ import Grisette.SymPrim as GSymPrim
 data AutSyn m loc t tloc = Automaton {
     locConf :: m loc,
     alphabet :: Set t,
-    transRel :: loc -> Map t (m (tloc, loc))
+    trans :: loc -> t -> m (tloc, loc)
     }
 
--- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
-automaton mqi alphFld trans = Automaton mqi alph trans'
-    where -- FIXME t is now Observable, in other functions we expect actions instead of transitions to be Observable.
-          -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
+{- |
+    The transitions of an automaton as a 'Map', with the automaton alphabet as key set.
+-} 
+transRel :: Ord t => AutSyn m loc t tloc -> loc -> Map t (m (tloc, loc))
+transRel aut l = Map.fromSet (trans aut l) (alphabet aut)
+
+{- |
+    Construct an automaton from an initial state configuration and a transition function, which must be defined (at least) for all reachable locations
+    and for all transition labels in the alphabet, in order for the functions in this module (such as 'after') to be defined.
+-}
+automaton :: (PermissionConfiguration m, Ord t, Foldable fld) => m loc -> fld t -> (loc -> t -> m (tloc, loc)) -> AutSyn m loc t tloc
+automaton mqi alphFld trans = Automaton mqi alph trans
+    where
     alph = Set.fromList $ Foldable.toList alphFld
-    trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
-    setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
+automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> t -> m (tloc, loc)) -> AutSyn m loc t tloc
 automaton' = automaton . pure
 
 ---------------
@@ -132,6 +139,7 @@ class Observable act where
     TransitionSemantics expresses that the semantics of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
     interaction variables that can be expressed in terms of concrete observed values.
 -}
+-- FIXME is TransitionSemantics still useful in it's current form, now that we are using a function instead of a Map?
 class (Ord t, Observable act) => TransitionSemantics t act where
     {- |
         Map an action to a matching transition. E.g. a concrete value on some channel that matches with the symbolic representation of that channel.
@@ -139,7 +147,7 @@ class (Ord t, Observable act) => TransitionSemantics t act where
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
     -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> Map t (m (tloc, loc)) -> Maybe (Move m t tloc loc)
+    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> t -> m (tloc, loc) -> Maybe (Move m t tloc loc)
     takeTransition loc alph act tmap = case asTransition loc alph act of
         Nothing -> Just $ LocationMove $ pure loc
         Just t -> TransitionMove . (t,) <$> Map.lookup t tmap
@@ -169,10 +177,10 @@ class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: (StateConfiguration m) => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter :: (StateConfiguration m) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
-    in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (transRel aut) act' }
+    in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (trans aut) act' }
 
 {- |
     Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
@@ -180,8 +188,8 @@ monadicAfter step autRun act' =
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
-withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q
+withStep move alph transMap act q = case takeTransition (asLoc q) alph act (trans $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
         where
