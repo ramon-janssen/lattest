@@ -1,0 +1,302 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">--{-# LANGUAGE MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">--{-# LANGUAGE FlexibleInstances #-}</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="annot"><span class="hs-comment">{-|
+    This module contains the definitions for working with symbolic values: variables, expressions, concrete values, guards and assignments.
+-}</span></span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Model.Symbolic</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-9"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#SymGuard"><span class="hs-identifier">SymGuard</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-10"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#SymAssign"><span class="hs-identifier">SymAssign</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-11"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#Value"><span class="hs-identifier">Value</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-12"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier">Variable</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-13"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#addTypedVar"><span class="hs-identifier">addTypedVar</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-14"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#Type"><span class="hs-identifier">Type</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-15"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#SymExpr"><span class="hs-identifier">SymExpr</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-16"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#equalTyped"><span class="hs-identifier">equalTyped</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-17"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#Valuation"><span class="hs-identifier">Valuation</span></a></span><span>
+</span><span id="line-18"></span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Grisette.Core</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Grisette</span></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Grisette.SymPrim</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">GSymPrim</span></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Map</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="annot"><span class="hs-comment">{- |
+    Types of symbolic expressions.
+    
+    Note: the supported types will be extended in the future.
+-}</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">data</span><span> </span><span id="Type"><span class="annot"><a href="Lattest.Model.Symbolic.html#Type"><span class="hs-identifier hs-var">Type</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="IntType"><span class="annot"><a href="Lattest.Model.Symbolic.html#IntType"><span class="hs-identifier hs-var">IntType</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="BoolType"><span class="annot"><a href="Lattest.Model.Symbolic.html#BoolType"><span class="hs-identifier hs-var">BoolType</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679286513"><span id="local-6989586621679286515"><span class="annot"><span class="annottext">Type -&gt; Type -&gt; Bool
+(Type -&gt; Type -&gt; Bool) -&gt; (Type -&gt; Type -&gt; Bool) -&gt; Eq Type
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Type -&gt; Type -&gt; Bool
+== :: Type -&gt; Type -&gt; Bool
+$c/= :: Type -&gt; Type -&gt; Bool
+/= :: Type -&gt; Type -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679286522"><span id="local-6989586621679286524"><span id="local-6989586621679286526"><span id="local-6989586621679286530"><span id="local-6989586621679286533"><span id="local-6989586621679286536"><span id="local-6989586621679286539"><span class="annot"><span class="annottext">Eq Type
+Eq Type =&gt;
+(Type -&gt; Type -&gt; Ordering)
+-&gt; (Type -&gt; Type -&gt; Bool)
+-&gt; (Type -&gt; Type -&gt; Bool)
+-&gt; (Type -&gt; Type -&gt; Bool)
+-&gt; (Type -&gt; Type -&gt; Bool)
+-&gt; (Type -&gt; Type -&gt; Type)
+-&gt; (Type -&gt; Type -&gt; Type)
+-&gt; Ord Type
+Type -&gt; Type -&gt; Bool
+Type -&gt; Type -&gt; Ordering
+Type -&gt; Type -&gt; Type
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: Type -&gt; Type -&gt; Ordering
+compare :: Type -&gt; Type -&gt; Ordering
+$c&lt; :: Type -&gt; Type -&gt; Bool
+&lt; :: Type -&gt; Type -&gt; Bool
+$c&lt;= :: Type -&gt; Type -&gt; Bool
+&lt;= :: Type -&gt; Type -&gt; Bool
+$c&gt; :: Type -&gt; Type -&gt; Bool
+&gt; :: Type -&gt; Type -&gt; Bool
+$c&gt;= :: Type -&gt; Type -&gt; Bool
+&gt;= :: Type -&gt; Type -&gt; Bool
+$cmax :: Type -&gt; Type -&gt; Type
+max :: Type -&gt; Type -&gt; Type
+$cmin :: Type -&gt; Type -&gt; Type
+min :: Type -&gt; Type -&gt; Type
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679286543"><span id="local-6989586621679286545"><span id="local-6989586621679286549"><span class="annot"><span class="annottext">Int -&gt; Type -&gt; ShowS
+[Type] -&gt; ShowS
+Type -&gt; String
+(Int -&gt; Type -&gt; ShowS)
+-&gt; (Type -&gt; String) -&gt; ([Type] -&gt; ShowS) -&gt; Show Type
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Type -&gt; ShowS
+showsPrec :: Int -&gt; Type -&gt; ShowS
+$cshow :: Type -&gt; String
+show :: Type -&gt; String
+$cshowList :: [Type] -&gt; ShowS
+showList :: [Type] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="annot"><span class="hs-comment">{- |
+    Check whether the types of a variable and an expression match.
+-}</span></span><span>
+</span><span id="line-35"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#equalTyped"><span class="hs-identifier hs-type">equalTyped</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-36"></span><span id="equalTyped"><span class="annot"><span class="annottext">equalTyped :: Variable -&gt; Value -&gt; Bool
+</span><a href="Lattest.Model.Symbolic.html#equalTyped"><span class="hs-identifier hs-var hs-var">equalTyped</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span class="annot"><span class="annottext">Symbol
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="Lattest.Model.Symbolic.html#BoolType"><span class="hs-identifier hs-var">BoolType</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#BoolVal"><span class="hs-identifier hs-type">BoolVal</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-37"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#equalTyped"><span class="hs-identifier hs-var">equalTyped</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span class="annot"><span class="annottext">Symbol
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="Lattest.Model.Symbolic.html#IntType"><span class="hs-identifier hs-var">IntType</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#IntVal"><span class="hs-identifier hs-type">IntVal</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-38"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#equalTyped"><span class="hs-identifier hs-var">equalTyped</span></a></span><span> </span><span class="annot"><span class="annottext">Variable
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="annot"><span class="hs-comment">{- |
+    In a symbolic model, substitute a variable by an expression.
+-}</span></span><span>
+</span><span id="line-43"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#addTypedVar"><span class="hs-identifier hs-type">addTypedVar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Model</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Model</span></span><span>
+</span><span id="line-44"></span><span id="addTypedVar"><span class="annot"><span class="annottext">addTypedVar :: Variable -&gt; Value -&gt; Model -&gt; Model
+</span><a href="Lattest.Model.Symbolic.html#addTypedVar"><span class="hs-identifier hs-var hs-var">addTypedVar</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span id="local-6989586621679286555"><span class="annot"><span class="annottext">Symbol
+</span><a href="#local-6989586621679286555"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="Lattest.Model.Symbolic.html#BoolType"><span class="hs-identifier hs-var">BoolType</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#BoolVal"><span class="hs-identifier hs-type">BoolVal</span></a></span><span> </span><span id="local-6989586621679286556"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679286556"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679286557"><span class="annot"><span class="annottext">Model
+</span><a href="#local-6989586621679286557"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TypedSymbol 'AnyKind Bool -&gt; Bool -&gt; Model -&gt; Model
+forall t. TypedSymbol 'AnyKind t -&gt; t -&gt; Model -&gt; Model
+forall model symbolSet (typedSymbol :: * -&gt; *) t.
+ModelOps model symbolSet typedSymbol =&gt;
+typedSymbol t -&gt; t -&gt; model -&gt; model
+</span><span class="hs-identifier hs-var">Grisette.insertValue</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Symbol -&gt; TypedSymbol 'AnyKind Bool
+forall t. SupportedPrim t =&gt; Symbol -&gt; TypedSymbol 'AnyKind t
+</span><span class="hs-identifier hs-var">GSymPrim.typedAnySymbol</span></span><span> </span><span class="annot"><span class="annottext">Symbol
+</span><a href="#local-6989586621679286555"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TypedAnySymbol</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679286556"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Model
+</span><a href="#local-6989586621679286557"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-45"></span><span class="annot"><a href="Lattest.Model.Symbolic.html#addTypedVar"><span class="hs-identifier hs-var">addTypedVar</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span id="local-6989586621679286561"><span class="annot"><span class="annottext">Symbol
+</span><a href="#local-6989586621679286561"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="Lattest.Model.Symbolic.html#IntType"><span class="hs-identifier hs-var">IntType</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.html#IntVal"><span class="hs-identifier hs-type">IntVal</span></a></span><span> </span><span id="local-6989586621679286562"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679286562"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679286563"><span class="annot"><span class="annottext">Model
+</span><a href="#local-6989586621679286563"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TypedSymbol 'AnyKind Integer -&gt; Integer -&gt; Model -&gt; Model
+forall t. TypedSymbol 'AnyKind t -&gt; t -&gt; Model -&gt; Model
+forall model symbolSet (typedSymbol :: * -&gt; *) t.
+ModelOps model symbolSet typedSymbol =&gt;
+typedSymbol t -&gt; t -&gt; model -&gt; model
+</span><span class="hs-identifier hs-var">Grisette.insertValue</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Symbol -&gt; TypedSymbol 'AnyKind Integer
+forall t. SupportedPrim t =&gt; Symbol -&gt; TypedSymbol 'AnyKind t
+</span><span class="hs-identifier hs-var">GSymPrim.typedAnySymbol</span></span><span> </span><span class="annot"><span class="annottext">Symbol
+</span><a href="#local-6989586621679286561"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TypedAnySymbol</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679286562"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Model
+</span><a href="#local-6989586621679286563"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="annot"><span class="hs-comment">{- |
+    A typed variable.
+-}</span></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">data</span><span> </span><span id="Variable"><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-var">Variable</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Variable"><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-var">Variable</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Grisette.Symbol</span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Type"><span class="hs-identifier hs-type">Type</span></a></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679286565"><span id="local-6989586621679286570"><span class="annot"><span class="annottext">Variable -&gt; Variable -&gt; Bool
+(Variable -&gt; Variable -&gt; Bool)
+-&gt; (Variable -&gt; Variable -&gt; Bool) -&gt; Eq Variable
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Variable -&gt; Variable -&gt; Bool
+== :: Variable -&gt; Variable -&gt; Bool
+$c/= :: Variable -&gt; Variable -&gt; Bool
+/= :: Variable -&gt; Variable -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679286576"><span id="local-6989586621679286581"><span id="local-6989586621679286585"><span id="local-6989586621679286589"><span id="local-6989586621679286592"><span id="local-6989586621679286595"><span id="local-6989586621679286598"><span class="annot"><span class="annottext">Eq Variable
+Eq Variable =&gt;
+(Variable -&gt; Variable -&gt; Ordering)
+-&gt; (Variable -&gt; Variable -&gt; Bool)
+-&gt; (Variable -&gt; Variable -&gt; Bool)
+-&gt; (Variable -&gt; Variable -&gt; Bool)
+-&gt; (Variable -&gt; Variable -&gt; Bool)
+-&gt; (Variable -&gt; Variable -&gt; Variable)
+-&gt; (Variable -&gt; Variable -&gt; Variable)
+-&gt; Ord Variable
+Variable -&gt; Variable -&gt; Bool
+Variable -&gt; Variable -&gt; Ordering
+Variable -&gt; Variable -&gt; Variable
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: Variable -&gt; Variable -&gt; Ordering
+compare :: Variable -&gt; Variable -&gt; Ordering
+$c&lt; :: Variable -&gt; Variable -&gt; Bool
+&lt; :: Variable -&gt; Variable -&gt; Bool
+$c&lt;= :: Variable -&gt; Variable -&gt; Bool
+&lt;= :: Variable -&gt; Variable -&gt; Bool
+$c&gt; :: Variable -&gt; Variable -&gt; Bool
+&gt; :: Variable -&gt; Variable -&gt; Bool
+$c&gt;= :: Variable -&gt; Variable -&gt; Bool
+&gt;= :: Variable -&gt; Variable -&gt; Bool
+$cmax :: Variable -&gt; Variable -&gt; Variable
+max :: Variable -&gt; Variable -&gt; Variable
+$cmin :: Variable -&gt; Variable -&gt; Variable
+min :: Variable -&gt; Variable -&gt; Variable
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679286601"><span id="local-6989586621679286608"><span id="local-6989586621679286612"><span class="annot"><span class="annottext">Int -&gt; Variable -&gt; ShowS
+[Variable] -&gt; ShowS
+Variable -&gt; String
+(Int -&gt; Variable -&gt; ShowS)
+-&gt; (Variable -&gt; String) -&gt; ([Variable] -&gt; ShowS) -&gt; Show Variable
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Variable -&gt; ShowS
+showsPrec :: Int -&gt; Variable -&gt; ShowS
+$cshow :: Variable -&gt; String
+show :: Variable -&gt; String
+$cshowList :: [Variable] -&gt; ShowS
+showList :: [Variable] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="annot"><span class="hs-comment">{- |
+    A symbolic guard, i.e., an predicate.
+-}</span></span><span>
+</span><span id="line-55"></span><span class="hs-keyword">type</span><span> </span><span id="SymGuard"><span class="annot"><a href="Lattest.Model.Symbolic.html#SymGuard"><span class="hs-identifier hs-var">SymGuard</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">GSymPrim.SymBool</span></span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="annot"><span class="hs-comment">{- |
+    A typed expression.
+-}</span></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">data</span><span> </span><span id="SymExpr"><span class="annot"><a href="Lattest.Model.Symbolic.html#SymExpr"><span class="hs-identifier hs-var">SymExpr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="BoolExpr"><span class="annot"><a href="Lattest.Model.Symbolic.html#BoolExpr"><span class="hs-identifier hs-var">BoolExpr</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">SymBool</span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="IntExpr"><span class="annot"><a href="Lattest.Model.Symbolic.html#IntExpr"><span class="hs-identifier hs-var">IntExpr</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">SymInteger</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679286617"><span id="local-6989586621679286625"><span id="local-6989586621679286629"><span class="annot"><span class="annottext">Int -&gt; SymExpr -&gt; ShowS
+[SymExpr] -&gt; ShowS
+SymExpr -&gt; String
+(Int -&gt; SymExpr -&gt; ShowS)
+-&gt; (SymExpr -&gt; String) -&gt; ([SymExpr] -&gt; ShowS) -&gt; Show SymExpr
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; SymExpr -&gt; ShowS
+showsPrec :: Int -&gt; SymExpr -&gt; ShowS
+$cshow :: SymExpr -&gt; String
+show :: SymExpr -&gt; String
+$cshowList :: [SymExpr] -&gt; ShowS
+showList :: [SymExpr] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><span class="hs-comment">{- |
+    Assignments of symbolic expressions to variables.
+-}</span></span><span>
+</span><span id="line-65"></span><span class="hs-keyword">type</span><span> </span><span id="SymAssign"><span class="annot"><a href="Lattest.Model.Symbolic.html#SymAssign"><span class="hs-identifier hs-var">SymAssign</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#SymExpr"><span class="hs-identifier hs-type">SymExpr</span></a></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="annot"><span class="hs-comment">{- |
+    Typed, concrete values.
+-}</span></span><span>
+</span><span id="line-70"></span><span class="hs-keyword">data</span><span> </span><span id="Value"><span class="annot"><a href="Lattest.Model.Symbolic.html#Value"><span class="hs-identifier hs-var">Value</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="IntVal"><span class="annot"><a href="Lattest.Model.Symbolic.html#IntVal"><span class="hs-identifier hs-var">IntVal</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="BoolVal"><span class="annot"><a href="Lattest.Model.Symbolic.html#BoolVal"><span class="hs-identifier hs-var">BoolVal</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679286632"><span id="local-6989586621679286638"><span class="annot"><span class="annottext">Value -&gt; Value -&gt; Bool
+(Value -&gt; Value -&gt; Bool) -&gt; (Value -&gt; Value -&gt; Bool) -&gt; Eq Value
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Value -&gt; Value -&gt; Bool
+== :: Value -&gt; Value -&gt; Bool
+$c/= :: Value -&gt; Value -&gt; Bool
+/= :: Value -&gt; Value -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679286644"><span id="local-6989586621679286650"><span id="local-6989586621679286654"><span id="local-6989586621679286658"><span id="local-6989586621679286661"><span id="local-6989586621679286664"><span id="local-6989586621679286667"><span class="annot"><span class="annottext">Eq Value
+Eq Value =&gt;
+(Value -&gt; Value -&gt; Ordering)
+-&gt; (Value -&gt; Value -&gt; Bool)
+-&gt; (Value -&gt; Value -&gt; Bool)
+-&gt; (Value -&gt; Value -&gt; Bool)
+-&gt; (Value -&gt; Value -&gt; Bool)
+-&gt; (Value -&gt; Value -&gt; Value)
+-&gt; (Value -&gt; Value -&gt; Value)
+-&gt; Ord Value
+Value -&gt; Value -&gt; Bool
+Value -&gt; Value -&gt; Ordering
+Value -&gt; Value -&gt; Value
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: Value -&gt; Value -&gt; Ordering
+compare :: Value -&gt; Value -&gt; Ordering
+$c&lt; :: Value -&gt; Value -&gt; Bool
+&lt; :: Value -&gt; Value -&gt; Bool
+$c&lt;= :: Value -&gt; Value -&gt; Bool
+&lt;= :: Value -&gt; Value -&gt; Bool
+$c&gt; :: Value -&gt; Value -&gt; Bool
+&gt; :: Value -&gt; Value -&gt; Bool
+$c&gt;= :: Value -&gt; Value -&gt; Bool
+&gt;= :: Value -&gt; Value -&gt; Bool
+$cmax :: Value -&gt; Value -&gt; Value
+max :: Value -&gt; Value -&gt; Value
+$cmin :: Value -&gt; Value -&gt; Value
+min :: Value -&gt; Value -&gt; Value
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679286670"><span id="local-6989586621679286678"><span id="local-6989586621679286682"><span class="annot"><span class="annottext">Int -&gt; Value -&gt; ShowS
+[Value] -&gt; ShowS
+Value -&gt; String
+(Int -&gt; Value -&gt; ShowS)
+-&gt; (Value -&gt; String) -&gt; ([Value] -&gt; ShowS) -&gt; Show Value
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Value -&gt; ShowS
+showsPrec :: Int -&gt; Value -&gt; ShowS
+$cshow :: Value -&gt; String
+show :: Value -&gt; String
+$cshowList :: [Value] -&gt; ShowS
+showList :: [Value] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><span class="hs-comment">{- |
+    Assignments of concrete expressions to variables.
+-}</span></span><span>
+</span><span id="line-75"></span><span class="hs-keyword">type</span><span> </span><span id="Valuation"><span class="annot"><a href="Lattest.Model.Symbolic.html#Valuation"><span class="hs-identifier hs-var">Valuation</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span></pre></body></html>
