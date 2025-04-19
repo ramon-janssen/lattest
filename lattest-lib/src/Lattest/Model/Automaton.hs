@@ -15,6 +15,7 @@ module Lattest.Model.Automaton (
 AutSyn,
 locConf,
 alphabet,
+trans,
 transRel,
 -- ** Constructing Syntactical Automata
 automaton,
@@ -76,17 +77,23 @@ import Grisette.SymPrim as GSymPrim
 data AutSyn m loc t tloc = Automaton {
     locConf :: m loc,
     alphabet :: Set t,
-    transRel :: loc -> Map t (m (tloc, loc))
+    trans :: loc -> t -> m (tloc, loc)
     }
 
--- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
-automaton mqi alphFld trans = Automaton mqi alph trans'
-    where -- FIXME t is now Observable, in other functions we expect actions instead of transitions to be Observable.
-          -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
+{- |
+    The transitions of an automaton as a 'Map', with the automaton alphabet as key set.
+-} 
+transRel :: Ord t => AutSyn m loc t tloc -> loc -> Map t (m (tloc, loc))
+transRel aut l = Map.fromSet (trans aut l) (alphabet aut)
+
+{- |
+    Construct an automaton from an initial state configuration and a transition function, which must be defined (at least) for all reachable locations
+    and for all transition labels in the alphabet, in order for the functions in this module (such as 'after') to be defined.
+-}
+automaton :: (PermissionConfiguration m, Ord t, Foldable fld) => m loc -> fld t -> (loc -> t -> m (tloc, loc)) -> AutSyn m loc t tloc
+automaton mqi alphFld trans = Automaton mqi alph trans
+    where
     alph = Set.fromList $ Foldable.toList alphFld
-    trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
-    setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
 automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
