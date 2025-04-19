@@ -48,23 +48,14 @@ fromInputAttempt,
 TimeoutIF,
 asTimeoutInputAttempt,
 fromTimeoutInputAttempt,
--- * STS
-SymInteract(..),
-SymGuard,
-SymAssign,
+-- ** Symbolic interaction for STSes
 GateValue(..),
-Value(..),
 Gate(..),
-Variable(..),
-addTypedVar,
-Type(..),
-SymExpr(..),
-equalTyped
+SymInteract(..)
 )
 where
 
-import Grisette.Core as Grisette
-import Grisette.SymPrim as GSymPrim
+import qualified Lattest.Model.Symbolic as Sym
 import qualified Data.Map as Map (Map, fromList)
 
 {- |
@@ -261,33 +252,19 @@ fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
 fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
 fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
-
--- STS data types
-
+{- |
+    A symbolic Gate is an input or output label to indicate the transition taken by a symbolic automaton (STS).
+-}
 data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord, Show)
 
-data Type = IntType | BoolType deriving (Eq, Ord,Show)
+{- |
+    A concrete interaction performed by a symbolic automaton (STS): the symbolic gate to indicate the transition
+    to take, accompanied by concrete values to assign to interaction variables.
+-}
+data GateValue i o = GateValue (Gate i o) [Sym.Value] deriving (Eq, Ord)
 
-addTypedVar :: Variable -> Value -> Model -> Model
-addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Bool) w m
-addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Integer) w m
-
-data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord, Show)
-
-data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord, Show)
-
-type SymGuard = GSymPrim.SymBool
-
-data SymExpr = BoolExpr SymBool | IntExpr SymInteger deriving (Show)
-
-type SymAssign  = Map.Map Variable SymExpr
-
-data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord,Show)
-
-data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
-
-equalTyped :: Variable -> Value -> Bool
-equalTyped (Variable _ BoolType) (BoolVal _) = True
-equalTyped (Variable _ IntType) (IntVal _) = True
-equalTyped _ _ = False
+{- |
+    SymInteract defines the interactions that can occur in a symbolic automaton (STS), a gate, accompanied by typed symbolic interaction variables.
+-}
+data SymInteract i o = SymInteract (Gate i o) [Sym.Variable] deriving (Eq, Ord, Show)
 

@@ -38,16 +38,15 @@ afters,
 FiniteMenu,
 specifiedMenu,
 -- ** STS State data types
-IntrpState(..),
-Valuation,
+IntrpState(..)
 )
 where
 
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,SymInteract(..),GateValue(..),Gate(..))
+import Lattest.Model.Symbolic(Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),equalTyped,Valuation)
 import Lattest.Util.Utils((&&&))
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
@@ -299,9 +298,10 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
-
-type Valuation = (Map Variable Value)
+{- |
+    A symbolic state interpretation, consisting of a location and a valuation of symbolic variables to concrete values.
+-}
+data IntrpState loc = IntrpState loc Valuation deriving (Eq, Ord, Show)
 
 evaluate :: SymExpr -> GSymPrim.Model -> Value
 evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)

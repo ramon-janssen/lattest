@@ -44,14 +44,16 @@ ConcreteTimeoutAutSem,
 semanticsQuiescentConcrete,
 ConcreteTimeoutInputAttemptAutSem,
 semanticsQuiescentInputAttemptConcrete,
+STS,
 semanticsSTS,
 STSIntrp
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign,GateValue)
+import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract(..), GateValue(..), Gate(..))
 import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination,IntrpState(..))
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
+import Lattest.Model.Symbolic (SymGuard, SymAssign, Valuation, Variable(..), Type(..), Value(..), SymExpr(..))
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
@@ -59,7 +61,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Lazy (mapWithKey)
 import qualified Data.Map.Lazy as LMap
-import  Data.Maybe as Maybe
+import Data.Maybe as Maybe
 import qualified Data.Set as Set
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
@@ -212,9 +214,23 @@ type ConcreteTimeoutInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (Ti
 semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
 semanticsQuiescentInputAttemptConcrete = flip semantics id
 
+{- |
+    Symbolic Transition Systems (STS): Automata with symbolic values on states, inputs and outputs. Transitions contain guards and assignments. Guards are
+    predicates over state variables and interaction variables, that should hold when the transition is taken. Assignments express how state variables
+    are updated when taking a transition.
+-}
 type STS m loc i o = AutSyn m loc (SymInteract i o) (SymGuard,SymAssign)
 
+{- |
+    Interpretation of STSes: the concrete state is a tuple of a symbolic location and a valuation of the state variables. The inputs and outputs
+    of the interpretation comprise an interaction variable and concrete values, where the values act as a valuation for the interaction variable.
+-}
 type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
 
+{- |
+    Interpret an STS. For more details see
+    
+    * [/Lars Frantzen, Jan Tretmans, Tim T. A. Willemse/, A symbolic framework for model-based testing, International Workshop on Formal Approaches to Software Testing, 2006, Springer Berlin Heidelberg](https://repository.ubn.ru.nl/bitstream/handle/2066/36155/36155.pdf)
+-}
 semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m ((SymGuard, SymAssign), loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
 semanticsSTS = semantics

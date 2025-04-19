@@ -6,9 +6,9 @@ import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation)
-import Lattest.Model.StandardAutomata(semanticsSTS,STSIntrp)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics)
+import Lattest.Model.StandardAutomata(semanticsSTS,STSIntrp,IntrpState(..),Valuation, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
+import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
