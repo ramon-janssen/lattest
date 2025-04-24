@@ -40,6 +40,9 @@ specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
 Valuation,
+-- * Auxiliary Automaton Functions
+reachable,
+reachableFrom,
 )
 where
 
@@ -48,7 +51,7 @@ import Prelude hiding (lookup)
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped)
-import Lattest.Util.Utils((&&&))
+import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
@@ -337,11 +340,35 @@ instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m l
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
                  in return $ IntrpState l2 varMap2)
 
+-------------------------
+-- Auxiliary functions --
+-------------------------
 
+{- |
+    Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
+-}
+reachable :: (Ord loc, Foldable m) => AutSyn m loc t tloc -> Set loc
+reachable aut = reachableFrom aut $ locConf aut
 
-
-
-
+{- |
+    Compute the set of locations that is syntactically reachable from the given locations.
+    
+    Note that this not involve any interpretation of the automaton, e.g. if a location of symbolic automaton is only reachable via a transition with
+    a guard that is always `False`, then that location is still considered to be reachable, even if a symbolic interpretation of that automaton
+    can never reach that location for any trace of concrete values.
+-}
+reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyn m loc t tloc -> f loc -> Set loc
+reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable.toList locations
+    where
+    reachableFrom' acc boundary = case takeArbitrary boundary of
+        Nothing -> acc -- done, no more new states to explore
+        Just (q, boundaryRem) -> -- explore the states reached by transitions from q
+            let ts = transRel aut q
+                qs = Set.fromList $ concat $ fmap snd . Foldable.toList <$> Map.elems ts
+                new = qs `Set.difference` acc
+                acc' = acc `Set.union` new
+                boundary' = boundaryRem `Set.union` new
+            in reachableFrom' acc' boundary'
 
 
 

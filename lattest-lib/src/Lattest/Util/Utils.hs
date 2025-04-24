@@ -12,11 +12,15 @@ module Lattest.Util.Utils (
 flipCoin,
 takeRandom,
 -- * Maybe
-takeJusts
+takeJusts,
+-- * Set
+takeArbitrary
 )
 where
 
 import Data.Foldable(toList)
+import qualified Data.Set as Set
+import Data.Set (Set)
 import System.Random(RandomGen, uniformR)
 import Control.Monad.Extra((||^), (&&^))
 
@@ -63,3 +67,9 @@ takeJusts maybes = takeJusts' $ toList maybes
     takeJusts' [] = []
     takeJusts' (Just x : xs) = x : takeJusts' xs
     takeJusts' (Nothing : xs) = takeJusts' xs 
+
+-- | Remove an arbitrary element from the given set, and return both that element and the remaining set, or `Nothing` if the given set was empty.
+takeArbitrary :: Set a -> Maybe (a, Set a)
+takeArbitrary set
+    | Set.null set = Nothing
+    | otherwise = Just (Set.elemAt 0 set, Set.deleteAt 0 set)
