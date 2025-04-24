@@ -43,6 +43,8 @@ Valuation,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
+prettyPrint,
+prettyPrintFrom
 )
 where
 
@@ -370,6 +372,19 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
+prettyPrint :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyn m loc t tloc -> String
+prettyPrint aut = prettyPrintFrom aut (locConf aut)
 
+prettyPrintFrom :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyn m loc t tloc -> f loc -> String
+prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitial ++ "\nlocations: " ++ printLocations ++ "\ntransitions:\n" ++ printTransitions
+    where
+    locations = Set.toList $ reachableFrom aut fromLocs
+    printInitial = show $ locConf aut
+    printLocations = List.intercalate ", " (show <$> locations)
+    printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
+    printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
+    printTransition q (t, mt) = show q ++ " ---" ++ show t ++ "---> " ++ show mt
+    
+    
 
 
