@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow)
+module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS)
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation,prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(semanticsSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..),underspecified,forbidden)
@@ -84,3 +84,9 @@ assertThrowsError expectedError someVal = do
     where
         handler :: Exception.ErrorCall -> IO (Maybe String)
         handler ex = return $ Just $ show ex
+
+testPrintSTS :: Test
+testPrintSTS = TestCase $ do
+    assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExample
+    where
+    printSTS = "???"
