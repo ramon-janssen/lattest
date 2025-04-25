@@ -44,7 +44,8 @@ Valuation,
 reachable,
 reachableFrom,
 prettyPrint,
-prettyPrintFrom
+prettyPrintFrom,
+prettyPrintIntrp
 )
 where
 
@@ -385,6 +386,10 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ " ---" ++ show t ++ "---> " ++ show mt
     
-    
+prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutSem m loc q t tloc act -> String
+prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
+    where
+    printStateConf = show $ stateConf intrp
+    printAut = prettyPrint $ syntacticAutomaton intrp
 
 
