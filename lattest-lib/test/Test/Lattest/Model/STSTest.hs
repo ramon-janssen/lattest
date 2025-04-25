@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow)
+module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS)
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation,prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(semanticsSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..),underspecified,forbidden)
@@ -84,3 +84,25 @@ assertThrowsError expectedError someVal = do
     where
         handler :: Exception.ErrorCall -> IO (Maybe String)
         handler ex = return $ Just $ show ex
+
+testPrintSTS :: Test
+testPrintSTS = TestCase $ do
+    putStrLn $ prettyPrintIntrp stsExample
+    assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExample
+    where
+    {-
+current state configuration: [IntrpState 0 (fromList [(Variable x IntType,IntVal 0)])]
+initial location configuration: [0]
+locations: 0, 1, 2
+transitions:
+0 ---SymInteract (InputGate "water") [Variable p IntType]---> [(((&& (<= 1 p) (<= -10 (- p))),fromList [(Variable x IntType,IntExpr (+ x p))]),1)]
+0 ---SymInteract (OutputGate "coffee") []---> [(((< 15 x),fromList []),2)]
+0 ---SymInteract (OutputGate "ok") [Variable p IntType]---> []
+1 ---SymInteract (InputGate "water") [Variable p IntType]---> []
+1 ---SymInteract (OutputGate "coffee") []---> []
+1 ---SymInteract (OutputGate "ok") [Variable p IntType]---> [(((= x p),fromList []),0)]
+2 ---SymInteract (InputGate "water") [Variable p IntType]---> []
+2 ---SymInteract (OutputGate "coffee") []---> []
+2 ---SymInteract (OutputGate "ok") [Variable p IntType]---> []
+    -}
+    printSTS = "current state configuration: [IntrpState 0 (fromList [(Variable x IntType,IntVal 0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 ---SymInteract (InputGate \"water\") [Variable p IntType]---> [(((&& (<= 1 p) (<= -10 (- p))),fromList [(Variable x IntType,IntExpr (+ x p))]),1)]\n0 ---SymInteract (OutputGate \"coffee\") []---> [(((< 15 x),fromList []),2)]\n0 ---SymInteract (OutputGate \"ok\") [Variable p IntType]---> []\n1 ---SymInteract (InputGate \"water\") [Variable p IntType]---> []\n1 ---SymInteract (OutputGate \"coffee\") []---> []\n1 ---SymInteract (OutputGate \"ok\") [Variable p IntType]---> [(((= x p),fromList []),0)]\n2 ---SymInteract (InputGate \"water\") [Variable p IntType]---> []\n2 ---SymInteract (OutputGate \"coffee\") []---> []\n2 ---SymInteract (OutputGate \"ok\") [Variable p IntType]---> []"

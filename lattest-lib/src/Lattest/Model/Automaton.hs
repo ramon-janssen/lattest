@@ -384,7 +384,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printLocations = List.intercalate ", " (show <$> locations)
     printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
-    printTransition q (t, mt) = show q ++ " ---" ++ show t ++ "---> " ++ show mt
+    printTransition q (t, mt) = show q ++ " ――" ++ show t ++ "⟶ " ++ show mt
     
 prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutSem m loc q t tloc act -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
