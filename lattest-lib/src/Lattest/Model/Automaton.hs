@@ -299,7 +299,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
 --------------------------------
 
 {- |
-    A symbolic state interpretation, consisting of a location and a valuation of symbolic variables to concrete values.
+    The interpretation of a symbolic state, consisting of a location and a valuation of symbolic variables to concrete values.
 -}
 data IntrpState loc = IntrpState loc Valuation deriving (Eq, Ord, Show)
 

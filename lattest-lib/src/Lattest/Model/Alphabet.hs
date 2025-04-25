@@ -48,7 +48,7 @@ fromInputAttempt,
 TimeoutIF,
 asTimeoutInputAttempt,
 fromTimeoutInputAttempt,
--- ** Symbolic interaction for STSes
+-- ** Interaction for STSes
 GateValue(..),
 Gate(..),
 SymInteract(..)
@@ -253,18 +253,18 @@ fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
 fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 {- |
-    A symbolic Gate is an input or output label to indicate the transition taken by a symbolic automaton (STS).
+    A Gate is an input or output label to indicate the transition taken by a symbolic automaton (STS).
 -}
 data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord, Show)
 
 {- |
-    A concrete interaction performed by a symbolic automaton (STS): the symbolic gate to indicate the transition
+    A concrete interaction performed by a symbolic automaton (STS): the gate to indicate the transition
     to take, accompanied by concrete values to assign to interaction variables.
 -}
 data GateValue i o = GateValue (Gate i o) [Sym.Value] deriving (Eq, Ord)
 
 {- |
-    SymInteract defines the interactions that can occur in a symbolic automaton (STS), a gate, accompanied by typed symbolic interaction variables.
+    SymInteract defines the symbolic interactions that can occur in a symbolic automaton (STS), a gate, accompanied by typed symbolic interaction variables.
 -}
 data SymInteract i o = SymInteract (Gate i o) [Sym.Variable] deriving (Eq, Ord, Show)
 

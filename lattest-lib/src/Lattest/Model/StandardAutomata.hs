@@ -215,22 +215,24 @@ semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, S
 semanticsQuiescentInputAttemptConcrete = flip semantics id
 
 {- |
-    Symbolic Transition Systems (STS): Automata with symbolic values on states, inputs and outputs. Transitions contain guards and assignments. Guards are
-    predicates over state variables and interaction variables, that should hold when the transition is taken. Assignments express how state variables
-    are updated when taking a transition.
+    Symbolic Transition Systems (STS): an automaton with location variables on locations, and symbolic transitions with input and output gates.
+    Transitions consist of a guard, assignments, and a symbolic interaction, containing an input or output gate and interaction variables.
+    Guards are predicates over location variables and interaction variables, that should hold when the transition is taken.
+    Assignments express how location variables are updated when taking a transition.
 -}
 type STS m loc i o = AutSyn m loc (SymInteract i o) (SymGuard,SymAssign)
 
 {- |
-    Interpretation of STSes: the concrete state is a tuple of a symbolic location and a valuation of the state variables. The inputs and outputs
+    Interpretation of STSes: the concrete state is a tuple of a symbolic location and a valuation of the location variables. The inputs and output gates
     of the interpretation comprise an interaction variable and concrete values, where the values act as a valuation for the interaction variable.
 -}
 type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
 
 {- |
     Interpret an STS. For more details see
-    
-    * [/Lars Frantzen, Jan Tretmans, Tim T. A. Willemse/, A symbolic framework for model-based testing, International Workshop on Formal Approaches to Software Testing, 2006, Springer Berlin Heidelberg](https://repository.ubn.ru.nl/bitstream/handle/2066/36155/36155.pdf)
+
+    * [/Petra van den Bos, Jan Tretmans/, Coverage-Based Testing with Symbolic Transition Systems, TAP 2019.](https://doi.org/10.1007/978-3-030-31157-5_5)
+    * [/Lars Frantzen, Jan Tretmans, Tim T. A. Willemse/, A symbolic framework for model-based testing, International Workshop on Formal Approaches to Software Testing, 2006, Springer Berlin Heidelberg](http://dx.doi.org/10.1007/11940197_3)
 -}
 semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m ((SymGuard, SymAssign), loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
 semanticsSTS = semantics
