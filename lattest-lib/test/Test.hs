@@ -148,7 +148,8 @@ tests = TestList [
     testRandomFIncorrectInput,
     testSTSHappyFlow,
     testErrorThrowingGates,
-    testSTSUnHappyFlow
+    testSTSUnHappyFlow,
+    testPrintSTS
     ]
 
 
