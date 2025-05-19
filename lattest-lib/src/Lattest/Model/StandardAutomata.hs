@@ -50,7 +50,7 @@ STSIntrp
 where
 
 import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination,IntrpState(..))
+import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -212,9 +212,9 @@ type ConcreteTimeoutInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (Ti
 semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
 semanticsQuiescentInputAttemptConcrete = flip semantics id
 
-type STS m loc i o = AutSyn m loc (SymInteract i o) (SymGuard,SymAssign)
+type STS m loc i o = AutSyn m loc (SymInteract i o) STStloc
 
-type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
+type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 
-semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m ((SymGuard, SymAssign), loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o)
+semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 semanticsSTS = semantics

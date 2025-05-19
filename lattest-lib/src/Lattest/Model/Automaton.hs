@@ -40,6 +40,8 @@ specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
 Valuation,
+STStloc,
+stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
@@ -53,7 +55,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped)
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
@@ -309,6 +311,14 @@ data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
 
 type Valuation = (Map Variable Value)
 
+newtype STStloc = STSLoc (SymGuard,SymAssign)
+
+stsTLoc :: SymGuard -> SymAssign -> STStloc
+stsTLoc g a = STSLoc (g,a)
+
+instance Show STStloc where
+    show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
+
 evaluate :: SymExpr -> GSymPrim.Model -> Value
 evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
 evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
@@ -332,13 +342,13 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             else errorWithoutStackTrace "type of variable and value do not match"
 
 
-instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o) where
-    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, (guard,assign))) l2 ->
+instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o) where
+    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 ->
         let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
             valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
         in if not $ Grisette.evalSymToCon valuation guard -- guard is false
             then implicitDestination gv
-            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case Map.lookup v assign of
+            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case assignedExpr v assign of
                                                     Nothing -> xval
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
                  in return $ IntrpState l2 varMap2)
@@ -384,7 +394,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printLocations = List.intercalate ", " (show <$> locations)
     printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
-    printTransition q (t, mt) = show q ++ " ---" ++ show t ++ "---> " ++ show mt
+    printTransition q (t, mt) = show q ++ " ――" ++ show t ++ "⟶ " ++ show mt
     
 prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutSem m loc q t tloc act -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
