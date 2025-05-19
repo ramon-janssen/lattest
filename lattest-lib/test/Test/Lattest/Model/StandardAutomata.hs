@@ -7,6 +7,7 @@ IG(..),
 OG(..),
 sg,
 testSpecF,
+testPrintSpecF,
 testSpecG,
 testSpecGQuiescent
 )
@@ -15,7 +16,7 @@ where
 import Prelude hiding (take)
 import Test.HUnit
 
-import Lattest.Model.Automaton(after, afters, stateConf, automaton)
+import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
@@ -49,6 +50,31 @@ testSpecF = TestCase $ do
     assertEqual "sf after ?A !Y" (q0f /\ q2f) (stateConf $ rf `after` af `after` y)
     assertEqual "sf after ?A !A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
     assertEqual "sf after ?A !B" top (stateConf $ rf `after` af `after` bf)
+
+testPrintSpecF :: Test
+testPrintSpecF = TestCase $ do
+    {-
+    initial location configuration: Q0f
+    locations: Q0f, Q1f, Q2f
+    transitions:
+    Q0f ――?A⟶ (((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f)))
+    Q0f ――?B⟶ ⊤
+    Q0f ――!X⟶ ((),Q0f)
+    Q0f ――!Y⟶ ((),Q0f)
+    Q1f ――?A⟶ ⊤
+    Q1f ――?B⟶ ⊤
+    Q1f ――!X⟶ ⊤
+    Q1f ――!Y⟶ ⊥
+    Q2f ――?A⟶ ⊤
+    Q2f ――?B⟶ ((),Q0f)
+    Q2f ――!X⟶ ⊥
+    Q2f ――!Y⟶ ((),Q2f)
+    -}
+    assertEqual "print of sf does not match" printF $ prettyPrint sf
+    where
+    printF =
+        "initial location configuration: Q0f\nlocations: Q0f, Q1f, Q2f\ntransitions:\nQ0f \8213\8213?A\10230 (((),Q0f) \8743 (((),Q1f) \8744 ((),Q2f)))\nQ0f \8213\8213?B\10230 \8868\nQ0f \8213\8213!X\10230 ((),Q0f)\nQ0f \8213\8213!Y\10230 ((),Q0f)\nQ1f \8213\8213?A\10230 \8868\nQ1f \8213\8213?B\10230 \8868\nQ1f \8213\8213!X\10230 \8868\nQ1f \8213\8213!Y\10230 \8869\nQ2f \8213\8213?A\10230 \8868\nQ2f \8213\8213?B\10230 ((),Q0f)\nQ2f \8213\8213!X\10230 \8869\nQ2f \8213\8213!Y\10230 ((),Q2f)"
+
 
 data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
 data OG = C | T | CM | TM deriving (Show, Eq, Ord)

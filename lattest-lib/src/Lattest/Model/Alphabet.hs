@@ -59,13 +59,17 @@ Variable(..),
 addTypedVar,
 Type(..),
 SymExpr(..),
-equalTyped
+equalTyped,
+assignedExpr,
+assignment,
+noAssignment
 )
 where
 
 import Grisette.Core as Grisette
 import Grisette.SymPrim as GSymPrim
-import qualified Data.Map as Map (Map, fromList)
+import qualified Data.Map as Map (Map, fromList, toList, lookup, empty)
+import qualified Data.List as List (intercalate)
 
 {- |
     The class of observable actions for which it is possible to derive whether the actions are accepted or refused. For types where refusal does not
@@ -264,23 +268,56 @@ fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
 
 -- STS data types
 
-data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord, Show)
+data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
 
-data Type = IntType | BoolType deriving (Eq, Ord,Show)
+instance (Show i, Show o) => Show (Gate i o) where
+    show (InputGate i) = "In " ++ show i
+    show (OutputGate o) = "Out " ++ show o
+
+data Type = IntType | BoolType deriving (Eq, Ord)
+
+instance Show Type where
+    show IntType = "Int"
+    show BoolType = "Bool"
 
 addTypedVar :: Variable -> Value -> Model -> Model
 addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Bool) w m
 addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Integer) w m
 
-data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord, Show)
+data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord)
 
-data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord, Show)
+instance Show Variable where
+    show (Variable symbol stype) = show symbol ++ ":" ++ show stype
+
+data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
+
+instance (Show i, Show o) => Show (SymInteract i o) where
+    show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
 type SymGuard = GSymPrim.SymBool
 
-data SymExpr = BoolExpr SymBool | IntExpr SymInteger deriving (Show)
+data SymExpr = BoolExpr SymBool | IntExpr SymInteger
 
-type SymAssign  = Map.Map Variable SymExpr
+instance Show SymExpr where
+    show (BoolExpr e) = show e
+    show (IntExpr e) = show e
+
+newtype SymAssign  = SymAssign (Map.Map Variable SymExpr)
+
+assignedExpr :: Variable -> SymAssign -> Maybe SymExpr
+assignedExpr v (SymAssign map) = Map.lookup v map
+
+assignment :: [(Variable, SymExpr)] -> SymAssign
+assignment = SymAssign . Map.fromList
+
+noAssignment :: SymAssign
+noAssignment = SymAssign Map.empty
+
+instance Show SymAssign where
+    show (SymAssign map) = "{" ++ (List.intercalate ", " showList) ++ "}"
+        where
+        showList = showAssign <$> Map.toList map
+        showAssign (v,e) = show v ++ ":=" ++ show e
 
 data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord,Show)
 

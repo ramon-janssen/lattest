@@ -40,6 +40,14 @@ specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
 Valuation,
+STStloc,
+stsTLoc,
+-- * Auxiliary Automaton Functions
+reachable,
+reachableFrom,
+prettyPrint,
+prettyPrintFrom,
+prettyPrintIntrp
 )
 where
 
@@ -47,8 +55,8 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped)
-import Lattest.Util.Utils((&&&))
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
+import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
@@ -303,6 +311,14 @@ data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
 
 type Valuation = (Map Variable Value)
 
+newtype STStloc = STSLoc (SymGuard,SymAssign)
+
+stsTLoc :: SymGuard -> SymAssign -> STStloc
+stsTLoc g a = STSLoc (g,a)
+
+instance Show STStloc where
+    show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
+
 evaluate :: SymExpr -> GSymPrim.Model -> Value
 evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
 evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
@@ -326,23 +342,64 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             else errorWithoutStackTrace "type of variable and value do not match"
 
 
-instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) (SymGuard,SymAssign) (GateValue i o) where
-    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, (guard,assign))) l2 ->
+instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o) where
+    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 ->
         let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
             valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
         in if not $ Grisette.evalSymToCon valuation guard -- guard is false
             then implicitDestination gv
-            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case Map.lookup v assign of
+            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case assignedExpr v assign of
                                                     Nothing -> xval
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
                  in return $ IntrpState l2 varMap2)
 
+-------------------------
+-- Auxiliary functions --
+-------------------------
 
+{- |
+    Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
+-}
+reachable :: (Ord loc, Foldable m) => AutSyn m loc t tloc -> Set loc
+reachable aut = reachableFrom aut $ locConf aut
 
+{- |
+    Compute the set of locations that is syntactically reachable from the given locations.
+    
+    Note that this not involve any interpretation of the automaton, e.g. if a location of symbolic automaton is only reachable via a transition with
+    a guard that is always `False`, then that location is still considered to be reachable, even if a symbolic interpretation of that automaton
+    can never reach that location for any trace of concrete values.
+-}
+reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyn m loc t tloc -> f loc -> Set loc
+reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable.toList locations
+    where
+    reachableFrom' acc boundary = case takeArbitrary boundary of
+        Nothing -> acc -- done, no more new states to explore
+        Just (q, boundaryRem) -> -- explore the states reached by transitions from q
+            let ts = transRel aut q
+                qs = Set.fromList $ concat $ fmap snd . Foldable.toList <$> Map.elems ts
+                new = qs `Set.difference` acc
+                acc' = acc `Set.union` new
+                boundary' = boundaryRem `Set.union` new
+            in reachableFrom' acc' boundary'
 
+prettyPrint :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyn m loc t tloc -> String
+prettyPrint aut = prettyPrintFrom aut (locConf aut)
 
-
-
-
+prettyPrintFrom :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyn m loc t tloc -> f loc -> String
+prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitial ++ "\nlocations: " ++ printLocations ++ "\ntransitions:\n" ++ printTransitions
+    where
+    locations = Set.toList $ reachableFrom aut fromLocs
+    printInitial = show $ locConf aut
+    printLocations = List.intercalate ", " (show <$> locations)
+    printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
+    printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
+    printTransition q (t, mt) = show q ++ " ――" ++ show t ++ "⟶ " ++ show mt
+    
+prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutSem m loc q t tloc act -> String
+prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
+    where
+    printStateConf = show $ stateConf intrp
+    printAut = prettyPrint $ syntacticAutomaton intrp
 
 

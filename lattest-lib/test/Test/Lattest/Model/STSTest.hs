@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow)
+module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS)
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(semanticsSTS,STSIntrp)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..))
+import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..), assignment, noAssignment)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
@@ -25,14 +25,14 @@ stsExample =
         ok = SymInteract (OutputGate "ok") [pvar]
         coffee = SymInteract (OutputGate "coffee") []
         waterGuard = 1 .<= psym .&& psym .<= 10
-        waterAssign = Map.fromList [(xvar,IntExpr $ xsym + psym)]
+        waterAssign = assignment [(xvar,IntExpr $ xsym + psym)]
         okGuard = xsym .== psym
         coffeeGuard = xsym .> 15
         locConf = NonDet [0] :: NonDetState Integer
         switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet [((waterGuard,waterAssign), 1)]),
-                                (coffee,NonDet [((coffeeGuard,Map.empty), 2)])]
-            1 -> Map.fromList [(ok,NonDet [((okGuard,Map.empty), 0)])]
+            0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
+                                (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
+            1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
         initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
         sts = automaton locConf (Set.fromList [water,ok,coffee]) switches
@@ -84,3 +84,24 @@ assertThrowsError expectedError someVal = do
     where
         handler :: Exception.ErrorCall -> IO (Maybe String)
         handler ex = return $ Just $ show ex
+
+testPrintSTS :: Test
+testPrintSTS = TestCase $ do
+    assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExample
+    where
+    {-
+    current state configuration: [IntrpState 0 (fromList [(x:Int,IntVal 0)])]
+    initial location configuration: [0]
+    locations: 0, 1, 2
+    transitions:
+    0 ――In "water" [p:Int]⟶ [([[(&& (<= 1 p) (<= -10 (- p)))]] {x:Int:=(+ x p)},1)]
+    0 ――Out "coffee" []⟶ [([[(< 15 x)]] {},2)]
+    0 ――Out "ok" [p:Int]⟶ []
+    1 ――In "water" [p:Int]⟶ []
+    1 ――Out "coffee" []⟶ []
+    1 ――Out "ok" [p:Int]⟶ [([[(= x p)]] {},0)]
+    2 ――In "water" [p:Int]⟶ []
+    2 ――Out "coffee" []⟶ []
+    2 ――Out "ok" [p:Int]⟶ []
+    -}
+    printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,IntVal 0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(&& (<= 1 p) (<= -10 (- p)))]] {x:Int:=(+ x p)},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[(< 15 x)]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(= x p)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"
