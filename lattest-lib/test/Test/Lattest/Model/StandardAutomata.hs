@@ -53,24 +53,28 @@ testSpecF = TestCase $ do
 
 testPrintSpecF :: Test
 testPrintSpecF = TestCase $ do
+    {-
+    initial location configuration: Q0f
+    locations: Q0f, Q1f, Q2f
+    transitions:
+    Q0f ――?A⟶ (((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f)))
+    Q0f ――?B⟶ ⊤
+    Q0f ――!X⟶ ((),Q0f)
+    Q0f ――!Y⟶ ((),Q0f)
+    Q1f ――?A⟶ ⊤
+    Q1f ――?B⟶ ⊤
+    Q1f ――!X⟶ ⊤
+    Q1f ――!Y⟶ ⊥
+    Q2f ――?A⟶ ⊤
+    Q2f ――?B⟶ ((),Q0f)
+    Q2f ――!X⟶ ⊥
+    Q2f ――!Y⟶ ((),Q2f)
+    -}
     assertEqual "print of sf does not match" printF $ prettyPrint sf
     where
     printF =
-        "initial location configuration: Q0f\n\
-        \locations: Q0f, Q1f, Q2f\n\
-        \transitions:\n\
-        \Q0f ---?A---> (((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f)))\n\
-        \Q0f ---?B---> ⊤\n\
-        \Q0f ---!X---> ((),Q0f)\n\
-        \Q0f ---!Y---> ((),Q0f)\n\
-        \Q1f ---?A---> ⊤\n\
-        \Q1f ---?B---> ⊤\n\
-        \Q1f ---!X---> ⊤\n\
-        \Q1f ---!Y---> ⊥\n\
-        \Q2f ---?A---> ⊤\n\
-        \Q2f ---?B---> ((),Q0f)\n\
-        \Q2f ---!X---> ⊥\n\
-        \Q2f ---!Y---> ((),Q2f)"
+        "initial location configuration: Q0f\nlocations: Q0f, Q1f, Q2f\ntransitions:\nQ0f \8213\8213?A\10230 (((),Q0f) \8743 (((),Q1f) \8744 ((),Q2f)))\nQ0f \8213\8213?B\10230 \8868\nQ0f \8213\8213!X\10230 ((),Q0f)\nQ0f \8213\8213!Y\10230 ((),Q0f)\nQ1f \8213\8213?A\10230 \8868\nQ1f \8213\8213?B\10230 \8868\nQ1f \8213\8213!X\10230 \8868\nQ1f \8213\8213!Y\10230 \8869\nQ2f \8213\8213?A\10230 \8868\nQ2f \8213\8213?B\10230 ((),Q0f)\nQ2f \8213\8213!X\10230 \8869\nQ2f \8213\8213!Y\10230 ((),Q2f)"
+
 
 data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
 data OG = C | T | CM | TM deriving (Show, Eq, Ord)
