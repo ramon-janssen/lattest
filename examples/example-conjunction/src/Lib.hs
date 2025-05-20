@@ -5,7 +5,7 @@ module Lib
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withTimeoutMillis)
-import Lattest.Model.StandardAutomata(automaton, ioAlphabet, alternatingConcTransFromMRel,semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
+import Lattest.Model.StandardAutomata(automaton, ioAlphabet, nonDetConcTransFromMRel,semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
 import Data.Aeson(FromJSON, ToJSON)
@@ -30,7 +30,7 @@ data GOut = C | T | CM | TM deriving (Eq, Ord, Show, Generic)
 instance FromJSON GOut
 instance ToJSON GOut
 
-tG =alternatingConcTransFromMRel
+tG =nonDetConcTransFromMRel
     [   (Q0G, In On, q1G /\ q3G /\ q5G /\ q8G),
         (Q1G, In A, q2G),
         (Q3G, In B, q4G),
