@@ -15,6 +15,7 @@ automaton,
 ioAlphabet,
 -- * Transition relations
 -- | Auxiliary functions useful for constructing transition relations, intended for creating automata via `automaton`.
+
 -- ** Deterministic Transition Relations
 detConcTransFromRel,
 detConcTransFromMRel,
