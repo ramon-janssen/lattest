@@ -17,10 +17,10 @@ isInput,
 isOutput,
 fromInput,
 fromOutput,
--- ** Observable Timeouts
+-- ** Observable Quiescence
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system, where the 'output' may also be an artificial
-    output that represents an observed timeout. For the theoretical background on observing timeouts, see the notion of /quiescence/ in
+    output that represents an observed timeout, /quiescence/. For the theoretical background on observing quiescence, see
     
     * [/Jan Tretmans/, Model based testing with labelled transition systems (Formal Methods and Testing), 2008](https://repository.ubn.ru.nl/bitstream/handle/2066/72680/72680.pdf)
 -}
@@ -44,7 +44,7 @@ IFAct(..),
 Attempt(..),
 asInputAttempt,
 fromInputAttempt,
--- ** Combined Input Refusals and Timeouts
+-- ** Combined Input Refusals and Quiescences
 SuspendedIF,
 asSuspendedInputAttempt,
 fromSuspendedInputAttempt,
@@ -145,42 +145,42 @@ fromOutput :: IOAct i o -> o
 fromOutput (Out o) = o
 
 {- |
-    Add observation of timeouts to a type of observable actions.
+    Add observation of quiescence to a type of observable actions.
 -}
-data Suspended o = Timeout | OutSusp o deriving (Eq, Ord)
+data Suspended o = Quiescence | OutSusp o deriving (Eq, Ord)
 
 instance Show o => Show (Suspended o) where
-    show Timeout = "δ"
+    show Quiescence = "δ"
     show (OutSusp o) = show o
 
 {- |
-    Add observation of timeouts to the observed inputs and outputs.
+    Add observation of quiescence to the observed inputs and outputs.
 -}
 type IOSuspAct i o = IOAct i (Suspended o)
 
 δ :: IOAct i (Suspended o)
-δ = Out Timeout
+δ = Out Quiescence
 
 {- |
-    Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to a timeout.
+    Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to quiescence.
 -}
 instance TestChoice (Maybe i) (IOSuspAct i o) where
-    -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
+    -- a (Maybe i) only makes sense in case of quiescence, since testing would otherwise quickly deadlock
     choiceToActs (Just i) = asSuspended <$> choiceToActs i
     choiceToActs Nothing = []
-    actToChoice (Out Timeout) = Just Nothing
+    actToChoice (Out Quiescence) = Just Nothing
     actToChoice (Out (OutSusp o)) = Nothing
     actToChoice (In i) = Just $ Just i
 
 {- |
-    Convert an input or output to a type containing timeouts.
+    Convert an input or output to a type containing quiescence.
 -}
 asSuspended :: IOAct i o -> IOSuspAct i o
 asSuspended (In i) = In i
 asSuspended (Out o) = Out (OutSusp o)
 
 {- |
-    Partially defined function that unpacks an input or output from a type with timeouts.
+    Partially defined function that unpacks an input or output from a type with quiescence.
 -}
 fromSuspended :: IOSuspAct i o -> IOAct i o
 fromSuspended (In i) = In i
@@ -235,31 +235,31 @@ fromInputAttempt (Out o) = Out o
 
 -- ideally, this could just be defined by stacking IFAct and IOSuspAct to avoid all the boilerplate below, but that is a bit of a hassle
 {- |
-    Input failure with observed timeouts. See 'IOSuspAct' and 'IFAct' for details.
+    Input failure with observed quiescence. See 'IOSuspAct' and 'IFAct' for details.
 -}
 type SuspendedIF i o = IOAct (Attempt i) (Suspended o)
 
 instance TestChoice (Maybe i) (SuspendedIF i o) where
-    choiceToActs Nothing = [Out Timeout]
+    choiceToActs Nothing = [Out Quiescence]
     choiceToActs (Just i) = inToAttempt <$> choiceToActs i
         where
         inToAttempt (In i) = In (Attempt (i, True))
         inToAttempt (Out o) = Out o 
-    --actToChoice (Out Timeout) = Just Nothing
+    --actToChoice (Out Quiescence) = Just Nothing
     actToChoice other = actToChoice $ attemptToIn other
         where
         attemptToIn (In (Attempt (i, _))) = In i
         attemptToIn (Out o) = Out o
 
 {- |
-    Convert an input or output to a type containing input failures and timeouts.
+    Convert an input or output to a type containing input failures and quiescence.
 -}
 asSuspendedInputAttempt :: IOAct i o -> SuspendedIF i o
 asSuspendedInputAttempt (In i) = In (Attempt (i, True))
 asSuspendedInputAttempt (Out o) = Out (OutSusp o)
 
 {- |
-    Partially defined function that unpacks an input or output from a type with input failures and timeouts.
+    Partially defined function that unpacks an input or output from a type with input failures and quiescence.
 -}
 fromSuspendedInputAttempt :: SuspendedIF i o -> IOAct i o
 fromSuspendedInputAttempt (In (Attempt (i, True))) = In i

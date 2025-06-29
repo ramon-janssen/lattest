@@ -4,7 +4,7 @@ module Lib
     ) where
 
 import Lattest.Model.Alphabet(IOAct(..))
-import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withTimeoutMillis)
+import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata(automaton, ioAlphabet, nonDetConcTransFromMRel,semanticsQuiescentConcrete, atom, top, bot, (\/), (/\),)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
@@ -60,7 +60,7 @@ someFunc :: IO ()
 someFunc = do
     putStrLn $ "connecting..."
     adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct GIn GOut) GIn) -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    imp <- withTimeoutMillis 200 adap
+    imp <- withQuiescenceMillis 200 adap
     let model = semanticsQuiescentConcrete sG
     putStrLn $ "starting test..."
     (verdict, (observed, maybeMq)) <- runTester model testSelector imp

@@ -123,9 +123,9 @@ traceAdapter steps = pureMealyAdapter traceTrans traceOutput steps
     traceTrans (In is:steps') (Just i) = if i == is then steps' else []
     traceTrans (In is:steps') Nothing = (In is:steps')
     traceTrans (Out _:steps') _ = steps' -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
-    traceOutput [] _ = [Out Timeout] -- if the adapter is not processing any more actions, show timeouts. Even if an input is attempted, because it will not be processed
+    traceOutput [] _ = [Out Quiescence] -- if the adapter is not processing any more actions, show timeouts. Even if an input is attempted, because it will not be processed
     traceOutput (In _:_) (Just i) = [In i]
-    traceOutput (In _:_) Nothing = [Out Timeout] -- the adapter is waiting for an input but doesn't receive one, so show a timeout.
+    traceOutput (In _:_) Nothing = [Out Quiescence] -- the adapter is waiting for an input but doesn't receive one, so show a timeout.
     traceOutput (Out os:_) _ = [Out $ OutSusp os] -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
 
 

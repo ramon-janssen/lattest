@@ -41,9 +41,9 @@ concTransFromFunc,
 -- the type of the semantical interpretation.
 ConcreteAutSem,
 semanticsConcrete,
-ConcreteTimeoutAutSem,
+ConcreteQuiescenceAutSem,
 semanticsQuiescentConcrete,
-ConcreteTimeoutInputAttemptAutSem,
+ConcreteQuiescenceInputAttemptAutSem,
 semanticsQuiescentInputAttemptConcrete,
 semanticsSTS,
 STSIntrp
@@ -193,10 +193,10 @@ semanticsConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyn m
 semanticsConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
-type ConcreteTimeoutAutSem m q i o = AutSem m q q (IOAct i o) () (IOSuspAct i o)
+type ConcreteQuiescenceAutSem m q i o = AutSem m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutAutSem m loc i o
+semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteQuiescenceAutSem m loc i o
 semanticsQuiescentConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
@@ -207,10 +207,10 @@ semanticsInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Sh
 semanticsInputAttemptConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-type ConcreteTimeoutInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (SuspendedIF i o)
+type ConcreteQuiescenceInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (SuspendedIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
+semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteQuiescenceInputAttemptAutSem m loc i o
 semanticsQuiescentInputAttemptConcrete = flip semantics id
 
 type STS m loc i o = AutSyn m loc (SymInteract i o) STStloc

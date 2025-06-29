@@ -39,15 +39,15 @@ parseJSONActionsFromSut,
 -- ** Observing Inputs
 acceptingInputs,
 acceptingInputsWithIncompletenessAsFailures,
--- ** Observing Timeouts
-withTimeout,
-withTimeoutMillis
+-- ** Observing Quiescences
+withQuiescence,
+withQuiescenceMillis
 )
 where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Timeout), asSuspended, fromSuspended)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended)
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM)
 import Control.Applicative((<|>))
@@ -286,7 +286,7 @@ pureAdapter g p transitionFunction initialState = do
         randomOutputTransitions' t g q outs isAfterNoInput =
             let ts = Map.filterWithKey (\k _ -> isOutput k) (t q)
             in if Map.null ts -- if no outputs are available at all, 
-                then if isAfterNoInput then (g, q, Out Timeout : outs) else (g, q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
+                then if isAfterNoInput then (g, q, Out Quiescence : outs) else (g, q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
                 else let (produceOut, g') = if isAfterNoInput then (True, g) else flipCoin g p -- else decide whether to produce more actions. This is mandatory if a "Nothing" input was previously received, otherwise flip a coin
                     in if not produceOut
                         then (g', q, outs)
@@ -296,12 +296,12 @@ pureAdapter g p transitionFunction initialState = do
         prependInput i (q, acts) = (q, In i:acts)
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given number of milliseconds, after any other observation.
-withTimeoutMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
-withTimeoutMillis timeoutMillis = withTimeout $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
+withQuiescenceMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
+withQuiescenceMillis timeoutMillis = withQuiescence $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given timeout duration, after any other observation.
-withTimeout :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
-withTimeout timeoutDiff adap = do
+withQuiescence :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
+withQuiescence timeoutDiff adap = do
     lastObservationTime <- newEmptyTMVarIO -- time of the last observed action. Nothing if observing hasn't started yet.
     isProcessingObservation <- newTVarIO False
     observedQueue <- newTQueueIO
@@ -319,20 +319,20 @@ withTimeout timeoutDiff adap = do
             lastTime <- readTMVar lastObservationTime -- blocking, in case of Nothing
             let targetTime = addUTCTime timeoutDiff lastTime
             return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime)
-        waitUntilTimeout = do -- wait until the target timeout. Blocks if there is no target timeout yet.
+        waitUntilQuiescence = do -- wait until the target timeout. Blocks if there is no target timeout yet.
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
             delay waitTimeMicros
         quiescenceMonitor = forever $ do -- background task that first wait until action monitoring starts, then continuously waits until a timeout
                                          -- is reached and sets the quiescence state to true
-            waitUntilTimeout
+            waitUntilQuiescence
             currentTime <- getCurrentTime
             --quiIsSet <- atomically $ do
             atomically $ do
                 additionalWaitTime <- getWaitTimeMicros currentTime
                 let quiescent = additionalWaitTime <= 0
                 ifM_ quiescent $ do
-                    writeTQueue observedQueue (Just $ Out Timeout)
+                    writeTQueue observedQueue (Just $ Out Quiescence)
                     updateObservationTime currentTime
         actMonitor = forever $ do --background task that waits for outputs, updates the observation time and unsets the quiescence state
             mAct <- atomically $ do
