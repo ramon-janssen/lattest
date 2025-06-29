@@ -41,9 +41,9 @@ concTransFromFunc,
 -- the type of the semantical interpretation.
 ConcreteAutIntrpr,
 interpretConcrete,
-ConcreteQuiescenceAutIntrpr,
+ConcreteSuspAutIntrpr,
 interpretQuiescentConcrete,
-ConcreteQuiescenceInputAttemptAutIntrpr,
+ConcreteSuspInputAttemptAutIntrpr,
 interpretQuiescentInputAttemptConcrete,
 interpretSTS,
 STSIntrp
@@ -193,10 +193,10 @@ interpretConcrete :: (BoundedMonad m, Ord t, Show t, Show loc) => AutSyntax m lo
 interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
-type ConcreteQuiescenceAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
+type ConcreteSuspAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceAutIntrpr m loc i o
+interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspAutIntrpr m loc i o
 interpretQuiescentConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
@@ -207,10 +207,10 @@ interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, 
 interpretInputAttemptConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-type ConcreteQuiescenceInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
+type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceInputAttemptAutIntrpr m loc i o
+interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
 type STS m loc i o = AutSyntax m loc (SymInteract i o) STStloc
