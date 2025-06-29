@@ -51,7 +51,7 @@ STSIntrp
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Observable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -68,21 +68,21 @@ ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
 -- | To a transition relation without tloc, add vacuous tlocs ().
-concreteTrans :: (Functor m, Observable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
+concreteTrans :: (Functor m, Completable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
 concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
     Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromRel :: (Completable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
 detConcTransFromRel = transFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as deterministic state
     configuration. Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMRel :: (Completable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
 detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
 {- |
@@ -90,7 +90,7 @@ detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fma
     states, where `Nothing` is mapped to either `forbidden` or `underspecified`, depending on the transition label. Having multiple occurrences of a transition label is forbidden,
     i.e., leads to a Nothing result.
 -}
-detConcTransFromMaybeRel :: (Observable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMaybeRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
 detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
     Just loc -> vacuousLoc <$> Det loc
     Nothing -> implicitDestination t
@@ -100,7 +100,7 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
-nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> pure $ vacuousLoc l)
 
 {- |
@@ -108,7 +108,7 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
---nonDetSymbTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tloc, loc)] -> (loc -> Map t (m (tloc, loc)))
+--nonDetSymbTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tloc, loc)] -> (loc -> Map t (m (tloc, loc)))
 --nonDetSymbTransFromRel = fromJust <$> transFromRelWith combineNonDet id (\l () _ -> pure $ vacuousLoc l)
 
 {- |
@@ -116,7 +116,7 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     configuration. The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted
     as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromMRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
 {- |
@@ -124,7 +124,7 @@ nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTra
     where the empty list is mapped to either `forbidden` or `underspecified`, depending on the transition label.
     Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDetState ((), loc)))
 nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
     where
     listToNonDet (list@(_:_)) () t = vacuousLoc <$> NonDet list
@@ -138,7 +138,7 @@ vacuousTrans (a,b,c) = (a,b,(),c)
 
 vacuousLoc l = ((), l)
 
-transFromRelWith :: (Observable t, Ord loc, Ord t) =>
+transFromRelWith :: (Completable t, Ord loc, Ord t) =>
     (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
     -> (te -> (loc, t, tloc, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
     -> (loc' -> tloc -> t -> m (tloc, loc)) -- the way of creating a monadic transition result from the transition info of a list element
@@ -150,7 +150,7 @@ transFromRelWith c' fe' f' trans = do
         Just tMap -> tMap
         Nothing -> Map.empty
     where
-    addToMap :: (Observable t, Ord loc, Ord t) => (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -> (te -> (loc, t, tloc, loc')) -> (loc' -> tloc -> t -> m (tloc, loc)) -> te -> Maybe (Map loc (Map t (m (tloc, loc)))) -> Maybe (Map loc (Map t (m (tloc, loc))))
+    addToMap :: (Completable t, Ord loc, Ord t) => (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -> (te -> (loc, t, tloc, loc')) -> (loc' -> tloc -> t -> m (tloc, loc)) -> te -> Maybe (Map loc (Map t (m (tloc, loc)))) -> Maybe (Map loc (Map t (m (tloc, loc))))
     addToMap c fe f te maybeTMapMap = do
         tMapMap <- maybeTMapMap
         let (loc, t, tloc, loc') = fe te

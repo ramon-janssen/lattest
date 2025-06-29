@@ -28,7 +28,7 @@ syntacticAutomaton,
 -- ** Constructing Syntactical Automata
 interpret,
 -- ** Type Classes for Semantics
-Observable,
+Completable,
 implicitDestination,
 TransitionSemantics,
 StateSemantics,
@@ -89,16 +89,16 @@ data AutSyntax m loc t tloc = Automaton {
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton :: (PermissionConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton mqi alphFld trans = Automaton mqi alph trans'
-    where -- FIXME t is now Observable, in other functions we expect actions instead of transitions to be Observable.
+    where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
     alph = Set.fromList $ Foldable.toList alphFld
     trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton' :: (PermissionApplicative m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton' = automaton . pure
 
 {- |
@@ -137,8 +137,8 @@ data AutIntrpr m loc q t tloc act = AutInterpretation {
 interpret :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutIntrpr m loc q t tloc act
 interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
--- | The Observable typeclass defines which types can be used as labels on transitions.
-class Observable act where
+-- | The Completable typeclass defines which types can be used as labels on transitions.
+class Completable act where
     {- |
         Defines the implicit state configuration reached by a given transition label if that label is omitted from 
         a syntactical automaton. E.g. if a state contains no outgoing transition for an output label, that label
@@ -150,7 +150,7 @@ class Observable act where
     TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
     interaction variables that can be expressed in terms of concrete observed values.
 -}
-class (Ord t, Observable act) => TransitionSemantics t act where
+class (Ord t, Completable act) => TransitionSemantics t act where
     {- |
         Map an action to a matching transition. E.g. a concrete value on some channel that matches with the symbolic representation of that channel.
         'Nothing' indicates an action that occurs within a location, without explicit transition.
@@ -196,7 +196,7 @@ monadicAfter step autRun act' =
     Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
     take a monadic step from the current state configuration.
     
-    If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
+    If no transition is found for the given action, then the state configuration is implicit, as described by 'Completable'.
 -}
 withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q
 withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
@@ -242,7 +242,7 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 -- special case where the semantic states and actions are directly represented syntactically --
 -----------------------------------------------------------------------------------------------
 
-instance (Observable act) where
+instance (Completable act) where
     implicitDestination _ = forbidden
 
 instance (Ord act) => TransitionSemantics act act where
@@ -262,7 +262,7 @@ instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics
 ----------------
 -- quiescence --
 ----------------
-instance (Observable (IOAct i o)) where
+instance (Completable (IOAct i o)) where
     implicitDestination (Out _) = forbidden
     implicitDestination _ = underspecified
 
@@ -333,7 +333,7 @@ evaluate :: SymExpr -> GSymPrim.Model -> Value
 evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
 evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
 
-instance (Observable (GateValue i o)) where
+instance (Completable (GateValue i o)) where
     implicitDestination (GateValue (OutputGate _) _) = forbidden
     implicitDestination _ = underspecified
 
