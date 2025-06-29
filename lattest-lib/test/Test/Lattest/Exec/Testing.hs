@@ -13,7 +13,7 @@ import Test.HUnit hiding (Path, path)
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.Automaton(AutSyn, automaton)
 import Lattest.Model.StandardAutomata(semanticsQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), TimeoutIO, Timeout(..))
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Timeout(..))
 import Lattest.Model.StateConfiguration
 import qualified Data.Map as Map (insert, fromList)
 import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter,acceptingInputs)
@@ -71,7 +71,7 @@ testTraceFailsWithQuiescence = TestCase $ do
     assertEqual "testTraceFailsWithQuiescence should fail" Fail verdict
     assertEqual "testTraceFailsWithQuiescence should be incomplete" True finished
 
-ioTraceTestController :: (Eq i, Eq o) => [IOAct i o] -> TestController m loc q t tloc (TimeoutIO i o) [Either (Maybe i) (TimeoutIO i o)] (Maybe i) Bool
+ioTraceTestController :: (Eq i, Eq o) => [IOAct i o] -> TestController m loc q t tloc (IOSuspAct i o) [Either (Maybe i) (IOSuspAct i o)] (Maybe i) Bool
 ioTraceTestController ioActs = traceTestController $ toCommandsAndActs ioActs
     where
     toCommandsAndActs [] = []
@@ -108,7 +108,7 @@ traceSpecification steps = automaton (if null steps then UnderspecDet else Det s
     detStateFromAct (In _) = UnderspecDet
     detStateFromAct (Out _) = ForbiddenDet
 {-
-traceAdapter :: (Show i, Show o) => [IOAct i o] -> IO (Adapter (TimeoutIO i o) (Maybe i))
+traceAdapter :: (Show i, Show o) => [IOAct i o] -> IO (Adapter (IOSuspAct i o) (Maybe i))
 traceAdapter steps = pureAdapter traceTrans traceOutput $ if (null $ takeOutputs steps) then steps else error "traceAdapter cannot start with output"
     where
     -- invariant: before and in between transitions, the first step is always an input
@@ -116,7 +116,7 @@ traceAdapter steps = pureAdapter traceTrans traceOutput $ if (null $ takeOutputs
     traceOutput steps' _ = takeOutputs steps' -- after the first input, take all next outputs
     takeOutputs steps' = fst (span isOutput steps')
 -}
-traceAdapter :: (Eq i) => [IOAct i o] -> IO (Adapter (TimeoutIO i o) (Maybe i))
+traceAdapter :: (Eq i) => [IOAct i o] -> IO (Adapter (IOSuspAct i o) (Maybe i))
 traceAdapter steps = pureMealyAdapter traceTrans traceOutput steps
     where
     traceTrans [] _ = []

@@ -55,7 +55,7 @@ where
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,TimeoutIO,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
@@ -266,14 +266,14 @@ instance (Observable (IOAct i o)) where
     implicitDestination (Out _) = forbidden
     implicitDestination _ = underspecified
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIO i o) where
+instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) where
     asTransition loc _ (Out Timeout) = Nothing
     asTransition _ _ other = Just $ fromTimeout other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc alph (Out Timeout) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
     takeTransition _ _ act m = Just $ TransitionMove (fromTimeout act, m $ fromTimeout act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIO i o) where
+instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asTimeout t]
     locationActions _ = [Out Timeout]
 

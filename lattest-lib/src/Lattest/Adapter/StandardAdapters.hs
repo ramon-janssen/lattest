@@ -47,7 +47,7 @@ where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), TimeoutIO, Timeout(Timeout), asTimeout, fromTimeout)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Timeout(Timeout), asTimeout, fromTimeout)
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM)
 import Control.Applicative((<|>))
@@ -81,7 +81,7 @@ import qualified Data.Text as Text(pack, unpack)
 import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), TimeoutIO, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
@@ -296,11 +296,11 @@ pureAdapter g p transitionFunction initialState = do
         prependInput i (q, acts) = (q, In i:acts)
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given number of milliseconds, after any other observation.
-withTimeoutMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (TimeoutIO i o) (Maybe i))
+withTimeoutMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
 withTimeoutMillis timeoutMillis = withTimeout $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given timeout duration, after any other observation.
-withTimeout :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (TimeoutIO i o) (Maybe i))
+withTimeout :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
 withTimeout timeoutDiff adap = do
     lastObservationTime <- newEmptyTMVarIO -- time of the last observed action. Nothing if observing hasn't started yet.
     isProcessingObservation <- newTVarIO False

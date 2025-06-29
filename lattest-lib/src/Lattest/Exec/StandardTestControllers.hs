@@ -49,7 +49,7 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), TimeoutIO, Timeout(..), asTimeout, actToChoice)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Timeout(..), asTimeout, actToChoice)
 import Lattest.Model.Automaton(AutSem(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
 import Lattest.Model.StateConfiguration(isConclusive, PermissionConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)

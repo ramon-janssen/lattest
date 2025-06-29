@@ -50,7 +50,7 @@ STSIntrp
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign,GateValue)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign,GateValue)
 import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
@@ -193,7 +193,7 @@ semanticsConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyn m
 semanticsConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
-type ConcreteTimeoutAutSem m q i o = AutSem m q q (IOAct i o) () (TimeoutIO i o)
+type ConcreteTimeoutAutSem m q i o = AutSem m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
 semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutAutSem m loc i o

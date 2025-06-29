@@ -26,7 +26,7 @@ fromOutput,
 -}
 Timeout (..),
 δ,
-TimeoutIO,
+IOSuspAct,
 asTimeout,
 fromTimeout,
 -- TODO decide on refusal or failure and be consistent
@@ -156,7 +156,7 @@ instance Show o => Show (Timeout o) where
 {- |
     Add observation of timeouts to the observed inputs and outputs.
 -}
-type TimeoutIO i o = IOAct i (Timeout o)
+type IOSuspAct i o = IOAct i (Timeout o)
 
 δ :: IOAct i (Timeout o)
 δ = Out Timeout
@@ -164,7 +164,7 @@ type TimeoutIO i o = IOAct i (Timeout o)
 {- |
     Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to a timeout.
 -}
-instance TestChoice (Maybe i) (TimeoutIO i o) where
+instance TestChoice (Maybe i) (IOSuspAct i o) where
     -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
     choiceToActs (Just i) = asTimeout <$> choiceToActs i
     choiceToActs Nothing = []
@@ -175,14 +175,14 @@ instance TestChoice (Maybe i) (TimeoutIO i o) where
 {- |
     Convert an input or output to a type containing timeouts.
 -}
-asTimeout :: IOAct i o -> TimeoutIO i o
+asTimeout :: IOAct i o -> IOSuspAct i o
 asTimeout (In i) = In i
 asTimeout (Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with timeouts.
 -}
-fromTimeout :: TimeoutIO i o -> IOAct i o
+fromTimeout :: IOSuspAct i o -> IOAct i o
 fromTimeout (In i) = In i
 fromTimeout (Out (OutSusp o)) = Out o
 
@@ -233,9 +233,9 @@ fromInputAttempt :: IFAct i o -> IOAct i o
 fromInputAttempt (In (Attempt (i, True))) = In i
 fromInputAttempt (Out o) = Out o
 
--- ideally, this could just be defined by stacking IFAct and TimeoutIO to avoid all the boilerplate below, but that is a bit of a hassle
+-- ideally, this could just be defined by stacking IFAct and IOSuspAct to avoid all the boilerplate below, but that is a bit of a hassle
 {- |
-    Input failure with observed timeouts. See 'TimeoutIO' and 'IFAct' for details.
+    Input failure with observed timeouts. See 'IOSuspAct' and 'IFAct' for details.
 -}
 type TimeoutIF i o = IOAct (Attempt i) (Timeout o)
 

@@ -18,7 +18,7 @@ import Test.HUnit
 
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, nonDetConcTransFromMRel)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Timeout(..), asTimeout, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
 

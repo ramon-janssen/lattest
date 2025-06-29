@@ -16,7 +16,7 @@ import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(
 import Lattest.Model.StateConfiguration(DetState(..),NonDetState(..), isConclusive)
 import Lattest.Model.Automaton(AutSyn, AutSem, automaton, transRel, locConf)
 import Lattest.Model.StandardAutomata(ConcreteAutSem, semanticsConcrete, semanticsQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), Attempt (..))
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Timeout(..), Attempt (..))
 import Lattest.Util.Utils((&&&))
 import System.Random(StdGen, uniformR, mkStdGen)
 import Data.List (span)
