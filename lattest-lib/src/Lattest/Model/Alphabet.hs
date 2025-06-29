@@ -7,7 +7,7 @@
 
 module Lattest.Model.Alphabet (
 -- * Translating between Actions and Inputs
-InputCommand,
+TestChoice,
 inputChoiceToActs,
 actToInputChoice,
 -- * Action types
@@ -83,12 +83,12 @@ class Refusable act where
     isAccepted _ = True
 
 {- |
-    If an input type is an 'InputCommand' to a type of observable actions, this means that
+    If an input type is an 'TestChoice' to a type of observable actions, this means that
     
     * given such an input, it is possible to derive the corresponding observable action, or sequence of actions, and
     * an observable action may (but also may not) correspond to an input.
 -}
-class Refusable act => InputCommand i act where
+class Refusable act => TestChoice i act where
     {- |
         If an observable action corresponds to an input, then derive that input.
     -}
@@ -113,7 +113,7 @@ instance {-# OVERLAPS #-} Refusable (IOAct i o)
     Relates input commands to observable inputs. Note that this instance is not very practical for testing: during testing, a test controller
     is usually asked for inputs, and with this instance, it is not possible to skip selecting an input.
 -}
-instance InputCommand i (IOAct i o) where
+instance TestChoice i (IOAct i o) where
     inputChoiceToActs i = [In i]
     actToInputChoice (In i) = Just i
     actToInputChoice (Out _) = Nothing
@@ -164,7 +164,7 @@ type TimeoutIO i o = IOAct i (Timeout o)
 {- |
     Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to a timeout.
 -}
-instance InputCommand (Maybe i) (TimeoutIO i o) where
+instance TestChoice (Maybe i) (TimeoutIO i o) where
     -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
     inputChoiceToActs (Just i) = asTimeout <$> inputChoiceToActs i
     inputChoiceToActs Nothing = []
@@ -209,7 +209,7 @@ instance {-# OVERLAPS #-} Refusable (IFAct i o) where
     Relates input commands to observable inputs. An input command corresponds to an accepted input action, and both a refused and accepted input
     command correspond to the same input action.
 -}
-instance InputCommand i (IFAct i o) where
+instance TestChoice i (IFAct i o) where
     inputChoiceToActs i = inToAttempt <$> inputChoiceToActs i
         where
         inToAttempt (In i) = In (Attempt (i, True))
@@ -239,7 +239,7 @@ fromInputAttempt (Out o) = Out o
 -}
 type TimeoutIF i o = IOAct (Attempt i) (Timeout o)
 
-instance InputCommand (Maybe i) (TimeoutIF i o) where
+instance TestChoice (Maybe i) (TimeoutIF i o) where
     inputChoiceToActs Nothing = [Out Timeout]
     inputChoiceToActs (Just i) = inToAttempt <$> inputChoiceToActs i
         where

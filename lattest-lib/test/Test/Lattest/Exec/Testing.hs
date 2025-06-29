@@ -81,9 +81,9 @@ ioTraceTestController ioActs = traceTestController $ toCommandsAndActs ioActs
 -- a hardcoded test controller just follows the input commands and observations in the given list. Returns whether it finish the list
 traceTestController :: (Eq act) => [Either (Maybe i) act] -> TestController m loc q t tloc act [Either (Maybe i) act] (Maybe i) Bool
 traceTestController steps = TestController {
-    -- testControllerState :: (InputCommand i act) => [Either i act]
+    -- testControllerState :: (TestChoice i act) => [Either i act]
     testControllerState = steps,
-    --selectTest :: (InputCommand i act) => [Either i act] -> AutSem m loc q t tloc act -> m q -> IO (Either (i, [Either i act]) Boolean),
+    --selectTest :: (TestChoice i act) => [Either i act] -> AutSem m loc q t tloc act -> m q -> IO (Either (i, [Either i act]) Boolean),
     selectTest = traceSelectTest,
     --updateTestController :: [Either i act] -> AutSem m loc q t tloc act -> act -> m q -> IO (Either [Either i act] Boolean),
     updateTestController = traceUpdateTestController,

@@ -40,7 +40,7 @@ Verdict(..)
 )
 where
 
-import Lattest.Model.Alphabet(InputCommand, Refusable, isAccepted)
+import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
 import Lattest.Model.Automaton(AutomatonSemantics, AutSem, after, stateConf)
 import Lattest.Model.StateConfiguration(PermissionConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
@@ -75,7 +75,7 @@ data TestController m loc q t tloc act state i r = TestController {
         Select a test based on test controller state, the specification (in its current state), and previous specification configuration.
         Either select a new controller state and a input, /or/ stop testing and return a result from the controller.
     -}
-    selectTest :: (InputCommand i act) => state -> AutSem m loc q t tloc act -> m q -> IO (Either (i, state) r),
+    selectTest :: (TestChoice i act) => state -> AutSem m loc q t tloc act -> m q -> IO (Either (i, state) r),
     {- |
         Select a test based on test controller state, the specification (in its current state), an observed action, and previous specification
         configuration. Either select a new controller state, /or/ stop testing and return a result from the controller.
@@ -90,7 +90,7 @@ data TestController m loc q t tloc act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (AutomatonSemantics m loc q t tloc act, InputCommand i act, PermissionConfiguration m) =>
+makeTester :: (AutomatonSemantics m loc q t tloc act, TestChoice i act, PermissionConfiguration m) =>
     AutSem m loc q t tloc act -> TestController m loc q t tloc act state i r -> ActionController act i (Verdict, r) (AutSem m loc q t tloc act, TestController m loc q t tloc act state i r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
@@ -99,7 +99,7 @@ makeTester initSpec initTestController = ActionController {
     handleClose = makeHandleClose
     }
     where
-        makeSelect :: (InputCommand i act, PermissionConfiguration m)
+        makeSelect :: (TestChoice i act, PermissionConfiguration m)
             => (AutSem m loc q t tloc act, TestController m loc q t tloc act state i r)
             -> IO (Either (i, (AutSem m loc q t tloc act, TestController m loc q t tloc act state i r)) (Verdict, r))
         makeSelect (spec, testController) = do
@@ -173,7 +173,7 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (AutomatonSemantics m loc q t tloc act, InputCommand i act, PermissionConfiguration m) =>
+runTester :: (AutomatonSemantics m loc q t tloc act, TestChoice i act, PermissionConfiguration m) =>
     AutSem m loc q t tloc act -> TestController m loc q t tloc act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 

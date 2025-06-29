@@ -34,7 +34,7 @@ connectJSONSocketAdapterAcceptingInputsWith,
 encodeUtf8,
 decodeUtf8,
 endecodeUtf8,
-encodeJSONInputCommands,
+encodeJSONTestChoices,
 parseJSONActionsFromSut,
 -- ** Observing Inputs
 acceptingInputs,
@@ -45,7 +45,7 @@ withTimeoutMillis
 )
 where
 
-import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapInputCommands,mapActionsFromSut)
+import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
 import Lattest.Model.Alphabet(IOAct(Out), TimeoutIO, Timeout(Timeout), asTimeout, fromTimeout)
 import Lattest.Model.Alphabet(IOAct)
@@ -81,7 +81,7 @@ import qualified Data.Text as Text(pack, unpack)
 import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(InputCommand, inputChoiceToActs, IOAct(..), TimeoutIO, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
+import Lattest.Model.Alphabet(TestChoice, inputChoiceToActs, IOAct(..), TimeoutIO, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
@@ -97,7 +97,7 @@ import System.IO.Streams.Combinators(contramap)
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends 'String's encoded in utf-8.
 encodeUtf8 :: Adapter act ByteString -> IO (Adapter act String)
-encodeUtf8 = mapInputCommands $ Encoding.encodeUtf8 . Text.pack
+encodeUtf8 = mapTestChoices $ Encoding.encodeUtf8 . Text.pack
 
 -- | Take an adapter that receives raw 'ByteString's, and transform it to an adapter that receives 'String's decoded from utf-8.
 decodeUtf8 :: Adapter ByteString i -> IO (Adapter String i)
@@ -111,8 +111,8 @@ encodeJSON :: (ToJSON i) => i -> ByteString
 encodeJSON = toStrict . (flip snoc $ c2w8 '\n') . encode -- encode as strict ByteString and append a newline as separator
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends any type encoded in JSON.
-encodeJSONInputCommands :: (ToJSON i) => Adapter act ByteString -> IO (Adapter act i)
-encodeJSONInputCommands = mapInputCommands encodeJSON
+encodeJSONTestChoices :: (ToJSON i) => Adapter act ByteString -> IO (Adapter act i)
+encodeJSONTestChoices = mapTestChoices encodeJSON
 
 -- | Take an adapter that receives raw 'ByteString's, and transform it to an adapter that receives any type decoded from JSON.
 parseJSONActionsFromSut :: (FromJSON act) => Adapter ByteString i -> IO (Adapter act i)
@@ -407,7 +407,7 @@ connectJSONSocketAdapterWith :: (ToJSON i, FromJSON o) => SocketSettings act i -
 connectJSONSocketAdapterWith settings = do
     rawAdap <- connectSocketAdapterWith settings
     parsingAdap <- parseJSONActionsFromSut rawAdap
-    encodeJSONInputCommands parsingAdap
+    encodeJSONTestChoices parsingAdap
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
 connectJSONSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o) => IO (Adapter (IOAct i o) i)
