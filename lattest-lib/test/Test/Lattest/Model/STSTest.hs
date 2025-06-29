@@ -28,14 +28,14 @@ stsExample =
         waterAssign = assignment [(xvar,IntExpr $ xsym + psym)]
         okGuard = xsym .== psym
         coffeeGuard = xsym .> 15
-        locConf = NonDet [0] :: NonDetState Integer
+        initConf = NonDet [0] :: NonDetState Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
                                 (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
             1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
         initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
-        sts = automaton locConf (Set.fromList [water,ok,coffee]) switches
+        sts = automaton initConf (Set.fromList [water,ok,coffee]) switches
     in semanticsSTS sts initAssign
 
 

@@ -14,7 +14,7 @@ import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),sf,IG(..),OG(..),sg)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.StateConfiguration(DetState(..),NonDetState(..), isConclusive)
-import Lattest.Model.Automaton(AutSyntax, AutSem, automaton, transRel, locConf)
+import Lattest.Model.Automaton(AutSyntax, AutSem, automaton, transRel, initConf)
 import Lattest.Model.StandardAutomata(ConcreteAutSem, semanticsConcrete, semanticsQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), InputAttempt(..))
 import Lattest.Util.Utils((&&&))

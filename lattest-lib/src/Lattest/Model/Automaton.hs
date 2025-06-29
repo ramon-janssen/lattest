@@ -13,7 +13,7 @@ module Lattest.Model.Automaton (
 -- * Syntactical Automaton Model
 -- ** Definition
 AutSyntax,
-locConf,
+initConf,
 alphabet,
 trans,
 transRel,
@@ -83,7 +83,7 @@ import Grisette.SymPrim as GSymPrim
     assignments, clocks for timing, etc.
 -}
 data AutSyntax m loc t tloc = Automaton {
-    locConf :: m loc,
+    initConf :: m loc,
     alphabet :: Set t,
     transRel :: loc -> Map t (m (tloc, loc))
     }
@@ -135,7 +135,7 @@ data AutSem m loc q t tloc act = AutomatonRun {
     "Lattest.Adapter.StandardAdapters".
 -}
 semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutSem m loc q t tloc act
-semantics aut initState = AutomatonRun { stateConf = initState <$> locConf aut, syntacticAutomaton = aut }
+semantics aut initState = AutomatonRun { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
 -- | The Observable typeclass defines which types can be used as labels on transitions.
 class Observable act where
@@ -220,7 +220,7 @@ afters aut (act:acts) = aut `after` act `afters` acts
 transMenu :: (Foldable m, Functor m, Ord t) => AutSyntax m mloc t tloc -> Set t
 transMenu aut = let
     stateToMenu = Set.fromList . Map.keys . transRel aut
-    in Set.unions $ stateToMenu <$> locConf aut
+    in Set.unions $ stateToMenu <$> initConf aut
 
 {-|
     The class of automata with a finite list of transition labels on outgoing transitions for every state.
@@ -371,7 +371,7 @@ instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m l
     Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
 -}
 reachable :: (Ord loc, Foldable m) => AutSyntax m loc t tloc -> Set loc
-reachable aut = reachableFrom aut $ locConf aut
+reachable aut = reachableFrom aut $ initConf aut
 
 {- |
     Compute the set of locations that is syntactically reachable from the given locations.
@@ -394,13 +394,13 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
             in reachableFrom' acc' boundary'
 
 prettyPrint :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tloc -> String
-prettyPrint aut = prettyPrintFrom aut (locConf aut)
+prettyPrint aut = prettyPrintFrom aut (initConf aut)
 
 prettyPrintFrom :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tloc -> f loc -> String
 prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitial ++ "\nlocations: " ++ printLocations ++ "\ntransitions:\n" ++ printTransitions
     where
     locations = Set.toList $ reachableFrom aut fromLocs
-    printInitial = show $ locConf aut
+    printInitial = show $ initConf aut
     printLocations = List.intercalate ", " (show <$> locations)
     printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
