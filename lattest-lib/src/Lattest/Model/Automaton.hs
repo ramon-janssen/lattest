@@ -55,7 +55,7 @@ where
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Timeout(Timeout),IFAct(..),Attempt(..),fromTimeout,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromTimeoutInputAttempt,
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Timeout(Timeout),IFAct(..),Attempt(..),fromSuspended,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
@@ -268,10 +268,10 @@ instance (Observable (IOAct i o)) where
 
 instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) where
     asTransition loc _ (Out Timeout) = Nothing
-    asTransition _ _ other = Just $ fromTimeout other
+    asTransition _ _ other = Just $ fromSuspended other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc alph (Out Timeout) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
-    takeTransition _ _ act m = Just $ TransitionMove (fromTimeout act, m $ fromTimeout act)
+    takeTransition _ _ act m = Just $ TransitionMove (fromSuspended act, m $ fromSuspended act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asTimeout t]
@@ -303,11 +303,11 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
     asTransition loc _ (In (Attempt (i, False))) = Nothing
     asTransition loc _ (Out Timeout) = Nothing
-    asTransition _ _ other = Just $ fromTimeoutInputAttempt other
+    asTransition _ _ other = Just $ fromSuspendedInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
     takeTransition loc alph (Out Timeout) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
-    takeTransition _ _ act m = Just $ TransitionMove (fromTimeoutInputAttempt act, m $ fromTimeoutInputAttempt act)
+    takeTransition _ _ act m = Just $ TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
     asActions t = [asTimeoutInputAttempt t]

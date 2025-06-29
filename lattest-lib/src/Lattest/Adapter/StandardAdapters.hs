@@ -47,7 +47,7 @@ where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Timeout(Timeout), asTimeout, fromTimeout)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Timeout(Timeout), asTimeout, fromSuspended)
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM)
 import Control.Applicative((<|>))

@@ -28,7 +28,7 @@ Timeout (..),
 δ,
 IOSuspAct,
 asTimeout,
-fromTimeout,
+fromSuspended,
 -- TODO decide on refusal or failure and be consistent
 -- ** Input Failures
 {- |
@@ -47,7 +47,7 @@ fromInputAttempt,
 -- ** Combined Input Refusals and Timeouts
 TimeoutIF,
 asTimeoutInputAttempt,
-fromTimeoutInputAttempt,
+fromSuspendedInputAttempt,
 -- * STS
 SymInteract(..),
 SymGuard,
@@ -182,9 +182,9 @@ asTimeout (Out o) = Out (OutSusp o)
 {- |
     Partially defined function that unpacks an input or output from a type with timeouts.
 -}
-fromTimeout :: IOSuspAct i o -> IOAct i o
-fromTimeout (In i) = In i
-fromTimeout (Out (OutSusp o)) = Out o
+fromSuspended :: IOSuspAct i o -> IOAct i o
+fromSuspended (In i) = In i
+fromSuspended (Out (OutSusp o)) = Out o
 
 -- (i, True) represents a succesful i, (i, False) represents a failed attempt at i
 newtype Attempt i = Attempt (i, Bool) deriving (Eq, Ord)
@@ -261,9 +261,9 @@ asTimeoutInputAttempt (Out o) = Out (OutSusp o)
 {- |
     Partially defined function that unpacks an input or output from a type with input failures and timeouts.
 -}
-fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
-fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
-fromTimeoutInputAttempt (Out (OutSusp o)) = Out o
+fromSuspendedInputAttempt :: TimeoutIF i o -> IOAct i o
+fromSuspendedInputAttempt (In (Attempt (i, True))) = In i
+fromSuspendedInputAttempt (Out (OutSusp o)) = Out o
 
 
 -- STS data types
