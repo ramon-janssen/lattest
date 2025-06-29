@@ -34,20 +34,20 @@ connectJSONSocketAdapterAcceptingInputsWith,
 encodeUtf8,
 decodeUtf8,
 endecodeUtf8,
-encodeJSONInputCommands,
+encodeJSONTestChoices,
 parseJSONActionsFromSut,
 -- ** Observing Inputs
 acceptingInputs,
 acceptingInputsWithIncompletenessAsFailures,
--- ** Observing Timeouts
-withTimeout,
-withTimeoutMillis
+-- ** Observing Quiescences
+withQuiescence,
+withQuiescenceMillis
 )
 where
 
-import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapInputCommands,mapActionsFromSut)
+import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), TimeoutIO, Timeout(Timeout), asTimeout, fromTimeout)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended)
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM)
 import Control.Applicative((<|>))
@@ -81,7 +81,7 @@ import qualified Data.Text as Text(pack, unpack)
 import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(InputCommand, inputChoiceToActs, IOAct(..), TimeoutIO, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
@@ -97,7 +97,7 @@ import System.IO.Streams.Combinators(contramap)
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends 'String's encoded in utf-8.
 encodeUtf8 :: Adapter act ByteString -> IO (Adapter act String)
-encodeUtf8 = mapInputCommands $ Encoding.encodeUtf8 . Text.pack
+encodeUtf8 = mapTestChoices $ Encoding.encodeUtf8 . Text.pack
 
 -- | Take an adapter that receives raw 'ByteString's, and transform it to an adapter that receives 'String's decoded from utf-8.
 decodeUtf8 :: Adapter ByteString i -> IO (Adapter String i)
@@ -111,8 +111,8 @@ encodeJSON :: (ToJSON i) => i -> ByteString
 encodeJSON = toStrict . (flip snoc $ c2w8 '\n') . encode -- encode as strict ByteString and append a newline as separator
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends any type encoded in JSON.
-encodeJSONInputCommands :: (ToJSON i) => Adapter act ByteString -> IO (Adapter act i)
-encodeJSONInputCommands = mapInputCommands encodeJSON
+encodeJSONTestChoices :: (ToJSON i) => Adapter act ByteString -> IO (Adapter act i)
+encodeJSONTestChoices = mapTestChoices encodeJSON
 
 -- | Take an adapter that receives raw 'ByteString's, and transform it to an adapter that receives any type decoded from JSON.
 parseJSONActionsFromSut :: (FromJSON act) => Adapter ByteString i -> IO (Adapter act i)
@@ -162,7 +162,7 @@ loopbackAdapter adap fduplicate fmerge = do
         }
 
 outputToActionIS adap = mapUnbuffered Out (error "acceptingInputs buffer from SUT does not support pushback") (actionsFromSut adap)
-actionToInputOS actionOS = streamSequence actionOS >>= contramap inputChoiceToActs
+actionToInputOS actionOS = streamSequence actionOS >>= contramap choiceToActs
 -- direct pushbacks to the streams below is not needed, the merge buffer will handle pushbacks instead
 streamSequence :: OutputStream a -> IO (OutputStream [a])
 streamSequence s = makeOutputStream $ doMaybeSequenceCmd $ Streams.writeTo s
@@ -210,14 +210,14 @@ acceptingInputsWithIncompletenessAsFailures adap = do
         if blockAdapActions
             then singleton <$> Streams.read loopbackActionIS -- adap actions are blocked, so observe just the loopback actions
             else mergeActions loopbackActionIS adapActionIS -- adap actions are not blocked, merge actions as normal
-    duplicateHandlingIncompleteness :: TVar Bool -> OutputStream (Attempt i) -> OutputStream i -> IO (OutputStream i)
+    duplicateHandlingIncompleteness :: TVar Bool -> OutputStream (InputAttempt i) -> OutputStream i -> IO (OutputStream i)
     duplicateHandlingIncompleteness isAdapOutputBlocked loopbackInputOS adapInputOS = makeOutputStream $ \mi -> do
         case mi of
             Nothing -> Streams.write Nothing loopbackInputOS >> Streams.write Nothing adapInputOS
             Just i -> do
                 atomically $ writeTVar isAdapOutputBlocked True
                 inputSucceeded <- attemptInputToAdap adapInputOS i
-                let mInputAction = Just $ Attempt (i,inputSucceeded)
+                let mInputAction = Just $ InputAttempt(i,inputSucceeded)
                 Streams.write mInputAction loopbackInputOS
                 atomically $ writeTVar isAdapOutputBlocked False
     attemptInputToAdap :: OutputStream i -> i -> IO Bool
@@ -255,7 +255,7 @@ pureMealyAdapter transitionFunction outputFunction initialState = do
     Adapter which, after every action, has the given probability of producing non-deterministically one of the corresponding (non-timeout) output transitions if any is available.
     After receiving a Nothing input, an output will be produced, which may be a timeout.
 -}
-pureAdapter :: (Ord i, Ord o, RandomGen g) => g -> Double -> (state -> Map.Map (IOAct i o) state) -> state -> IO (Adapter (TimeoutIF i o) (Maybe i))
+pureAdapter :: (Ord i, Ord o, RandomGen g) => g -> Double -> (state -> Map.Map (IOAct i o) state) -> state -> IO (Adapter (SuspendedIF i o) (Maybe i))
 pureAdapter g p transitionFunction initialState = do
     let ((g',q), outs) = randomOutputTransitions transitionFunction g initialState False -- immediately take some outputs at the start
     statefulAdapter <- (statefulIO' (processInput transitionFunction) (g', q))
@@ -275,33 +275,33 @@ pureAdapter g p transitionFunction initialState = do
         close = return ()
     }
     where 
-        --processInput :: (Ord i, Ord o, RandomGen g) => (q -> Map.Map (IOAct i o) q) -> (g, q) -> Maybe i -> ((g, q), [Timeout o])
+        --processInput :: (Ord i, Ord o, RandomGen g) => (q -> Map.Map (IOAct i o) q) -> (g, q) -> Maybe i -> ((g, q), [Suspended o])
         processInput t (g, q) Nothing = randomOutputTransitions t g q True
         processInput t (g, q) (Just i) = case Map.lookup (In i) (t q) of
-            Just q' -> prependInput (Attempt (i, True)) $ randomOutputTransitions t g q' False
-            Nothing -> ((g, q), [In $ Attempt (i, False)])
-        --randomOutputTransitions :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> Bool -> ((g, q), [Timeout o])
+            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g q' False
+            Nothing -> ((g, q), [In $ InputAttempt(i, False)])
+        --randomOutputTransitions :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> Bool -> ((g, q), [Suspended o])
         randomOutputTransitions t g q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g q [] isAfterNoInput in ((g', q'), reverse outs)
-        --randomOutputTransitions' :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> [Timeout o] -> Bool -> (g, q, [Timeout o])
+        --randomOutputTransitions' :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> [Suspended o] -> Bool -> (g, q, [Suspended o])
         randomOutputTransitions' t g q outs isAfterNoInput =
             let ts = Map.filterWithKey (\k _ -> isOutput k) (t q)
             in if Map.null ts -- if no outputs are available at all, 
-                then if isAfterNoInput then (g, q, Out Timeout : outs) else (g, q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
+                then if isAfterNoInput then (g, q, Out Quiescence : outs) else (g, q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
                 else let (produceOut, g') = if isAfterNoInput then (True, g) else flipCoin g p -- else decide whether to produce more actions. This is mandatory if a "Nothing" input was previously received, otherwise flip a coin
                     in if not produceOut
                         then (g', q, outs)
                         else -- pick a random output, and continue randomly picking more outputs
                             let ((o, q'), g'') = takeRandom  g' $ Map.toList ts
-                            in randomOutputTransitions' t g'' q' ((Out $ TimeoutOut $ fromOutput o) : outs) False
+                            in randomOutputTransitions' t g'' q' ((Out $ OutSusp $ fromOutput o) : outs) False
         prependInput i (q, acts) = (q, In i:acts)
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given number of milliseconds, after any other observation.
-withTimeoutMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (TimeoutIO i o) (Maybe i))
-withTimeoutMillis timeoutMillis = withTimeout $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
+withQuiescenceMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
+withQuiescenceMillis timeoutMillis = withQuiescence $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given timeout duration, after any other observation.
-withTimeout :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (TimeoutIO i o) (Maybe i))
-withTimeout timeoutDiff adap = do
+withQuiescence :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
+withQuiescence timeoutDiff adap = do
     lastObservationTime <- newEmptyTMVarIO -- time of the last observed action. Nothing if observing hasn't started yet.
     isProcessingObservation <- newTVarIO False
     observedQueue <- newTQueueIO
@@ -319,20 +319,20 @@ withTimeout timeoutDiff adap = do
             lastTime <- readTMVar lastObservationTime -- blocking, in case of Nothing
             let targetTime = addUTCTime timeoutDiff lastTime
             return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime)
-        waitUntilTimeout = do -- wait until the target timeout. Blocks if there is no target timeout yet.
+        waitUntilQuiescence = do -- wait until the target timeout. Blocks if there is no target timeout yet.
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
             delay waitTimeMicros
         quiescenceMonitor = forever $ do -- background task that first wait until action monitoring starts, then continuously waits until a timeout
                                          -- is reached and sets the quiescence state to true
-            waitUntilTimeout
+            waitUntilQuiescence
             currentTime <- getCurrentTime
             --quiIsSet <- atomically $ do
             atomically $ do
                 additionalWaitTime <- getWaitTimeMicros currentTime
                 let quiescent = additionalWaitTime <= 0
                 ifM_ quiescent $ do
-                    writeTQueue observedQueue (Just $ Out Timeout)
+                    writeTQueue observedQueue (Just $ Out Quiescence)
                     updateObservationTime currentTime
         actMonitor = forever $ do --background task that waits for outputs, updates the observation time and unsets the quiescence state
             mAct <- atomically $ do
@@ -343,7 +343,7 @@ withTimeout timeoutDiff adap = do
                 -- observation has been made
                 updateObservationTime currentTime -- update the observation time
                 writeTVar isProcessingObservation False
-                let timedMAct = asTimeout <$> mAct
+                let timedMAct = asSuspended <$> mAct
                 writeTQueue observedQueue timedMAct -- pass the action to the timeout adapter
         hasObservation = readTVar isProcessingObservation ||^ (not <$> isEmptyTQueue observedQueue) ||^ hasInput (actionsFromSut adap)
     actionsFromSut' <- makeTInputStream (readTQueue observedQueue) hasObservation
@@ -407,7 +407,7 @@ connectJSONSocketAdapterWith :: (ToJSON i, FromJSON o) => SocketSettings act i -
 connectJSONSocketAdapterWith settings = do
     rawAdap <- connectSocketAdapterWith settings
     parsingAdap <- parseJSONActionsFromSut rawAdap
-    encodeJSONInputCommands parsingAdap
+    encodeJSONTestChoices parsingAdap
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
 connectJSONSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o) => IO (Adapter (IOAct i o) i)

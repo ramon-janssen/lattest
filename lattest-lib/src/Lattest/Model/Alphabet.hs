@@ -7,9 +7,9 @@
 
 module Lattest.Model.Alphabet (
 -- * Translating between Actions and Inputs
-InputCommand,
-inputChoiceToActs,
-actToInputChoice,
+TestChoice,
+choiceToActs,
+actToChoice,
 -- * Action types
 -- ** Inputs and Outputs
 IOAct(..),
@@ -17,18 +17,18 @@ isInput,
 isOutput,
 fromInput,
 fromOutput,
--- ** Observable Timeouts
+-- ** Observable Quiescence
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system, where the 'output' may also be an artificial
-    output that represents an observed timeout. For the theoretical background on observing timeouts, see the notion of /quiescence/ in
+    output that represents an observed timeout, /quiescence/. For the theoretical background on observing quiescence, see
     
     * [/Jan Tretmans/, Model based testing with labelled transition systems (Formal Methods and Testing), 2008](https://repository.ubn.ru.nl/bitstream/handle/2066/72680/72680.pdf)
 -}
-Timeout (..),
+Suspended(..),
 δ,
-TimeoutIO,
-asTimeout,
-fromTimeout,
+IOSuspAct,
+asSuspended,
+fromSuspended,
 -- TODO decide on refusal or failure and be consistent
 -- ** Input Failures
 {- |
@@ -41,13 +41,13 @@ fromTimeout,
 Refusable,
 isAccepted,
 IFAct(..),
-Attempt(..),
+InputAttempt(..),
 asInputAttempt,
 fromInputAttempt,
--- ** Combined Input Refusals and Timeouts
-TimeoutIF,
-asTimeoutInputAttempt,
-fromTimeoutInputAttempt,
+-- ** Combined Input Refusals and Quiescences
+SuspendedIF,
+asSuspendedInputAttempt,
+fromSuspendedInputAttempt,
 -- * STS
 SymInteract(..),
 SymGuard,
@@ -83,20 +83,20 @@ class Refusable act where
     isAccepted _ = True
 
 {- |
-    If an input type is an 'InputCommand' to a type of observable actions, this means that
+    If an input type is an 'TestChoice' to a type of observable actions, this means that
     
     * given such an input, it is possible to derive the corresponding observable action, or sequence of actions, and
     * an observable action may (but also may not) correspond to an input.
 -}
-class Refusable act => InputCommand i act where
+class Refusable act => TestChoice i act where
     {- |
         If an observable action corresponds to an input, then derive that input.
     -}
-    actToInputChoice :: act -> Maybe i -- the input command that corresponds to given action (ideally, e.g. in case of a waiting time, the observed waiting time may be different than the intended waiting time)
+    actToChoice :: act -> Maybe i -- the input command that corresponds to given action (ideally, e.g. in case of a waiting time, the observed waiting time may be different than the intended waiting time)
     {- |
         Derive the sequence of observable actions that correspond to an input.
     -}
-    inputChoiceToActs :: i -> [act] -- which action(s) an input command corresponds to
+    choiceToActs :: i -> [act] -- which action(s) an input command corresponds to
 
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system.
@@ -113,10 +113,10 @@ instance {-# OVERLAPS #-} Refusable (IOAct i o)
     Relates input commands to observable inputs. Note that this instance is not very practical for testing: during testing, a test controller
     is usually asked for inputs, and with this instance, it is not possible to skip selecting an input.
 -}
-instance InputCommand i (IOAct i o) where
-    inputChoiceToActs i = [In i]
-    actToInputChoice (In i) = Just i
-    actToInputChoice (Out _) = Nothing
+instance TestChoice i (IOAct i o) where
+    choiceToActs i = [In i]
+    actToChoice (In i) = Just i
+    actToChoice (Out _) = Nothing
 
 {- |
     Is the given action an input?
@@ -145,53 +145,53 @@ fromOutput :: IOAct i o -> o
 fromOutput (Out o) = o
 
 {- |
-    Add observation of timeouts to a type of observable actions.
+    Add observation of quiescence to a type of observable actions.
 -}
-data Timeout o = Timeout | TimeoutOut o deriving (Eq, Ord)
+data Suspended o = Quiescence | OutSusp o deriving (Eq, Ord)
 
-instance Show o => Show (Timeout o) where
-    show Timeout = "δ"
-    show (TimeoutOut o) = show o
+instance Show o => Show (Suspended o) where
+    show Quiescence = "δ"
+    show (OutSusp o) = show o
 
 {- |
-    Add observation of timeouts to the observed inputs and outputs.
+    Add observation of quiescence to the observed inputs and outputs.
 -}
-type TimeoutIO i o = IOAct i (Timeout o)
+type IOSuspAct i o = IOAct i (Suspended o)
 
-δ :: IOAct i (Timeout o)
-δ = Out Timeout
-
-{- |
-    Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to a timeout.
--}
-instance InputCommand (Maybe i) (TimeoutIO i o) where
-    -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
-    inputChoiceToActs (Just i) = asTimeout <$> inputChoiceToActs i
-    inputChoiceToActs Nothing = []
-    actToInputChoice (Out Timeout) = Just Nothing
-    actToInputChoice (Out (TimeoutOut o)) = Nothing
-    actToInputChoice (In i) = Just $ Just i
+δ :: IOAct i (Suspended o)
+δ = Out Quiescence
 
 {- |
-    Convert an input or output to a type containing timeouts.
+    Relates input commands to observable inputs. A 'Nothing' input command, corresponds to observation of an output, which may lead to quiescence.
 -}
-asTimeout :: IOAct i o -> TimeoutIO i o
-asTimeout (In i) = In i
-asTimeout (Out o) = Out (TimeoutOut o)
+instance TestChoice (Maybe i) (IOSuspAct i o) where
+    -- a (Maybe i) only makes sense in case of quiescence, since testing would otherwise quickly deadlock
+    choiceToActs (Just i) = asSuspended <$> choiceToActs i
+    choiceToActs Nothing = []
+    actToChoice (Out Quiescence) = Just Nothing
+    actToChoice (Out (OutSusp o)) = Nothing
+    actToChoice (In i) = Just $ Just i
 
 {- |
-    Partially defined function that unpacks an input or output from a type with timeouts.
+    Convert an input or output to a type containing quiescence.
 -}
-fromTimeout :: TimeoutIO i o -> IOAct i o
-fromTimeout (In i) = In i
-fromTimeout (Out (TimeoutOut o)) = Out o
+asSuspended :: IOAct i o -> IOSuspAct i o
+asSuspended (In i) = In i
+asSuspended (Out o) = Out (OutSusp o)
+
+{- |
+    Partially defined function that unpacks an input or output from a type with quiescence.
+-}
+fromSuspended :: IOSuspAct i o -> IOAct i o
+fromSuspended (In i) = In i
+fromSuspended (Out (OutSusp o)) = Out o
 
 -- (i, True) represents a succesful i, (i, False) represents a failed attempt at i
-newtype Attempt i = Attempt (i, Bool) deriving (Eq, Ord)
+newtype InputAttempt i = InputAttempt(i, Bool) deriving (Eq, Ord)
 
-instance Show i => Show (Attempt i) where
-    show (Attempt (i, True)) = show i
-    show (Attempt (i, False)) = showFailure (show i)
+instance Show i => Show (InputAttempt i) where
+    show (InputAttempt(i, True)) = show i
+    show (InputAttempt(i, False)) = showFailure (show i)
         where
         showFailure [] = []
         showFailure (c:rest) = c:'\x0305':showFailure rest -- U+0305, combine-symbol for overline
@@ -199,71 +199,71 @@ instance Show i => Show (Attempt i) where
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system, where the 'inputs' may be refused.
 -}
-type IFAct i o = IOAct (Attempt i) o
+type IFAct i o = IOAct (InputAttempt i) o
 
 instance {-# OVERLAPS #-} Refusable (IFAct i o) where
-    isAccepted (In (Attempt (_, False))) = False
+    isAccepted (In (InputAttempt(_, False))) = False
     isAccepted _ = True
 
 {- |
     Relates input commands to observable inputs. An input command corresponds to an accepted input action, and both a refused and accepted input
     command correspond to the same input action.
 -}
-instance InputCommand i (IFAct i o) where
-    inputChoiceToActs i = inToAttempt <$> inputChoiceToActs i
+instance TestChoice i (IFAct i o) where
+    choiceToActs i = inToInputAttempt <$> choiceToActs i
         where
-        inToAttempt (In i) = In (Attempt (i, True))
-        inToAttempt (Out o) = Out o 
-    actToInputChoice = actToInputChoice . attemptToIn
+        inToInputAttempt(In i) = In (InputAttempt(i, True))
+        inToInputAttempt(Out o) = Out o 
+    actToChoice = actToChoice . attemptToIn
         where
-        attemptToIn (In (Attempt (i, _))) = In i
+        attemptToIn (In (InputAttempt(i, _))) = In i
         attemptToIn (Out o) = Out o
 
 {- |
     Convert an input or output to a type containing input failures.
 -}
 asInputAttempt :: IOAct i o -> IFAct i o
-asInputAttempt (In i) = In (Attempt (i, True))
-asInputAttempt (Out o) = Out o
+asInputAttempt(In i) = In (InputAttempt(i, True))
+asInputAttempt(Out o) = Out o
 
 {- |
     Partially defined function that unpacks an input or output from a type with input failures.
 -}
 fromInputAttempt :: IFAct i o -> IOAct i o
-fromInputAttempt (In (Attempt (i, True))) = In i
-fromInputAttempt (Out o) = Out o
+fromInputAttempt(In (InputAttempt(i, True))) = In i
+fromInputAttempt(Out o) = Out o
 
--- ideally, this could just be defined by stacking IFAct and TimeoutIO to avoid all the boilerplate below, but that is a bit of a hassle
+-- ideally, this could just be defined by stacking IFAct and IOSuspAct to avoid all the boilerplate below, but that is a bit of a hassle
 {- |
-    Input failure with observed timeouts. See 'TimeoutIO' and 'IFAct' for details.
+    Input failure with observed quiescence. See 'IOSuspAct' and 'IFAct' for details.
 -}
-type TimeoutIF i o = IOAct (Attempt i) (Timeout o)
+type SuspendedIF i o = IOAct (InputAttempt i) (Suspended o)
 
-instance InputCommand (Maybe i) (TimeoutIF i o) where
-    inputChoiceToActs Nothing = [Out Timeout]
-    inputChoiceToActs (Just i) = inToAttempt <$> inputChoiceToActs i
+instance TestChoice (Maybe i) (SuspendedIF i o) where
+    choiceToActs Nothing = [Out Quiescence]
+    choiceToActs (Just i) = inToInputAttempt <$> choiceToActs i
         where
-        inToAttempt (In i) = In (Attempt (i, True))
-        inToAttempt (Out o) = Out o 
-    --actToInputChoice (Out Timeout) = Just Nothing
-    actToInputChoice other = actToInputChoice $ attemptToIn other
+        inToInputAttempt(In i) = In (InputAttempt(i, True))
+        inToInputAttempt(Out o) = Out o 
+    --actToChoice (Out Quiescence) = Just Nothing
+    actToChoice other = actToChoice $ attemptToIn other
         where
-        attemptToIn (In (Attempt (i, _))) = In i
+        attemptToIn (In (InputAttempt(i, _))) = In i
         attemptToIn (Out o) = Out o
 
 {- |
-    Convert an input or output to a type containing input failures and timeouts.
+    Convert an input or output to a type containing input failures and quiescence.
 -}
-asTimeoutInputAttempt :: IOAct i o -> TimeoutIF i o
-asTimeoutInputAttempt (In i) = In (Attempt (i, True))
-asTimeoutInputAttempt (Out o) = Out (TimeoutOut o)
+asSuspendedInputAttempt :: IOAct i o -> SuspendedIF i o
+asSuspendedInputAttempt(In i) = In (InputAttempt(i, True))
+asSuspendedInputAttempt(Out o) = Out (OutSusp o)
 
 {- |
-    Partially defined function that unpacks an input or output from a type with input failures and timeouts.
+    Partially defined function that unpacks an input or output from a type with input failures and quiescence.
 -}
-fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
-fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
-fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
+fromSuspendedInputAttempt :: SuspendedIF i o -> IOAct i o
+fromSuspendedInputAttempt(In (InputAttempt(i, True))) = In i
+fromSuspendedInputAttempt(Out (OutSusp o)) = Out o
 
 
 -- STS data types

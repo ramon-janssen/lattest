@@ -7,7 +7,7 @@ observe,
 tryObserve,
 -- * Transformations
 map,
-mapInputCommands,
+mapTestChoices,
 mapActionsFromSut,
 parseActionsFromSut
 )
@@ -41,12 +41,12 @@ data Adapter act i = Adapter {
     }
 
 {-instance AbstractAdapter BlockingAdapter where
-    inputCommandsToSut = blockingInputCommandsToSut
+    inputCommandsToSut = blockingTestChoicesToSut
     actionsFromSut = blockingActionsFromSut
     unblockedActionsFromSut adap = do
         unblockedActions <- forkEagerInputStream $ blockingActionsFromSut adap
         return $ Adapter {
-            readyInputCommandsToSut = blockingInputCommandsToSut adap,
+            readyTestChoicesToSut = blockingTestChoicesToSut adap,
             readyActionsFromSut = unblockedActions,
             readyClose = close adap
         }
@@ -88,8 +88,8 @@ observe = atomically . Streams.read . actionsFromSut
 ---------------------
 
 -- | Map a function over the inputs sent to the adapter.
-mapInputCommands :: (i' -> i) -> Adapter act i -> IO (Adapter act i')
-mapInputCommands f adapter = do
+mapTestChoices :: (i' -> i) -> Adapter act i -> IO (Adapter act i')
+mapTestChoices f adapter = do
     inputCommandsToSut' <- contramap f $ inputCommandsToSut adapter
     return $ Adapter {
         inputCommandsToSut = inputCommandsToSut',

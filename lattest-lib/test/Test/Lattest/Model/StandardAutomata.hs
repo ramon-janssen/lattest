@@ -17,9 +17,9 @@ import Prelude hiding (take)
 import Test.HUnit
 
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
-import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, nonDetConcTransFromMRel)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, TimeoutIO, Timeout(..), asTimeout, δ)
-import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
+import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
 
 data IF = A | B deriving (Show, Eq, Ord)
@@ -45,7 +45,7 @@ sf = automaton q0f menuf tf
 
 testSpecF :: Test
 testSpecF = TestCase $ do
-    let rf = semanticsConcrete sf
+    let rf = interpretConcrete sf
     assertEqual "sf after ?A !X" q0f (stateConf $ rf `after` af `after` x)
     assertEqual "sf after ?A !Y" (q0f /\ q2f) (stateConf $ rf `after` af `after` y)
     assertEqual "sf after ?A !A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
@@ -124,15 +124,15 @@ sg = automaton q0g menug tg
 
 testSpecG :: Test
 testSpecG = TestCase $ do
-    let rg = semanticsConcrete sg
+    let rg = interpretConcrete sg
     assertEqual "sg after ?On ?B !T" bot (stateConf $ rg `after` on `after` bg `after` t)
     assertEqual "sg after ?On ?B !TM" q10g (stateConf $ rg `after` on `after` bg `after` tm)
 
 testSpecGQuiescent :: Test
 testSpecGQuiescent = TestCase $ do
-    let rg = semanticsQuiescentConcrete sg
-    assertEqual "Δ(sg) after δ ?On δ ?B !T" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout t])
-    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
-    assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout tm])
-    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
+    let rg = interpretQuiescentConcrete sg
+    assertEqual "Δ(sg) after δ ?On δ ?B !T" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended t])
+    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
+    assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
+    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 

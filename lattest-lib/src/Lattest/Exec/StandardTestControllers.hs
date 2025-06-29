@@ -49,9 +49,9 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(InputCommand, IOAct(..), TimeoutIO, Timeout(..), asTimeout, actToInputChoice)
-import Lattest.Model.Automaton(AutSem(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
-import Lattest.Model.StateConfiguration(isConclusive, PermissionConfiguration)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
+import Lattest.Model.Automaton(AutIntrpr(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Data.Either(isLeft)
@@ -70,10 +70,10 @@ type TestSelector m loc q t tloc act s i = TestController m loc q t tloc act s i
     Create a 'TestSelector'. Requires one function to select an input, also updating the state, and one function to update the state when observing
     an action.
 -}
-selector :: InputCommand i act => 
+selector :: TestChoice i act => 
     state ->
-    (state -> AutSem m loc q t tloc act -> m q -> IO (Maybe (i, state))) ->
-    (state -> AutSem m loc q t tloc act -> act -> m q -> IO (Maybe state)) ->
+    (state -> AutIntrpr m loc q t tloc act -> m q -> IO (Maybe (i, state))) ->
+    (state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe state)) ->
     TestSelector m loc q t tloc act state i
 selector state sel upd = TestController {
     testControllerState = state,
@@ -88,7 +88,7 @@ selector state sel upd = TestController {
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomTestSelector :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, InputCommand i act)
+randomTestSelector :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, TestChoice i act)
     => IO (TestSelector m loc q t tloc act StdGen i)
 randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
 
@@ -96,7 +96,7 @@ randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomTestSelectorFromSeed :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, InputCommand i act)
+randomTestSelectorFromSeed :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, TestChoice i act)
     => Int -> TestSelector m loc q t tloc act StdGen i
 randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
 
@@ -104,12 +104,12 @@ randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, InputCommand i act, RandomGen g)
+randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
     => g -> TestSelector m loc q t tloc act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
     randomSelectTest g aut _ =
-        let ins = takeJusts $ actToInputChoice <$> specifiedMenu aut
+        let ins = takeJusts $ actToChoice <$> specifiedMenu aut
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
@@ -124,7 +124,7 @@ type StopCondition m loc q t tloc act s = TestController m loc q t tloc act s ()
     Create a state-based stop condition, starting in the given initial state. The provided function should provide either 'Just' a new state to continue
     testing, or 'Nothing' to stop testing.
 -}
-stopCondition :: s -> (s -> AutSem m loc q t tloc act -> act -> m q -> IO (Maybe s)) -> StopCondition m loc q t tloc act s
+stopCondition :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe s)) -> StopCondition m loc q t tloc act s
 stopCondition state upd = TestController {
     testControllerState = state,
     selectTest = \s _ _  -> return $ Left ((), s), -- no state change, continue testing
@@ -158,7 +158,7 @@ untilCondition controller condition = TestController {
     handleTestClose = \s -> handleTestClose controller (fst s)
     }
     where
-    updateStopCondition :: TestController m loc q t tloc act state i r -> state -> AutSem m loc q t tloc act -> act -> m q -> IO (Maybe state)
+    updateStopCondition :: TestController m loc q t tloc act state i r -> state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe state)
     updateStopCondition condition state aut act q = updateTestController condition state aut act q >>= return . leftToMaybe
 
 
@@ -178,7 +178,7 @@ type TestObserver m loc q t tloc act s r = TestController m loc q t tloc act s (
 {- |
     Create a 'TestObserver'.
 -}
-observer :: s -> (s -> AutSem m loc q t tloc act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tloc act s r
+observer :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tloc act s r
 observer state upd finish = TestController {
     testControllerState = state,
     selectTest = \s _ _ -> return $ Left ((), s), -- no state change, continue testing
@@ -250,7 +250,7 @@ stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) r
     this observer returns the last state before the failure.
     
 -}
-inconclusiveStateObserver :: PermissionConfiguration m => TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
+inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return
     where
     makeSelection _ aut _ mq = 
@@ -272,7 +272,7 @@ withSideEffect controller sideEffect = andObservingWith controller const sideEff
 {- |
     Create a 'TestSideEffect'. The provided function returns the new state in an 'IO' monad that can also perform the side effects.
 -}
-testSideEffect :: s -> (s -> AutSem m loc q t tloc act -> act -> m q -> IO s) -> TestSideEffect m loc q t tloc act s
+testSideEffect :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO s) -> TestSideEffect m loc q t tloc act s
 testSideEffect s f = observer s f (const $ pure ())
 
 {- |

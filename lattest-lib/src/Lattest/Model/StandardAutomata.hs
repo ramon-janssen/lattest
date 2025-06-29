@@ -3,7 +3,7 @@
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
     Note that the types are no more than type aliases, so if the automata type with your favorite combination of type parameters
-    is not listed, don't hesitate to construct an automaton type ('AutSyn' or 'AutSem') yourself instead of using the StandardAutomata.
+    is not listed, don't hesitate to construct an automaton type ('AutSyntax' or 'AutIntrpr') yourself instead of using the StandardAutomata.
     The base function `automaton` for constructing automata is re-exported here for convenience.
 -}
 
@@ -25,8 +25,8 @@ nonDetConcTransFromRel,
 nonDetConcTransFromMRel,
 nonDetConcTransFromListRel,
 -- *** Alternating state configurations
--- | Re-exports, so that test scripts don't need to import StateConfiguration separately
-FDL,
+-- | Re-exports, so that test scripts don't need to import BoundedMonad separately
+FreeLattice,
 atom,
 top,
 bot,
@@ -37,22 +37,22 @@ transFromFunc,
 concTransFromFunc,
 
 -- * Automaton Semantics
--- | Auxiliary functions for creating semantical automata `AutSem`. Note that most of these functions are no more than calls to `semantics`, instantiating
+-- | Auxiliary functions for creating semantical automata `AutIntrpr`. Note that most of these functions are no more than calls to `interpret`, instantiating
 -- the type of the semantical interpretation.
-ConcreteAutSem,
-semanticsConcrete,
-ConcreteTimeoutAutSem,
-semanticsQuiescentConcrete,
-ConcreteTimeoutInputAttemptAutSem,
-semanticsQuiescentInputAttemptConcrete,
-semanticsSTS,
+ConcreteAutIntrpr,
+interpretConcrete,
+ConcreteSuspAutIntrpr,
+interpretQuiescentConcrete,
+ConcreteSuspInputAttemptAutIntrpr,
+interpretQuiescentInputAttemptConcrete,
+interpretSTS,
 STSIntrp
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), TimeoutIO, Timeout, isInput, IFAct, TimeoutIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyn, automaton, AutSem, semantics, Observable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
-import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
+import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
@@ -68,21 +68,21 @@ ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
 -- | To a transition relation without tloc, add vacuous tlocs ().
-concreteTrans :: (Functor m, Observable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
+concreteTrans :: (Functor m, Completable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
 concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
     Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromRel :: (Observable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromRel :: (Completable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromRel = transFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as deterministic state
     configuration. Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromMRel :: (Observable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Det loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
 {- |
@@ -90,7 +90,7 @@ detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fma
     states, where `Nothing` is mapped to either `forbidden` or `underspecified`, depending on the transition label. Having multiple occurrences of a transition label is forbidden,
     i.e., leads to a Nothing result.
 -}
-detConcTransFromMaybeRel :: (Observable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMaybeRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
     Just loc -> vacuousLoc <$> Det loc
     Nothing -> implicitDestination t
@@ -100,7 +100,7 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
-nonDetConcTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> pure $ vacuousLoc l)
 
 {- |
@@ -108,7 +108,7 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
---nonDetSymbTransFromRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tloc, loc)] -> (loc -> Map t (m (tloc, loc)))
+--nonDetSymbTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tloc, loc)] -> (loc -> Map t (m (tloc, loc)))
 --nonDetSymbTransFromRel = fromJust <$> transFromRelWith combineNonDet id (\l () _ -> pure $ vacuousLoc l)
 
 {- |
@@ -116,7 +116,7 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     configuration. The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted
     as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromMRel :: (Observable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromMRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
 
 {- |
@@ -124,13 +124,13 @@ nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTra
     where the empty list is mapped to either `forbidden` or `underspecified`, depending on the transition label.
     Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromListRel :: (Observable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDet ((), loc)))
 nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
     where
     listToNonDet (list@(_:_)) () t = vacuousLoc <$> NonDet list
     listToNonDet [] () t = implicitDestination t
 
-combineNonDet x y = Just $ join x y
+combineNonDet x y = Just $ x \/ y
 
 combineDet _ _ = Nothing
 
@@ -138,19 +138,19 @@ vacuousTrans (a,b,c) = (a,b,(),c)
 
 vacuousLoc l = ((), l)
 
-transFromRelWith :: (Observable t, Ord loc, Ord t) =>
+transFromRelWith :: (Completable t, Ord loc, Ord t) =>
     (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
     -> (te -> (loc, t, tloc, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
     -> (loc' -> tloc -> t -> m (tloc, loc)) -- the way of creating a monadic transition result from the transition info of a list element
     -> [te] -- the transition relation in a list representation
     -> Maybe (loc -> Map t (m (tloc, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
 transFromRelWith c' fe' f' trans = do
-    tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to DetStates
+    tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to Dets
     Just $ \loc -> case loc `Map.lookup` tMapMap of
         Just tMap -> tMap
         Nothing -> Map.empty
     where
-    addToMap :: (Observable t, Ord loc, Ord t) => (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -> (te -> (loc, t, tloc, loc')) -> (loc' -> tloc -> t -> m (tloc, loc)) -> te -> Maybe (Map loc (Map t (m (tloc, loc)))) -> Maybe (Map loc (Map t (m (tloc, loc))))
+    addToMap :: (Completable t, Ord loc, Ord t) => (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -> (te -> (loc, t, tloc, loc')) -> (loc' -> tloc -> t -> m (tloc, loc)) -> te -> Maybe (Map loc (Map t (m (tloc, loc)))) -> Maybe (Map loc (Map t (m (tloc, loc))))
     addToMap c fe f te maybeTMapMap = do
         tMapMap <- maybeTMapMap
         let (loc, t, tloc, loc') = fe te
@@ -182,40 +182,40 @@ foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld
 
 ---------------------------------
--- instantiations of semantics --
+-- instantiations of interpret --
 ---------------------------------
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions.
-type ConcreteAutSem m q act = AutSem m q q act () act
+type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-semanticsConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyn m loc t () -> ConcreteAutSem m loc t
-semanticsConcrete = flip semantics id
+interpretConcrete :: (BoundedMonad m, Ord t, Show t, Show loc) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
+interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
-type ConcreteTimeoutAutSem m q i o = AutSem m q q (IOAct i o) () (TimeoutIO i o)
+type ConcreteSuspAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutAutSem m loc i o
-semanticsQuiescentConcrete = flip semantics id
+interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspAutIntrpr m loc i o
+interpretQuiescentConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
-type ConcreteInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (IFAct i o)
+type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-semanticsInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteInputAttemptAutSem m loc i o
-semanticsInputAttemptConcrete = flip semantics id
+interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
+interpretInputAttemptConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-type ConcreteTimeoutInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (TimeoutIF i o)
+type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyn m loc (IOAct i o) () -> ConcreteTimeoutInputAttemptAutSem m loc i o
-semanticsQuiescentInputAttemptConcrete = flip semantics id
+interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
+interpretQuiescentInputAttemptConcrete = flip interpret id
 
-type STS m loc i o = AutSyn m loc (SymInteract i o) STStloc
+type STS m loc i o = AutSyntax m loc (SymInteract i o) STStloc
 
-type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+type STSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 
-semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
-semanticsSTS = semantics
+interpretSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+interpretSTS = interpret
