@@ -51,7 +51,7 @@ STSIntrp
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc)
 import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -67,7 +67,7 @@ import qualified Data.Set as Set
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
--- | To a transition relation without tloc, add vacuous tlocs ().
+-- | To a transition relation without tdest, add vacuous tdests ().
 concreteTrans :: (Functor m, Completable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
 concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
@@ -108,7 +108,7 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
---nonDetSymbTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tloc, loc)] -> (loc -> Map t (m (tloc, loc)))
+--nonDetSymbTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, tdest, loc)] -> (loc -> Map t (m (tdest, loc)))
 --nonDetSymbTransFromRel = fromJust <$> transFromRelWith combineNonDet id (\l () _ -> pure $ vacuousLoc l)
 
 {- |
@@ -139,34 +139,34 @@ vacuousTrans (a,b,c) = (a,b,(),c)
 vacuousLoc l = ((), l)
 
 transFromRelWith :: (Completable t, Ord loc, Ord t) =>
-    (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
-    -> (te -> (loc, t, tloc, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
-    -> (loc' -> tloc -> t -> m (tloc, loc)) -- the way of creating a monadic transition result from the transition info of a list element
+    (m (tdest, loc) -> m (tdest, loc) -> Maybe (m (tdest, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
+    -> (te -> (loc, t, tdest, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
+    -> (loc' -> tdest -> t -> m (tdest, loc)) -- the way of creating a monadic transition result from the transition info of a list element
     -> [te] -- the transition relation in a list representation
-    -> Maybe (loc -> Map t (m (tloc, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
+    -> Maybe (loc -> Map t (m (tdest, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
 transFromRelWith c' fe' f' trans = do
     tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to Dets
     Just $ \loc -> case loc `Map.lookup` tMapMap of
         Just tMap -> tMap
         Nothing -> Map.empty
     where
-    addToMap :: (Completable t, Ord loc, Ord t) => (m (tloc, loc) -> m (tloc, loc) -> Maybe (m (tloc, loc))) -> (te -> (loc, t, tloc, loc')) -> (loc' -> tloc -> t -> m (tloc, loc)) -> te -> Maybe (Map loc (Map t (m (tloc, loc)))) -> Maybe (Map loc (Map t (m (tloc, loc))))
+    addToMap :: (Completable t, Ord loc, Ord t) => (m (tdest, loc) -> m (tdest, loc) -> Maybe (m (tdest, loc))) -> (te -> (loc, t, tdest, loc')) -> (loc' -> tdest -> t -> m (tdest, loc)) -> te -> Maybe (Map loc (Map t (m (tdest, loc)))) -> Maybe (Map loc (Map t (m (tdest, loc))))
     addToMap c fe f te maybeTMapMap = do
         tMapMap <- maybeTMapMap
-        let (loc, t, tloc, loc') = fe te
+        let (loc, t, tdest, loc') = fe te
         case loc `Map.lookup` tMapMap of
             Just tMap -> case t `Map.lookup` tMap of
-                Nothing -> Just $ Map.insert loc (Map.insert t (f loc' tloc t) tMap) tMapMap
+                Nothing -> Just $ Map.insert loc (Map.insert t (f loc' tdest t) tMap) tMapMap
                 Just prevLoc -> do
-                    combinedLoc <- c prevLoc $ f loc' tloc t
+                    combinedLoc <- c prevLoc $ f loc' tdest t
                     Just $ Map.insert loc (Map.insert t combinedLoc tMap) tMapMap
-            Nothing -> Just $ Map.insert loc (Map.singleton t (f loc' tloc t)) tMapMap
+            Nothing -> Just $ Map.insert loc (Map.singleton t (f loc' tdest t)) tMapMap
 
 {- |
     Create a transition relation from a transition function. Warning: to use the resulting transition relation in an automaton, the function must be defined
     for all reachable states, and for all transition labels in the alphabet of the automaton.
 -}
-transFromFunc :: (Foldable fld, Ord t) => (loc -> t -> m (tloc, loc)) -> fld t -> (loc -> Map t (m (tloc, loc)))
+transFromFunc :: (Foldable fld, Ord t) => (loc -> t -> m (tdest, loc)) -> fld t -> (loc -> Map t (m (tdest, loc)))
 transFromFunc fTrans alph loc = Map.fromSet (fTrans loc) (foldableAsSet alph)
 
 {- |
@@ -213,9 +213,9 @@ type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () 
 interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
-type STS m loc i o = AutSyntax m loc (SymInteract i o) STStloc
+type STS m loc i o = AutSyntax m loc (SymInteract i o) STStdest
 
-type STSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+type STSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o)
 
-interpretSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+interpretSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m,Show (m (STStdest, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o)
 interpretSTS = interpret

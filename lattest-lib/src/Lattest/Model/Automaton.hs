@@ -41,7 +41,7 @@ specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
 Valuation,
-STStloc,
+STStdest,
 stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,
@@ -82,14 +82,14 @@ import Grisette.SymPrim as GSymPrim
     observable actions as labels, whereas a more complex automaton model may have symbolic data variables with guards,
     assignments, clocks for timing, etc.
 -}
-data AutSyntax m loc t tloc = Automaton {
+data AutSyntax m loc t tdest = Automaton {
     initConf :: m loc,
     alphabet :: Set t,
-    transRel :: loc -> Map t (m (tloc, loc))
+    transRel :: loc -> Map t (m (tdest, loc))
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
 automaton mqi alphFld trans = Automaton mqi alph trans'
     where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
@@ -98,14 +98,14 @@ automaton mqi alphFld trans = Automaton mqi alph trans'
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (BoundedApplicative m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton' :: (BoundedApplicative m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
 automaton' = automaton . pure
 
 {- |
     The transition relation as a function. Note that this function is partial, and only defined for transition labels in the alphabet of the
     automaton.
 -}
-trans :: Ord t => AutSyntax m loc t tloc -> loc -> t -> m (tloc, loc)
+trans :: Ord t => AutSyntax m loc t tdest -> loc -> t -> m (tdest, loc)
 trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
@@ -123,9 +123,9 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     complex automaton model may have states consisting of syntactical locations combined with valuations for data
     variables, clocks for timing, etc.
 -}
-data AutIntrpr m loc q t tloc act = AutInterpretation {
+data AutIntrpr m loc q t tdest act = AutInterpretation {
     stateConf :: m q,
-    syntacticAutomaton :: AutSyntax m loc t tloc
+    syntacticAutomaton :: AutSyntax m loc t tdest
     }
 
 {- |
@@ -134,7 +134,7 @@ data AutIntrpr m loc q t tloc act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutIntrpr m loc q t tloc act
+interpret :: (AutomatonSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
 interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
@@ -157,7 +157,7 @@ class (Ord t, Completable act) => TransitionSemantics t act where
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
     -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (BoundedApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tloc, loc)) -> Maybe (Move m t tloc loc)
+    takeTransition :: (BoundedApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Maybe (Move m t tdest loc)
     takeTransition loc alph act trans' = case asTransition loc alph act of
         Nothing -> Just $ LocationMove $ pure loc
         Just t -> Just $ TransitionMove (t, trans' t)
@@ -166,7 +166,7 @@ class (Ord t, Completable act) => TransitionSemantics t act where
     Data structure needed to express that an automaton may transition from one location to another, but it may also 'transition'
     within a single state, e.g. the passing of time in a timed automaton.
 -}
-data Move m t tloc loc = TransitionMove (t, m (tloc, loc)) | LocationMove (m loc)
+data Move m t tdest loc = TransitionMove (t, m (tdest, loc)) | LocationMove (m loc)
 
 {- |
     StateSemantics expresses that the interpret of a syntactic location can be expressed in terms of state q. E.g. a location symbolic variables can be 
@@ -179,15 +179,15 @@ class StateSemantics loc q where
 {- |
     Automaton interpret expresses that we can take steps, to move from one state configuration to another. 
 -}
-class BoundedMonad m => AutomatonSemantics m loc q t tloc act where
+class BoundedMonad m => AutomatonSemantics m loc q t tdest act where
     -- | Take a transition for the given action.
-    after :: AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
+    after :: AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 
 {- |
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: (BoundedMonad m, Ord t) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
+monadicAfter :: (BoundedMonad m, Ord t) => (Set t -> (loc -> t -> m (tdest, loc)) -> act -> q -> m q) -> AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
     in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (trans aut) act' }
@@ -198,18 +198,18 @@ monadicAfter step autRun act' =
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Completable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, BoundedMonad m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q
+withStep :: (TransitionSemantics t act, StateSemantics loc q, BoundedMonad m) => (q -> act -> Maybe (t, tdest) -> loc -> m q) -> Set t -> (loc -> t -> m (tdest, loc)) -> act -> q -> m q
 withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
         where
-        moveWithinLocation q act nottloc loc = move q act nottloc loc
+        moveWithinLocation q act nottdest loc = move q act nottdest loc
     Just (TransitionMove (t, mloc)) -> mloc >>= moveAlongTransition q act t
         where
-        moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
+        moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (AutomatonSemantics m loc q t tloc act) => AutIntrpr m loc q t tloc act -> [act] -> AutIntrpr m loc q t tloc act
+afters :: (AutomatonSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -217,7 +217,7 @@ afters aut (act:acts) = aut `after` act `afters` acts
 -- utility function to obtain the menu of outgoing transitions --
 ------------------------------------------------------------------
 -- note: this only shows the transitions that are syntactically present in the automaton, so e.g. not quiescence, including underspecified/forbidden transitions
-transMenu :: (Foldable m, Functor m, Ord t) => AutSyntax m mloc t tloc -> Set t
+transMenu :: (Foldable m, Functor m, Ord t) => AutSyntax m mloc t tdest -> Set t
 transMenu aut = let
     stateToMenu = Set.fromList . Map.keys . transRel aut
     in Set.unions $ stateToMenu <$> initConf aut
@@ -229,13 +229,13 @@ transMenu aut = let
 class TransitionSemantics t act => FiniteMenu t act where
     -- menu of actions that are semantically present in the automaton, including underspecified/forbidden transitions
     asActions :: t -> [act]
-    locationActions :: AutSyntax m mloc t tloc -> [act]
+    locationActions :: AutSyntax m mloc t tdest -> [act]
 
-actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedApplicative m => AutSyntax m mloc t tloc -> [act]
+actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedApplicative m => AutSyntax m mloc t tdest -> [act]
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (AutomatonSemantics m loc q t tloc act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tloc act -> [act]
+specifiedMenu :: (AutomatonSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -277,7 +277,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
 
-hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tloc, loc)) -> Bool
+hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tdest, loc)) -> Bool
 hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
 
 -------------------
@@ -321,12 +321,12 @@ data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
 
 type Valuation = (Map Variable Value)
 
-newtype STStloc = STSLoc (SymGuard,SymAssign)
+newtype STStdest = STSLoc (SymGuard,SymAssign)
 
-stsTLoc :: SymGuard -> SymAssign -> STStloc
+stsTLoc :: SymGuard -> SymAssign -> STStdest
 stsTLoc g a = STSLoc (g,a)
 
-instance Show STStloc where
+instance Show STStdest where
     show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
 
 evaluate :: SymExpr -> GSymPrim.Model -> Value
@@ -352,7 +352,7 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             else errorWithoutStackTrace "type of variable and value do not match"
 
 
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o) where
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
     after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 ->
         let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
             valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
@@ -370,7 +370,7 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (In
 {- |
     Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
 -}
-reachable :: (Ord loc, Foldable m) => AutSyntax m loc t tloc -> Set loc
+reachable :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> Set loc
 reachable aut = reachableFrom aut $ initConf aut
 
 {- |
@@ -380,7 +380,7 @@ reachable aut = reachableFrom aut $ initConf aut
     a guard that is always `False`, then that location is still considered to be reachable, even if a symbolic interpretation of that automaton
     can never reach that location for any trace of concrete values.
 -}
-reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tloc -> f loc -> Set loc
+reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Set loc
 reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable.toList locations
     where
     reachableFrom' acc boundary = case takeArbitrary boundary of
@@ -393,10 +393,10 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
-prettyPrint :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tloc -> String
+prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)
 
-prettyPrintFrom :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tloc -> f loc -> String
+prettyPrintFrom :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> String
 prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitial ++ "\nlocations: " ++ printLocations ++ "\ntransitions:\n" ++ printTransitions
     where
     locations = Set.toList $ reachableFrom aut fromLocs
@@ -406,7 +406,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ " ――" ++ show t ++ "⟶ " ++ show mt
     
-prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc q t tloc act -> String
+prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc q t tdest act -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
     where
     printStateConf = show $ stateConf intrp

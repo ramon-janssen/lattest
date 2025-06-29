@@ -64,7 +64,7 @@ import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 {- |
     'Testselector's are test controllers that are only concerned with selecting inputs for testing. They do not return any testing results.
 -}
-type TestSelector m loc q t tloc act s i = TestController m loc q t tloc act s i ()
+type TestSelector m loc q t tdest act s i = TestController m loc q t tdest act s i ()
 
 {- |
     Create a 'TestSelector'. Requires one function to select an input, also updating the state, and one function to update the state when observing
@@ -72,9 +72,9 @@ type TestSelector m loc q t tloc act s i = TestController m loc q t tloc act s i
 -}
 selector :: TestChoice i act => 
     state ->
-    (state -> AutIntrpr m loc q t tloc act -> m q -> IO (Maybe (i, state))) ->
-    (state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe state)) ->
-    TestSelector m loc q t tloc act state i
+    (state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))) ->
+    (state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe state)) ->
+    TestSelector m loc q t tdest act state i
 selector state sel upd = TestController {
     testControllerState = state,
     selectTest = \s aut mq -> maybeToLeft () <$> sel s aut mq,
@@ -88,24 +88,24 @@ selector state sel upd = TestController {
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomTestSelector :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, TestChoice i act)
-    => IO (TestSelector m loc q t tloc act StdGen i)
+randomTestSelector :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
+    => IO (TestSelector m loc q t tdest act StdGen i)
 randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomTestSelectorFromSeed :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, TestChoice i act)
-    => Int -> TestSelector m loc q t tloc act StdGen i
+randomTestSelectorFromSeed :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
+    => Int -> TestSelector m loc q t tdest act StdGen i
 randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tloc act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
-    => g -> TestSelector m loc q t tloc act g i
+randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
+    => g -> TestSelector m loc q t tdest act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
     randomSelectTest g aut _ =
@@ -118,13 +118,13 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
     select inputs or return any testing results.
 -}
-type StopCondition m loc q t tloc act s = TestController m loc q t tloc act s () ()
+type StopCondition m loc q t tdest act s = TestController m loc q t tdest act s () ()
 
 {- |
     Create a state-based stop condition, starting in the given initial state. The provided function should provide either 'Just' a new state to continue
     testing, or 'Nothing' to stop testing.
 -}
-stopCondition :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe s)) -> StopCondition m loc q t tloc act s
+stopCondition :: s -> (s -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe s)) -> StopCondition m loc q t tdest act s
 stopCondition state upd = TestController {
     testControllerState = state,
     selectTest = \s _ _  -> return $ Left ((), s), -- no state change, continue testing
@@ -139,7 +139,7 @@ stopCondition state upd = TestController {
 {- |
     Apply a stop condition: run the (first) test controller until it returns a result, or until the stop condition is reached. The selected inputs and returned result come from the test controller.
 -}
-untilCondition :: TestController m loc q t tloc act state1 i1 r1 -> TestController m loc q t tloc act state2 i2 r2 -> TestController m loc q t tloc act (state1,state2) i1 r1
+untilCondition :: TestController m loc q t tdest act state1 i1 r1 -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 r1
 untilCondition controller condition = TestController {
     testControllerState = (testControllerState controller, testControllerState condition),
     selectTest = \s aut mq -> do
@@ -158,7 +158,7 @@ untilCondition controller condition = TestController {
     handleTestClose = \s -> handleTestClose controller (fst s)
     }
     where
-    updateStopCondition :: TestController m loc q t tloc act state i r -> state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe state)
+    updateStopCondition :: TestController m loc q t tdest act state i r -> state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe state)
     updateStopCondition condition state aut act q = updateTestController condition state aut act q >>= return . leftToMaybe
 
 
@@ -167,18 +167,18 @@ untilCondition controller condition = TestController {
     
     Note: since stop conditions only decide whether to stop testing after observing an action, the minimum number of actions to observe is 1.
 -}
-stopAfterSteps :: Int -> StopCondition m loc q t tloc act Int
+stopAfterSteps :: Int -> StopCondition m loc q t tdest act Int
 stopAfterSteps n = stopCondition n (\n' _ _ _ -> return $ if n' <= 1 then Nothing else Just (n'-1))
 
 {- |
     'TestObserver's are only concerned with returning a result after testing. They do not select inputs or decide whether to continue testing.
 -}
-type TestObserver m loc q t tloc act s r = TestController m loc q t tloc act s () r
+type TestObserver m loc q t tdest act s r = TestController m loc q t tdest act s () r
 
 {- |
     Create a 'TestObserver'.
 -}
-observer :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tloc act s r
+observer :: s -> (s -> AutIntrpr m loc q t tdest act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tdest act s r
 observer state upd finish = TestController {
     testControllerState = state,
     selectTest = \s _ _ -> return $ Left ((), s), -- no state change, continue testing
@@ -189,7 +189,7 @@ observer state upd finish = TestController {
 {- |
     Apply an observer: Use the (former) test controller, but also returning the result of the (latter) observer. Combine the two results using the given function.
 -}
-andObservingWith :: TestController m loc q t tloc act state1 i1 r1 -> (r1 -> r2 -> r) -> TestController m loc q t tloc act state2 i2 r2 -> TestController m loc q t tloc act (state1,state2) i1 r
+andObservingWith :: TestController m loc q t tdest act state1 i1 r1 -> (r1 -> r2 -> r) -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 r
 andObservingWith controller f obs = TestController {
     testControllerState = (testControllerState controller, testControllerState obs),
     selectTest = \s aut mq -> do
@@ -222,19 +222,19 @@ andObservingWith controller f obs = TestController {
 {- |
     Apply an observer: use the (former) test controller, but also returning the result of the (latter) observer in a tuple.
 -}
-andObserving :: TestController m loc q t tloc act state1 i1 r1 -> TestController m loc q t tloc act state2 i2 r2 -> TestController m loc q t tloc act (state1,state2) i1 (r1,r2)
+andObserving :: TestController m loc q t tdest act state1 i1 r1 -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 (r1,r2)
 andObserving controller = andObservingWith controller (,)
 
 {- |
     Apply an observer: use the (former) test controller, but only return the result of the (latter) observer.
 -}
-observingOnly :: TestController m loc q t tloc act state1 i1 r1 -> TestController m loc q t tloc act state2 i2 r2 -> TestController m loc q t tloc act (state1,state2) i1 r2
+observingOnly :: TestController m loc q t tdest act state1 i1 r1 -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 r2
 observingOnly controller = andObservingWith controller (\r1 r2 -> r2)
 
 {- |
     A 'TestObserver' that returns the trace of all observed actions
 -}
-traceObserver :: TestObserver m loc q t tloc act [act] [act]
+traceObserver :: TestObserver m loc q t tdest act [act] [act]
 traceObserver = observer [] (\trace _ act _ -> return $ act : trace) (pure . reverse)
 
 -- FIXME get rid of the Maybe
@@ -242,7 +242,7 @@ traceObserver = observer [] (\trace _ act _ -> return $ act : trace) (pure . rev
     A 'TestObserver' that returns the last state configuration of the specification model. This may be a conclusive state. For example,
     during a failed test, this observer returns 'forbidden'.
 -}
-stateObserver :: TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
+stateObserver :: TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) return
 
 {- |
@@ -250,7 +250,7 @@ stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) r
     this observer returns the last state before the failure.
     
 -}
-inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
+inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return
     where
     makeSelection _ aut _ mq = 
@@ -260,29 +260,29 @@ inconclusiveStateObserver = observer Nothing makeSelection return
 {- |
     'TestSideEffect's perform side effects during testing, but have no impact on the testing itself, nor on the result.
 -}
-type TestSideEffect m loc q t tloc act s = TestController m loc q t tloc act s () ()
+type TestSideEffect m loc q t tdest act s = TestController m loc q t tdest act s () ()
 
 {- |
     Apply a side effect: Use the (former) test controller, but also perform the side effect of the (latter) observer.
 -}
-withSideEffect :: TestController m loc q t tloc act state1 i1 r1 -> TestController m loc q t tloc act state2 i2 r2 -> TestController m loc q t tloc act (state1,state2) i1 r1
+withSideEffect :: TestController m loc q t tdest act state1 i1 r1 -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 r1
 withSideEffect controller sideEffect = andObservingWith controller const sideEffect
 
 
 {- |
     Create a 'TestSideEffect'. The provided function returns the new state in an 'IO' monad that can also perform the side effects.
 -}
-testSideEffect :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO s) -> TestSideEffect m loc q t tloc act s
+testSideEffect :: s -> (s -> AutIntrpr m loc q t tdest act -> act -> m q -> IO s) -> TestSideEffect m loc q t tdest act s
 testSideEffect s f = observer s f (const $ pure ())
 
 {- |
     Print observed to stdin actions during testing.
 -}
-printActions :: Show act => TestSideEffect m loc q t tloc act ()
+printActions :: Show act => TestSideEffect m loc q t tdest act ()
 printActions = testSideEffect () (\_ _ act _ -> putStrLn $ show act)
 
 {- |
     Print the state configuration of the specification during testing.
 -}
-printState :: Show (m q) => TestSideEffect m loc q t tloc act ()
+printState :: Show (m q) => TestSideEffect m loc q t tdest act ()
 printState = testSideEffect () (\_ _ _ mq -> putStrLn $ show mq)

@@ -68,19 +68,19 @@ data Verdict = Pass | Fail deriving (Ord, Eq, Show, Read)
     Results can be used to record additional information that the tester is interested in, depending on the controller implementation.
     For example, the actions observed during a testing experiment, or whether certain coverage criteria were achieved during the experiment.
 -} 
-data TestController m loc q t tloc act state i r = TestController {
+data TestController m loc q t tdest act state i r = TestController {
     -- | Any state that the controller needs for its decision making duties.
     testControllerState :: state,
     {- |
         Select a test based on test controller state, the specification (in its current state), and previous specification configuration.
         Either select a new controller state and a input, /or/ stop testing and return a result from the controller.
     -}
-    selectTest :: (TestChoice i act) => state -> AutIntrpr m loc q t tloc act -> m q -> IO (Either (i, state) r),
+    selectTest :: (TestChoice i act) => state -> AutIntrpr m loc q t tdest act -> m q -> IO (Either (i, state) r),
     {- |
         Select a test based on test controller state, the specification (in its current state), an observed action, and previous specification
         configuration. Either select a new controller state, /or/ stop testing and return a result from the controller.
     -}
-    updateTestController :: state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Either state r),
+    updateTestController :: state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
     -- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.
     handleTestClose :: state -> IO r
     }
@@ -90,8 +90,8 @@ data TestController m loc q t tloc act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (AutomatonSemantics m loc q t tloc act, TestChoice i act, BoundedConfiguration m) =>
-    AutIntrpr m loc q t tloc act -> TestController m loc q t tloc act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tloc act, TestController m loc q t tloc act state i r)
+makeTester :: (AutomatonSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
@@ -100,8 +100,8 @@ makeTester initSpec initTestController = ActionController {
     }
     where
         makeSelect :: (TestChoice i act, BoundedConfiguration m)
-            => (AutIntrpr m loc q t tloc act, TestController m loc q t tloc act state i r)
-            -> IO (Either (i, (AutIntrpr m loc q t tloc act, TestController m loc q t tloc act state i r)) (Verdict, r))
+            => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+            -> IO (Either (i, (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)) (Verdict, r))
         makeSelect (spec, testController) = do
             next <- selectTest testController (testControllerState testController) spec (stateConf spec)
             case next of
@@ -110,8 +110,8 @@ makeTester initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (AutomatonSemantics m loc q t tloc act, BoundedConfiguration m, Refusable act) =>
-            (AutIntrpr m loc q t tloc act, TestController m loc q t tloc act state i r) -> act -> IO (Either (AutIntrpr m loc q t tloc act, TestController m loc q t tloc act state i r) (Verdict, r))
+        makeUpdate :: (AutomatonSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
+            (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
             let spec' = spec `after` act
             let verdict = actToVerd (stateConf spec') act
@@ -123,7 +123,7 @@ makeTester initSpec initTestController = ActionController {
                         r <- handleTestClose testController state'
                         return $ Right (verdict, r)
                     else return $ Left (spec', testController { testControllerState = state' })
-        makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tloc act, TestController m loc q t tloc act state i r) -> IO (Verdict, r)
+        makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
             return (pToVerd $ stateConf spec, r) 
@@ -173,8 +173,8 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (AutomatonSemantics m loc q t tloc act, TestChoice i act, BoundedConfiguration m) =>
-    AutIntrpr m loc q t tloc act -> TestController m loc q t tloc act state i r -> Adapter act i -> IO (Verdict, r)
+runTester :: (AutomatonSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
