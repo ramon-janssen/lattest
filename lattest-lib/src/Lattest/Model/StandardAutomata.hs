@@ -3,7 +3,7 @@
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
     Note that the types are no more than type aliases, so if the automata type with your favorite combination of type parameters
-    is not listed, don't hesitate to construct an automaton type ('AutSyntax' or 'AutSem') yourself instead of using the StandardAutomata.
+    is not listed, don't hesitate to construct an automaton type ('AutSyntax' or 'AutIntrpr') yourself instead of using the StandardAutomata.
     The base function `automaton` for constructing automata is re-exported here for convenience.
 -}
 
@@ -37,13 +37,13 @@ transFromFunc,
 concTransFromFunc,
 
 -- * Automaton Semantics
--- | Auxiliary functions for creating semantical automata `AutSem`. Note that most of these functions are no more than calls to `semantics`, instantiating
+-- | Auxiliary functions for creating semantical automata `AutIntrpr`. Note that most of these functions are no more than calls to `semantics`, instantiating
 -- the type of the semantical interpretation.
-ConcreteAutSem,
+ConcreteAutIntrpr,
 semanticsConcrete,
-ConcreteQuiescenceAutSem,
+ConcreteQuiescenceAutIntrpr,
 semanticsQuiescentConcrete,
-ConcreteQuiescenceInputAttemptAutSem,
+ConcreteQuiescenceInputAttemptAutIntrpr,
 semanticsQuiescentInputAttemptConcrete,
 semanticsSTS,
 STSIntrp
@@ -51,7 +51,7 @@ STSIntrp
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutSem, semantics, Observable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, semantics, Observable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
 import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -186,36 +186,36 @@ foldableAsSet fld = Set.fromList $ Foldable.toList fld
 ---------------------------------
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions.
-type ConcreteAutSem m q act = AutSem m q q act () act
+type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-semanticsConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyntax m loc t () -> ConcreteAutSem m loc t
+semanticsConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
 semanticsConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
-type ConcreteQuiescenceAutSem m q i o = AutSem m q q (IOAct i o) () (IOSuspAct i o)
+type ConcreteQuiescenceAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceAutSem m loc i o
+semanticsQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceAutIntrpr m loc i o
 semanticsQuiescentConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
-type ConcreteInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (IFAct i o)
+type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-semanticsInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutSem m loc i o
+semanticsInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
 semanticsInputAttemptConcrete = flip semantics id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-type ConcreteQuiescenceInputAttemptAutSem m q i o = AutSem m q q (IOAct i o) () (SuspendedIF i o)
+type ConcreteQuiescenceInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceInputAttemptAutSem m loc i o
+semanticsQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceInputAttemptAutIntrpr m loc i o
 semanticsQuiescentInputAttemptConcrete = flip semantics id
 
 type STS m loc i o = AutSyntax m loc (SymInteract i o) STStloc
 
-type STSIntrp m loc i o = AutSem m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+type STSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 
-semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutSem m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+semanticsSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 semanticsSTS = semantics

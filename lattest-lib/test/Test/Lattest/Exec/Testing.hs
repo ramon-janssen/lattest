@@ -83,9 +83,9 @@ traceTestController :: (Eq act) => [Either (Maybe i) act] -> TestController m lo
 traceTestController steps = TestController {
     -- testControllerState :: (TestChoice i act) => [Either i act]
     testControllerState = steps,
-    --selectTest :: (TestChoice i act) => [Either i act] -> AutSem m loc q t tloc act -> m q -> IO (Either (i, [Either i act]) Boolean),
+    --selectTest :: (TestChoice i act) => [Either i act] -> AutIntrpr m loc q t tloc act -> m q -> IO (Either (i, [Either i act]) Boolean),
     selectTest = traceSelectTest,
-    --updateTestController :: [Either i act] -> AutSem m loc q t tloc act -> act -> m q -> IO (Either [Either i act] Boolean),
+    --updateTestController :: [Either i act] -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Either [Either i act] Boolean),
     updateTestController = traceUpdateTestController,
     --handleTestClose :: [Either i act] -> IO Boolean -- When testing finishes, return a result
     handleTestClose = return . null

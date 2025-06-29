@@ -50,7 +50,7 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
-import Lattest.Model.Automaton(AutSem(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Model.Automaton(AutIntrpr(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
 import Lattest.Model.StateConfiguration(isConclusive, PermissionConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
@@ -72,8 +72,8 @@ type TestSelector m loc q t tloc act s i = TestController m loc q t tloc act s i
 -}
 selector :: TestChoice i act => 
     state ->
-    (state -> AutSem m loc q t tloc act -> m q -> IO (Maybe (i, state))) ->
-    (state -> AutSem m loc q t tloc act -> act -> m q -> IO (Maybe state)) ->
+    (state -> AutIntrpr m loc q t tloc act -> m q -> IO (Maybe (i, state))) ->
+    (state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe state)) ->
     TestSelector m loc q t tloc act state i
 selector state sel upd = TestController {
     testControllerState = state,
@@ -124,7 +124,7 @@ type StopCondition m loc q t tloc act s = TestController m loc q t tloc act s ()
     Create a state-based stop condition, starting in the given initial state. The provided function should provide either 'Just' a new state to continue
     testing, or 'Nothing' to stop testing.
 -}
-stopCondition :: s -> (s -> AutSem m loc q t tloc act -> act -> m q -> IO (Maybe s)) -> StopCondition m loc q t tloc act s
+stopCondition :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe s)) -> StopCondition m loc q t tloc act s
 stopCondition state upd = TestController {
     testControllerState = state,
     selectTest = \s _ _  -> return $ Left ((), s), -- no state change, continue testing
@@ -158,7 +158,7 @@ untilCondition controller condition = TestController {
     handleTestClose = \s -> handleTestClose controller (fst s)
     }
     where
-    updateStopCondition :: TestController m loc q t tloc act state i r -> state -> AutSem m loc q t tloc act -> act -> m q -> IO (Maybe state)
+    updateStopCondition :: TestController m loc q t tloc act state i r -> state -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Maybe state)
     updateStopCondition condition state aut act q = updateTestController condition state aut act q >>= return . leftToMaybe
 
 
@@ -178,7 +178,7 @@ type TestObserver m loc q t tloc act s r = TestController m loc q t tloc act s (
 {- |
     Create a 'TestObserver'.
 -}
-observer :: s -> (s -> AutSem m loc q t tloc act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tloc act s r
+observer :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tloc act s r
 observer state upd finish = TestController {
     testControllerState = state,
     selectTest = \s _ _ -> return $ Left ((), s), -- no state change, continue testing
@@ -272,7 +272,7 @@ withSideEffect controller sideEffect = andObservingWith controller const sideEff
 {- |
     Create a 'TestSideEffect'. The provided function returns the new state in an 'IO' monad that can also perform the side effects.
 -}
-testSideEffect :: s -> (s -> AutSem m loc q t tloc act -> act -> m q -> IO s) -> TestSideEffect m loc q t tloc act s
+testSideEffect :: s -> (s -> AutIntrpr m loc q t tloc act -> act -> m q -> IO s) -> TestSideEffect m loc q t tloc act s
 testSideEffect s f = observer s f (const $ pure ())
 
 {- |

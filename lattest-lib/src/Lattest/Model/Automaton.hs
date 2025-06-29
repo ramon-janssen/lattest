@@ -22,7 +22,7 @@ automaton,
 automaton',
 -- * Semantical Automaton Model
 -- ** Definition
-AutSem,
+AutIntrpr,
 stateConf,
 syntacticAutomaton,
 -- ** Constructing Syntactical Automata
@@ -123,7 +123,7 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     complex automaton model may have states consisting of syntactical locations combined with valuations for data
     variables, clocks for timing, etc.
 -}
-data AutSem m loc q t tloc act = AutomatonRun {
+data AutIntrpr m loc q t tloc act = AutInterpretation {
     stateConf :: m q,
     syntacticAutomaton :: AutSyntax m loc t tloc
     }
@@ -134,8 +134,8 @@ data AutSem m loc q t tloc act = AutomatonRun {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'semantics' in
     "Lattest.Adapter.StandardAdapters".
 -}
-semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutSem m loc q t tloc act
-semantics aut initState = AutomatonRun { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
+semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutIntrpr m loc q t tloc act
+semantics aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
 -- | The Observable typeclass defines which types can be used as labels on transitions.
 class Observable act where
@@ -181,13 +181,13 @@ class StateSemantics loc q where
 -}
 class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     -- | Take a transition for the given action.
-    after :: AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+    after :: AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
 
 {- |
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: (StateConfiguration m, Ord t) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter :: (StateConfiguration m, Ord t) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
     in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (trans aut) act' }
@@ -209,7 +209,7 @@ withStep move alph transMap act q = case takeTransition (asLoc q) alph act (tran
         moveAlongTransition q act t (tloc, loc) = move q act (Just (t, tloc)) loc
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (AutomatonSemantics m loc q t tloc act) => AutSem m loc q t tloc act -> [act] -> AutSem m loc q t tloc act
+afters :: (AutomatonSemantics m loc q t tloc act) => AutIntrpr m loc q t tloc act -> [act] -> AutIntrpr m loc q t tloc act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -235,7 +235,7 @@ actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => PermissionAp
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (AutomatonSemantics m loc q t tloc act, Foldable m, Ord t) => FiniteMenu t act => AutSem m loc q t tloc act -> [act]
+specifiedMenu :: (AutomatonSemantics m loc q t tloc act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tloc act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -406,7 +406,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ " ――" ++ show t ++ "⟶ " ++ show mt
     
-prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutSem m loc q t tloc act -> String
+prettyPrintIntrp :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc q t tloc act -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
     where
     printStateConf = show $ stateConf intrp
