@@ -42,15 +42,15 @@ top,
 bot,
 (\/),
 (/\),
--- * Permissions
-Permission(..),
+-- * Specifiednesss
+Specifiedness(..),
 BoundedMonad,
-permission,
+specifiedness,
 forbidden,
 underspecified,
 isForbidden,
 isUnderspecified,
--- ** Auxiliary Permission functions
+-- ** Auxiliary Specifiedness functions
 isAllowed,
 isSpecified,
 isIndefinite,
@@ -217,15 +217,15 @@ instance JoinSemiLattice (FreeLattice a) where
     join = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
 
 {-|
-    Permissions describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
+    Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
     behaviour is not allowed, not is any subsequent behaviour. 'Underspecified' describes that behaviour is allowed and any subsequent
     behaviour is also allowed. 'Indefinite' means that the behaviour is allowed, and subsequent behaviour may be forbidden, underspecified,
     or may again be 'Indefinite'. 
 -}
-data Permission = Underspecified | Forbidden | Indefinite deriving (Eq, Ord, Show, Read)
+data Specifiedness = Underspecified | Forbidden | Indefinite deriving (Eq, Ord, Show, Read)
 
 {-|
-    Permission configurations are state configurations which have a representation for forbidden and underspecified configurations.
+    Specifiedness configurations are state configurations which have a representation for forbidden and underspecified configurations.
 -}
 class BoundedMonad m where
     forbidden :: m t -- ^ The forbidden state configuration. 
@@ -233,35 +233,35 @@ class BoundedMonad m where
     isForbidden :: m t -> Bool -- ^ Is this state configuration forbidden?
     isUnderspecified :: m t -> Bool -- ^ Is this state configuration underspecified?
 
--- | Extract the current 'Permission' from a permission configuration.
-permission c
+-- | Extract the current 'Specifiedness' from a bounded monad.
+specifiedness c
     | isForbidden c = Forbidden
     | isUnderspecified c = Underspecified
     | otherwise = Indefinite
 
--- | Is the configuration a representation of the 'Indefinite' permission?
+-- | Is the configuration a representation of the 'Indefinite' specifiedness?
 isIndefinite :: (BoundedMonad m) => m t -> Bool
-isIndefinite p = permission p == Indefinite
+isIndefinite p = specifiedness p == Indefinite
 
--- | Is the configuration a representation of a "definitive" permission, i.e., 'Forbidden' or 'Underspecified'?
+-- | Is the configuration a representation of "definitive", i.e., 'Forbidden' or 'Underspecified'?
 isConclusive :: (BoundedMonad m) => m t -> Bool
-isConclusive p = permission p /= Indefinite
+isConclusive p = specifiedness p /= Indefinite
 
--- | Is the configuration a representation of an "allowed" permission, i.e., 'Indefinite' or 'Underspecified'?
+-- | Is the configuration a representation of "allowed", i.e., 'Indefinite' or 'Underspecified'?
 isAllowed :: (BoundedMonad m) => m t -> Bool
 isAllowed = not . isForbidden
 
--- | Is the configuration a representation of a "specified" permission, i.e., 'Indefinite' or 'Forbidden'?
+-- | Is the configuration a representation of "specified", i.e., 'Indefinite' or 'Forbidden'?
 isSpecified :: (BoundedMonad m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
--- | Abbreviation for types which are both permission configurations and Monads.
+-- | Abbreviation for types which are both bounded configurations and Monads.
 type StateConfiguration m = (BoundedMonad m, Monad m)
 
--- | Abbreviation for types which are both permission configurations and Applicatives.
+-- | Abbreviation for types which are both bounded configurations and Applicatives.
 type BoundedApplicative m = (BoundedMonad m, Applicative m)
 
--- | Abbreviation for types which are both permission configurations and Functors.
+-- | Abbreviation for types which are both bounded configurations and Functors.
 type BoundedFunctor m = (BoundedMonad m, Functor m)
 
 -- | Because the lattices-library doesn't support this
