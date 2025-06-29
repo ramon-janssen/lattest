@@ -9,7 +9,7 @@ module Lattest.Model.Alphabet (
 -- * Translating between Actions and Inputs
 TestChoice,
 choiceToActs,
-actToInputChoice,
+actToChoice,
 -- * Action types
 -- ** Inputs and Outputs
 IOAct(..),
@@ -92,7 +92,7 @@ class Refusable act => TestChoice i act where
     {- |
         If an observable action corresponds to an input, then derive that input.
     -}
-    actToInputChoice :: act -> Maybe i -- the input command that corresponds to given action (ideally, e.g. in case of a waiting time, the observed waiting time may be different than the intended waiting time)
+    actToChoice :: act -> Maybe i -- the input command that corresponds to given action (ideally, e.g. in case of a waiting time, the observed waiting time may be different than the intended waiting time)
     {- |
         Derive the sequence of observable actions that correspond to an input.
     -}
@@ -115,8 +115,8 @@ instance {-# OVERLAPS #-} Refusable (IOAct i o)
 -}
 instance TestChoice i (IOAct i o) where
     choiceToActs i = [In i]
-    actToInputChoice (In i) = Just i
-    actToInputChoice (Out _) = Nothing
+    actToChoice (In i) = Just i
+    actToChoice (Out _) = Nothing
 
 {- |
     Is the given action an input?
@@ -168,9 +168,9 @@ instance TestChoice (Maybe i) (TimeoutIO i o) where
     -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
     choiceToActs (Just i) = asTimeout <$> choiceToActs i
     choiceToActs Nothing = []
-    actToInputChoice (Out Timeout) = Just Nothing
-    actToInputChoice (Out (TimeoutOut o)) = Nothing
-    actToInputChoice (In i) = Just $ Just i
+    actToChoice (Out Timeout) = Just Nothing
+    actToChoice (Out (TimeoutOut o)) = Nothing
+    actToChoice (In i) = Just $ Just i
 
 {- |
     Convert an input or output to a type containing timeouts.
@@ -214,7 +214,7 @@ instance TestChoice i (IFAct i o) where
         where
         inToAttempt (In i) = In (Attempt (i, True))
         inToAttempt (Out o) = Out o 
-    actToInputChoice = actToInputChoice . attemptToIn
+    actToChoice = actToChoice . attemptToIn
         where
         attemptToIn (In (Attempt (i, _))) = In i
         attemptToIn (Out o) = Out o
@@ -245,8 +245,8 @@ instance TestChoice (Maybe i) (TimeoutIF i o) where
         where
         inToAttempt (In i) = In (Attempt (i, True))
         inToAttempt (Out o) = Out o 
-    --actToInputChoice (Out Timeout) = Just Nothing
-    actToInputChoice other = actToInputChoice $ attemptToIn other
+    --actToChoice (Out Timeout) = Just Nothing
+    actToChoice other = actToChoice $ attemptToIn other
         where
         attemptToIn (In (Attempt (i, _))) = In i
         attemptToIn (Out o) = Out o

@@ -49,7 +49,7 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), TimeoutIO, Timeout(..), asTimeout, actToInputChoice)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), TimeoutIO, Timeout(..), asTimeout, actToChoice)
 import Lattest.Model.Automaton(AutSem(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
 import Lattest.Model.StateConfiguration(isConclusive, PermissionConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)
@@ -109,7 +109,7 @@ randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tloc act, FiniteMenu 
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
     randomSelectTest g aut _ =
-        let ins = takeJusts $ actToInputChoice <$> specifiedMenu aut
+        let ins = takeJusts $ actToChoice <$> specifiedMenu aut
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
