@@ -81,7 +81,7 @@ import qualified Data.Text as Text(pack, unpack)
 import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Suspended(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, Attempt(..))
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
@@ -255,7 +255,7 @@ pureMealyAdapter transitionFunction outputFunction initialState = do
     Adapter which, after every action, has the given probability of producing non-deterministically one of the corresponding (non-timeout) output transitions if any is available.
     After receiving a Nothing input, an output will be produced, which may be a timeout.
 -}
-pureAdapter :: (Ord i, Ord o, RandomGen g) => g -> Double -> (state -> Map.Map (IOAct i o) state) -> state -> IO (Adapter (TimeoutIF i o) (Maybe i))
+pureAdapter :: (Ord i, Ord o, RandomGen g) => g -> Double -> (state -> Map.Map (IOAct i o) state) -> state -> IO (Adapter (SuspendedIF i o) (Maybe i))
 pureAdapter g p transitionFunction initialState = do
     let ((g',q), outs) = randomOutputTransitions transitionFunction g initialState False -- immediately take some outputs at the start
     statefulAdapter <- (statefulIO' (processInput transitionFunction) (g', q))

@@ -45,7 +45,7 @@ Attempt(..),
 asInputAttempt,
 fromInputAttempt,
 -- ** Combined Input Refusals and Timeouts
-TimeoutIF,
+SuspendedIF,
 asSuspendedInputAttempt,
 fromSuspendedInputAttempt,
 -- * STS
@@ -237,9 +237,9 @@ fromInputAttempt (Out o) = Out o
 {- |
     Input failure with observed timeouts. See 'IOSuspAct' and 'IFAct' for details.
 -}
-type TimeoutIF i o = IOAct (Attempt i) (Suspended o)
+type SuspendedIF i o = IOAct (Attempt i) (Suspended o)
 
-instance TestChoice (Maybe i) (TimeoutIF i o) where
+instance TestChoice (Maybe i) (SuspendedIF i o) where
     choiceToActs Nothing = [Out Timeout]
     choiceToActs (Just i) = inToAttempt <$> choiceToActs i
         where
@@ -254,14 +254,14 @@ instance TestChoice (Maybe i) (TimeoutIF i o) where
 {- |
     Convert an input or output to a type containing input failures and timeouts.
 -}
-asSuspendedInputAttempt :: IOAct i o -> TimeoutIF i o
+asSuspendedInputAttempt :: IOAct i o -> SuspendedIF i o
 asSuspendedInputAttempt (In i) = In (Attempt (i, True))
 asSuspendedInputAttempt (Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with input failures and timeouts.
 -}
-fromSuspendedInputAttempt :: TimeoutIF i o -> IOAct i o
+fromSuspendedInputAttempt :: SuspendedIF i o -> IOAct i o
 fromSuspendedInputAttempt (In (Attempt (i, True))) = In i
 fromSuspendedInputAttempt (Out (OutSusp o)) = Out o
 

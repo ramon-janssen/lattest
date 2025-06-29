@@ -55,7 +55,7 @@ where
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Timeout),IFAct(..),Attempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,TimeoutIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Timeout),IFAct(..),Attempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
@@ -300,7 +300,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 --------------------------------
 -- Ideally this would just be the above two semantics stacked to avoid the boilerplate below, but that is a hassle
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
+instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) where
     asTransition loc _ (In (Attempt (i, False))) = Nothing
     asTransition loc _ (Out Timeout) = Nothing
     asTransition _ _ other = Just $ fromSuspendedInputAttempt other
@@ -309,7 +309,7 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
     takeTransition loc alph (Out Timeout) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
     takeTransition _ _ act m = Just $ TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
+instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
     asActions t = [asSuspendedInputAttempt t]
     locationActions _ = [Out Timeout]
 
