@@ -13,7 +13,7 @@ import Test.HUnit hiding (Path, path)
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.Automaton(AutSyn, automaton)
 import Lattest.Model.StandardAutomata(semanticsQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Timeout(..))
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
 import Lattest.Model.StateConfiguration
 import qualified Data.Map as Map (insert, fromList)
 import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter,acceptingInputs)

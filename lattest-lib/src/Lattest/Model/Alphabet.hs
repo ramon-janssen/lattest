@@ -24,7 +24,7 @@ fromOutput,
     
     * [/Jan Tretmans/, Model based testing with labelled transition systems (Formal Methods and Testing), 2008](https://repository.ubn.ru.nl/bitstream/handle/2066/72680/72680.pdf)
 -}
-Timeout (..),
+Suspended(..),
 δ,
 IOSuspAct,
 asSuspended,
@@ -147,18 +147,18 @@ fromOutput (Out o) = o
 {- |
     Add observation of timeouts to a type of observable actions.
 -}
-data Timeout o = Timeout | OutSusp o deriving (Eq, Ord)
+data Suspended o = Timeout | OutSusp o deriving (Eq, Ord)
 
-instance Show o => Show (Timeout o) where
+instance Show o => Show (Suspended o) where
     show Timeout = "δ"
     show (OutSusp o) = show o
 
 {- |
     Add observation of timeouts to the observed inputs and outputs.
 -}
-type IOSuspAct i o = IOAct i (Timeout o)
+type IOSuspAct i o = IOAct i (Suspended o)
 
-δ :: IOAct i (Timeout o)
+δ :: IOAct i (Suspended o)
 δ = Out Timeout
 
 {- |
@@ -237,7 +237,7 @@ fromInputAttempt (Out o) = Out o
 {- |
     Input failure with observed timeouts. See 'IOSuspAct' and 'IFAct' for details.
 -}
-type TimeoutIF i o = IOAct (Attempt i) (Timeout o)
+type TimeoutIF i o = IOAct (Attempt i) (Suspended o)
 
 instance TestChoice (Maybe i) (TimeoutIF i o) where
     choiceToActs Nothing = [Out Timeout]

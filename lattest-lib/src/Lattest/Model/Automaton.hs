@@ -55,7 +55,7 @@ where
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Timeout(Timeout),IFAct(..),Attempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,TimeoutIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Timeout),IFAct(..),Attempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,TimeoutIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
