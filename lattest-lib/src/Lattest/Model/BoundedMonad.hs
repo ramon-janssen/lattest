@@ -7,9 +7,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 {- |
-    A /state configuration/ is a type constructor which represents the observable perspective on the state of an automaton. A
-    system will internally have a state, but this state can not always be observed or inferred for an external viewer. To model
-    the difference between internal and observable state, we define automata as having a type of internal state, say q, and
+    A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
+    /state configuration/. A system will internally have a state, but this state can not always be observed or inferred for an external viewer. To
+    model the difference between internal and observable state, we define automata as having a type of internal state, say q, and
     an observable state configuration over q.
     
     In this module, we define three such state configurations:
@@ -24,7 +24,8 @@
     that trace is either 'forbidden' or 'underspecified'. Here, 'forbidden' expresses that the automaton does not allow the
     given trace, whereas 'underspecified' expresses that the automaton does not specify the trace, hence the trace is allowed.
     
-    For more details see
+    The name 'bounded monad' is based on bounded lattices, which have a top and bottom element. For more details on the use of top and bottom in
+    state configurations, see
     
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
 -}
