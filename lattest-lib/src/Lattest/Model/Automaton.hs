@@ -15,6 +15,7 @@ module Lattest.Model.Automaton (
 AutSyn,
 locConf,
 alphabet,
+trans,
 transRel,
 -- ** Constructing Syntactical Automata
 automaton,
@@ -100,6 +101,15 @@ automaton mqi alphFld trans = Automaton mqi alph trans'
 automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
 automaton' = automaton . pure
 
+{- |
+    The transition relation as a function. Note that this function is partial, and only defined for transition labels in the alphabet of the
+    automaton.
+-}
+trans :: Ord t => AutSyn m loc t tloc -> loc -> t -> m (tloc, loc)
+trans aut loc t = case Map.lookup t (transRel aut loc) of
+    Just x -> x
+    Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
+
 ---------------
 -- semantics --
 ---------------
@@ -147,10 +157,10 @@ class (Ord t, Observable act) => TransitionSemantics t act where
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
     -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> Map t (m (tloc, loc)) -> Maybe (Move m t tloc loc)
-    takeTransition loc alph act tmap = case asTransition loc alph act of
+    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tloc, loc)) -> Maybe (Move m t tloc loc)
+    takeTransition loc alph act trans' = case asTransition loc alph act of
         Nothing -> Just $ LocationMove $ pure loc
-        Just t -> TransitionMove . (t,) <$> Map.lookup t tmap
+        Just t -> Just $ TransitionMove (t, trans' t)
 
 {- |
     Data structure needed to express that an automaton may transition from one location to another, but it may also 'transition'
@@ -177,10 +187,10 @@ class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: (StateConfiguration m) => (Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
+monadicAfter :: (StateConfiguration m, Ord t) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutSem m loc q t tloc act -> act -> AutSem m loc q t tloc act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
-    in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (transRel aut) act' }
+    in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (trans aut) act' }
 
 {- |
     Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
@@ -188,7 +198,7 @@ monadicAfter step autRun act' =
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Observable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> Map t (m (tloc, loc))) -> act -> q -> m q
+withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q
 withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
@@ -260,8 +270,8 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIO i o) where
     asTransition loc _ (Out Timeout) = Nothing
     asTransition _ _ other = Just $ fromTimeout other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (Out Timeout) m = Just . LocationMove $ if hasQuiescence m then forbidden else pure loc
-    takeTransition _ _ act m = TransitionMove . (fromTimeout act,) <$> Map.lookup (fromTimeout act) m
+    takeTransition loc alph (Out Timeout) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition _ _ act m = Just $ TransitionMove (fromTimeout act, m $ fromTimeout act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIO i o) where
     asActions t = [asTimeout t]
@@ -279,7 +289,7 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) where
     asTransition _ _ other = Just $ fromInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
-    takeTransition _ _ act m = TransitionMove . (fromInputAttempt act,) <$> Map.lookup (fromInputAttempt act) m
+    takeTransition _ _ act m = Just $ TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
     asActions t = [asInputAttempt t]
@@ -296,8 +306,8 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
     asTransition _ _ other = Just $ fromTimeoutInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (Attempt (i, False))) m = Just . LocationMove $ pure loc
-    takeTransition loc _ (Out Timeout) m = Just . LocationMove $ if hasQuiescence m then forbidden else pure loc
-    takeTransition _ _ act m = TransitionMove . (fromTimeoutInputAttempt act,) <$> Map.lookup (fromTimeoutInputAttempt act) m
+    takeTransition loc alph (Out Timeout) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition _ _ act m = Just $ TransitionMove (fromTimeoutInputAttempt act, m $ fromTimeoutInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
     asActions t = [asTimeoutInputAttempt t]
