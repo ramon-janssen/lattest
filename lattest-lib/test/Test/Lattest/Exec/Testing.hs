@@ -71,7 +71,7 @@ testTraceFailsWithQuiescence = TestCase $ do
     assertEqual "testTraceFailsWithQuiescence should fail" Fail verdict
     assertEqual "testTraceFailsWithQuiescence should be incomplete" True finished
 
-ioTraceTestController :: (Eq i, Eq o) => [IOAct i o] -> TestController m loc q t tloc (IOSuspAct i o) [Either (Maybe i) (IOSuspAct i o)] (Maybe i) Bool
+ioTraceTestController :: (Eq i, Eq o) => [IOAct i o] -> TestController m loc q t tdest (IOSuspAct i o) [Either (Maybe i) (IOSuspAct i o)] (Maybe i) Bool
 ioTraceTestController ioActs = traceTestController $ toCommandsAndActs ioActs
     where
     toCommandsAndActs [] = []
@@ -79,13 +79,13 @@ ioTraceTestController ioActs = traceTestController $ toCommandsAndActs ioActs
     toCommandsAndActs (Out o:rest) = Right (Out $ OutSusp o) : toCommandsAndActs rest
 
 -- a hardcoded test controller just follows the input commands and observations in the given list. Returns whether it finish the list
-traceTestController :: (Eq act) => [Either (Maybe i) act] -> TestController m loc q t tloc act [Either (Maybe i) act] (Maybe i) Bool
+traceTestController :: (Eq act) => [Either (Maybe i) act] -> TestController m loc q t tdest act [Either (Maybe i) act] (Maybe i) Bool
 traceTestController steps = TestController {
     -- testControllerState :: (TestChoice i act) => [Either i act]
     testControllerState = steps,
-    --selectTest :: (TestChoice i act) => [Either i act] -> AutIntrpr m loc q t tloc act -> m q -> IO (Either (i, [Either i act]) Boolean),
+    --selectTest :: (TestChoice i act) => [Either i act] -> AutIntrpr m loc q t tdest act -> m q -> IO (Either (i, [Either i act]) Boolean),
     selectTest = traceSelectTest,
-    --updateTestController :: [Either i act] -> AutIntrpr m loc q t tloc act -> act -> m q -> IO (Either [Either i act] Boolean),
+    --updateTestController :: [Either i act] -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either [Either i act] Boolean),
     updateTestController = traceUpdateTestController,
     --handleTestClose :: [Either i act] -> IO Boolean -- When testing finishes, return a result
     handleTestClose = return . null
