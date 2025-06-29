@@ -18,7 +18,7 @@ import Test.HUnit
 
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(semanticsConcrete, semanticsQuiescentConcrete, nonDetConcTransFromMRel)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Timeout(..), asTimeout, δ)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Timeout(..), asSuspended, δ)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
 
@@ -131,8 +131,8 @@ testSpecG = TestCase $ do
 testSpecGQuiescent :: Test
 testSpecGQuiescent = TestCase $ do
     let rg = semanticsQuiescentConcrete sg
-    assertEqual "Δ(sg) after δ ?On δ ?B !T" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout t])
-    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
-    assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, asTimeout tm])
-    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asTimeout on, δ, asTimeout bg, δ])
+    assertEqual "Δ(sg) after δ ?On δ ?B !T" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended t])
+    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
+    assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
+    assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 

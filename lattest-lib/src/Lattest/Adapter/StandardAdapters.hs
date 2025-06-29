@@ -47,7 +47,7 @@ where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Timeout(Timeout), asTimeout, fromSuspended)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Timeout(Timeout), asSuspended, fromSuspended)
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM)
 import Control.Applicative((<|>))
@@ -343,7 +343,7 @@ withTimeout timeoutDiff adap = do
                 -- observation has been made
                 updateObservationTime currentTime -- update the observation time
                 writeTVar isProcessingObservation False
-                let timedMAct = asTimeout <$> mAct
+                let timedMAct = asSuspended <$> mAct
                 writeTQueue observedQueue timedMAct -- pass the action to the timeout adapter
         hasObservation = readTVar isProcessingObservation ||^ (not <$> isEmptyTQueue observedQueue) ||^ hasInput (actionsFromSut adap)
     actionsFromSut' <- makeTInputStream (readTQueue observedQueue) hasObservation

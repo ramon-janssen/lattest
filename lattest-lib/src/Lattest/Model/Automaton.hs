@@ -55,7 +55,7 @@ where
 import Prelude hiding (lookup)
 
 import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Timeout(Timeout),IFAct(..),Attempt(..),fromSuspended,asTimeout,fromInputAttempt,asInputAttempt,TimeoutIF,asTimeoutInputAttempt,fromSuspendedInputAttempt,
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Timeout(Timeout),IFAct(..),Attempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,TimeoutIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Data.Foldable as Foldable
@@ -274,7 +274,7 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) where
     takeTransition _ _ act m = Just $ TransitionMove (fromSuspended act, m $ fromSuspended act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
-    asActions t = [asTimeout t]
+    asActions t = [asSuspended t]
     locationActions _ = [Out Timeout]
 
 hasQuiescence :: PermissionApplicative m => Map (IOAct i o) (m (tloc, loc)) -> Bool
@@ -310,7 +310,7 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (TimeoutIF i o) where
     takeTransition _ _ act m = Just $ TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (TimeoutIF i o) where
-    asActions t = [asTimeoutInputAttempt t]
+    asActions t = [asSuspendedInputAttempt t]
     locationActions _ = [Out Timeout]
 
 --------------------------------

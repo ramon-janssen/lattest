@@ -27,7 +27,7 @@ fromOutput,
 Timeout (..),
 δ,
 IOSuspAct,
-asTimeout,
+asSuspended,
 fromSuspended,
 -- TODO decide on refusal or failure and be consistent
 -- ** Input Failures
@@ -46,7 +46,7 @@ asInputAttempt,
 fromInputAttempt,
 -- ** Combined Input Refusals and Timeouts
 TimeoutIF,
-asTimeoutInputAttempt,
+asSuspendedInputAttempt,
 fromSuspendedInputAttempt,
 -- * STS
 SymInteract(..),
@@ -166,7 +166,7 @@ type IOSuspAct i o = IOAct i (Timeout o)
 -}
 instance TestChoice (Maybe i) (IOSuspAct i o) where
     -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
-    choiceToActs (Just i) = asTimeout <$> choiceToActs i
+    choiceToActs (Just i) = asSuspended <$> choiceToActs i
     choiceToActs Nothing = []
     actToChoice (Out Timeout) = Just Nothing
     actToChoice (Out (OutSusp o)) = Nothing
@@ -175,9 +175,9 @@ instance TestChoice (Maybe i) (IOSuspAct i o) where
 {- |
     Convert an input or output to a type containing timeouts.
 -}
-asTimeout :: IOAct i o -> IOSuspAct i o
-asTimeout (In i) = In i
-asTimeout (Out o) = Out (OutSusp o)
+asSuspended :: IOAct i o -> IOSuspAct i o
+asSuspended (In i) = In i
+asSuspended (Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with timeouts.
@@ -254,9 +254,9 @@ instance TestChoice (Maybe i) (TimeoutIF i o) where
 {- |
     Convert an input or output to a type containing input failures and timeouts.
 -}
-asTimeoutInputAttempt :: IOAct i o -> TimeoutIF i o
-asTimeoutInputAttempt (In i) = In (Attempt (i, True))
-asTimeoutInputAttempt (Out o) = Out (OutSusp o)
+asSuspendedInputAttempt :: IOAct i o -> TimeoutIF i o
+asSuspendedInputAttempt (In i) = In (Attempt (i, True))
+asSuspendedInputAttempt (Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with input failures and timeouts.
