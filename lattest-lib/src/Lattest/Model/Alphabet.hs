@@ -41,7 +41,7 @@ fromSuspended,
 Refusable,
 isAccepted,
 IFAct(..),
-Attempt(..),
+InputAttempt(..),
 asInputAttempt,
 fromInputAttempt,
 -- ** Combined Input Refusals and Quiescences
@@ -187,11 +187,11 @@ fromSuspended (In i) = In i
 fromSuspended (Out (OutSusp o)) = Out o
 
 -- (i, True) represents a succesful i, (i, False) represents a failed attempt at i
-newtype Attempt i = Attempt (i, Bool) deriving (Eq, Ord)
+newtype InputAttempt i = InputAttempt(i, Bool) deriving (Eq, Ord)
 
-instance Show i => Show (Attempt i) where
-    show (Attempt (i, True)) = show i
-    show (Attempt (i, False)) = showFailure (show i)
+instance Show i => Show (InputAttempt i) where
+    show (InputAttempt(i, True)) = show i
+    show (InputAttempt(i, False)) = showFailure (show i)
         where
         showFailure [] = []
         showFailure (c:rest) = c:'\x0305':showFailure rest -- U+0305, combine-symbol for overline
@@ -199,10 +199,10 @@ instance Show i => Show (Attempt i) where
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system, where the 'inputs' may be refused.
 -}
-type IFAct i o = IOAct (Attempt i) o
+type IFAct i o = IOAct (InputAttempt i) o
 
 instance {-# OVERLAPS #-} Refusable (IFAct i o) where
-    isAccepted (In (Attempt (_, False))) = False
+    isAccepted (In (InputAttempt(_, False))) = False
     isAccepted _ = True
 
 {- |
@@ -210,60 +210,60 @@ instance {-# OVERLAPS #-} Refusable (IFAct i o) where
     command correspond to the same input action.
 -}
 instance TestChoice i (IFAct i o) where
-    choiceToActs i = inToAttempt <$> choiceToActs i
+    choiceToActs i = inToInputAttempt <$> choiceToActs i
         where
-        inToAttempt (In i) = In (Attempt (i, True))
-        inToAttempt (Out o) = Out o 
+        inToInputAttempt(In i) = In (InputAttempt(i, True))
+        inToInputAttempt(Out o) = Out o 
     actToChoice = actToChoice . attemptToIn
         where
-        attemptToIn (In (Attempt (i, _))) = In i
+        attemptToIn (In (InputAttempt(i, _))) = In i
         attemptToIn (Out o) = Out o
 
 {- |
     Convert an input or output to a type containing input failures.
 -}
 asInputAttempt :: IOAct i o -> IFAct i o
-asInputAttempt (In i) = In (Attempt (i, True))
-asInputAttempt (Out o) = Out o
+asInputAttempt(In i) = In (InputAttempt(i, True))
+asInputAttempt(Out o) = Out o
 
 {- |
     Partially defined function that unpacks an input or output from a type with input failures.
 -}
 fromInputAttempt :: IFAct i o -> IOAct i o
-fromInputAttempt (In (Attempt (i, True))) = In i
-fromInputAttempt (Out o) = Out o
+fromInputAttempt(In (InputAttempt(i, True))) = In i
+fromInputAttempt(Out o) = Out o
 
 -- ideally, this could just be defined by stacking IFAct and IOSuspAct to avoid all the boilerplate below, but that is a bit of a hassle
 {- |
     Input failure with observed quiescence. See 'IOSuspAct' and 'IFAct' for details.
 -}
-type SuspendedIF i o = IOAct (Attempt i) (Suspended o)
+type SuspendedIF i o = IOAct (InputAttempt i) (Suspended o)
 
 instance TestChoice (Maybe i) (SuspendedIF i o) where
     choiceToActs Nothing = [Out Quiescence]
-    choiceToActs (Just i) = inToAttempt <$> choiceToActs i
+    choiceToActs (Just i) = inToInputAttempt <$> choiceToActs i
         where
-        inToAttempt (In i) = In (Attempt (i, True))
-        inToAttempt (Out o) = Out o 
+        inToInputAttempt(In i) = In (InputAttempt(i, True))
+        inToInputAttempt(Out o) = Out o 
     --actToChoice (Out Quiescence) = Just Nothing
     actToChoice other = actToChoice $ attemptToIn other
         where
-        attemptToIn (In (Attempt (i, _))) = In i
+        attemptToIn (In (InputAttempt(i, _))) = In i
         attemptToIn (Out o) = Out o
 
 {- |
     Convert an input or output to a type containing input failures and quiescence.
 -}
 asSuspendedInputAttempt :: IOAct i o -> SuspendedIF i o
-asSuspendedInputAttempt (In i) = In (Attempt (i, True))
-asSuspendedInputAttempt (Out o) = Out (OutSusp o)
+asSuspendedInputAttempt(In i) = In (InputAttempt(i, True))
+asSuspendedInputAttempt(Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with input failures and quiescence.
 -}
 fromSuspendedInputAttempt :: SuspendedIF i o -> IOAct i o
-fromSuspendedInputAttempt (In (Attempt (i, True))) = In i
-fromSuspendedInputAttempt (Out (OutSusp o)) = Out o
+fromSuspendedInputAttempt(In (InputAttempt(i, True))) = In i
+fromSuspendedInputAttempt(Out (OutSusp o)) = Out o
 
 
 -- STS data types

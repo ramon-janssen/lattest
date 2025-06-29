@@ -81,7 +81,7 @@ import qualified Data.Text as Text(pack, unpack)
 import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, Attempt(..))
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
@@ -210,14 +210,14 @@ acceptingInputsWithIncompletenessAsFailures adap = do
         if blockAdapActions
             then singleton <$> Streams.read loopbackActionIS -- adap actions are blocked, so observe just the loopback actions
             else mergeActions loopbackActionIS adapActionIS -- adap actions are not blocked, merge actions as normal
-    duplicateHandlingIncompleteness :: TVar Bool -> OutputStream (Attempt i) -> OutputStream i -> IO (OutputStream i)
+    duplicateHandlingIncompleteness :: TVar Bool -> OutputStream (InputAttempt i) -> OutputStream i -> IO (OutputStream i)
     duplicateHandlingIncompleteness isAdapOutputBlocked loopbackInputOS adapInputOS = makeOutputStream $ \mi -> do
         case mi of
             Nothing -> Streams.write Nothing loopbackInputOS >> Streams.write Nothing adapInputOS
             Just i -> do
                 atomically $ writeTVar isAdapOutputBlocked True
                 inputSucceeded <- attemptInputToAdap adapInputOS i
-                let mInputAction = Just $ Attempt (i,inputSucceeded)
+                let mInputAction = Just $ InputAttempt(i,inputSucceeded)
                 Streams.write mInputAction loopbackInputOS
                 atomically $ writeTVar isAdapOutputBlocked False
     attemptInputToAdap :: OutputStream i -> i -> IO Bool
@@ -278,8 +278,8 @@ pureAdapter g p transitionFunction initialState = do
         --processInput :: (Ord i, Ord o, RandomGen g) => (q -> Map.Map (IOAct i o) q) -> (g, q) -> Maybe i -> ((g, q), [Suspended o])
         processInput t (g, q) Nothing = randomOutputTransitions t g q True
         processInput t (g, q) (Just i) = case Map.lookup (In i) (t q) of
-            Just q' -> prependInput (Attempt (i, True)) $ randomOutputTransitions t g q' False
-            Nothing -> ((g, q), [In $ Attempt (i, False)])
+            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g q' False
+            Nothing -> ((g, q), [In $ InputAttempt(i, False)])
         --randomOutputTransitions :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> Bool -> ((g, q), [Suspended o])
         randomOutputTransitions t g q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g q [] isAfterNoInput in ((g', q'), reverse outs)
         --randomOutputTransitions' :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> [Suspended o] -> Bool -> (g, q, [Suspended o])
