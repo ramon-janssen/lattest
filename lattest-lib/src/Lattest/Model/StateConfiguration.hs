@@ -36,7 +36,7 @@ Det(..),
 -- ** Non-deterministic
 NonDet(..),
 -- ** Distributive lattice
-FDL,
+FreeLattice,
 atom,
 top,
 bot,
@@ -161,59 +161,59 @@ instance JoinSemiLattice (NonDet a) where
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
 -}
-newtype FDL a = FDL (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
+newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
 
 -- | A single state embedded in a free distributive lattice.
-atom :: a -> FDL a
-atom = FDL . Levitate . Var
+atom :: a -> FreeLattice a
+atom = FreeLattice . Levitate . Var
 
 -- | The free distributive lattice element ⊥, or false.
-bot :: FDL a
-bot = FDL Bottom
+bot :: FreeLattice a
+bot = FreeLattice Bottom
 
 -- | The free distributive lattice element ⊤, or true.
-top :: FDL a
-top = FDL Top
+top :: FreeLattice a
+top = FreeLattice Top
 
 -- | Disjunction on free distributive lattices.
-(\/) :: FDL a -> FDL a -> FDL a
+(\/) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (\/) = (L.\/)
 
 -- | Conjunction on free distributive lattices.
-(/\) :: FDL a -> FDL a -> FDL a
+(/\) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (/\) = (L./\)
 
 {-|
-    An FDL as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
+    An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
     where state configurations top and bottom, or true and false, indicate underspecified and forbidden configurations, respectively.
 -}
-instance PermissionConfiguration FDL where
-    isForbidden (FDL Bottom) = True
+instance PermissionConfiguration FreeLattice where
+    isForbidden (FreeLattice Bottom) = True
     isForbidden _ = False
-    isUnderspecified (FDL Top) = True
+    isUnderspecified (FreeLattice Top) = True
     isUnderspecified _ = False
-    forbidden = FDL Bottom
-    underspecified = FDL Top
+    forbidden = FreeLattice Bottom
+    underspecified = FreeLattice Top
 
-instance Applicative FDL where
+instance Applicative FreeLattice where
     pure = atom
     (<*>) = ap
 
-instance Monad FDL where
-    (FDL Bottom) >>= _ = FDL Bottom
-    (FDL Top) >>= _ = FDL Top
-    (FDL (Levitate x)) >>= f = lowerFree f x
+instance Monad FreeLattice where
+    (FreeLattice Bottom) >>= _ = FreeLattice Bottom
+    (FreeLattice Top) >>= _ = FreeLattice Top
+    (FreeLattice (Levitate x)) >>= f = lowerFree f x
 
-instance Show a => Show (FDL a) where
-    show (FDL Top) = "⊤"
-    show (FDL Bottom) = "⊥"
-    show (FDL (Levitate a)) = show' a
+instance Show a => Show (FreeLattice a) where
+    show (FreeLattice Top) = "⊤"
+    show (FreeLattice Bottom) = "⊥"
+    show (FreeLattice (Levitate a)) = show' a
         where
         show' (Var a) = show a
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
-instance JoinSemiLattice (FDL a) where
+instance JoinSemiLattice (FreeLattice a) where
     join = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
 
 {-|

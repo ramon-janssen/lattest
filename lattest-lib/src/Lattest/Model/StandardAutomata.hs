@@ -26,7 +26,7 @@ nonDetConcTransFromMRel,
 nonDetConcTransFromListRel,
 -- *** Alternating state configurations
 -- | Re-exports, so that test scripts don't need to import StateConfiguration separately
-FDL,
+FreeLattice,
 atom,
 top,
 bot,
@@ -52,7 +52,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
-import Lattest.Model.StateConfiguration (Det(..), NonDet(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
+import Lattest.Model.StateConfiguration (Det(..), NonDet(..), FreeLattice, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
