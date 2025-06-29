@@ -29,7 +29,7 @@
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
 -}
 
-module Lattest.Model.StateConfiguration (
+module Lattest.Model.BoundedMonad (
 -- * State configurations
 -- ** Deterministic
 Det(..),
@@ -40,11 +40,10 @@ FreeLattice,
 atom,
 top,
 bot,
-(\/),
 (/\),
 -- * Specifiednesss
 Specifiedness(..),
-BoundedMonad,
+BoundedConfiguration,
 specifiedness,
 forbidden,
 underspecified,
@@ -56,12 +55,12 @@ isSpecified,
 isIndefinite,
 isConclusive,
 -- ** Utility types
-StateConfiguration,
+BoundedMonad,
 BoundedApplicative,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
-join
+(\/)
 )
 where
 
@@ -75,7 +74,7 @@ import Control.Monad(ap)
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet
 
-instance BoundedMonad Det where
+instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
     isUnderspecified UnderspecDet = True
@@ -114,7 +113,7 @@ instance Show a => Show (Det a) where
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDet q = NonDet [q] | UnderspecNonDet
 
-instance BoundedMonad NonDet where
+instance BoundedConfiguration NonDet where
     isForbidden (NonDet []) = True
     isForbidden _ = False
     isUnderspecified UnderspecNonDet = True
@@ -133,7 +132,7 @@ instance Applicative NonDet where
     _ <*> UnderspecNonDet = UnderspecNonDet
     
 instance Monad NonDet where
-    NonDet ss >>= f = foldr join (NonDet []) $ fmap f ss  
+    NonDet ss >>= f = foldr (\/) (NonDet []) $ fmap f ss  
     UnderspecNonDet >>= _ = UnderspecNonDet
 
 instance Foldable NonDet where
@@ -155,8 +154,8 @@ instance Ord a => Ord (NonDet a) where
     (NonDet q1) <= (NonDet q2) = Set.fromList q1 <= Set.fromList q2
 
 instance JoinSemiLattice (NonDet a) where
-    join (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
-    join _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
+    (\/) (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
+    (\/) _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
@@ -175,9 +174,12 @@ bot = FreeLattice Bottom
 top :: FreeLattice a
 top = FreeLattice Top
 
--- | Disjunction on free distributive lattices.
+{-
+-- Disjunction on free distributive lattices.
+-- note: this is already imlpemented by the JoinSemiLattice instance
 (\/) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (\/) = (L.\/)
+-}
 
 -- | Conjunction on free distributive lattices.
 (/\) :: FreeLattice a -> FreeLattice a -> FreeLattice a
@@ -187,7 +189,7 @@ top = FreeLattice Top
     An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
     where state configurations top and bottom, or true and false, indicate underspecified and forbidden configurations, respectively.
 -}
-instance BoundedMonad FreeLattice where
+instance BoundedConfiguration FreeLattice where
     isForbidden (FreeLattice Bottom) = True
     isForbidden _ = False
     isUnderspecified (FreeLattice Top) = True
@@ -214,7 +216,7 @@ instance Show a => Show (FreeLattice a) where
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
 instance JoinSemiLattice (FreeLattice a) where
-    join = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
+    (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
@@ -227,7 +229,7 @@ data Specifiedness = Underspecified | Forbidden | Indefinite deriving (Eq, Ord, 
 {-|
     Specifiedness configurations are state configurations which have a representation for forbidden and underspecified configurations.
 -}
-class BoundedMonad m where
+class BoundedConfiguration m where
     forbidden :: m t -- ^ The forbidden state configuration. 
     underspecified :: m t -- ^ The underspecified state configuration.
     isForbidden :: m t -> Bool -- ^ Is this state configuration forbidden?
@@ -240,33 +242,33 @@ specifiedness c
     | otherwise = Indefinite
 
 -- | Is the configuration a representation of the 'Indefinite' specifiedness?
-isIndefinite :: (BoundedMonad m) => m t -> Bool
+isIndefinite :: (BoundedConfiguration m) => m t -> Bool
 isIndefinite p = specifiedness p == Indefinite
 
 -- | Is the configuration a representation of "definitive", i.e., 'Forbidden' or 'Underspecified'?
-isConclusive :: (BoundedMonad m) => m t -> Bool
+isConclusive :: (BoundedConfiguration m) => m t -> Bool
 isConclusive p = specifiedness p /= Indefinite
 
 -- | Is the configuration a representation of "allowed", i.e., 'Indefinite' or 'Underspecified'?
-isAllowed :: (BoundedMonad m) => m t -> Bool
+isAllowed :: (BoundedConfiguration m) => m t -> Bool
 isAllowed = not . isForbidden
 
 -- | Is the configuration a representation of "specified", i.e., 'Indefinite' or 'Forbidden'?
-isSpecified :: (BoundedMonad m) => m t -> Bool
+isSpecified :: (BoundedConfiguration m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
 -- | Abbreviation for types which are both bounded configurations and Monads.
-type StateConfiguration m = (BoundedMonad m, Monad m)
+type BoundedMonad m = (BoundedConfiguration m, Monad m)
 
 -- | Abbreviation for types which are both bounded configurations and Applicatives.
-type BoundedApplicative m = (BoundedMonad m, Applicative m)
+type BoundedApplicative m = (BoundedConfiguration m, Applicative m)
 
 -- | Abbreviation for types which are both bounded configurations and Functors.
-type BoundedFunctor m = (BoundedMonad m, Functor m)
+type BoundedFunctor m = (BoundedConfiguration m, Functor m)
 
 -- | Because the lattices-library doesn't support this
 class JoinSemiLattice a where
-    join :: a -> a -> a
+    (\/) :: a -> a -> a
 
 --this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
 --instance Lattice a => JoinSemiLattice a where

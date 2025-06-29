@@ -13,7 +13,7 @@ import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),sf,IG(..),OG(..),sg)
 -- TODO prototype imports, (re)move or insert into alphabetical order
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Model.StateConfiguration(Det(..),NonDet(..), isConclusive)
+import Lattest.Model.BoundedMonad(Det(..),NonDet(..), isConclusive)
 import Lattest.Model.Automaton(AutSyntax, AutIntrpr, automaton, transRel, initConf)
 import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), InputAttempt(..))

@@ -14,7 +14,7 @@ import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(
 import Lattest.Model.Automaton(AutSyntax, automaton)
 import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
-import Lattest.Model.StateConfiguration
+import Lattest.Model.BoundedMonad
 import qualified Data.Map as Map (insert, fromList)
 import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter,acceptingInputs)
 

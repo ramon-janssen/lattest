@@ -54,7 +54,7 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.StateConfiguration(BoundedApplicative, StateConfiguration, BoundedMonad, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
@@ -75,7 +75,7 @@ import Grisette.SymPrim as GSymPrim
 
 {- |
     Syntactical automaton model, with locations and transitions. This is analogous to an automaton drawn on paper
-    with points and arrows. Transitions are mapped to /state configurations/, see "Lattest.Model.StateConfiguration".
+    with points and arrows. Transitions are mapped to /state configurations/, see "Lattest.Model.BoundedMonad".
     Furthermore, transitions contain transition labels, both on the 'outside' and in the 'inside' of the state configuration.
     
     These labels are abstract and may be interpreted in various ways, e.g. a simple automaton model may directly have
@@ -89,7 +89,7 @@ data AutSyntax m loc t tloc = Automaton {
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (BoundedMonad m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton mqi alphFld trans = Automaton mqi alph trans'
     where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
@@ -144,7 +144,7 @@ class Completable act where
         a syntactical automaton. E.g. if a state contains no outgoing transition for an output label, that label
         is often considered to map to the 'forbidden' state configuration.
     -}
-    implicitDestination :: BoundedMonad m => act -> m any
+    implicitDestination :: BoundedConfiguration m => act -> m any
 
 {- |
     TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
@@ -179,7 +179,7 @@ class StateSemantics loc q where
 {- |
     Automaton interpret expresses that we can take steps, to move from one state configuration to another. 
 -}
-class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
+class BoundedMonad m => AutomatonSemantics m loc q t tloc act where
     -- | Take a transition for the given action.
     after :: AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
 
@@ -187,7 +187,7 @@ class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
     produce a new state configuration from the transition relation, the action taken, and the previous state.
 -}
-monadicAfter :: (StateConfiguration m, Ord t) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
+monadicAfter :: (BoundedMonad m, Ord t) => (Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q) -> AutIntrpr m loc q t tloc act -> act -> AutIntrpr m loc q t tloc act
 monadicAfter step autRun act' =
     let aut = syntacticAutomaton autRun 
     in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (trans aut) act' }
@@ -198,7 +198,7 @@ monadicAfter step autRun act' =
     
     If no transition is found for the given action, then the state configuration is implicit, as described by 'Completable'.
 -}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, StateConfiguration m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q
+withStep :: (TransitionSemantics t act, StateSemantics loc q, BoundedMonad m) => (q -> act -> Maybe (t, tloc) -> loc -> m q) -> Set t -> (loc -> t -> m (tloc, loc)) -> act -> q -> m q
 withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
     Nothing -> implicitDestination act
     Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
@@ -255,7 +255,7 @@ instance (Ord act) => FiniteMenu act act where
 instance StateSemantics q q where
     asLoc = id
 
-instance (TransitionSemantics t act, StateConfiguration m) => AutomatonSemantics m q q t () act
+instance (TransitionSemantics t act, BoundedMonad m) => AutomatonSemantics m q q t () act
     where
     after = monadicAfter $ withStep (\_ _ _ q -> pure q)
 
@@ -352,7 +352,7 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             else errorWithoutStackTrace "type of variable and value do not match"
 
 
-instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o) where
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o) where
     after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 ->
         let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
             valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap

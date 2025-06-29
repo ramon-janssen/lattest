@@ -25,7 +25,7 @@ nonDetConcTransFromRel,
 nonDetConcTransFromMRel,
 nonDetConcTransFromListRel,
 -- *** Alternating state configurations
--- | Re-exports, so that test scripts don't need to import StateConfiguration separately
+-- | Re-exports, so that test scripts don't need to import BoundedMonad separately
 FreeLattice,
 atom,
 top,
@@ -52,7 +52,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
-import Lattest.Model.StateConfiguration (Det(..), NonDet(..), FreeLattice, BoundedMonad, StateConfiguration, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
+import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
@@ -130,7 +130,7 @@ nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuous
     listToNonDet (list@(_:_)) () t = vacuousLoc <$> NonDet list
     listToNonDet [] () t = implicitDestination t
 
-combineNonDet x y = Just $ join x y
+combineNonDet x y = Just $ x \/ y
 
 combineDet _ _ = Nothing
 
@@ -189,33 +189,33 @@ foldableAsSet fld = Set.fromList $ Foldable.toList fld
 type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-interpretConcrete :: (StateConfiguration m, Ord t, Show t, Show loc) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
+interpretConcrete :: (BoundedMonad m, Ord t, Show t, Show loc) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
 interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
 type ConcreteQuiescenceAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-interpretQuiescentConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceAutIntrpr m loc i o
+interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceAutIntrpr m loc i o
 interpretQuiescentConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
 type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-interpretInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
+interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
 interpretInputAttemptConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
 type ConcreteQuiescenceInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-interpretQuiescentInputAttemptConcrete :: (StateConfiguration m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceInputAttemptAutIntrpr m loc i o
+interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteQuiescenceInputAttemptAutIntrpr m loc i o
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
 type STS m loc i o = AutSyntax m loc (SymInteract i o) STStloc
 
 type STSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 
-interpretSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), StateConfiguration m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
+interpretSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m,Show (m (STStloc, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStloc (GateValue i o)
 interpretSTS = interpret

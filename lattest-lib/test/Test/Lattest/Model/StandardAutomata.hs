@@ -19,7 +19,7 @@ import Test.HUnit
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
-import Lattest.Model.StateConfiguration((/\), (\/), FreeLattice, atom, top, bot)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot)
 import qualified Data.Map as Map (toList, insert, fromList)
 
 data IF = A | B deriving (Show, Eq, Ord)
