@@ -292,7 +292,7 @@ pureAdapter g p transitionFunction initialState = do
                         then (g', q, outs)
                         else -- pick a random output, and continue randomly picking more outputs
                             let ((o, q'), g'') = takeRandom  g' $ Map.toList ts
-                            in randomOutputTransitions' t g'' q' ((Out $ TimeoutOut $ fromOutput o) : outs) False
+                            in randomOutputTransitions' t g'' q' ((Out $ OutSusp $ fromOutput o) : outs) False
         prependInput i (q, acts) = (q, In i:acts)
 
 -- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given number of milliseconds, after any other observation.

@@ -62,9 +62,9 @@ testRandomFIncorrectOutput = TestCase $ do
     assertEqual "testRandomFIncorrectOutput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
     -- the only non-conformance is the output Y from Q2fd
-    assertEqual "expected test failure on !Y" (Out $ TimeoutOut X) (last observed)
+    assertEqual "expected test failure on !Y" (Out $ OutSusp X) (last observed)
     -- the only observations leading to Q2fd are X and Y
-    assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ TimeoutOut X) == prev || (Out $ TimeoutOut Y) == prev
+    assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ OutSusp X) == prev || (Out $ OutSusp Y) == prev
     assertEqual "state before the final state should be inconclusive" (Just True) (not . isConclusive <$> maybePrvMq)
     assertEqual "final state should be conclusive" (Just True) (isConclusive <$> maybeMq)
 
@@ -84,7 +84,7 @@ testRandomFIncorrectInput = TestCase $ do
     -- the only non-conformance is the output Y from Q2fd
     assertEqual "expected test failure on ?A̅" (In $ Attempt (B, False)) (last observed)
     -- the only observation leading to Q2fd is Y
-    assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ TimeoutOut X) == prev || (Out $ TimeoutOut Y) == prev
+    assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ OutSusp X) == prev || (Out $ OutSusp Y) == prev
     assertEqual "final state should be inconclusive" (Just True) (not . isConclusive <$> maybeMq)
     
 

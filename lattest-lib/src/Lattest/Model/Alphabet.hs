@@ -147,11 +147,11 @@ fromOutput (Out o) = o
 {- |
     Add observation of timeouts to a type of observable actions.
 -}
-data Timeout o = Timeout | TimeoutOut o deriving (Eq, Ord)
+data Timeout o = Timeout | OutSusp o deriving (Eq, Ord)
 
 instance Show o => Show (Timeout o) where
     show Timeout = "δ"
-    show (TimeoutOut o) = show o
+    show (OutSusp o) = show o
 
 {- |
     Add observation of timeouts to the observed inputs and outputs.
@@ -169,7 +169,7 @@ instance TestChoice (Maybe i) (TimeoutIO i o) where
     choiceToActs (Just i) = asTimeout <$> choiceToActs i
     choiceToActs Nothing = []
     actToChoice (Out Timeout) = Just Nothing
-    actToChoice (Out (TimeoutOut o)) = Nothing
+    actToChoice (Out (OutSusp o)) = Nothing
     actToChoice (In i) = Just $ Just i
 
 {- |
@@ -177,14 +177,14 @@ instance TestChoice (Maybe i) (TimeoutIO i o) where
 -}
 asTimeout :: IOAct i o -> TimeoutIO i o
 asTimeout (In i) = In i
-asTimeout (Out o) = Out (TimeoutOut o)
+asTimeout (Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with timeouts.
 -}
 fromTimeout :: TimeoutIO i o -> IOAct i o
 fromTimeout (In i) = In i
-fromTimeout (Out (TimeoutOut o)) = Out o
+fromTimeout (Out (OutSusp o)) = Out o
 
 -- (i, True) represents a succesful i, (i, False) represents a failed attempt at i
 newtype Attempt i = Attempt (i, Bool) deriving (Eq, Ord)
@@ -256,14 +256,14 @@ instance TestChoice (Maybe i) (TimeoutIF i o) where
 -}
 asTimeoutInputAttempt :: IOAct i o -> TimeoutIF i o
 asTimeoutInputAttempt (In i) = In (Attempt (i, True))
-asTimeoutInputAttempt (Out o) = Out (TimeoutOut o)
+asTimeoutInputAttempt (Out o) = Out (OutSusp o)
 
 {- |
     Partially defined function that unpacks an input or output from a type with input failures and timeouts.
 -}
 fromTimeoutInputAttempt :: TimeoutIF i o -> IOAct i o
 fromTimeoutInputAttempt (In (Attempt (i, True))) = In i
-fromTimeoutInputAttempt (Out (TimeoutOut o)) = Out o
+fromTimeoutInputAttempt (Out (OutSusp o)) = Out o
 
 
 -- STS data types

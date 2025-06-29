@@ -76,7 +76,7 @@ ioTraceTestController ioActs = traceTestController $ toCommandsAndActs ioActs
     where
     toCommandsAndActs [] = []
     toCommandsAndActs (In i:rest) = Left (Just i) : Right (In i) : toCommandsAndActs rest
-    toCommandsAndActs (Out o:rest) = Right (Out $ TimeoutOut o) : toCommandsAndActs rest
+    toCommandsAndActs (Out o:rest) = Right (Out $ OutSusp o) : toCommandsAndActs rest
 
 -- a hardcoded test controller just follows the input commands and observations in the given list. Returns whether it finish the list
 traceTestController :: (Eq act) => [Either (Maybe i) act] -> TestController m loc q t tloc act [Either (Maybe i) act] (Maybe i) Bool
@@ -126,7 +126,7 @@ traceAdapter steps = pureMealyAdapter traceTrans traceOutput steps
     traceOutput [] _ = [Out Timeout] -- if the adapter is not processing any more actions, show timeouts. Even if an input is attempted, because it will not be processed
     traceOutput (In _:_) (Just i) = [In i]
     traceOutput (In _:_) Nothing = [Out Timeout] -- the adapter is waiting for an input but doesn't receive one, so show a timeout.
-    traceOutput (Out os:_) _ = [Out $ TimeoutOut os] -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
+    traceOutput (Out os:_) _ = [Out $ OutSusp os] -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
 
 
 
