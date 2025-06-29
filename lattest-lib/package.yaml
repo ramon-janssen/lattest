@@ -2,7 +2,7 @@ name:                lattest-lib
 version:             0.1.0.0
 #synopsis:
 #description:
-homepage:            https://bitbucket.org/lattest/lattest/src/
+homepage:            https://github.com/ramon-janssen/lattest
 license:             BSD3
 author:              Ramon Janssen
 copyright:           2023 Ramon Janssen
