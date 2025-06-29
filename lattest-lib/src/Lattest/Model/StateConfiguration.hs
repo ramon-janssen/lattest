@@ -44,7 +44,7 @@ bot,
 (/\),
 -- * Permissions
 Permission(..),
-PermissionConfiguration,
+BoundedMonad,
 permission,
 forbidden,
 underspecified,
@@ -57,8 +57,8 @@ isIndefinite,
 isConclusive,
 -- ** Utility types
 StateConfiguration,
-PermissionApplicative,
-PermissionFunctor,
+BoundedApplicative,
+BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
 join
@@ -75,7 +75,7 @@ import Control.Monad(ap)
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet
 
-instance PermissionConfiguration Det where
+instance BoundedMonad Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
     isUnderspecified UnderspecDet = True
@@ -114,7 +114,7 @@ instance Show a => Show (Det a) where
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDet q = NonDet [q] | UnderspecNonDet
 
-instance PermissionConfiguration NonDet where
+instance BoundedMonad NonDet where
     isForbidden (NonDet []) = True
     isForbidden _ = False
     isUnderspecified UnderspecNonDet = True
@@ -187,7 +187,7 @@ top = FreeLattice Top
     An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
     where state configurations top and bottom, or true and false, indicate underspecified and forbidden configurations, respectively.
 -}
-instance PermissionConfiguration FreeLattice where
+instance BoundedMonad FreeLattice where
     isForbidden (FreeLattice Bottom) = True
     isForbidden _ = False
     isUnderspecified (FreeLattice Top) = True
@@ -227,7 +227,7 @@ data Permission = Underspecified | Forbidden | Indefinite deriving (Eq, Ord, Sho
 {-|
     Permission configurations are state configurations which have a representation for forbidden and underspecified configurations.
 -}
-class PermissionConfiguration m where
+class BoundedMonad m where
     forbidden :: m t -- ^ The forbidden state configuration. 
     underspecified :: m t -- ^ The underspecified state configuration.
     isForbidden :: m t -> Bool -- ^ Is this state configuration forbidden?
@@ -240,29 +240,29 @@ permission c
     | otherwise = Indefinite
 
 -- | Is the configuration a representation of the 'Indefinite' permission?
-isIndefinite :: (PermissionConfiguration m) => m t -> Bool
+isIndefinite :: (BoundedMonad m) => m t -> Bool
 isIndefinite p = permission p == Indefinite
 
 -- | Is the configuration a representation of a "definitive" permission, i.e., 'Forbidden' or 'Underspecified'?
-isConclusive :: (PermissionConfiguration m) => m t -> Bool
+isConclusive :: (BoundedMonad m) => m t -> Bool
 isConclusive p = permission p /= Indefinite
 
 -- | Is the configuration a representation of an "allowed" permission, i.e., 'Indefinite' or 'Underspecified'?
-isAllowed :: (PermissionConfiguration m) => m t -> Bool
+isAllowed :: (BoundedMonad m) => m t -> Bool
 isAllowed = not . isForbidden
 
 -- | Is the configuration a representation of a "specified" permission, i.e., 'Indefinite' or 'Forbidden'?
-isSpecified :: (PermissionConfiguration m) => m t -> Bool
+isSpecified :: (BoundedMonad m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
 -- | Abbreviation for types which are both permission configurations and Monads.
-type StateConfiguration m = (PermissionConfiguration m, Monad m)
+type StateConfiguration m = (BoundedMonad m, Monad m)
 
 -- | Abbreviation for types which are both permission configurations and Applicatives.
-type PermissionApplicative m = (PermissionConfiguration m, Applicative m)
+type BoundedApplicative m = (BoundedMonad m, Applicative m)
 
 -- | Abbreviation for types which are both permission configurations and Functors.
-type PermissionFunctor m = (PermissionConfiguration m, Functor m)
+type BoundedFunctor m = (BoundedMonad m, Functor m)
 
 -- | Because the lattices-library doesn't support this
 class JoinSemiLattice a where

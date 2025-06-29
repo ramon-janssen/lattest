@@ -51,7 +51,7 @@ where
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
 import Lattest.Model.Automaton(AutIntrpr(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
-import Lattest.Model.StateConfiguration(isConclusive, PermissionConfiguration)
+import Lattest.Model.StateConfiguration(isConclusive, BoundedMonad)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Data.Either(isLeft)
@@ -250,7 +250,7 @@ stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) r
     this observer returns the last state before the failure.
     
 -}
-inconclusiveStateObserver :: PermissionConfiguration m => TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
+inconclusiveStateObserver :: BoundedMonad m => TestObserver m loc q t tloc act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return
     where
     makeSelection _ aut _ mq = 

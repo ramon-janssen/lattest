@@ -54,7 +54,7 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.StateConfiguration(PermissionApplicative, StateConfiguration, PermissionConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.StateConfiguration(BoundedApplicative, StateConfiguration, BoundedMonad, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
@@ -89,7 +89,7 @@ data AutSyntax m loc t tloc = Automaton {
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (PermissionConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton :: (BoundedMonad m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton mqi alphFld trans = Automaton mqi alph trans'
     where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
@@ -98,7 +98,7 @@ automaton mqi alphFld trans = Automaton mqi alph trans'
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (PermissionApplicative m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
+automaton' :: (BoundedApplicative m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton' = automaton . pure
 
 {- |
@@ -144,7 +144,7 @@ class Completable act where
         a syntactical automaton. E.g. if a state contains no outgoing transition for an output label, that label
         is often considered to map to the 'forbidden' state configuration.
     -}
-    implicitDestination :: PermissionConfiguration m => act -> m any
+    implicitDestination :: BoundedMonad m => act -> m any
 
 {- |
     TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
@@ -157,7 +157,7 @@ class (Ord t, Completable act) => TransitionSemantics t act where
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
     -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (PermissionApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tloc, loc)) -> Maybe (Move m t tloc loc)
+    takeTransition :: (BoundedApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tloc, loc)) -> Maybe (Move m t tloc loc)
     takeTransition loc alph act trans' = case asTransition loc alph act of
         Nothing -> Just $ LocationMove $ pure loc
         Just t -> Just $ TransitionMove (t, trans' t)
@@ -231,7 +231,7 @@ class TransitionSemantics t act => FiniteMenu t act where
     asActions :: t -> [act]
     locationActions :: AutSyntax m mloc t tloc -> [act]
 
-actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => PermissionApplicative m => AutSyntax m mloc t tloc -> [act]
+actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedApplicative m => AutSyntax m mloc t tloc -> [act]
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
@@ -277,7 +277,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
 
-hasQuiescence :: PermissionApplicative m => Map (IOAct i o) (m (tloc, loc)) -> Bool
+hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tloc, loc)) -> Bool
 hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
 
 -------------------

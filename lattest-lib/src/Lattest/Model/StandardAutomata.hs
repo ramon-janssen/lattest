@@ -52,7 +52,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
-import Lattest.Model.StateConfiguration (Det(..), NonDet(..), FreeLattice, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
+import Lattest.Model.StateConfiguration (Det(..), NonDet(..), FreeLattice, BoundedMonad, StateConfiguration, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
