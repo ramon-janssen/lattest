@@ -81,7 +81,7 @@ import qualified Data.Text as Text(pack, unpack)
 import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(TestChoice, inputChoiceToActs, IOAct(..), TimeoutIO, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), TimeoutIO, Timeout(..), TimeoutIF, isOutput, fromOutput, IFAct, Attempt(..))
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
@@ -162,7 +162,7 @@ loopbackAdapter adap fduplicate fmerge = do
         }
 
 outputToActionIS adap = mapUnbuffered Out (error "acceptingInputs buffer from SUT does not support pushback") (actionsFromSut adap)
-actionToInputOS actionOS = streamSequence actionOS >>= contramap inputChoiceToActs
+actionToInputOS actionOS = streamSequence actionOS >>= contramap choiceToActs
 -- direct pushbacks to the streams below is not needed, the merge buffer will handle pushbacks instead
 streamSequence :: OutputStream a -> IO (OutputStream [a])
 streamSequence s = makeOutputStream $ doMaybeSequenceCmd $ Streams.writeTo s

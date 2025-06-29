@@ -8,7 +8,7 @@
 module Lattest.Model.Alphabet (
 -- * Translating between Actions and Inputs
 TestChoice,
-inputChoiceToActs,
+choiceToActs,
 actToInputChoice,
 -- * Action types
 -- ** Inputs and Outputs
@@ -96,7 +96,7 @@ class Refusable act => TestChoice i act where
     {- |
         Derive the sequence of observable actions that correspond to an input.
     -}
-    inputChoiceToActs :: i -> [act] -- which action(s) an input command corresponds to
+    choiceToActs :: i -> [act] -- which action(s) an input command corresponds to
 
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system.
@@ -114,7 +114,7 @@ instance {-# OVERLAPS #-} Refusable (IOAct i o)
     is usually asked for inputs, and with this instance, it is not possible to skip selecting an input.
 -}
 instance TestChoice i (IOAct i o) where
-    inputChoiceToActs i = [In i]
+    choiceToActs i = [In i]
     actToInputChoice (In i) = Just i
     actToInputChoice (Out _) = Nothing
 
@@ -166,8 +166,8 @@ type TimeoutIO i o = IOAct i (Timeout o)
 -}
 instance TestChoice (Maybe i) (TimeoutIO i o) where
     -- a (Maybe i) only makes sense in case of timeout outputs (quiescence), since testing would otherwise quickly deadlock
-    inputChoiceToActs (Just i) = asTimeout <$> inputChoiceToActs i
-    inputChoiceToActs Nothing = []
+    choiceToActs (Just i) = asTimeout <$> choiceToActs i
+    choiceToActs Nothing = []
     actToInputChoice (Out Timeout) = Just Nothing
     actToInputChoice (Out (TimeoutOut o)) = Nothing
     actToInputChoice (In i) = Just $ Just i
@@ -210,7 +210,7 @@ instance {-# OVERLAPS #-} Refusable (IFAct i o) where
     command correspond to the same input action.
 -}
 instance TestChoice i (IFAct i o) where
-    inputChoiceToActs i = inToAttempt <$> inputChoiceToActs i
+    choiceToActs i = inToAttempt <$> choiceToActs i
         where
         inToAttempt (In i) = In (Attempt (i, True))
         inToAttempt (Out o) = Out o 
@@ -240,8 +240,8 @@ fromInputAttempt (Out o) = Out o
 type TimeoutIF i o = IOAct (Attempt i) (Timeout o)
 
 instance TestChoice (Maybe i) (TimeoutIF i o) where
-    inputChoiceToActs Nothing = [Out Timeout]
-    inputChoiceToActs (Just i) = inToAttempt <$> inputChoiceToActs i
+    choiceToActs Nothing = [Out Timeout]
+    choiceToActs (Just i) = inToAttempt <$> choiceToActs i
         where
         inToAttempt (In i) = In (Attempt (i, True))
         inToAttempt (Out o) = Out o 
