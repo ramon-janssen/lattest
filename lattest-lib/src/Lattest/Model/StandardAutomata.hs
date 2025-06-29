@@ -52,7 +52,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStloc,stsTLoc)
-import Lattest.Model.StateConfiguration (DetState(..), NonDetState(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
+import Lattest.Model.StateConfiguration (Det(..), NonDet(..), FDL, PermissionConfiguration, StateConfiguration, PermissionFunctor, PermissionApplicative, forbidden, underspecified, FDL, atom, top, bot, (\/), (/\), JoinSemiLattice, join)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
@@ -75,14 +75,14 @@ concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
     Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromRel :: (Completable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromRel :: (Completable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromRel = transFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as deterministic state
     configuration. Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromMRel :: (Completable t, Ord loc, Ord t) => [(loc, t, DetState loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Det loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
 {- |
@@ -90,7 +90,7 @@ detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fma
     states, where `Nothing` is mapped to either `forbidden` or `underspecified`, depending on the transition label. Having multiple occurrences of a transition label is forbidden,
     i.e., leads to a Nothing result.
 -}
-detConcTransFromMaybeRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (DetState ((), loc)))
+detConcTransFromMaybeRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Maybe loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t -> case mLoc of
     Just loc -> vacuousLoc <$> Det loc
     Nothing -> implicitDestination t
@@ -124,7 +124,7 @@ nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTra
     where the empty list is mapped to either `forbidden` or `underspecified`, depending on the transition label.
     Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDetState ((), loc)))
+nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDet ((), loc)))
 nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
     where
     listToNonDet (list@(_:_)) () t = vacuousLoc <$> NonDet list
@@ -145,7 +145,7 @@ transFromRelWith :: (Completable t, Ord loc, Ord t) =>
     -> [te] -- the transition relation in a list representation
     -> Maybe (loc -> Map t (m (tloc, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
 transFromRelWith c' fe' f' trans = do
-    tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to DetStates
+    tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to Dets
     Just $ \loc -> case loc `Map.lookup` tMapMap of
         Just tMap -> tMap
         Nothing -> Map.empty

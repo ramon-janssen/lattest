@@ -9,13 +9,13 @@ import qualified Data.Set as Set
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..), assignment, noAssignment)
-import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..),underspecified,forbidden)
+import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
 import qualified Control.Exception as Exception
 
 
-stsExample :: STSIntrp NonDetState Integer String String
+stsExample :: STSIntrp NonDet Integer String String
 stsExample =
     let pvar = (Variable "p" IntType)
         xvar = (Variable "x" IntType)
@@ -28,7 +28,7 @@ stsExample =
         waterAssign = assignment [(xvar,IntExpr $ xsym + psym)]
         okGuard = xsym .== psym
         coffeeGuard = xsym .> 15
-        initConf = NonDet [0] :: NonDetState Integer
+        initConf = NonDet [0] :: NonDet Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
                                 (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
@@ -39,7 +39,7 @@ stsExample =
     in interpretSTS sts initAssign
 
 
-getSTSIntrpState :: Integer ->  Integer -> NonDetState (IntrpState Integer)
+getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = NonDet [IntrpState loc $ Map.singleton (Variable "x" IntType) (IntVal val)]
 
 testSTSHappyFlow :: Test

@@ -32,9 +32,9 @@
 module Lattest.Model.StateConfiguration (
 -- * State configurations
 -- ** Deterministic
-DetState(..),
+Det(..),
 -- ** Non-deterministic
-NonDetState(..),
+NonDet(..),
 -- ** Distributive lattice
 FDL,
 atom,
@@ -73,9 +73,9 @@ import qualified Data.Set as Set
 import Control.Monad(ap)
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
-data DetState q = Det q | ForbiddenDet | UnderspecDet
+data Det q = Det q | ForbiddenDet | UnderspecDet
 
-instance PermissionConfiguration DetState where
+instance PermissionConfiguration Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
     isUnderspecified UnderspecDet = True
@@ -83,12 +83,12 @@ instance PermissionConfiguration DetState where
     forbidden = ForbiddenDet
     underspecified = UnderspecDet
 
-instance Functor DetState where
+instance Functor Det where
     fmap f (Det s) = Det (f s)
     fmap _ UnderspecDet = UnderspecDet
     fmap _ ForbiddenDet = ForbiddenDet
     
-instance Applicative DetState where
+instance Applicative Det where
     pure q = Det q
     Det f <*> (Det s) = Det (f s)
     ForbiddenDet <*> _ = ForbiddenDet
@@ -96,25 +96,25 @@ instance Applicative DetState where
     _ <*> ForbiddenDet = ForbiddenDet
     _ <*> UnderspecDet = UnderspecDet
     
-instance Monad DetState where
+instance Monad Det where
     Det s >>= f = f s
     ForbiddenDet >>= _ = ForbiddenDet
     UnderspecDet >>= _ = UnderspecDet
 
-instance Foldable DetState where
+instance Foldable Det where
     foldr f q (Det q') = f q' q
     foldr _ q _ = q
 
-instance Show a => Show (DetState a) where
+instance Show a => Show (Det a) where
     show (Det a) = show a
     show ForbiddenDet = "-forbidden-"
     show UnderspecDet = "-underspecified-"
 
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
-data NonDetState q = NonDet [q] | UnderspecNonDet
+data NonDet q = NonDet [q] | UnderspecNonDet
 
-instance PermissionConfiguration NonDetState where
+instance PermissionConfiguration NonDet where
     isForbidden (NonDet []) = True
     isForbidden _ = False
     isUnderspecified UnderspecNonDet = True
@@ -122,39 +122,39 @@ instance PermissionConfiguration NonDetState where
     forbidden = NonDet []
     underspecified = UnderspecNonDet
 
-instance Functor NonDetState where
+instance Functor NonDet where
     fmap f (NonDet ss) = NonDet $ fmap f ss
     fmap _ UnderspecNonDet = UnderspecNonDet
     
-instance Applicative NonDetState where
+instance Applicative NonDet where
     pure s = NonDet [s]
     NonDet fs <*> NonDet ss = NonDet (fs <*> ss)
     UnderspecNonDet <*> _ = UnderspecNonDet
     _ <*> UnderspecNonDet = UnderspecNonDet
     
-instance Monad NonDetState where
+instance Monad NonDet where
     NonDet ss >>= f = foldr join (NonDet []) $ fmap f ss  
     UnderspecNonDet >>= _ = UnderspecNonDet
 
-instance Foldable NonDetState where
+instance Foldable NonDet where
     foldr f q (NonDet qs) = foldr f q qs
     foldr _ q _ = q
 
-instance Show a => Show (NonDetState a) where
+instance Show a => Show (NonDet a) where
     show (NonDet a) = show a
     show UnderspecNonDet = "⊤"
 
-instance Ord a => Eq (NonDetState a) where
+instance Ord a => Eq (NonDet a) where
     UnderspecNonDet == UnderspecNonDet = True
     (NonDet q1) == (NonDet q2) = Set.fromList q1 == Set.fromList q2
     _ == _ = False
 
-instance Ord a => Ord (NonDetState a) where
+instance Ord a => Ord (NonDet a) where
     _ <= UnderspecNonDet = True
     UnderspecNonDet <= _ = False
     (NonDet q1) <= (NonDet q2) = Set.fromList q1 <= Set.fromList q2
 
-instance JoinSemiLattice (NonDetState a) where
+instance JoinSemiLattice (NonDet a) where
     join (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
     join _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
