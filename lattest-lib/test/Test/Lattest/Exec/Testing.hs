@@ -11,7 +11,7 @@ where
 import Test.HUnit hiding (Path, path)
 
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Model.Automaton(AutSyn, automaton)
+import Lattest.Model.Automaton(AutSyntax, automaton)
 import Lattest.Model.StandardAutomata(semanticsQuiescentConcrete)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
 import Lattest.Model.StateConfiguration
@@ -99,7 +99,7 @@ traceTestController steps = TestController {
     traceUpdateTestController (Left _:_) _ _ _ = return $ Right False -- test controller makes an observation but wanted to choose an input
     traceUpdateTestController (Right expectedAct:steps') _ act _ = return $ if expectedAct == act then Left steps' else Right (null steps')
 
-traceSpecification :: (Ord i, Ord o) => [IOAct i o] -> AutSyn DetState [IOAct i o] (IOAct i o) () -- TODO automata are inconsistent: no explicit alphabet, but an explicit transition map
+traceSpecification :: (Ord i, Ord o) => [IOAct i o] -> AutSyntax DetState [IOAct i o] (IOAct i o) () -- TODO automata are inconsistent: no explicit alphabet, but an explicit transition map
 traceSpecification steps = automaton (if null steps then UnderspecDet else Det steps) steps traceTransRel
     where
     traceTransRel (step:steps') = Map.insert step (Det ((), steps')) baseTransRel

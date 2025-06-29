@@ -12,7 +12,7 @@
 module Lattest.Model.Automaton (
 -- * Syntactical Automaton Model
 -- ** Definition
-AutSyn,
+AutSyntax,
 locConf,
 alphabet,
 trans,
@@ -82,14 +82,14 @@ import Grisette.SymPrim as GSymPrim
     observable actions as labels, whereas a more complex automaton model may have symbolic data variables with guards,
     assignments, clocks for timing, etc.
 -}
-data AutSyn m loc t tloc = Automaton {
+data AutSyntax m loc t tloc = Automaton {
     locConf :: m loc,
     alphabet :: Set t,
     transRel :: loc -> Map t (m (tloc, loc))
     }
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
-automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
+automaton :: (PermissionConfiguration m, Observable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton mqi alphFld trans = Automaton mqi alph trans'
     where -- FIXME t is now Observable, in other functions we expect actions instead of transitions to be Observable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
@@ -98,14 +98,14 @@ automaton mqi alphFld trans = Automaton mqi alph trans'
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyn m loc t tloc
+automaton' :: (PermissionApplicative m, Observable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tloc, loc))) -> AutSyntax m loc t tloc
 automaton' = automaton . pure
 
 {- |
     The transition relation as a function. Note that this function is partial, and only defined for transition labels in the alphabet of the
     automaton.
 -}
-trans :: Ord t => AutSyn m loc t tloc -> loc -> t -> m (tloc, loc)
+trans :: Ord t => AutSyntax m loc t tloc -> loc -> t -> m (tloc, loc)
 trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
@@ -125,7 +125,7 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
 -}
 data AutSem m loc q t tloc act = AutomatonRun {
     stateConf :: m q,
-    syntacticAutomaton :: AutSyn m loc t tloc
+    syntacticAutomaton :: AutSyntax m loc t tloc
     }
 
 {- |
@@ -134,7 +134,7 @@ data AutSem m loc q t tloc act = AutomatonRun {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'semantics' in
     "Lattest.Adapter.StandardAdapters".
 -}
-semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyn m loc t tloc -> (loc -> q) -> AutSem m loc q t tloc act
+semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutSem m loc q t tloc act
 semantics aut initState = AutomatonRun { stateConf = initState <$> locConf aut, syntacticAutomaton = aut }
 
 -- | The Observable typeclass defines which types can be used as labels on transitions.
@@ -217,7 +217,7 @@ afters aut (act:acts) = aut `after` act `afters` acts
 -- utility function to obtain the menu of outgoing transitions --
 ------------------------------------------------------------------
 -- note: this only shows the transitions that are syntactically present in the automaton, so e.g. not quiescence, including underspecified/forbidden transitions
-transMenu :: (Foldable m, Functor m, Ord t) => AutSyn m mloc t tloc -> Set t
+transMenu :: (Foldable m, Functor m, Ord t) => AutSyntax m mloc t tloc -> Set t
 transMenu aut = let
     stateToMenu = Set.fromList . Map.keys . transRel aut
     in Set.unions $ stateToMenu <$> locConf aut
@@ -229,9 +229,9 @@ transMenu aut = let
 class TransitionSemantics t act => FiniteMenu t act where
     -- menu of actions that are semantically present in the automaton, including underspecified/forbidden transitions
     asActions :: t -> [act]
-    locationActions :: AutSyn m mloc t tloc -> [act]
+    locationActions :: AutSyntax m mloc t tloc -> [act]
 
-actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => PermissionApplicative m => AutSyn m mloc t tloc -> [act]
+actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => PermissionApplicative m => AutSyntax m mloc t tloc -> [act]
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
@@ -370,7 +370,7 @@ instance (Ord i, Ord o, Ord loc, StateConfiguration m) => AutomatonSemantics m l
 {- |
     Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
 -}
-reachable :: (Ord loc, Foldable m) => AutSyn m loc t tloc -> Set loc
+reachable :: (Ord loc, Foldable m) => AutSyntax m loc t tloc -> Set loc
 reachable aut = reachableFrom aut $ locConf aut
 
 {- |
@@ -380,7 +380,7 @@ reachable aut = reachableFrom aut $ locConf aut
     a guard that is always `False`, then that location is still considered to be reachable, even if a symbolic interpretation of that automaton
     can never reach that location for any trace of concrete values.
 -}
-reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyn m loc t tloc -> f loc -> Set loc
+reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tloc -> f loc -> Set loc
 reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable.toList locations
     where
     reachableFrom' acc boundary = case takeArbitrary boundary of
@@ -393,10 +393,10 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
-prettyPrint :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyn m loc t tloc -> String
+prettyPrint :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tloc -> String
 prettyPrint aut = prettyPrintFrom aut (locConf aut)
 
-prettyPrintFrom :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyn m loc t tloc -> f loc -> String
+prettyPrintFrom :: (Show (m (tloc, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tloc -> f loc -> String
 prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitial ++ "\nlocations: " ++ printLocations ++ "\ntransitions:\n" ++ printTransitions
     where
     locations = Set.toList $ reachableFrom aut fromLocs
