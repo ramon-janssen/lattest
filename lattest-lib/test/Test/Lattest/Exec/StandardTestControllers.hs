@@ -15,7 +15,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.StateConfiguration(DetState(..),NonDetState(..), isConclusive)
 import Lattest.Model.Automaton(AutSyntax, AutIntrpr, automaton, transRel, initConf)
-import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, semanticsConcrete, semanticsQuiescentInputAttemptConcrete)
+import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), InputAttempt(..))
 import Lattest.Util.Utils((&&&))
 import System.Random(StdGen, uniformR, mkStdGen)
@@ -42,7 +42,7 @@ impFDetCorrect = pureAdapter (mkStdGen 123) 0.5 tFDetCorrect Q0fd
 testRandomFCorrect :: Test
 testRandomFCorrect = TestCase $ do
     imp <- impFDetCorrect
-    let model = semanticsQuiescentInputAttemptConcrete sf
+    let model = interpretQuiescentInputAttemptConcrete sf
     (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
     assertEqual "testRandomFCorrect should pass" Pass verdict
     assertEqual "incorrect number of observations made" nrSteps (length observed)
@@ -56,7 +56,7 @@ impFDetIncorrectOutput = pureAdapter (mkStdGen 123) 0.5 tFDetIncorrectOutput Q0f
 testRandomFIncorrectOutput :: Test
 testRandomFIncorrectOutput = TestCase $ do
     imp <- impFDetIncorrectOutput
-    let model = semanticsQuiescentInputAttemptConcrete sf
+    let model = interpretQuiescentInputAttemptConcrete sf
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectOutput should fail" Fail verdict
@@ -76,7 +76,7 @@ impFDetIncorrectInput = pureAdapter (mkStdGen 123) 0.5 tFDetIncorrectInput Q0fd
 testRandomFIncorrectInput :: Test
 testRandomFIncorrectInput = TestCase $ do
     imp <- impFDetIncorrectInput
-    let model = semanticsQuiescentInputAttemptConcrete sf
+    let model = interpretQuiescentInputAttemptConcrete sf
     (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectInput should fail" Fail verdict

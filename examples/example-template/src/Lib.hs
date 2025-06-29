@@ -37,7 +37,7 @@ someFunc = do
     putStrLn $ "connecting..."
     adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
     imp <- withQuiescenceMillis 200 adap
-    let model = semanticsQuiescentConcrete spec
+    let model = interpretQuiescentConcrete spec
     putStrLn $ "starting test..."
     (verdict, (observed, maybeMq)) <- runTester model testSelector imp
     putStrLn $ "verdict: " ++ show verdict

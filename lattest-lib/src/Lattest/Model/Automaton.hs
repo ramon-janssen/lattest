@@ -6,7 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 {-|
-    This module contains the definitions and semantics of automata models.
+    This module contains the definitions and interpretations of automata models.
 -}
 
 module Lattest.Model.Automaton (
@@ -26,7 +26,7 @@ AutIntrpr,
 stateConf,
 syntacticAutomaton,
 -- ** Constructing Syntactical Automata
-semantics,
+interpret,
 -- ** Type Classes for Semantics
 Observable,
 implicitDestination,
@@ -111,7 +111,7 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
 
 ---------------
--- semantics --
+-- interpret --
 ---------------
 
 {- |
@@ -119,7 +119,7 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     but it also contains a state configuration with semantical states.
 
     The difference between the locations from the syntactical model and the states from the semantical model depends
-    on the automaton semantics. E.g. for a simple automaton model, states and locations may be the same, whereas a more
+    on the automaton interpret. E.g. for a simple automaton model, states and locations may be the same, whereas a more
     complex automaton model may have states consisting of syntactical locations combined with valuations for data
     variables, clocks for timing, etc.
 -}
@@ -131,11 +131,11 @@ data AutIntrpr m loc q t tloc act = AutInterpretation {
 {- |
     Infer a semantical model from a syntactical model, based on the appropriate instance of the 'AutomatonSemantics' typeclass.
     Note that an automaton may be interpreted in multiple ways, so the type checker may need a hint on which semantical
-    automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'semantics' in
+    automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-semantics :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutIntrpr m loc q t tloc act
-semantics aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
+interpret :: (AutomatonSemantics m loc q t tloc act) => AutSyntax m loc t tloc -> (loc -> q) -> AutIntrpr m loc q t tloc act
+interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
 -- | The Observable typeclass defines which types can be used as labels on transitions.
 class Observable act where
@@ -147,7 +147,7 @@ class Observable act where
     implicitDestination :: PermissionConfiguration m => act -> m any
 
 {- |
-    TransitionSemantics expresses that the semantics of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
+    TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
     interaction variables that can be expressed in terms of concrete observed values.
 -}
 class (Ord t, Observable act) => TransitionSemantics t act where
@@ -169,7 +169,7 @@ class (Ord t, Observable act) => TransitionSemantics t act where
 data Move m t tloc loc = TransitionMove (t, m (tloc, loc)) | LocationMove (m loc)
 
 {- |
-    StateSemantics expresses that the semantics of a syntactic location can be expressed in terms of state q. E.g. a location symbolic variables can be 
+    StateSemantics expresses that the interpret of a syntactic location can be expressed in terms of state q. E.g. a location symbolic variables can be 
     given in terms of valuations of these variables.
 -}
 class StateSemantics loc q where
@@ -177,7 +177,7 @@ class StateSemantics loc q where
     asLoc :: q -> loc
 
 {- |
-    Automaton semantics expresses that we can take steps, to move from one state configuration to another. 
+    Automaton interpret expresses that we can take steps, to move from one state configuration to another. 
 -}
 class StateConfiguration m => AutomatonSemantics m loc q t tloc act where
     -- | Take a transition for the given action.
@@ -298,7 +298,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 --------------------------------
 -- input-failure + quiescence --
 --------------------------------
--- Ideally this would just be the above two semantics stacked to avoid the boilerplate below, but that is a hassle
+-- Ideally this would just be the above two interpret stacked to avoid the boilerplate below, but that is a hassle
 
 instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) where
     asTransition loc _ (In (InputAttempt(i, False))) = Nothing

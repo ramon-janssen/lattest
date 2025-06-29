@@ -19,7 +19,7 @@
     * distributive lattices, or positive boolean formulas, where the observable behaviour is expressed as a logical expression over states.
     
     Here, 'observed behaviour' is formally a trace or sequence of observable actions. Thus, after a trace, the system is
-    in a state configuration over states. The state configuration is computed by taking transitions, following the monadic semantics 
+    in a state configuration over states. The state configuration is computed by taking transitions, following the monadic interpret 
     of the state configuration. If the automaton does not exhibit a given trace of actions, then the state configuration after
     that trace is either 'forbidden' or 'underspecified'. Here, 'forbidden' expresses that the automaton does not allow the
     given trace, whereas 'underspecified' expresses that the automaton does not specify the trace, hence the trace is allowed.

@@ -12,7 +12,7 @@ import Test.HUnit hiding (Path, path)
 
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.Automaton(AutSyntax, automaton)
-import Lattest.Model.StandardAutomata(semanticsQuiescentConcrete)
+import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
 import Lattest.Model.StateConfiguration
 import qualified Data.Map as Map (insert, fromList)
@@ -22,7 +22,7 @@ testTraceHappy :: Test
 testTraceHappy = TestCase $ do
     let t = [In 1, In 2, Out 3, In 4, Out 5, Out 6] :: [IOAct Integer Integer]
     adap <- traceAdapter t
-    (verdict, finished) <- runTester (semanticsQuiescentConcrete $ traceSpecification t) (ioTraceTestController t) adap
+    (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification t) (ioTraceTestController t) adap
     assertEqual "testTraceHappy should pass" verdict Pass
     assertEqual "testTraceHappy should be complete" finished True
 
@@ -31,7 +31,7 @@ testTraceFailsAtLastOutput = TestCase $ do
     let t = [Out 1, Out 1, Out 2] :: [IOAct Integer Integer]
     let tspec = [Out 1, Out 2] :: [IOAct Integer Integer]
     adap <- traceAdapter t
-    (verdict, finished) <- runTester (semanticsQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
+    (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
     assertEqual "testTraceFailsAtLastOutput should fail" Fail verdict 
     assertEqual "testTraceFailsAtLastOutput should be complete" True finished
 
@@ -40,7 +40,7 @@ testTraceFailsBeforeLastOutput = TestCase $ do
     let t = [Out 1, Out 2] :: [IOAct Integer Integer]
     let tspec = [Out 2, Out 1] :: [IOAct Integer Integer]
     adap <- traceAdapter t
-    (verdict, finished) <- runTester (semanticsQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
+    (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
     assertEqual "testTraceFailsBeforeLastOutput should fail" Fail verdict
     assertEqual "testTraceFailsBeforeLastOutput should be incomplete" False finished
 
@@ -49,7 +49,7 @@ testTraceIncompleteAtLastOutput = TestCase $ do
     let t = [Out 1, Out 2] :: [IOAct Integer Integer]
     let tController = [Out 1, Out 1] :: [IOAct Integer Integer]
     adap <- traceAdapter t
-    (verdict, finished) <- runTester (semanticsQuiescentConcrete $ traceSpecification t) (ioTraceTestController tController) adap
+    (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification t) (ioTraceTestController tController) adap
     assertEqual "testTraceIncompleteAtLastOutput should pass" Pass verdict 
     assertEqual "testTraceIncompleteAtLastOutput should be complete" True finished
 
@@ -58,7 +58,7 @@ testTraceIncompleteBeforeLastOutput = TestCase $ do
     let t = [Out 1, Out 2] :: [IOAct Integer Integer]
     let tController = [Out 2, Out 2] :: [IOAct Integer Integer]
     adap <- traceAdapter t
-    (verdict, finished) <- runTester (semanticsQuiescentConcrete $ traceSpecification t) (ioTraceTestController tController) adap
+    (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification t) (ioTraceTestController tController) adap
     assertEqual "testTraceIncompleteBeforeLastOutput should pass" Pass verdict
     assertEqual "testTraceIncompleteBeforeLastOutput should be incomplete" False finished
 
@@ -67,7 +67,7 @@ testTraceFailsWithQuiescence = TestCase $ do
     let t = [Out 1, In 2] :: [IOAct Integer Integer]
     let tspec = [Out 1, Out 2] :: [IOAct Integer Integer]
     adap <- traceAdapter t
-    (verdict, finished) <- runTester (semanticsQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
+    (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
     assertEqual "testTraceFailsWithQuiescence should fail" Fail verdict
     assertEqual "testTraceFailsWithQuiescence should be incomplete" True finished
 

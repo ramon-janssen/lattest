@@ -6,8 +6,8 @@ import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,semantics,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
-import Lattest.Model.StandardAutomata(semanticsSTS,STSIntrp)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
+import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..), assignment, noAssignment)
 import Lattest.Model.StateConfiguration((/\), (\/), FDL, atom, top, bot, NonDetState(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
@@ -36,7 +36,7 @@ stsExample =
             2 -> Map.empty
         initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
         sts = automaton initConf (Set.fromList [water,ok,coffee]) switches
-    in semanticsSTS sts initAssign
+    in interpretSTS sts initAssign
 
 
 getSTSIntrpState :: Integer ->  Integer -> NonDetState (IntrpState Integer)
