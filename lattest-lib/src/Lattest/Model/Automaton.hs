@@ -156,11 +156,14 @@ class (Ord t, Completable act) => TransitionSemantics t act where
         'Nothing' indicates an action that occurs within a location, without explicit transition.
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
-    -- | Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-    takeTransition :: (BoundedApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Maybe (Move m t tdest loc)
+    {- |
+        Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
+        The function may be partial, following the given alphabet.
+    -}
+    takeTransition :: (BoundedApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
     takeTransition loc alph act trans' = case asTransition loc alph act of
-        Nothing -> Just $ LocationMove $ pure loc
-        Just t -> Just $ TransitionMove (t, trans' t)
+        Nothing -> LocationMove $ pure loc
+        Just t -> TransitionMove (t, trans' t)
 
 {- |
     Data structure needed to express that an automaton may transition from one location to another, but it may also 'transition'
@@ -195,16 +198,13 @@ monadicAfter step autRun act' =
 {- |
     Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
     take a monadic step from the current state configuration.
-    
-    If no transition is found for the given action, then the state configuration is implicit, as described by 'Completable'.
 -}
 withStep :: (TransitionSemantics t act, StateSemantics loc q, BoundedMonad m) => (q -> act -> Maybe (t, tdest) -> loc -> m q) -> Set t -> (loc -> t -> m (tdest, loc)) -> act -> q -> m q
 withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
-    Nothing -> implicitDestination act
-    Just (LocationMove mloc) -> mloc >>= moveWithinLocation q act Nothing
+    LocationMove mloc -> mloc >>= moveWithinLocation q act Nothing
         where
         moveWithinLocation q act nottdest loc = move q act nottdest loc
-    Just (TransitionMove (t, mloc)) -> mloc >>= moveAlongTransition q act t
+    TransitionMove (t, mloc) -> mloc >>= moveAlongTransition q act t
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
 
@@ -270,8 +270,8 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) where
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspended other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc alph (Out Quiescence) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
-    takeTransition _ _ act m = Just $ TransitionMove (fromSuspended act, m $ fromSuspended act)
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
@@ -288,8 +288,8 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) where
     asTransition loc _ (In (InputAttempt(i, False))) = Nothing
     asTransition _ _ other = Just $ fromInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m = Just . LocationMove $ pure loc
-    takeTransition _ _ act m = Just $ TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
+    takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
+    takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
     asActions t = [asInputAttempt t]
@@ -305,9 +305,9 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) whe
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspendedInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m = Just . LocationMove $ pure loc
-    takeTransition loc alph (Out Quiescence) m = Just . LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
-    takeTransition _ _ act m = Just $ TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
+    takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition _ _ act m = TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
     asActions t = [asSuspendedInputAttempt t]
