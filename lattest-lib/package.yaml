@@ -33,6 +33,7 @@ dependencies:
   - lattices >= 2.0.0
   - stm >= 2.5.1.0
   - grisette >= 0.9.0.0
+  - deepseq >= 	1.5.0.0
 
 ghc-options:
 - -Wall
