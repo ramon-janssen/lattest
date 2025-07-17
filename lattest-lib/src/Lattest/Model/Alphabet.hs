@@ -66,8 +66,8 @@ noAssignment
 )
 where
 
-import Grisette.Core as Grisette
-import Grisette.SymPrim as GSymPrim
+import qualified Grisette.Core as Grisette
+import qualified Grisette.SymPrim as GSymPrim
 import qualified Data.Map as Map (Map, fromList, toList, lookup, empty)
 import qualified Data.List as List (intercalate)
 
@@ -280,9 +280,9 @@ instance Show Type where
     show IntType = "Int"
     show BoolType = "Bool"
 
-addTypedVar :: Variable -> Value -> Model -> Model
-addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Bool) w m
-addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: TypedAnySymbol Integer) w m
+addTypedVar :: Variable -> Value -> GSymPrim.Model -> GSymPrim.Model
+addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Bool) w m
+addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Integer) w m
 
 data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord)
 
@@ -296,7 +296,7 @@ instance (Show i, Show o) => Show (SymInteract i o) where
 
 type SymGuard = GSymPrim.SymBool
 
-data SymExpr = BoolExpr SymBool | IntExpr SymInteger
+data SymExpr = BoolExpr GSymPrim.SymBool | IntExpr GSymPrim.SymInteger
 
 instance Show SymExpr where
     show (BoolExpr e) = show e
