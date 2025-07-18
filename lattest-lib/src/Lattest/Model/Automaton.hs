@@ -31,7 +31,7 @@ Completable,
 implicitDestination,
 TransitionSemantics,
 StateSemantics,
-AutomatonSemantics,
+StepSemantics,
 after,
 afters,
 -- ** Finite Transition Labels
@@ -134,7 +134,7 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (AutomatonSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
+interpret :: (StepSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
 interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
@@ -192,20 +192,12 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
 {- |
-    Automaton semantics expresses that we can take steps, according to the step semantics to move from one state configuration
-    to another.
+    Take a step for the given action, according to the step semantics to move from one state configuration to another.
 -}
-class (StepSemantics m loc q t tdest act) => AutomatonSemantics m loc q t tdest act where
-    -- | Take a transition for the given action.
-    after :: AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-    after intrpr act' = 
-        let aut = syntacticAutomaton intrpr
-        in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act' }
-
--- | Take a sequence of transitions for the given actions.
-afters :: (AutomatonSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
-afters aut [] = aut
-afters aut (act:acts) = aut `after` act `afters` acts
+after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after intrpr act' = 
+    let aut = syntacticAutomaton intrpr
+    in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act' }
 
 after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
 after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act ((!) (transMap $ asLoc q)) of
@@ -217,6 +209,11 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
     TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+
+-- | Take a sequence of transitions for the given actions.
+afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters aut [] = aut
+afters aut (act:acts) = aut `after` act `afters` acts
 
 ------------------------------------------------------------------
 -- utility function to obtain the menu of outgoing transitions --
@@ -240,7 +237,7 @@ actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedAppli
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (AutomatonSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
+specifiedMenu :: (StepSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -262,10 +259,6 @@ instance StateSemantics q q where
 
 instance (TransitionSemantics t act, BoundedMonad m) => StepSemantics m q q t () act where
     move _ _ _ q = pure q
-
-instance (TransitionSemantics t act, BoundedMonad m) => AutomatonSemantics m q q t () act
---    where
---    after = monadicAfter $ withStep (\_ _ _ q -> pure q)
 
 ----------------
 -- quiescence --
@@ -369,8 +362,6 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpSt
                                                     Nothing -> xval
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
                  in return $ IntrpState l2 varMap2
-
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o)
 
 -------------------------
 -- Auxiliary functions --

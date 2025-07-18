@@ -41,7 +41,7 @@ Verdict(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
-import Lattest.Model.Automaton(AutomatonSemantics, AutIntrpr, after, stateConf)
+import Lattest.Model.Automaton(StepSemantics, AutIntrpr, after, stateConf)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
@@ -90,7 +90,7 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (AutomatonSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
@@ -110,7 +110,7 @@ makeTester initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (AutomatonSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
+        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
             (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
             let spec' = spec `after` act
@@ -173,7 +173,7 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (AutomatonSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 
