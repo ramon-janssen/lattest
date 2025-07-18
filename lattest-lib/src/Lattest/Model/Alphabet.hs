@@ -62,7 +62,11 @@ SymExpr(..),
 equalTyped,
 assignedExpr,
 assignment,
-noAssignment
+noAssignment,
+-- ** Unobservable actions
+Internal(..),
+vis,
+τ
 )
 where
 
@@ -328,3 +332,14 @@ equalTyped (Variable _ BoolType) (BoolVal _) = True
 equalTyped (Variable _ IntType) (IntVal _) = True
 equalTyped _ _ = False
 
+{- |
+    Internal transitions
+-}
+data Internal act = Internal | Visible act deriving (Eq, Ord)
+
+τ = Internal
+vis = Visible
+
+instance Show act => Show (Internal act) where
+    show Internal = "τ"
+    show (Visible act) = show act

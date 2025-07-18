@@ -53,9 +53,9 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified, InternalConfiguration, joinInternal)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr, Internal(..))
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Control.Monad as Monad(join)
 import qualified Data.Foldable as Foldable
@@ -363,6 +363,51 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpSt
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
                  in return $ IntrpState l2 varMap2
 
+--------------------------
+-- internal transitions --
+--------------------------
+instance Completable act => Completable (Internal act) where
+    implicitDestination Internal = forbidden
+    implicitDestination (Visible act) = implicitDestination act
+
+instance TransitionSemantics t act => TransitionSemantics (Internal t) act where
+    asTransition loc act = Visible <$> asTransition loc act
+
+instance (TransitionSemantics t act, BoundedMonad m) => StepSemantics m q loc t () act where -- ???????????????????
+    -- move :: q -> act -> Maybe (t, tdest) -> loc -> m q
+    move _ _ _ q = pure q -- ???????
+{-
+instance {-# OVERLAPPING #-} (AutomatonSemantics m q q t () act, JoinSemiLattice (m q), Ord t, Eq (m q)) => AutomatonSemantics m q q (Internal t) () act
+    where
+         -- TODO requires translating the eClosure to an automaton which doesn't contain internal
+         -- transitions in order to make `after` take the AutomatonSemantics from the class constraint
+    after aut act = aut { stateConf = stateConf $ (withoutInternal eClosure) `after` act }
+        where
+        eClosure = expandEClosure aut
+        expandEClosure aut' =
+            -- find the least fix point of the state configuration, expanding via internal transitions
+            let conf' = stateConf aut'
+                aut'' = afterInternal aut'
+                conf'' = stateConf aut'' `join` conf'
+            in if conf' == conf''
+                then aut {stateConf = conf'}
+                else expandEClosure $ aut {stateConf = conf''}
+        afterInternal aut = aut { stateConf = stateConf aut >>= stepInternal (transRel $ syntacticAutomaton aut) }
+        stepInternal t q = case Map.lookup Internal (t $ asLoc q) of
+            Nothing -> forbidden
+            Just mq -> snd <$> mq
+        withoutInternal :: AutomatonSemantics m q q (Internal t) () act => AutSem m q q (Internal t) () act -> AutSem m q q t () act
+        withoutInternal aut = aut { syntacticAutomaton = withoutInternal' $ syntacticAutomaton aut }
+        -- AutSyn m loc t tloc
+        withoutInternal' :: AutomatonSemantics m loc loc (Internal t) () act => AutSyn m loc (Internal t) () -> AutSyn m loc t ()
+        withoutInternal' aut = aut { transRel = withoutInternal'' $ transRel aut }
+        withoutInternal'' :: AutomatonSemantics m loc loc (Internal t) () act => (loc -> Map (Internal t) (m ((), loc))) -> (loc -> Map t (m ((), loc)))
+        withoutInternal'' t q = (mapKeys fromInternal . filterKeys isVisible) (t q) -- mapKeysMonotonic may also suffice
+        filterKeys f = filterWithKey (\k _ -> f k) -- could be replaced by the filterKeys in Data.Map if collections is bumped to version >= 0.8
+        isVisible Internal = False
+        isVisible (Visible _) = True
+        fromInternal (Visible t) = t
+-}
 -------------------------
 -- Auxiliary functions --
 -------------------------

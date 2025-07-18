@@ -61,7 +61,9 @@ BoundedApplicative,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
-(\/)
+(\/),
+InternalConfiguration,
+joinInternal
 )
 where
 
@@ -275,3 +277,9 @@ class JoinSemiLattice a where
 --instance Lattice a => JoinSemiLattice a where
 --    join = (L.\/)
 
+
+class InternalConfiguration a where
+    joinInternal :: a -> a -> a
+
+instance JoinSemiLattice a -> InternalConfiguration a where
+    joinInternal = (\/)
