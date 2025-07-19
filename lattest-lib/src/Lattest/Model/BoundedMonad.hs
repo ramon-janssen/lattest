@@ -281,5 +281,5 @@ class JoinSemiLattice a where
 class InternalConfiguration a where
     joinInternal :: a -> a -> a
 
-instance JoinSemiLattice a -> InternalConfiguration a where
+instance JoinSemiLattice a => InternalConfiguration a where
     joinInternal = (\/)

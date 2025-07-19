@@ -4,6 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-|
     This module contains the definitions and interpretations of automata models.
 -}
@@ -55,13 +56,14 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified, InternalConfiguration, joinInternal)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr, Internal(..))
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr, Internal(..), maybeVisible)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import qualified Control.Monad as Monad(join)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map, (!))
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
@@ -371,11 +373,15 @@ instance Completable act => Completable (Internal act) where
     implicitDestination (Visible act) = implicitDestination act
 
 instance TransitionSemantics t act => TransitionSemantics (Internal t) act where
-    asTransition loc act = Visible <$> asTransition loc act
+    --  asTransition :: loc -> Set (Internal t) -> act -> Maybe (Internal t)
+    asTransition loc alph act = Visible <$> asTransition loc (mapJustSet maybeVisible alph) act
+        where
+        mapJustSet f = Set.fromList . Maybe.catMaybes . fmap f . Set.toList
 
-instance (TransitionSemantics t act, BoundedMonad m) => StepSemantics m q loc t () act where -- ???????????????????
-    -- move :: q -> act -> Maybe (t, tdest) -> loc -> m q
-    move _ _ _ q = pure q -- ???????
+instance (InternalConfiguration (m q), TransitionSemantics t act, StepSemantics m q loc t tdest (Internal act)) => StepSemantics m q loc (Internal t) tdest act where -- ???????????????????
+    --move :: q -> (Internal act) -> Maybe (t, tdest) -> loc -> m q
+    move q (Visible act) t loc = move q act t loc
+    
 {-
 instance {-# OVERLAPPING #-} (AutomatonSemantics m q q t () act, JoinSemiLattice (m q), Ord t, Eq (m q)) => AutomatonSemantics m q q (Internal t) () act
     where

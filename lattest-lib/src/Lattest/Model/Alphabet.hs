@@ -66,7 +66,8 @@ noAssignment,
 -- ** Unobservable actions
 Internal(..),
 vis,
-τ
+τ,
+maybeVisible
 )
 where
 
@@ -343,3 +344,7 @@ vis = Visible
 instance Show act => Show (Internal act) where
     show Internal = "τ"
     show (Visible act) = show act
+
+maybeVisible :: Internal act -> Maybe act
+maybeVisible Internal = Nothing
+maybeVisible (Visible act) = Just act
