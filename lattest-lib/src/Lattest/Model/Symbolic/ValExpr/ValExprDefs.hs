@@ -74,10 +74,11 @@ data  ValExprView v = Vconst  Constant
                                 ,   position :: ValExpr v
                                 }
                     | Vconcat   [ValExpr v]
+{-
                     -- Regex
---                    | Vstrinre {    string :: ValExpr v
---                               ,    regex  :: ValExpr v
---                               }
+                    | Vstrinre {    string :: ValExpr v
+                               ,    regex  :: ValExpr v
+                               }
                     -- ADT
                     | Vcstr   CstrId [ValExpr v]
                     | Viscstr CstrId (ValExpr v)
@@ -85,6 +86,7 @@ data  ValExprView v = Vconst  Constant
 
                     | Vfunc   FuncId [ValExpr v]
                     | Vpredef PredefKind FuncId [ValExpr v]
+-}
      deriving (Eq, Ord, Read, Show, Generic, NFData, Data)
 
 instance (Ord v, Resettable v) => Resettable (ValExprView v)
@@ -142,10 +144,10 @@ instance (Variable v) => SortOf (ValExpr v) where
   sortOf = sortOf'
 
 sortOf' :: (Variable v) => ValExpr v -> SortId
-sortOf' (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         = fs
-sortOf' (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         = cs
-sortOf' (view -> Viscstr { })                                   = sortIdBool
-sortOf' (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  = ca!!p
+--sortOf' (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         = fs
+--sortOf' (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         = cs
+--sortOf' (view -> Viscstr { })                                   = sortIdBool
+--sortOf' (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  = ca!!p
 sortOf' (view -> Vconst con)                                    = sortOf con
 sortOf' (view -> Vvar v)                                        = vsort v
 sortOf' (view -> Vite _cond vexp1 _vexp2)                       = sortOf' vexp1
@@ -161,7 +163,7 @@ sortOf' (view -> Vlength { })                                   = sortIdInt
 sortOf' (view -> Vat { })                                       = sortIdString
 sortOf' (view -> Vconcat { })                                   = sortIdString
 --sortOf' (view -> Vstrinre { })                                  = sortIdBool
-sortOf' (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   = fs
+--sortOf' (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   = fs
 
 
 

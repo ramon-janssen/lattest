@@ -33,7 +33,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** If Then Else
 , cstrITE
   -- *** Function Call
-, cstrFunc
+--, cstrFunc
   -- ** Boolean Operators to create Value Expressions
   -- *** Not
 , cstrNot
@@ -62,14 +62,14 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 --, cstrStrInRe
   -- ** Algebraic Data Type Operators to create Value Expressions
   -- *** Algebraic Data Type constructor operator
-, cstrCstr
+--, cstrCstr
   -- *** Algebraic Data Type IsConstructor function
-, cstrIsCstr
+--, cstrIsCstr
   -- *** Algebraic Data Type Accessor
-, cstrAccess
+--, cstrAccess
 
 -- to be documented
-, cstrPredef
+--, cstrPredef
 -- * Substitution of var by value
 , subst
 , compSubst         -- changes type
@@ -98,7 +98,7 @@ import           Lattest.Model.Symbolic.ValExpr.Variable
 
 -- | Create a function call.
 -- Preconditions are /not/ checked.
-cstrFunc :: (Variable v, Variable w) => Map.Map FuncId (FuncDef v) -> FuncId -> [ValExpr w] -> ValExpr w
+{-cstrFunc :: (Variable v, Variable w) => Map.Map FuncId (FuncDef v) -> FuncId -> [ValExpr w] -> ValExpr w
 cstrFunc fis fi arguments =
     case Map.lookup fi fis of
         Nothing ->
@@ -142,7 +142,7 @@ cstrAccess c1 n1 p1 (view -> Vconst (Ccstr c2 fields)) =
         then cstrConst (fields!!p1)
         else error ("Error in model: Accessing field " ++ show n1 ++ " of constructor " ++ show c1 ++ " on value from constructor " ++ show c2)
 cstrAccess c n p e = ValExpr (Vaccess c n p e)
-
+-}
 -- | Is ValExpr a Constant/Value Expression?
 isConst :: ValExpr v -> Bool
 isConst (view -> Vconst{}) = True
@@ -247,9 +247,9 @@ cstrAnd' s =
                             let nots = filterNot (Set.toList s') in
                                 if any (contains s') nots
                                     then cstrConst (Cbool False)
-                                    else let ts = isCstrTuples (Set.toList s') in
-                                            if sameValExpr ts
-                                                then cstrConst (Cbool False)
+--                                    else let ts = isCstrTuples (Set.toList s') in
+--                                            if sameValExpr ts
+--                                                then cstrConst (Cbool False)
                                                 else ValExpr (Vand s')
     where
         filterNot :: [ValExpr v] -> [ValExpr v]
@@ -261,13 +261,13 @@ cstrAnd' s =
         contains :: Ord v => Set.Set (ValExpr v) -> ValExpr v -> Bool
         contains set (view -> Vand a) = all (`Set.member` set) (Set.toList a)
         contains set a                = Set.member a set
-
+{-
         isCstrTuples :: [ValExpr v] -> [(CstrId, ValExpr v)]
         isCstrTuples [] = []
         isCstrTuples (x:xs) = case view x of
                                 Viscstr c v -> (c,v) : isCstrTuples xs
                                 _           ->         isCstrTuples xs
-
+-}
         sameValExpr :: Ord v => [(CstrId, ValExpr v)] ->  Bool
         sameValExpr []     = False
         sameValExpr (x:xs) = containValExpr x xs
@@ -445,10 +445,11 @@ flatten (x:xs)                   = x : flatten xs
 --cstrStrInRe (view -> Vconst (Cstring s)) (view -> Vconst (Cregex r)) = cstrConst (Cbool (T.unpack s =~ T.unpack (xsd2posix r) ) )
 --cstrStrInRe s r                                                      = ValExpr (Vstrinre s r)
 
+{-
 -- | Create a call to a predefined function as a value expression.
 cstrPredef :: PredefKind -> FuncId -> [ValExpr v] -> ValExpr v
 cstrPredef p f a = ValExpr (Vpredef p f a)
-
+-}
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
@@ -470,10 +471,10 @@ subst' :: (Variable v, Integral (ValExpr v), Variable w, Integral (ValExpr w))
        => Map.Map v (ValExpr v) -> Map.Map FuncId (FuncDef w) -> ValExprView v -> ValExpr v
 subst' _  _   (Vconst const')          = cstrConst const'
 subst' ve _   (Vvar vid)               = Map.findWithDefault (cstrVar vid) vid ve
-subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
-subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
-subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
-subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
+--subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
+--subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
+--subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
+--subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
 subst' ve fis (Vite cond vexp1 vexp2)  = cstrITE ( (subst' ve fis . view) cond) ( (subst' ve fis . view) vexp1) ( (subst' ve fis . view) vexp2)
 subst' ve fis (Vdivide t n)            = cstrDivide ( (subst' ve fis . view) t) ( (subst' ve fis . view) n)
 subst' ve fis (Vmodulo t n)            = cstrModulo ( (subst' ve fis . view) t) ( (subst' ve fis . view) n)
@@ -487,7 +488,7 @@ subst' ve fis (Vlength vexp)           = cstrLength ( (subst' ve fis . view) vex
 subst' ve fis (Vat s p)                = cstrAt ( (subst' ve fis . view) s) ( (subst' ve fis . view) p)
 subst' ve fis (Vconcat vexps)          = cstrConcat $ map (subst' ve fis . view) vexps
 --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
-subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
+--subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
 
 -- | Substitute variables by value expressions in a value expression (change variable kind).
 -- Preconditions are /not/ checked.
@@ -498,14 +499,14 @@ compSubst ve fis x                 = compSubst' ve fis (view x)
 
 compSubst' :: (Variable v, Integral (ValExpr v), Variable w, Integral (ValExpr w))
            => Map.Map v (ValExpr w) -> Map.Map FuncId (FuncDef v) -> ValExprView v -> ValExpr w
-compSubst' _  _   (Vconst const')          = cstrConst const'
+--compSubst' _  _   (Vconst const')          = cstrConst const'
 compSubst' ve _   (Vvar vid)               = fromMaybe
                                                     (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
                                                     (Map.lookup vid ve)
-compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
-compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
-compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
-compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
+--compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
+--compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
+--compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
+--compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
 compSubst' ve fis (Vite cond vexp1 vexp2)  = cstrITE ( (compSubst' ve fis . view) cond) ( (compSubst' ve fis . view) vexp1) ( (compSubst' ve fis . view) vexp2)
 compSubst' ve fis (Vdivide t n)            = cstrDivide ( (compSubst' ve fis . view) t) ( (compSubst' ve fis . view) n)
 compSubst' ve fis (Vmodulo t n)            = cstrModulo ( (compSubst' ve fis . view) t) ( (compSubst' ve fis . view) n)
@@ -519,7 +520,7 @@ compSubst' ve fis (Vlength vexp)           = cstrLength ( (compSubst' ve fis . v
 compSubst' ve fis (Vat s p)                = cstrAt ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) p)
 compSubst' ve fis (Vconcat vexps)          = cstrConcat $ map (compSubst' ve fis . view) vexps
 --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
-compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
+--compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
 
 -- ----------------------------------------------------------------------------------------- --
 --
