@@ -409,19 +409,19 @@ connectJSONSocketAdapterWith settings = do
     parsingAdap <- parseJSONActionsFromSut rawAdap
     encodeJSONTestChoices parsingAdap
 
---withCloseCommand :: (ToJSON c) => c -> Adapter (IOAct i o) i -> IO (Adapter (IOAct i o) i)
---withCloseCommand cmd adap = return adap{close = Streams.write (Just $ toJSON cmd) (inputCommandsToSut adap)}
-
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format.
 connectJSONResetSocketAdapter :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => reset -> resetOK -> IO (Adapter o i, IO ())
 connectJSONResetSocketAdapter = connectJSONResetSocketAdapterWith baseSocketSettings
+
+instance (FromJSON a, FromJSON b) => EitherNoJSONWrap a b where
+    fromJSON val = leftNoJSONWrap 
 
  -- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format.
 connectJSONResetSocketAdapterWith :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => SocketSettings -> reset -> resetOK -> IO (Adapter o i, IO ())
 connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd = do
     rawAdap <- connectSocketAdapterWith settings
     parsingAdap <- parseJSONActionsFromSut rawAdap
-    ioOrResetAdap <- encodeJSONTestChoices parsingAdap -- Adapter (Either (IOAct i o) (resetOK)) (Either i reset)
+    ioOrResetAdap <- encodeJSONTestChoices parsingAdap
     ioActionsFromSut <- makeTInputStream
         (do
             actOrResetOK <- Streams.read $ actionsFromSut ioOrResetAdap
@@ -430,17 +430,21 @@ connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd = do
                 Just (Right _) -> error "resetting adapter: reset OK response received without sending a reset first!"
                 Nothing -> return Nothing)
         (hasInput $ actionsFromSut ioOrResetAdap)
-    ioInputCommandsToSut <- makeOutputStream $ \mi -> send (Left mi) ioOrResetAdap
+    ioInputCommandsToSut <- makeOutputStream $ \mi -> Streams.write (Left <$> mi) (inputCommandsToSut ioOrResetAdap)
     let ioAdap = ioOrResetAdap {
         inputCommandsToSut = ioInputCommandsToSut,
         actionsFromSut = ioActionsFromSut
     }
+    _ <- dummyCoerceReset resetCmd resetOKCmd ioAdap ioOrResetAdap
     let reset = do
-         send (Right $ toJSON resetCmd) ioOrResetAdap
+         send (Right resetCmd) ioOrResetAdap
          resetOK <- observe ioOrResetAdap
          return ()
          -- check Right resetOK==resetOKCmd. Or observe _until_ resetOK==resetOKCmd?
     return (ioAdap, reset)
+    where
+    dummyCoerceReset :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => reset -> resetOK -> Adapter o i -> Adapter (Either o (resetOK)) (Either i reset) -> IO ()
+    dummyCoerceReset resetCmd resetOKCmd ioAdap ioOrResetAdap = return ()
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
 connectJSONSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o) => IO (Adapter (IOAct i o) i)
