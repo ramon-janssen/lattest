@@ -45,7 +45,7 @@ withQuiescenceMillis
 )
 where
 
-import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
+import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut,send,observe)
 import qualified Lattest.Adapter.Adapter as Adap(map)
 import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended)
 import Lattest.Model.Alphabet(IOAct)
@@ -69,7 +69,7 @@ import System.IO.Streams.Network(socketToStreams)
 import System.IO.Streams.Synchronized(fromInputStreamBuffered,makeTInputStream,hasInput)
 import qualified System.IO.Streams.Synchronized as Streams (read)
 
-import Data.Aeson(fromJSON,encode,Result(Error, Success),FromJSON,ToJSON)
+import Data.Aeson(fromJSON,toJSON,encode,Result(Error, Success),FromJSON,ToJSON)
 import Data.Aeson.Parser(jsonNoDup)
 import qualified Data.Attoparsec.ByteString.Char8 as Parse
 import Data.Bits.Utils(c2w8)
@@ -370,13 +370,13 @@ withQuiescence timeoutDiff adap = do
 --------------------
 
 -- | Settings for a socket Adapter.
-data SocketSettings act i = SocketSettings {
+data SocketSettings = SocketSettings {
     hostName :: HostName,
     portNumber :: PortNumber
     }
 
 -- | Default settings for a socket Adapter.
-baseSocketSettings :: SocketSettings act i
+baseSocketSettings :: SocketSettings
 baseSocketSettings  = SocketSettings {
     hostName = "127.0.0.1",
     portNumber = 2929
@@ -387,7 +387,7 @@ connectSocketAdapter :: IO (Adapter ByteString ByteString)
 connectSocketAdapter = connectSocketAdapterWith baseSocketSettings
 
 -- | Create an adapter by connecting to a server socket, with the given settings.
-connectSocketAdapterWith :: SocketSettings act i -> IO (Adapter ByteString ByteString)
+connectSocketAdapterWith :: SocketSettings -> IO (Adapter ByteString ByteString)
 connectSocketAdapterWith settings = niceSocketsDo $ do
     socket <- connectTCP (hostName settings) (portNumber settings)
     (actionBytes, inputCommandBytes) <- socketToStreams socket
@@ -403,17 +403,50 @@ connectJSONSocketAdapter :: (ToJSON i, FromJSON o) => IO (Adapter o i)
 connectJSONSocketAdapter = connectJSONSocketAdapterWith baseSocketSettings
 
 -- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format.
-connectJSONSocketAdapterWith :: (ToJSON i, FromJSON o) => SocketSettings act i -> IO (Adapter o i)
+connectJSONSocketAdapterWith :: (ToJSON i, FromJSON o) => SocketSettings -> IO (Adapter o i)
 connectJSONSocketAdapterWith settings = do
     rawAdap <- connectSocketAdapterWith settings
     parsingAdap <- parseJSONActionsFromSut rawAdap
     encodeJSONTestChoices parsingAdap
+
+--withCloseCommand :: (ToJSON c) => c -> Adapter (IOAct i o) i -> IO (Adapter (IOAct i o) i)
+--withCloseCommand cmd adap = return adap{close = Streams.write (Just $ toJSON cmd) (inputCommandsToSut adap)}
+
+-- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format.
+connectJSONResetSocketAdapter :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => reset -> resetOK -> IO (Adapter o i, IO ())
+connectJSONResetSocketAdapter = connectJSONResetSocketAdapterWith baseSocketSettings
+
+ -- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format.
+connectJSONResetSocketAdapterWith :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => SocketSettings -> reset -> resetOK -> IO (Adapter o i, IO ())
+connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd = do
+    rawAdap <- connectSocketAdapterWith settings
+    parsingAdap <- parseJSONActionsFromSut rawAdap
+    ioOrResetAdap <- encodeJSONTestChoices parsingAdap -- Adapter (Either (IOAct i o) (resetOK)) (Either i reset)
+    ioActionsFromSut <- makeTInputStream
+        (do
+            actOrResetOK <- Streams.read $ actionsFromSut ioOrResetAdap
+            case actOrResetOK of
+                Just (Left act) -> return $ Just act
+                Just (Right _) -> error "resetting adapter: reset OK response received without sending a reset first!"
+                Nothing -> return Nothing)
+        (hasInput $ actionsFromSut ioOrResetAdap)
+    ioInputCommandsToSut <- makeOutputStream $ \mi -> send (Left mi) ioOrResetAdap
+    let ioAdap = ioOrResetAdap {
+        inputCommandsToSut = ioInputCommandsToSut,
+        actionsFromSut = ioActionsFromSut
+    }
+    let reset = do
+         send (Right $ toJSON resetCmd) ioOrResetAdap
+         resetOK <- observe ioOrResetAdap
+         return ()
+         -- check Right resetOK==resetOKCmd. Or observe _until_ resetOK==resetOKCmd?
+    return (ioAdap, reset)
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
 connectJSONSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o) => IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputs = connectJSONSocketAdapter >>= acceptingInputs
 
 -- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
-connectJSONSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o) => SocketSettings act i -> IO (Adapter (IOAct i o) i)
+connectJSONSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o) => SocketSettings -> IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputsWith settings = connectJSONSocketAdapterWith settings >>= acceptingInputs
 
