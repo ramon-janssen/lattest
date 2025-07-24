@@ -413,9 +413,6 @@ connectJSONSocketAdapterWith settings = do
 connectJSONResetSocketAdapter :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => reset -> resetOK -> IO (Adapter o i, IO ())
 connectJSONResetSocketAdapter = connectJSONResetSocketAdapterWith baseSocketSettings
 
-instance (FromJSON a, FromJSON b) => EitherNoJSONWrap a b where
-    fromJSON val = leftNoJSONWrap 
-
  -- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format.
 connectJSONResetSocketAdapterWith :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => SocketSettings -> reset -> resetOK -> IO (Adapter o i, IO ())
 connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd = do
@@ -439,12 +436,17 @@ connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd = do
     let reset = do
          send (Right resetCmd) ioOrResetAdap
          resetOK <- observe ioOrResetAdap
-         return ()
-         -- check Right resetOK==resetOKCmd. Or observe _until_ resetOK==resetOKCmd?
+         consumeOutputs ioOrResetAdap
     return (ioAdap, reset)
     where
     dummyCoerceReset :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => reset -> resetOK -> Adapter o i -> Adapter (Either o (resetOK)) (Either i reset) -> IO ()
     dummyCoerceReset resetCmd resetOKCmd ioAdap ioOrResetAdap = return ()
+    consumeOutputs ioOrResetAdap = do
+        actOrResetOK <- observe ioOrResetAdap
+        case actOrResetOK of
+            Just (Left _) -> consumeOutputs ioOrResetAdap -- consume an output and repeat
+            Just (Right _) -> return  () -- TODO verify whether the reset is equal to expected?
+            Nothing -> return () -- TODO ? what to do in case of close?
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
 connectJSONSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o) => IO (Adapter (IOAct i o) i)
