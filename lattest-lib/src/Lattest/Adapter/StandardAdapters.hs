@@ -452,7 +452,20 @@ connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd = do
 connectJSONSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o) => IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputs = connectJSONSocketAdapter >>= acceptingInputs
 
+-- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
+connectJSONResetSocketAdapterAcceptingInputs :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => reset -> resetOK ->  IO (Adapter (IOAct i o) i, IO ())
+connectJSONResetSocketAdapterAcceptingInputs  resetCmd resetOKCmd = do
+    (ioAdap, reset) <- connectJSONResetSocketAdapter resetCmd resetOKCmd
+    acceptingAdap <- acceptingInputs ioAdap
+    return (acceptingAdap, reset)
+
 -- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
 connectJSONSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o) => SocketSettings -> IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputsWith settings = connectJSONSocketAdapterWith settings >>= acceptingInputs
 
+-- | Create an adapter by connecting to a server socket, with the given settings, and sending inputs and reading outputs in JSON format, observing any input as accepted.
+connectJSONResetSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o, ToJSON reset, FromJSON resetOK) => SocketSettings -> reset -> resetOK -> IO (Adapter (IOAct i o) i, IO ())
+connectJSONResetSocketAdapterAcceptingInputsWith settings resetCmd resetOKCmd = do
+    (ioAdap, reset) <- connectJSONResetSocketAdapterWith settings resetCmd resetOKCmd
+    acceptingAdap <- acceptingInputs ioAdap
+    return (acceptingAdap, reset)
