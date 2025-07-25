@@ -71,13 +71,19 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 -- to be documented
 --, cstrPredef
 -- * Substitution of var by value
+, VarModel
+, assign
+, Valuation
+, evalConst
 , subst
 , compSubst         -- changes type
+, assignedExpr
 )
 where
 
 import           Control.Arrow   (first)
 import           Control.Exception ( assert )
+import qualified Data.List       as List
 import qualified Data.Map        as Map
 import           Data.Maybe      (fromMaybe)
 import qualified Data.Set        as Set
@@ -94,7 +100,6 @@ import           Lattest.Model.Symbolic.ValExpr.Product as Product
 --import           Lattest.Model.Symbolic.ValExpr.RegexXSD2Posix
 import           Lattest.Model.Symbolic.ValExpr.Sum as Sum
 import           Lattest.Model.Symbolic.ValExpr.ValExprDefs
-import           Lattest.Model.Symbolic.ValExpr.Variable
 
 -- | Create a function call.
 -- Preconditions are /not/ checked.
@@ -115,24 +120,24 @@ cstrFunc fis fi arguments =
 
 -- | Apply ADT Constructor of constructor with CstrId and the provided arguments (the list of value expressions).
 -- Preconditions are /not/ checked.
-cstrCstr :: CstrId -> [ValExpr v] -> ValExpr v
+cstrCstr :: CstrId -> [ValExpr] -> ValExpr
 cstrCstr c a = if all isConst a
                 then cstrConst (Ccstr c (map toConst a) )
                 else ValExpr (Vcstr c a)
-    where   toConst :: ValExpr v -> Constant
+    where   toConst :: ValExpr -> Constant
             toConst (view -> Vconst v) = v
             toConst _                  = error "Impossible when all satisfy isConst"
 
 -- | Is the provided value expression made by the ADT constructor with CstrId?
 -- Preconditions are /not/ checked.
-cstrIsCstr :: CstrId -> ValExpr v -> ValExpr v
+cstrIsCstr :: CstrId -> ValExpr -> ValExpr
 cstrIsCstr c1 (view -> Vcstr c2 _)          = cstrConst (Cbool (c1 == c2) )
 cstrIsCstr c1 (view -> Vconst (Ccstr c2 _)) = cstrConst (Cbool (c1 == c2) )
 cstrIsCstr c e                              = ValExpr (Viscstr c e)
 
 -- | Apply ADT Accessor of constructor with CstrId on field with given position on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrAccess :: CstrId -> T.Text -> Int -> ValExpr v -> ValExpr v
+cstrAccess :: CstrId -> T.Text -> Int -> ValExpr -> ValExpr
 cstrAccess c1 n1 p1 (view -> Vcstr c2 fields) =
     if c1 == c2 -- prevent crashes due to model errors
         then fields!!p1
@@ -144,12 +149,12 @@ cstrAccess c1 n1 p1 (view -> Vconst (Ccstr c2 fields)) =
 cstrAccess c n p e = ValExpr (Vaccess c n p e)
 -}
 -- | Is ValExpr a Constant/Value Expression?
-isConst :: ValExpr v -> Bool
+isConst :: ValExpr -> Bool
 isConst (view -> Vconst{}) = True
 isConst _                  = False
 
 -- | Get the integer value of a constant.
-getIntVal :: ValExpr v -> Integer
+getIntVal :: ValExpr -> Integer
 getIntVal (view -> Vconst (Cint i)) = i
 getIntVal (view -> Vconst _)        =
     error "ValExprImpls.hs - getIntVal - Unexpected Constant"
@@ -157,16 +162,16 @@ getIntVal _                         =
     error "ValExprImpls.hs - getIntVal - Unexpected ValExpr"
 
 -- | Create a constant as a value expression.
-cstrConst :: Constant -> ValExpr v
+cstrConst :: Constant -> ValExpr
 cstrConst = ValExpr . Vconst
 
 -- | Create a variable as a value expression.
-cstrVar :: v -> ValExpr v
+cstrVar :: Variable -> ValExpr
 cstrVar = ValExpr . Vvar
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrITE :: Eq v => ValExpr v -> ValExpr v -> ValExpr v -> ValExpr v
+cstrITE :: ValExpr -> ValExpr -> ValExpr -> ValExpr
 cstrITE (view -> Vconst (Cbool True))  tb _ = tb
 cstrITE (view -> Vconst (Cbool False)) _ fb = fb
 -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
@@ -183,7 +188,7 @@ cstrITE cs tb fb                            = ValExpr (Vite cs tb fb)
 
 -- | Apply operator Equal on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrEqual :: (Ord v) => ValExpr v -> ValExpr v -> ValExpr v
+cstrEqual :: ValExpr -> ValExpr -> ValExpr
 -- Simplification a == a <==> True
 cstrEqual ve1 ve2 | ve1 == ve2                      = cstrConst (Cbool True)
 -- Simplification Different Values <==> False : use Same Values are already detected in previous step
@@ -214,7 +219,7 @@ cstrEqual ve1 ve2                                   = if ve1 <= ve2
 
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrNot :: ValExpr v -> ValExpr v
+cstrNot :: ValExpr -> ValExpr
 cstrNot (view -> Vconst (Cbool True))       = cstrConst (Cbool False)
 cstrNot (view -> Vconst (Cbool False))      = cstrConst (Cbool True)
 cstrNot (view -> Vnot ve)                   = ve
@@ -224,18 +229,18 @@ cstrNot ve                                  = ValExpr (Vnot ve)
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-cstrAnd :: (Ord v) => Set.Set (ValExpr v) -> ValExpr v
+cstrAnd :: Set.Set ValExpr -> ValExpr
 cstrAnd = cstrAnd' . flattenAnd
     where
-        flattenAnd :: (Ord v) => Set.Set (ValExpr v) -> Set.Set (ValExpr v)
+        flattenAnd :: Set.Set ValExpr -> Set.Set ValExpr
         flattenAnd = Set.unions . map fromValExpr . Set.toList
         
-        fromValExpr :: ValExpr v -> Set.Set (ValExpr v)
+        fromValExpr :: ValExpr -> Set.Set ValExpr
         fromValExpr (view -> Vand a) = a
         fromValExpr x                = Set.singleton x
 
 -- And doesn't contain elements of type Vand.
-cstrAnd' :: (Ord v) => Set.Set (ValExpr v) -> ValExpr v
+cstrAnd' :: Set.Set ValExpr -> ValExpr
 cstrAnd' s =
     if Set.member (cstrConst (Cbool False)) s
         then cstrConst (Cbool False)
@@ -252,27 +257,27 @@ cstrAnd' s =
 --                                                then cstrConst (Cbool False)
                                                 else ValExpr (Vand s')
     where
-        filterNot :: [ValExpr v] -> [ValExpr v]
+        filterNot :: [ValExpr] -> [ValExpr]
         filterNot [] = []
         filterNot (x:xs) = case view x of
                             Vnot n -> n : filterNot xs
                             _      ->     filterNot xs
         
-        contains :: Ord v => Set.Set (ValExpr v) -> ValExpr v -> Bool
+        contains :: Set.Set ValExpr -> ValExpr -> Bool
         contains set (view -> Vand a) = all (`Set.member` set) (Set.toList a)
         contains set a                = Set.member a set
 {-
-        isCstrTuples :: [ValExpr v] -> [(CstrId, ValExpr v)]
+        isCstrTuples :: [ValExpr] -> [(CstrId, ValExpr)]
         isCstrTuples [] = []
         isCstrTuples (x:xs) = case view x of
                                 Viscstr c v -> (c,v) : isCstrTuples xs
                                 _           ->         isCstrTuples xs
 -}
-        sameValExpr :: Ord v => [(CstrId, ValExpr v)] ->  Bool
+        sameValExpr :: [(CstrId, ValExpr)] ->  Bool
         sameValExpr []     = False
         sameValExpr (x:xs) = containValExpr x xs
             where
-                containValExpr :: Ord v => (CstrId, ValExpr v) -> [(CstrId, ValExpr v)] ->  Bool
+                containValExpr :: (CstrId, ValExpr) -> [(CstrId, ValExpr)] ->  Bool
                 containValExpr _      []             = False
                 containValExpr (c1,x1) ((c2,x2):cxs) = if x1 == x2 
                                                         then assert (c1 /= c2) True
@@ -280,17 +285,17 @@ cstrAnd' s =
 -- * Sum
 
 -- | Is ValExpr a Sum Expression?
-isSum :: ValExpr v -> Bool
+isSum :: ValExpr -> Bool
 isSum (view -> Vsum{}) = True
 isSum _                = False
 
-getSum :: ValExpr v -> FreeSum (ValExpr v)
+getSum :: ValExpr -> FreeSum ValExpr
 getSum (view -> Vsum s) = s
 getSum _ = error "ValExprImpls.hs - getSum - Unexpected ValExpr "
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
-cstrSum :: forall v . (Ord v, Integral (ValExpr v)) => FreeSum (ValExpr v) -> ValExpr v
+cstrSum ::  FreeSum ValExpr -> ValExpr
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the sum of all values
@@ -300,11 +305,11 @@ cstrSum ms =
     cstrSum' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSum ms
-      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ValExpr v)))
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm ValExpr))
       sumOfAdds = FMX.mapTerms (getSum . summand) adds
 
 -- Sum doesn't contain elements of type VExprSum
-cstrSum' :: Ord v => FreeSum (ValExpr v) -> ValExpr v
+cstrSum' :: FreeSum ValExpr -> ValExpr
 cstrSum' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         sumVals = summand $ FMX.foldFMX (FMX.mapTerms (SumTerm . getIntVal . summand) vals)
@@ -320,18 +325,18 @@ cstrSum' ms =
 -- Product
 
 -- | Is ValExpr a Product Expression?
-isProduct :: ValExpr v -> Bool
+isProduct :: ValExpr -> Bool
 isProduct (view -> Vproduct{}) = True
 isProduct _                    = False
 
-getProduct :: ValExpr v -> FreeProduct (ValExpr v)
+getProduct :: ValExpr -> FreeProduct ValExpr
 getProduct (view -> Vproduct p) = p
 getProduct _ = error "ValExprImpls.hs - getProduct - Unexpected ValExpr "
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
 -- Preconditions are /not/ checked.
-cstrProduct :: forall v .(Ord v, Integral (ValExpr v)) => FreeProduct (ValExpr v) -> ValExpr v
+cstrProduct :: forall v . FreeProduct ValExpr -> ValExpr
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the product of all values
@@ -341,12 +346,11 @@ cstrProduct ms =
     cstrProduct' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProduct ms
-      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ValExpr v)))
+      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm ValExpr))
       prodOfProds = FMX.mapTerms (getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
-cstrProduct' :: (Ord v, Integral (ValExpr v))
-             => FreeProduct (ValExpr v) -> ValExpr v
+cstrProduct' :: FreeProduct ValExpr -> ValExpr
 cstrProduct' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         (zeros, _) = FMX.partitionT isZero vals
@@ -365,7 +369,7 @@ cstrProduct' ms =
                             0   ->  cstrConst (Cint 0)      -- 0 * x == 0
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
-        isZero :: ValExpr v -> Bool
+        isZero :: ValExpr -> Bool
         isZero (view -> Vconst (Cint 0)) = True
         isZero _                         = False
 
@@ -373,7 +377,7 @@ cstrProduct' ms =
 
 -- | Apply operator Divide on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrDivide :: ValExpr v -> ValExpr v -> ValExpr v
+cstrDivide :: ValExpr -> ValExpr -> ValExpr
 cstrDivide _                          (view -> Vconst (Cint n)) | n == 0 = error "Error in model: Division by Zero in Divide"
 cstrDivide (view ->  Vconst (Cint t)) (view -> Vconst (Cint n)) = cstrConst (Cint (t `Boute.div` n) )
 cstrDivide vet ven = ValExpr (Vdivide vet ven)
@@ -382,14 +386,14 @@ cstrDivide vet ven = ValExpr (Vdivide vet ven)
 
 -- | Apply operator Modulo on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrModulo :: ValExpr v -> ValExpr v -> ValExpr v
+cstrModulo :: ValExpr -> ValExpr -> ValExpr
 cstrModulo _                         (view -> Vconst (Cint n)) | n == 0 = error "Error in model: Division by Zero in Modulo"
 cstrModulo (view -> Vconst (Cint t)) (view -> Vconst (Cint n)) = cstrConst (Cint (t `Boute.mod` n) )
 cstrModulo vet ven = ValExpr (Vmodulo vet ven)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrGEZ :: ValExpr v -> ValExpr v
+cstrGEZ :: ValExpr -> ValExpr
 -- Simplification Values
 cstrGEZ (view -> Vconst (Cint v)) = cstrConst (Cbool (0 <= v))
 cstrGEZ (view -> Vlength _)       = cstrConst (Cbool True)        -- length of string is always Greater or equal to zero
@@ -398,13 +402,13 @@ cstrGEZ ve                        = ValExpr (Vgez ve)
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrLength :: ValExpr v -> ValExpr v
+cstrLength :: ValExpr -> ValExpr
 cstrLength (view -> Vconst (Cstring s)) = cstrConst (Cint (Prelude.toInteger (T.length s)))
 cstrLength v                            = ValExpr (Vlength v)
 
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrAt :: ValExpr v -> ValExpr v -> ValExpr v
+cstrAt :: ValExpr -> ValExpr -> ValExpr
 cstrAt (view -> Vconst (Cstring s)) (view -> Vconst (Cint i)) =
     if i < 0 || i >= Prelude.toInteger (T.length s)
         then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (T.length s) ++ " with illegal index "++ show i) 
@@ -413,7 +417,7 @@ cstrAt ves vei = ValExpr (Vat ves vei)
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
-cstrConcat :: (Eq v) => [ValExpr v] -> ValExpr v
+cstrConcat :: [ValExpr] -> ValExpr
 cstrConcat l =
     let n = (mergeVals . flatten . filter (cstrConst (Cstring "") /= ) ) l in
         case Prelude.length n of
@@ -427,50 +431,80 @@ cstrConcat l =
 --    "a" ++ "b" == "ab"    - concat consecutive string values
 --   remove all nested Concats, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
-mergeVals :: [ValExpr v] -> [ValExpr v]
+mergeVals :: [ValExpr] -> [ValExpr]
 mergeVals []            = []
 mergeVals [x]           = [x]
 mergeVals ( (view -> Vconst (Cstring s1)) : (view -> Vconst (Cstring s2)) : xs) =
                           mergeVals (cstrConst (Cstring (s1 <> s2)): xs)
 mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
 
-flatten :: [ValExpr v] -> [ValExpr v]
+flatten :: [ValExpr] -> [ValExpr]
 flatten []                       = []
 flatten ((view -> Vconcat l):xs) = l ++ flatten xs
 flatten (x:xs)                   = x : flatten xs
 
 -- | Apply String In Regular Expression operator on the provided value expressions.
 -- Preconditions are /not/ checked.
---cstrStrInRe :: ValExpr v -> ValExpr v -> ValExpr v
+--cstrStrInRe :: ValExpr -> ValExpr -> ValExpr
 --cstrStrInRe (view -> Vconst (Cstring s)) (view -> Vconst (Cregex r)) = cstrConst (Cbool (T.unpack s =~ T.unpack (xsd2posix r) ) )
 --cstrStrInRe s r                                                      = ValExpr (Vstrinre s r)
 
 {-
 -- | Create a call to a predefined function as a value expression.
-cstrPredef :: PredefKind -> FuncId -> [ValExpr v] -> ValExpr v
+cstrPredef :: PredefKind -> FuncId -> [ValExpr] -> ValExpr
 cstrPredef p f a = ValExpr (Vpredef p f a)
 -}
+
+type Valuation = Map.Map Variable Constant
+
+newtype VarModel = VarModel (Map.Map Variable ValExpr)
+
+assignedExpr :: Variable -> VarModel -> Maybe ValExpr
+assignedExpr v (VarModel map) = Map.lookup v map
+
+assignedExprWithDefault :: Variable -> VarModel -> ValExpr
+assignedExprWithDefault v (VarModel map) = Map.findWithDefault (cstrVar v) v map
+
+assignment :: [(Variable, ValExpr)] -> VarModel
+assignment = VarModel . Map.fromList
+
+assign :: Variable -> ValExpr -> VarModel -> VarModel
+assign v e (VarModel map) = VarModel $ Map.insert v e map
+
+noAssignment :: VarModel
+noAssignment = VarModel Map.empty
+
+instance Show VarModel where
+    show (VarModel map) = "{" ++ (List.intercalate ", " showList) ++ "}"
+        where
+        showList = showAssign <$> Map.toList map
+        showAssign (v,e) = show v ++ ":=" ++ show e
+
+evalConst :: Valuation -> ValExpr -> Either String Constant
+evalConst valuation = eval . evalConst' valuation
+
+evalConst' :: Valuation -> ValExpr -> ValExpr
+evalConst' valuation e = subst (VarModel $ Map.map cstrConst valuation) Map.empty e
+
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
 --
-subst :: (Variable v, Integral (ValExpr v), Variable w, Integral (ValExpr w))
-      => Map.Map v (ValExpr v)      -- ^ Map from variables to value expressions.
+subst :: VarModel      -- ^ Map from variables to value expressions.
       -> Map.Map FuncId (FuncDef w) -- ^ Map from identifiers to their
                                     -- definitions, this is used to replace
                                     -- function calls by their bodies if all
                                     -- the arguments of the function are
                                     -- constant.
-      -> ValExpr v                  -- ^ Value expression where the
+      -> ValExpr                  -- ^ Value expression where the
                                     -- substitution will take place.
-      -> ValExpr v
-subst ve _ x   | ve == Map.empty = x
+      -> ValExpr
+--subst ve _ x   | ve == Map.empty = x
 subst ve fis x = subst' ve fis (view x)
 
-subst' :: (Variable v, Integral (ValExpr v), Variable w, Integral (ValExpr w))
-       => Map.Map v (ValExpr v) -> Map.Map FuncId (FuncDef w) -> ValExprView v -> ValExpr v
+subst' :: VarModel -> Map.Map FuncId (FuncDef w) -> ValExprView -> ValExpr
 subst' _  _   (Vconst const')          = cstrConst const'
-subst' ve _   (Vvar vid)               = Map.findWithDefault (cstrVar vid) vid ve
+subst' ve _   (Vvar vid)               = assignedExprWithDefault vid ve
 --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
 --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
 --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
@@ -492,17 +526,15 @@ subst' ve fis (Vconcat vexps)          = cstrConcat $ map (subst' ve fis . view)
 
 -- | Substitute variables by value expressions in a value expression (change variable kind).
 -- Preconditions are /not/ checked.
-compSubst :: (Variable v, Integral (ValExpr v), Variable w, Integral (ValExpr w))
-          => Map.Map v (ValExpr w) -> Map.Map FuncId (FuncDef v) -> ValExpr v -> ValExpr w
+compSubst :: VarModel -> Map.Map FuncId (FuncDef v) -> ValExpr -> ValExpr
 -- compSubst ve _ _ | ve == Map.empty = error "TXS Subst compSubst: variables must be substitute, yet varenv empty\n"
 compSubst ve fis x                 = compSubst' ve fis (view x)
 
-compSubst' :: (Variable v, Integral (ValExpr v), Variable w, Integral (ValExpr w))
-           => Map.Map v (ValExpr w) -> Map.Map FuncId (FuncDef v) -> ValExprView v -> ValExpr w
+compSubst' :: VarModel -> Map.Map FuncId (FuncDef v) -> ValExprView -> ValExpr
 --compSubst' _  _   (Vconst const')          = cstrConst const'
 compSubst' ve _   (Vvar vid)               = fromMaybe
                                                     (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
-                                                    (Map.lookup vid ve)
+                                                    (assignedExpr vid ve)
 --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
 --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
 --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)

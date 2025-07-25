@@ -43,6 +43,7 @@ data Constant = -- | Constructor of Boolean constant.
                 -- | Constructor of String constant.
               | Cstring  { toText :: Text }
                 -- | Constructor of Regular Expression constant.
+{-
               | Cregex   { -- | Regular Expression in XSD format
                            toXSDRegex :: Text } 
                                             -- PvdL: performance gain: translate only once,
@@ -51,6 +52,7 @@ data Constant = -- | Constructor of Boolean constant.
               | Ccstr    { cstrId :: CstrId, args :: [Constant] }
                 -- | Constructor of ANY constant.
               | Cany     { sort :: SortId }
+-}
   deriving (Eq, Ord, Read, Show, Generic, NFData, Data)
 
 -- | Const is Resettable
@@ -61,6 +63,6 @@ instance SortOf Constant where
   sortOf (Cbool _b)                         = sortIdBool
   sortOf (Cint _i)                          = sortIdInt
   sortOf (Cstring _s)                       = sortIdString
-  sortOf (Cregex _r)                        = sortIdRegex
-  sortOf (Ccstr (CstrId _nm _uid _ca cs) _) = cs
-  sortOf (Cany s)                           = s
+--  sortOf (Cregex _r)                        = sortIdRegex
+--  sortOf (Ccstr (CstrId _nm _uid _ca cs) _) = cs
+--  sortOf (Cany s)                           = s

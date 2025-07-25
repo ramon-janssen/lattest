@@ -51,25 +51,18 @@ fromSuspendedInputAttempt,
 -- * STS
 SymInteract(..),
 SymGuard,
-SymAssign,
 GateValue(..),
-Value(..),
 Gate(..),
 Variable(..),
-addTypedVar,
+addTypedVal,
 Type(..),
-SymExpr(..),
-equalTyped,
-assignedExpr,
-assignment,
-noAssignment
 )
 where
 
-import qualified Grisette.Core as Grisette
-import qualified Grisette.SymPrim as GSymPrim
-import qualified Data.Map as Map (Map, fromList, toList, lookup, empty)
+import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
 import qualified Data.List as List (intercalate)
+import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, ValExpr(..), Type(..), constType, varType, assign)
+import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 {- |
     The class of observable actions for which it is possible to derive whether the actions are accepted or refused. For types where refusal does not
@@ -274,57 +267,18 @@ instance (Show i, Show o) => Show (Gate i o) where
     show (InputGate i) = "In " ++ show i
     show (OutputGate o) = "Out " ++ show o
 
-data Type = IntType | BoolType deriving (Eq, Ord)
-
-instance Show Type where
-    show IntType = "Int"
-    show BoolType = "Bool"
-
-addTypedVar :: Variable -> Value -> GSymPrim.Model -> GSymPrim.Model
-addTypedVar (Variable v BoolType) (BoolVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Bool) w m
-addTypedVar (Variable v IntType) (IntVal w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Integer) w m
-
-data Variable = Variable Grisette.Symbol Type deriving (Eq, Ord)
-
-instance Show Variable where
-    show (Variable symbol stype) = show symbol ++ ":" ++ show stype
+addTypedVal :: Variable -> Constant -> Valuation -> Valuation
+addTypedVal v c | not (varType v == constType c) = error $ "expression "  ++ show c ++ " :: " ++ show (constType c) ++ " assigned to variable " ++ varName v ++ " :: " ++ show (varType v)
+addTypedVal v c = Map.insert v c
+--addTypedVal (Variable v BoolType) (Cbool w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Bool) w m
+--addTypedVal (Variable v IntType) (Cint w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Integer) w m
 
 data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 
 instance (Show i, Show o) => Show (SymInteract i o) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
-type SymGuard = GSymPrim.SymBool
+type SymGuard = ValExpr -- TODO should be boolean
 
-data SymExpr = BoolExpr GSymPrim.SymBool | IntExpr GSymPrim.SymInteger
-
-instance Show SymExpr where
-    show (BoolExpr e) = show e
-    show (IntExpr e) = show e
-
-newtype SymAssign  = SymAssign (Map.Map Variable SymExpr)
-
-assignedExpr :: Variable -> SymAssign -> Maybe SymExpr
-assignedExpr v (SymAssign map) = Map.lookup v map
-
-assignment :: [(Variable, SymExpr)] -> SymAssign
-assignment = SymAssign . Map.fromList
-
-noAssignment :: SymAssign
-noAssignment = SymAssign Map.empty
-
-instance Show SymAssign where
-    show (SymAssign map) = "{" ++ (List.intercalate ", " showList) ++ "}"
-        where
-        showList = showAssign <$> Map.toList map
-        showAssign (v,e) = show v ++ ":=" ++ show e
-
-data Value = IntVal Integer | BoolVal Bool deriving (Eq, Ord,Show)
-
-data GateValue i o = GateValue (Gate i o) [Value] deriving (Eq, Ord)
-
-equalTyped :: Variable -> Value -> Bool
-equalTyped (Variable _ BoolType) (BoolVal _) = True
-equalTyped (Variable _ IntType) (IntVal _) = True
-equalTyped _ _ = False
+data GateValue i o = GateValue (Gate i o) [Constant] deriving (Eq, Ord)
 
