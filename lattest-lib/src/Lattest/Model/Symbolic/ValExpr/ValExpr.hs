@@ -22,6 +22,16 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , ValExprView(..)
 , PredefKind(..)
 , Resettable
+, Type(..)
+, varName
+, varType
+, constType
+, Variable(..)
+, VarModel
+, assign
+, evalConst
+, Valuation
+, assignedExpr
 , module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 )

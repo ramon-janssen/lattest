@@ -56,8 +56,9 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
+    SymInteract(..),GateValue(..), SymGuard, addTypedVal,Gate(..))
 import Lattest.Util.Utils((&&&), takeArbitrary)
+import Data.Either.Utils (fromRight)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
@@ -66,8 +67,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
-import qualified Grisette.Core as Grisette
-import qualified Grisette.SymPrim as GSymPrim
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), eval, constType, varType, evalConst, assignedExpr, subst)
+import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 ------------
 -- syntax --
@@ -319,19 +320,13 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
 
 data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
 
-type Valuation = (Map Variable Value)
+newtype STStdest = STSLoc (SymGuard,VarModel)
 
-newtype STStdest = STSLoc (SymGuard,SymAssign)
-
-stsTLoc :: SymGuard -> SymAssign -> STStdest
+stsTLoc :: SymGuard -> VarModel -> STStdest
 stsTLoc g a = STSLoc (g,a)
 
 instance Show STStdest where
     show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
-
-evaluate :: SymExpr -> GSymPrim.Model -> Value
-evaluate (BoolExpr expr) valuation = BoolVal (Grisette.evalSymToCon valuation expr :: Bool)
-evaluate (IntExpr expr) valuation = IntVal (Grisette.evalSymToCon valuation expr :: Integer)
 
 instance (Completable (GateValue i o)) where
     implicitDestination (GateValue (OutputGate _) _) = forbidden
@@ -347,21 +342,30 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
             Just i@(SymInteract g vars) ->
                 if List.length values /= List.length vars
                     then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
-                    else if List.all (\(var,val) -> equalTyped var val) (zip vars values)
+                    else if List.all (\(var,val) -> varType var == constType val) (zip vars values)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
 
 instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
-    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 ->
-        let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
-            valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
-        in if not $ Grisette.evalSymToCon valuation guard -- guard is false
+    after = monadicAfter $ withStep (\(IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 ->
+        let gateValuation = buildGateValuation gateVars gateVals
+            -- valuation = Map.foldrWithKey (\x xval m -> addTypedVal x xval m) gateValuation stateValuation
+            valuation = stateValuation `Map.union` gateValuation
+        in if not $ evalBool valuation guard
             then implicitDestination gv
-            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case assignedExpr v assign of
-                                                    Nothing -> xval
-                                                    Just assignExpr -> evaluate assignExpr valuation) varMap
-                 in return $ IntrpState l2 varMap2)
+            else let stateValuation2 = Map.mapWithKey (\var@(Variable _ _) val -> case assignedExpr var assign of
+                                                    Nothing -> val
+                                                    Just assignExpr -> evalVal valuation assignExpr) stateValuation
+                 in return $ IntrpState l2 stateValuation2)
+        where
+        buildGateValuation :: [Variable] -> [Constant] -> Valuation
+        buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
+        evalVal :: Valuation -> ValExpr -> Constant
+        evalVal valuation = fromRight . evalConst valuation
+        evalBool :: Valuation -> ValExpr -> Bool
+        evalBool valuation = toBool . evalVal valuation
+
 
 -------------------------
 -- Auxiliary functions --
