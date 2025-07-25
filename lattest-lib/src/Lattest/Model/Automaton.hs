@@ -66,8 +66,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
-import Grisette.Core as Grisette
-import Grisette.SymPrim as GSymPrim
+import qualified Grisette.Core as Grisette
+import qualified Grisette.SymPrim as GSymPrim
 
 ------------
 -- syntax --
