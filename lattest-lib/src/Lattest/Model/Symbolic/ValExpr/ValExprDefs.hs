@@ -35,18 +35,20 @@ where
 import           Control.DeepSeq
 import           Data.Data
 import           Data.Set        (Set)
+import qualified Data.Set as Set
 import           Data.Text       (Text)
 import           GHC.Generics    (Generic)
 
-import           Lattest.Model.Symbolic.ValExpr.Constant (Constant(..))
+import           Lattest.Model.Symbolic.ValExpr.Constant (Constant(..), toBool, toText)
+import qualified Lattest.Model.Symbolic.ValExpr.Constant as Const (toInteger)
 import           Lattest.Model.Symbolic.ValExpr.CstrId
+import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
 import           Lattest.Model.Symbolic.ValExpr.FuncId
 import           Lattest.Model.Symbolic.ValExpr.Id
 import           Lattest.Model.Symbolic.ValExpr.Product
 import           Lattest.Model.Symbolic.ValExpr.Sum
 import           Lattest.Model.Symbolic.ValExpr.SortId
 import           Lattest.Model.Symbolic.ValExpr.SortOf
-
 
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
@@ -165,38 +167,47 @@ reduceExpr :: ValExprView -> ValExprView
 --reduceExpr (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
 --reduceExpr (view -> Viscstr { })                                   =
 --reduceExpr (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
-reduceExpr (Vconst con)                                    = Vconst con
-reduceExpr (Vvar v)                                        = Vvar v
-reduceExpr (Vite (reduceExpr . view -> Vconst c) (view -> e1) (view -> e2))     = if toBool c then reduceExpr e1 else reduceExpr e2
-reduceExpr (Vite (reduceExpr . view -> Vconst c) (view -> e1) (view -> e2))     = if toBool c then reduceExpr e1 else reduceExpr e2
-reduceExpr (Vite (view -> c) (view -> e1) (view -> e2))            = Vite (ValExpr $ reduceExpr c) (ValExpr $ reduceExpr e1) (ValExpr $ reduceExpr e2)
-reduceExpr (Vequal (reduceExpr . view -> e1) (reduceExpr . view -> e2))  =
-    case (e1, e2) of
-        (Vconst c1, Vconst c2) -> Vconst $ Cbool (c1 == c2)
-        _ -> Vequal (ValExpr $ e1) (ValExpr $ e2)
-{-reduceExpr e@(view -> Vequal { }) = e 
-reduceExpr (view -> Vnot { })                                      = BoolType
-reduceExpr (view -> Vnot { })                                      = BoolType
-reduceExpr (view -> Vand { })                                      = BoolType
-reduceExpr (view -> Vand { })                                      = BoolType
-reduceExpr (view -> Vsum { })                                      = IntType
-reduceExpr (view -> Vsum { })                                      = IntType
-reduceExpr (view -> Vproduct { })                                  = IntType
-reduceExpr (view -> Vproduct { })                                  = IntType
-reduceExpr (view -> Vmodulo { })                                   = IntType
-reduceExpr (view -> Vmodulo { })                                   = IntType
-reduceExpr (view -> Vdivide { })                                   = IntType
-reduceExpr (view -> Vdivide { })                                   = IntType
-reduceExpr (view -> Vgez { })                                      = BoolType
-reduceExpr (view -> Vgez { })                                      = BoolType
-reduceExpr (view -> Vlength { })                                   = IntType
-reduceExpr (view -> Vlength { })                                   = IntType
-reduceExpr (view -> Vat { })                                       = StringType
-reduceExpr (view -> Vat { })                                       = StringType
-reduceExpr (view -> Vconcat { })                                   = StringType
-reduceExpr (view -> Vconcat { })                                   = StringType-}
+reduceExpr (Vconst con) = Vconst con
+reduceExpr (Vvar v) = Vvar v
+reduceExpr (Vite (reduceView -> Vconst c) (reduceView -> e1) (reduceView -> e2)) = if toBool c then e1 else e2
+reduceExpr (Vite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Vite c e1 e2
+reduceExpr (Vequal (reduceView -> Vconst e1) (reduceView -> Vconst e2)) = Vconst $ Cbool (e1 == e2)
+reduceExpr (Vequal (reduce -> e1) (reduce -> e2)) = Vequal e1 e2
+reduceExpr (Vnot (reduceView -> (Vconst (Cbool b)))) = vbool b
+reduceExpr (Vnot (reduce -> e)) = Vnot e
+reduceExpr (Vand (Set.map reduceView -> es)) | all isConst es = vbool $ foldr (&&) True (Set.map getBool es)
+reduceExpr (Vand (Set.map reduce -> es)) = Vand es
+reduceExpr (Vsum (foldFMX reduceView -> es)) | all isConst es = vint $ foldr (+) 0 (foldFMX getInt es)
+reduceExpr (Vsum (Set.map reduce -> es)) = Vsum es
+reduceExpr (Vproduct (foldFMX reduceView -> es)) | all isConst es = vint $ foldr (*) 1 (foldFMX getInt es)
+reduceExpr (Vproduct (foldFMX reduce -> es)) = es
+reduceExpr (Vmodulo (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ vint $ x `mod` y
+reduceExpr (Vmodulo (reduce -> e1) (reduce -> e2)) = Vmodulo e1 e2
+reduceExpr (Vdivide (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ x / y
+reduceExpr (Vdivide (reduce -> e1) (reduce -> e2)) = Vdivide e1 e2
+reduceExpr (Vgez (reduceView -> (Vconst (Cint x)))) = vbool $ x >= 0
+reduceExpr (Vgez (reduce -> e)) = Vgez e
+reduceExpr (Vlength (reduceView -> (Vconst (Cstring s)))) = vint $ length s
+reduceExpr (Vlength (reduce -> e)) = Vlength e
+reduceExpr (Vat (reduceView -> (Vconst (Cstring s))) (reduceView -> (Vconst (Cint i)))) = vstring $ if i >= length s then "" else [s !! i] -- TODO are these semantics the same as in SMT2?
+reduceExpr (Vat (reduce -> e1) (reduce -> e2)) = Vat e1 e2
+reduceExpr (Vconcat (fmap reduceView -> es)) | all isConst es = Vconst $ concat $ fmap getInt es
+reduceExpr (Vconcat (fmap reduce -> e)) = Vconcat e
 --reduceExpr (view -> Vstrinre { })                                  =
 --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
+
+isConst (Vconst _) = True
+isConst _ = False
+getConst (Vconst c) = c
+getInt = Const.toInteger . getConst
+getBool = toBool . getConst
+getString = toText . getConst
+-- variations of reduceExpr that work on ValExprs or produce ValExprs. Note that this is only to make the type checker happy.
+reduceView = reduceExpr . view
+reduce = ValExpr . reduceView
+vbool = Vconst . Cbool
+vint = Vconst . Cint
+vstring = Vconst . Cstring
 
 typeOfExpr = sortOf'
 
