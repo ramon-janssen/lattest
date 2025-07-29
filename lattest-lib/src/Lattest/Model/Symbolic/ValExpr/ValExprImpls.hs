@@ -78,6 +78,8 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , subst
 , compSubst         -- changes type
 , assignedExpr
+, assignment
+, noAssignment
 )
 where
 
