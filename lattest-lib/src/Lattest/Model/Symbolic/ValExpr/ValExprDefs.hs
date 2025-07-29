@@ -34,10 +34,12 @@ where
 
 import           Control.DeepSeq
 import           Data.Data
-import           Data.Set        (Set)
+import           Data.Set         (Set)
 import qualified Data.Set as Set
-import           Data.Text       (Text)
-import           GHC.Generics    (Generic)
+import           Data.Text        (Text)
+import qualified Data.Text as Text(length, pack, index, concat)
+import           GHC.Generics     (Generic)
+import           GHC.Integer (divInteger)
 
 import           Lattest.Model.Symbolic.ValExpr.Constant (Constant(..), toBool, toText)
 import qualified Lattest.Model.Symbolic.ValExpr.Constant as Const (toInteger)
@@ -177,37 +179,51 @@ reduceExpr (Vnot (reduceView -> (Vconst (Cbool b)))) = vbool b
 reduceExpr (Vnot (reduce -> e)) = Vnot e
 reduceExpr (Vand (Set.map reduceView -> es)) | all isConst es = vbool $ foldr (&&) True (Set.map getBool es)
 reduceExpr (Vand (Set.map reduce -> es)) = Vand es
-reduceExpr (Vsum (foldFMX reduceView -> es)) | all isConst es = vint $ foldr (+) 0 (foldFMX getInt es)
-reduceExpr (Vsum (Set.map reduce -> es)) = Vsum es
-reduceExpr (Vproduct (foldFMX reduceView -> es)) | all isConst es = vint $ foldr (*) 1 (foldFMX getInt es)
-reduceExpr (Vproduct (foldFMX reduce -> es)) = es
-reduceExpr (Vmodulo (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ vint $ x `mod` y
+reduceExpr (Vsum (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (+) 0 (mapFreeMonoidX getInt es)
+reduceExpr (Vsum (mapFreeMonoidX reduce -> es)) = Vsum es
+reduceExpr (Vproduct (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (*) 1 (mapFreeMonoidX getInt es)
+reduceExpr (Vproduct (mapFreeMonoidX reduce -> es)) = Vproduct es
+reduceExpr (Vmodulo (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ x `mod` y
 reduceExpr (Vmodulo (reduce -> e1) (reduce -> e2)) = Vmodulo e1 e2
-reduceExpr (Vdivide (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ x / y
+reduceExpr (Vdivide (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ x `divInteger` y
 reduceExpr (Vdivide (reduce -> e1) (reduce -> e2)) = Vdivide e1 e2
 reduceExpr (Vgez (reduceView -> (Vconst (Cint x)))) = vbool $ x >= 0
 reduceExpr (Vgez (reduce -> e)) = Vgez e
-reduceExpr (Vlength (reduceView -> (Vconst (Cstring s)))) = vint $ length s
+reduceExpr (Vlength (reduceView -> (Vconst (Cstring s)))) = vint $ textLength s
 reduceExpr (Vlength (reduce -> e)) = Vlength e
-reduceExpr (Vat (reduceView -> (Vconst (Cstring s))) (reduceView -> (Vconst (Cint i)))) = vstring $ if i >= length s then "" else [s !! i] -- TODO are these semantics the same as in SMT2?
+reduceExpr (Vat (reduceView -> (Vconst (Cstring s))) (reduceView -> (Vconst (Cint i)))) = vtext $ charAt s i -- TODO are these semantics the same as in SMT2?
 reduceExpr (Vat (reduce -> e1) (reduce -> e2)) = Vat e1 e2
-reduceExpr (Vconcat (fmap reduceView -> es)) | all isConst es = Vconst $ concat $ fmap getInt es
+reduceExpr (Vconcat (fmap reduceView -> es)) | all isConst es = vtext $ Text.concat $ fmap getText es
 reduceExpr (Vconcat (fmap reduce -> e)) = Vconcat e
 --reduceExpr (view -> Vstrinre { })                                  =
 --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
 
+isConst :: ValExprView -> Bool
 isConst (Vconst _) = True
 isConst _ = False
+getConst :: ValExprView -> Constant
 getConst (Vconst c) = c
+getInt :: ValExprView -> Integer
 getInt = Const.toInteger . getConst
+getBool :: ValExprView -> Bool
 getBool = toBool . getConst
-getString = toText . getConst
+getText :: ValExprView -> Text
+getText = toText . getConst
 -- variations of reduceExpr that work on ValExprs or produce ValExprs. Note that this is only to make the type checker happy.
+reduceView :: ValExpr -> ValExprView
 reduceView = reduceExpr . view
+reduce :: ValExpr -> ValExpr
 reduce = ValExpr . reduceView
+vbool :: Bool -> ValExprView
 vbool = Vconst . Cbool
+vint :: Integer -> ValExprView
 vint = Vconst . Cint
-vstring = Vconst . Cstring
+vtext :: Text -> ValExprView
+vtext = Vconst . Cstring
+textLength :: Text -> Integer
+textLength = Prelude.toInteger . Text.length
+charAt :: Text -> Integer -> Text
+charAt t i = Text.pack $ if i > Prelude.toInteger (Text.length t) then [Text.index t (fromInteger i)] else "" 
 
 typeOfExpr = sortOf'
 
