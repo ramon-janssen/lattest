@@ -86,6 +86,10 @@ instance TermWrapper SumTerm where
 instance Integral a => IntMultipliable (SumTerm a) where
     n <.> SumTerm x = SumTerm (fromInteger $ toInteger x * toInteger n)
 
+instance Foldable SumTerm where
+    --foldr :: (a -> b -> b) -> b -> t a -> b 
+    foldr f e (SumTerm x) = f x e
+
 {--------------------------------------------------------------------
   Sums and multiplications
 --------------------------------------------------------------------}

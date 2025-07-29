@@ -102,6 +102,10 @@ instance TermWrapper ProductTerm where
 instance Integral a => IntMultipliable (ProductTerm a) where
     n <.> pt = (^ toInteger n) <$> pt
 
+instance Foldable ProductTerm where
+    --foldr :: (a -> b -> b) -> b -> t a -> b 
+    foldr f e (ProductTerm x) = f x e
+
 {--------------------------------------------------------------------
   Products and multiplications
 --------------------------------------------------------------------}
