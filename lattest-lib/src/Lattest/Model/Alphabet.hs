@@ -53,9 +53,7 @@ SymInteract(..),
 SymGuard,
 GateValue(..),
 Gate(..),
-Variable(..),
 addTypedVal,
-Type(..),
 )
 where
 
