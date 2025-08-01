@@ -69,7 +69,10 @@ type FreeSum a = FreeMonoidX (SumTerm a)
 -- > a0 + a1 + ... + an-1
 --
 newtype SumTerm a = SumTerm { summand :: a }
-    deriving (Eq, Ord, Read, Show, Generic, NFData, Functor, Data)
+    deriving (Eq, Ord, Read, Generic, NFData, Functor, Data)
+
+instance Show a => Show (SumTerm a) where
+    show = show . summand
 
 instance (Resettable a) => Resettable (SumTerm a)
 

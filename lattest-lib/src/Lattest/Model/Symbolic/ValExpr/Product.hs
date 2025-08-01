@@ -81,7 +81,10 @@ type FreeProduct a = FreeMonoidX (ProductTerm a)
 -- > a0 * a1 * ... * an-1
 --
 newtype ProductTerm a = ProductTerm { factor :: a }
-    deriving (Eq, Ord, Read, Show, Generic, NFData, Functor, Data)
+    deriving (Eq, Ord, Read, Generic, NFData, Functor, Data)
+
+instance Show a => Show (ProductTerm a) where
+    show = show . factor
 
 instance (Resettable a) => Resettable (ProductTerm a)
 

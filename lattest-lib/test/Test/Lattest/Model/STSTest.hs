@@ -97,18 +97,18 @@ testPrintSTS = TestCase $ do
     assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExample
     where
     {-
-    current state configuration: [IntrpState 0 (fromList [(x:Int,Cint 0)])]
+    current state configuration: [IntrpState 0 (fromList [(x:Int,0)])]
     initial location configuration: [0]
     locations: 0, 1, 2
     transitions:
-    0 ――In "water" [p:Int]⟶ [([[(&& (<= 1 p) (<= -10 (- p)))]] {x:Int:=(+ x p)},1)]
-    0 ――Out "coffee" []⟶ [([[(< 15 x)]] {},2)]
+    0 ――In "water" [p:Int]⟶ [([[(([(-1,1),(p:Int,1)]) > 0) ∧ (([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]
+    0 ――Out "coffee" []⟶ [([[([(-15,1),(x:Int,1)]) > 0]] {},2)]
     0 ――Out "ok" [p:Int]⟶ []
     1 ――In "water" [p:Int]⟶ []
     1 ――Out "coffee" []⟶ []
-    1 ――Out "ok" [p:Int]⟶ [([[(= x p)]] {},0)]
+    1 ――Out "ok" [p:Int]⟶ [([[(p:Int) = (x:Int)]] {},0)]
     2 ――In "water" [p:Int]⟶ []
     2 ――Out "coffee" []⟶ []
     2 ――Out "ok" [p:Int]⟶ []
     -}
-    printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,Cint 0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(&& (<= 1 p) (<= -10 (- p)))]] {x:Int:=(+ x p)},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[(< 15 x)]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(= x p)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"
+    printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(([(-1,1),(p:Int,1)]) > 0)\8743(([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[([(-15,1),(x:Int,1)]) > 0]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(p:Int) = (x:Int)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"

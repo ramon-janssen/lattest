@@ -34,6 +34,7 @@ where
 
 import           Control.DeepSeq
 import           Data.Data
+import qualified Data.List as List
 import           Data.Set         (Set)
 import qualified Data.Set as Set
 import           Data.Text        (Text)
@@ -68,7 +69,7 @@ instance Show Type where
 data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
 
 instance Show Variable where
-    show (Variable name stype) = show name ++ ":" ++ show stype
+    show (Variable name stype) = name ++ ":" ++ show stype
 
 
 -- ----------------------------------------------------------------------------------------- --
@@ -114,7 +115,24 @@ data  ValExprView   = Vconst  Constant
                     | Vfunc   FuncId [ValExpr]
                     | Vpredef PredefKind FuncId [ValExpr]
 -}
-     deriving (Eq, Ord, Show)
+     deriving (Eq, Ord)
+
+instance Show ValExprView where
+    show (Vconst c) = show c
+    show (Vvar v) = show v
+    show (Vequal e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
+    show (Vite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
+    show (Vnot e) = "¬(" ++ show e ++ ")"
+    show (Vand es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es
+    show (Vdivide e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"
+    show (Vmodulo e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
+    show (Vsum es) = show es -- List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es -- FreeSum ValExpr
+    show (Vproduct es) = show es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
+    show (Vgez e) = "(" ++ show e ++ ") > 0"
+    show (Vlength e) = "length(" ++ show e ++ ")"
+    show (Vat e1 e2) = "" ++ show e2 ++ "[" ++ show e2 ++ "]"
+    show (Vconcat es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> es
+
 
 -- These instances are needed to use the symbolic representation of sums and
 -- products of val expressions. These instances have no implementation, which
@@ -153,7 +171,10 @@ instance Ord v => Integral ValExpr
 newtype ValExpr = ValExpr {
                         -- | View on value expression.
                         view :: ValExprView }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show ValExpr where
+    show = show . view
 
 -- | Evaluate the provided value expression.
 -- Either the Right Constant Value is returned or a (Left) error message.
