@@ -53,7 +53,12 @@ data Constant = -- | Constructor of Boolean constant.
                 -- | Constructor of ANY constant.
               | Cany     { sort :: SortId }
 -}
-  deriving (Eq, Ord, Read, Show, Generic, NFData, Data)
+  deriving (Eq, Ord, Read, Generic, NFData, Data)
+
+instance Show Constant where
+  show (Cbool b) = show b
+  show (Cint i) = show i
+  show (Cstring t) = show t
 
 -- | Const is Resettable
 instance Resettable Constant
