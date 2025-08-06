@@ -14,13 +14,16 @@ takeRandom,
 -- * Maybe
 takeJusts,
 -- * Set
-takeArbitrary
+takeArbitrary,
+-- * List utils
+removeDuplicates
 )
 where
 
 import Data.Foldable(toList)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import Data.List(sort, head, group)
 import System.Random(RandomGen, uniformR)
 import Control.Monad.Extra((||^), (&&^))
 
@@ -73,3 +76,7 @@ takeArbitrary :: Set a -> Maybe (a, Set a)
 takeArbitrary set
     | Set.null set = Nothing
     | otherwise = Just (Set.elemAt 0 set, Set.deleteAt 0 set)
+
+-- | Remove duplicates from a list by sorting, grouping and taking only the first element of each group. Returns ordered and filtered list.
+removeDuplicates :: Ord a => [a] -> [a]
+removeDuplicates = map head . group . sort
