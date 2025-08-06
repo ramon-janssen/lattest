@@ -46,12 +46,3 @@ parseTupleLine line =
                else
                    Nothing -- Non-valid action
         _ -> Nothing  -- Malformed line
-
--- removeDuplicates :: Ord a => [a] -> [a]
--- removeDuplicates = go Set.empty
---   where
---     go _    []     = []
---     go seen (x:xs)
---       | x `Set.member` seen = go seen xs
---       | otherwise           = x : go (Set.insert x seen) xs
-
