@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lattest.Util.ModelParsingUtils (readAutFile) where
+module Lattest.Util.ModelParsingUtils (readAutFile, dumpLTSdot) where
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Util.Utils(removeDuplicates)
@@ -10,8 +10,6 @@ import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
 import System.FilePath (replaceExtension)
 import Data.List (isSuffixOf)
-
-type Edge = (String, String, String)
 
 readAutFile :: FilePath -> IO ([String], [String], Set.Set String, Maybe [(String, IOAct String String, String)])
 readAutFile path = do
@@ -28,12 +26,13 @@ readAutFile path = do
 
     return (inputAlphabet, outputAlphabet, allStates, Just parsed)
 
+-- | Parse a text line of the form (state, action, state), and return the transition tuple
+-- | NOTE: action labels are expected to end with either "_i" or "_o"
 parseTupleLine :: T.Text -> Maybe (String, IOAct String String, String)
 parseTupleLine line =
     let stripped = T.strip line -- Remove trailing whitespaces
-        removeParenAux = T.replace "(" "" stripped 
-        removeParenAux2 = T.replace ")," "" removeParenAux
-        transition = T.split (==',') removeParenAux2
+        removedParen = (T.replace ")" "" . T.replace "(" "" . T.replace ")," "") stripped
+        transition = T.split (==',') removedParen
     in case transition of
         [s1, act, s2] ->
             let actionStr = T.unpack (T.strip act)
@@ -46,3 +45,17 @@ parseTupleLine line =
                else
                    Nothing -- Non-valid action
         _ -> Nothing  -- Malformed line
+
+-- Build dot file representation of LTS transitions
+dumpLTSdot :: (Ord s, Show s, Ord i, Show i, Ord o, Show o) => FilePath -> [(s, IOAct i o, s)] -> IO ()
+dumpLTSdot path transitions = do
+    let edges = [ (show from, T.unpack (T.replace "!" "" . T.replace "?" "" $ T.pack (show label)), show to)
+                | (from, label, to) <- transitions ]
+    let dotPath = if ".dot" `isSuffixOf` path then path else path ++ ".dot"
+    writeFile dotPath $
+        unlines $
+            ["digraph Automaton {"] ++
+            [ "    " ++ from ++ " -> " ++ to ++ " [label=" ++ label ++ "];" 
+            | (from, label, to) <- edges
+            ] ++ ["}"]
+    putStrLn $ "DOT file written to: " ++ dotPath
