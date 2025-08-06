@@ -3,7 +3,7 @@
 This is an example of testing a specification which contains conjunctive composition. Specifically, this specification is the alternating interface
 automaton sG, taken from:
 
-- [_Ramon Janssen_, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 3.4.1](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf).
+- [_Ramon Janssen_, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 4.3.1](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf).
 
 This is implementation represents a vending machine, which outputs coffee (C) and tea (T), optionally with milk (CM or TM).
 
