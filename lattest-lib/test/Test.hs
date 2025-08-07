@@ -5,6 +5,7 @@ import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.Testing
 import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
+import Test.Lattest.Util.ModelParsingUtils
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
 
 import Data.Functor(void)
@@ -56,7 +57,8 @@ hunitTests = TestList [
     testSTSHappyFlow,
     testErrorThrowingGates,
     testSTSUnHappyFlow,
-    testPrintSTS
+    testPrintSTS,
+    testReadAutFile
     ]
 
 

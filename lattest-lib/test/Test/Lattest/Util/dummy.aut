@@ -1,0 +1,6 @@
+des(Idle,4,4)
+(Idle, coin_i, CoinInserted)
+(CoinInserted, select_coffee_i, Brewing)
+(Brewing, ready_o, Ready)
+(Brewing, dummy_transition_not_parsed, Ready),
+(Ready, take_cup_i, Idle)
