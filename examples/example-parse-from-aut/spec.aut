@@ -1,4 +1,4 @@
-des (0_i,11,8)
+des (PickEither,11,8)
 (PickEither, 0_i, PickEitherIn),
 (PickEither, 1_o, Picked1),
 (PickEither, 2_o, Picked2),

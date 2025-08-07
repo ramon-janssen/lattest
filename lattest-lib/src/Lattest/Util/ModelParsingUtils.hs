@@ -18,14 +18,13 @@ import Data.List (isSuffixOf)
     - Set.Set String: Set of all LTS states
     - String: Initial state
     - Maybe [(String, IOAct String String, String)]: List of LTS transition tuples as (InitialState, Action, EndState)
-    NOTE: In order to parse actions correctly, inputs and outputs must end in _i and _o respectively. The first line of the .aut file must follow the structure des(initState,nEdges,nStates).
+    NOTE: In order to parse actions correctly, inputs and outputs must end in _i and _o respectively. The first line of the .aut file must follow the structure des (initState,nEdges,nStates).
 -}
 readAutFile :: FilePath -> IO ([String], [String], Set.Set String, String, Maybe [(String, IOAct String String, String)])
 readAutFile path = do
     contents <- TIO.readFile path
     let linesT = T.lines contents
     case linesT of
-      [] -> error "Error: .aut file is empty."
       firstLine : restLines ->
         case parseInitialState firstLine of
           Nothing -> error "Error: Could not parse initial state from header."
@@ -38,10 +37,10 @@ readAutFile path = do
                             [s2 | (_, _, s2) <- parsed]
             in return (inputAlphabet, outputAlphabet, allStates, initialState, Just parsed)
 
--- | Parse initial line of .aut file and return initialState. The line must follow the structure des(initState,nEdges,nStates).
+-- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
 parseInitialState :: T.Text -> Maybe String
 parseInitialState line =
-  case T.stripPrefix "des(" (T.strip line) of
+  case T.stripPrefix "des (" (T.strip line) of
     Nothing -> Nothing
     Just rest ->
       let elems = T.split (==',') (T.replace ")," "" rest)
