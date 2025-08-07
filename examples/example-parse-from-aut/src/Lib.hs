@@ -19,44 +19,45 @@ runMultipleTests :: IO ()
 runMultipleTests = do
     let filePath = "./spec.aut"
 
-    (inputAlphabet, outputAlphabet, states, initialState, Just transitions) <- readAutFile filePath
+    (inputAlphabet, outputAlphabet, states, initialState, maybeTransitions) <- readAutFile filePath
+    case maybeTransitions of
+        Nothing -> error "No transitions found"
+        Just transitions -> do
+            putStrLn "Input Alphabet:"
+            print inputAlphabet
+            putStrLn "\nOutput Alphabet:"
+            print outputAlphabet
+            putStrLn "\nStates:"
+            print states
+            putStrLn "\nTransitions:"
+            mapM_ print transitions
+            
+            let Just detConcTransitions = detConcTransFromRel transitions
+                alphabet = ioAlphabet inputAlphabet outputAlphabet
+                initialConfiguration = pure initialState
+                spec = automaton initialConfiguration alphabet detConcTransitions
+                model = interpretQuiescentConcrete spec
+            
+            putStrLn "Starting tests..."
+            
+            forM_ [1..nrTests] $ \i -> do
+                putStrLn $ "\n--- Test #" ++ show i ++ " ---"
+                putStrLn "Connecting..."
+                adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct String String) String)
+                imp  <- withQuiescenceMillis 500 adap
+                let testSelector = randomTestSelectorFromSeed (initialSeed + i)
+                                `untilCondition` stopAfterSteps nrSteps
+                                `observingOnly` printActions
+                                `observingOnly` traceObserver
+                                `andObserving` stateObserver
+                (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+                putStrLn $ "Verdict: " ++ show verdict
+                putStrLn $ "Observed: " ++ show observed
+                putStrLn $ "Final state: " ++ show maybeMq
+                close adap
+            
+            putStrLn "\nAll tests completed."
+            
+            -- Dump the DOT file next to the executable
+            dumpLTSdot "LTS.dot" transitions
 
-    putStrLn "Input Alphabet:"
-    print inputAlphabet
-
-    putStrLn "\nOutput Alphabet:"
-    print outputAlphabet
-
-    putStrLn "\nStates:"
-    print states
-
-    putStrLn "\nTransitions:"
-    mapM_ print transitions
-
-    let Just detConcTransitions = detConcTransFromRel transitions
-        alphabet = ioAlphabet inputAlphabet outputAlphabet
-        initialConfiguration = pure initialState
-        spec = automaton initialConfiguration alphabet detConcTransitions
-        model = interpretQuiescentConcrete spec
-
-    -- Dump the DOT file next to the executable
-    dumpLTSdot "LTS.dot" transitions
-    putStrLn "Starting tests..."
-
-    forM_ [1..nrTests] $ \i -> do
-        putStrLn $ "\n--- Test #" ++ show i ++ " ---"
-        putStrLn "Connecting..."
-        adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct String String) String)
-        imp  <- withQuiescenceMillis 500 adap
-        let testSelector = randomTestSelectorFromSeed (initialSeed + i)
-                         `untilCondition` stopAfterSteps nrSteps
-                         `observingOnly` printActions
-                         `observingOnly` traceObserver
-                         `andObserving` stateObserver
-        (verdict, (observed, maybeMq)) <- runTester model testSelector imp
-        putStrLn $ "Verdict: " ++ show verdict
-        putStrLn $ "Observed: " ++ show observed
-        putStrLn $ "Final state: " ++ show maybeMq
-        close adap
-
-    putStrLn "\nAll tests completed."
