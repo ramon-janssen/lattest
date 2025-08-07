@@ -16,23 +16,38 @@ import Data.List (isSuffixOf)
     - [String]: Input Alphabet
     - [String]: Output Alphabet
     - Set.Set String: Set of all LTS states
+    - String: Initial state
     - Maybe [(String, IOAct String String, String)]: List of LTS transition tuples as (InitialState, Action, EndState)
-    NOTE: In order to parse actions correctly, inputs and outputs must end in _i and _o respectively. The first line of the .aut file is ignored.
+    NOTE: In order to parse actions correctly, inputs and outputs must end in _i and _o respectively. The first line of the .aut file must follow the structure des(initState,nEdges,nStates).
 -}
-readAutFile :: FilePath -> IO ([String], [String], Set.Set String, Maybe [(String, IOAct String String, String)])
+readAutFile :: FilePath -> IO ([String], [String], Set.Set String, String, Maybe [(String, IOAct String String, String)])
 readAutFile path = do
     contents <- TIO.readFile path
-    let ls = drop 1 (T.lines contents)  -- Skip the first line (header)
-        parsed = mapMaybe parseTupleLine ls
+    let linesT = T.lines contents
+    case linesT of
+      [] -> error "Error: .aut file is empty."
+      firstLine : restLines ->
+        case parseInitialState firstLine of
+          Nothing -> error "Error: Could not parse initial state from header."
+          Just initialState ->
+            let parsed = mapMaybe parseTupleLine restLines
+                inputAlphabet  = removeDuplicates [s | (_, In s, _)  <- parsed]
+                outputAlphabet = removeDuplicates [s | (_, Out s, _) <- parsed]
+                allStates = Set.fromList $
+                            [s1 | (s1, _, _) <- parsed] ++
+                            [s2 | (_, _, s2) <- parsed]
+            in return (inputAlphabet, outputAlphabet, allStates, initialState, Just parsed)
 
-        inputAlphabet  = removeDuplicates [s | (_, In s, _)  <- parsed]
-        outputAlphabet = removeDuplicates [s | (_, Out s, _) <- parsed]
-
-        allStates = Set.fromList $
-                    [s1 | (s1, _, _) <- parsed] ++
-                    [s2 | (_, _, s2) <- parsed]
-
-    return (inputAlphabet, outputAlphabet, allStates, Just parsed)
+-- | Parse initial line of .aut file and return initialState. The line must follow the structure des(initState,nEdges,nStates).
+parseInitialState :: T.Text -> Maybe String
+parseInitialState line =
+  case T.stripPrefix "des(" (T.strip line) of
+    Nothing -> Nothing
+    Just rest ->
+      let elems = T.split (==',') (T.replace ")," "" rest)
+      in case elems of
+           (s:_) -> Just (T.unpack (T.strip s))
+           _     -> Nothing
 
 -- | Parse a text line of the form (state, action, state), and return the transition tuple
 -- | NOTE: only action labels finished in "_i" or "_o" are considered

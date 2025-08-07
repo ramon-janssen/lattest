@@ -19,7 +19,7 @@ runMultipleTests :: IO ()
 runMultipleTests = do
     let filePath = "./spec.aut"
 
-    (inputAlphabet, outputAlphabet, states, Just transitions) <- readAutFile filePath
+    (inputAlphabet, outputAlphabet, states, initialState, Just transitions) <- readAutFile filePath
 
     putStrLn "Input Alphabet:"
     print inputAlphabet
@@ -35,7 +35,7 @@ runMultipleTests = do
 
     let Just detConcTransitions = detConcTransFromRel transitions
         alphabet = ioAlphabet inputAlphabet outputAlphabet
-        initialConfiguration = pure "PickEither"
+        initialConfiguration = pure initialState
         spec = automaton initialConfiguration alphabet detConcTransitions
         model = interpretQuiescentConcrete spec
 
