@@ -78,9 +78,9 @@ instance Show Variable where
 -- | ValExprView: the public view of value expression 'ValExpr'
 data ValExprIntView = VIntConst  Constant
                     | VIntVar    Variable
-                    | VIntIte   {   condition   :: ValExprBool
-                                ,   trueBranch  :: ValExprInt
-                                ,   falseBranch :: ValExprInt
+                    | VIntIte   {   conditionInt   :: ValExprBool
+                                ,   trueBranchInt  :: ValExprInt
+                                ,   falseBranchInt :: ValExprInt
                                 }
                     | VIntDivide   {   dividend :: ValExprInt
                                 ,   divisor  :: ValExprInt
@@ -90,29 +90,31 @@ data ValExprIntView = VIntConst  Constant
                                 }
                     | VIntSum      (FreeSum ValExprInt)
                     | VIntProduct  (FreeProduct ValExprInt)
-                    | VIntGez      ValExprInt
-                    | VLength   ValExprInt
+                    | VLength   ValExprString
+     deriving (Eq, Ord)
 
 data ValExprBoolView = VBoolConst  Constant
                     | VBoolVar    Variable
                     | VEqualInt  ValExprInt ValExprInt
                     | VEqualBool  ValExprBool ValExprBool
-                    | VBoolEqualString  ValExprString ValExprString
-                    | VBoolIte   {   condition   :: ValExprBool
-                                ,   trueBranch  :: ValExprBool
-                                ,   falseBranch :: ValExprBool
+                    | VEqualString  ValExprString ValExprString
+                    | VBoolIte   {   conditionBool   :: ValExprBool
+                                ,   trueBranchBool  :: ValExprBool
+                                ,   falseBranchBool :: ValExprBool
                                 }
+                    | VGezInt      ValExprInt
                     | VNot      ValExprBool
                     | VAnd      (Set ValExprBool)
+     deriving (Eq, Ord)
 
 data ValExprStringView = VStringConst  Constant
                     | VStringVar    Variable
-                    | VStringIte   {   condition   :: ValExprString
-                                ,   trueBranch  :: ValExprString
-                                ,   falseBranch :: ValExprString
+                    | VStringIte   {   conditionString   :: ValExprBool
+                                ,   trueBranchString  :: ValExprString
+                                ,   falseBranchString :: ValExprString
                                 }
                     | VAt       {   string   :: ValExprString
-                                ,   position :: ValExprString
+                                ,   position :: ValExprInt
                                 }
                     | VConcat   [ValExprString]
 {-
@@ -138,8 +140,7 @@ instance Show ValExprIntView where
     show (VIntModulo e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
     show (VIntSum es) = show es -- List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es -- FreeSum ValExpr
     show (VIntProduct es) = show es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
-    show (VIntGez e) = "(" ++ show e ++ ") > 0"
-    show (VIntLength e) = "length(" ++ show e ++ ")"
+    show (VLength e) = "length(" ++ show e ++ ")"
 
 instance Show ValExprBoolView where
     show (VBoolConst c) = show c
@@ -148,6 +149,7 @@ instance Show ValExprBoolView where
     show (VEqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (VEqualString e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (VBoolIte cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
+    show (VGezInt e) = "(" ++ show e ++ ") > 0"
     show (VNot e) = "¬(" ++ show e ++ ")"
     show (VAnd es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es
 
@@ -200,22 +202,33 @@ newtype ValExpr v = ValExpr {
 instance Show v => Show (ValExpr v) where
     show = show . view
 
-type ValExprInt = ValExpr ValExprViewInt
-type ValExprBool = ValExpr ValExprViewBool
-type ValExprString = ValExpr ValExprViewString
+type ValExprInt = ValExpr ValExprIntView
+type ValExprBool = ValExpr ValExprBoolView
+type ValExprString = ValExpr ValExprStringView
 
-class Eval v where
+{-class Eval v where
     eval :: v -> Either String Constant
     evalView :: v -> Either String Constant
-
+-}
 -- | Evaluate the provided value expression.
 -- Either the Right Constant Value is returned or a (Left) error message.
-eval :: Reduce v => ValExpr v -> Either String Constant
+eval :: Eval v => ValExpr v -> Either String Constant
 eval = evalView . view
 
-evalView :: Reduce v => v -> Either String Constant
-evalView (reduceExpr -> Vconst v) = Right v
-evalView x          = Left $ "Value Expression is not a constant value " ++ show x
+class Reduce v => Eval v where
+    evalView :: v -> Either String Constant
+
+instance Eval ValExprIntView where
+    evalView (reduceExpr -> VIntConst v) = Right v
+    evalView x          = Left $ "Value Expression is not a constant value " ++ show x
+
+instance Eval ValExprBoolView where
+    evalView (reduceExpr -> VBoolConst v) = Right v
+    evalView x          = Left $ "Value Expression is not a constant value " ++ show x
+
+instance Eval ValExprStringView where
+    evalView (reduceExpr -> VStringConst v) = Right v
+    evalView x          = Left $ "Value Expression is not a constant value " ++ show x
 
 class Reduce v where
     reduceExpr :: v -> v
@@ -225,85 +238,108 @@ instance Reduce ValExprIntView where
     --reduceExpr (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
     --reduceExpr (view -> Viscstr { })                                   =
     --reduceExpr (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
-    reduceExpr (VIntConst con) = Vconst con
-    reduceExpr (VIntVar v) = Vvar v
-    reduceExpr (VIntIte (reduceView -> Vconst c) (reduceView -> e1) (reduceView -> e2)) = if toBool c then e1 else e2
-    reduceExpr (VIntIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = Vite c e1 e2
-    reduceExpr (VEqualInt (reduceView -> Vconst e1) (reduceView -> Vconst e2)) = Vconst $ Cbool (e1 == e2)
-    reduceExpr (VEqualInt (reduce -> e1) (reduce -> e2)) = Vequal e1 e2
-    reduceExpr (VNot (reduceView -> (Vconst (Cbool b)))) = vbool b
-    reduceExpr (VNot (reduce -> e)) = Vnot e
-    reduceExpr (VAnd (Set.map reduceView -> es)) | all isConst es = vbool $ foldr (&&) True (Set.map getBool es)
-    reduceExpr (VAnd (Set.map reduce -> es)) = Vand es
-    reduceExpr (VIntSum (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (+) 0 (mapFreeMonoidX getInt es)
-    reduceExpr (VIntSum (mapFreeMonoidX reduce -> es)) = Vsum es
-    reduceExpr (VIntProduct (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (*) 1 (mapFreeMonoidX getInt es)
-    reduceExpr (VIntProduct (mapFreeMonoidX reduce -> es)) = Vproduct es
-    reduceExpr (VIntModulo (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ x `mod` y
-    reduceExpr (VIntModulo (reduce -> e1) (reduce -> e2)) = Vmodulo e1 e2
-    reduceExpr (VIntDivide (reduceView -> (Vconst (Cint x))) (reduceView -> (Vconst (Cint y)))) = vint $ x `divInteger` y
-    reduceExpr (VIntDivide (reduce -> e1) (reduce -> e2)) = Vdivide e1 e2
-    reduceExpr (VIntGez (reduceView -> (Vconst (Cint x)))) = vbool $ x >= 0
-    reduceExpr (VIntGez (reduce -> e)) = Vgez e
-    reduceExpr (VLength (reduceView -> (Vconst (Cstring s)))) = vint $ textLength s
-    reduceExpr (VLength (reduce -> e)) = Vlength e
-    reduceExpr (VAt (reduceView -> (Vconst (Cstring s))) (reduceView -> (Vconst (Cint i)))) = vtext $ charAt s i -- TODO are these semantics the same as in SMT2?
-    reduceExpr (VAt (reduce -> e1) (reduce -> e2)) = Vat e1 e2
-    reduceExpr (VConcat (fmap reduceView -> es)) | all isConst es = vtext $ Text.concat $ fmap getText es
-    reduceExpr (VConcat (fmap reduce -> e)) = Vconcat e
+    reduceExpr (VIntConst con) = VIntConst con
+    reduceExpr (VIntVar v) = VIntVar v
+    reduceExpr (VIntIte (reduceView -> VBoolConst c) (reduceView -> e1) (reduceView -> e2)) = if toBool c then e1 else e2
+    reduceExpr (VIntIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = VIntIte c e1 e2
+    reduceExpr (VIntSum (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isIntConst es = vint $ foldrTerms (+) 0 (mapFreeMonoidX getInt es)
+    reduceExpr (VIntSum (mapFreeMonoidX reduce -> es)) = VIntSum es
+    reduceExpr (VIntProduct (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isIntConst es = vint $ foldrTerms (*) 1 (mapFreeMonoidX getInt es)
+    reduceExpr (VIntProduct (mapFreeMonoidX reduce -> es)) = VIntProduct es
+    reduceExpr (VIntModulo (reduceView -> (VIntConst (Cint x))) (reduceView -> (VIntConst (Cint y)))) = vint $ x `mod` y
+    reduceExpr (VIntModulo (reduce -> e1) (reduce -> e2)) = VIntModulo e1 e2
+    reduceExpr (VIntDivide (reduceView -> (VIntConst (Cint x))) (reduceView -> (VIntConst (Cint y)))) = vint $ x `divInteger` y
+    reduceExpr (VIntDivide (reduce -> e1) (reduce -> e2)) = VIntDivide e1 e2
+    reduceExpr (VLength (reduceView -> (VStringConst (Cstring s)))) = vint $ textLength s
+    reduceExpr (VLength (reduce -> e)) = VLength e
     --reduceExpr (view -> Vstrinre { })                                  =
     --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
 
-isConst :: ValExprView -> Bool
-isConst (Vconst _) = True
-isConst _ = False
-getConst :: ValExprView -> Constant
-getConst (Vconst c) = c
-getInt :: ValExprView -> Integer
-getInt = Const.toInteger . getConst
-getBool :: ValExprView -> Bool
-getBool = toBool . getConst
-getText :: ValExprView -> Text
-getText = toText . getConst
+instance Reduce ValExprBoolView where
+    --reduceExpr (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         =
+    --reduceExpr (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
+    --reduceExpr (view -> Viscstr { })                                   =
+    --reduceExpr (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
+    reduceExpr (VBoolConst con) = VBoolConst con
+    reduceExpr (VBoolVar v) = VBoolVar v
+    reduceExpr (VBoolIte (reduceView -> VBoolConst c) (reduceView -> e1) (reduceView -> e2)) = if toBool c then e1 else e2
+    reduceExpr (VBoolIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = VBoolIte c e1 e2
+    reduceExpr (VEqualInt (reduceView -> VIntConst e1) (reduceView -> VIntConst e2)) = VBoolConst $ Cbool (e1 == e2)
+    reduceExpr (VEqualInt (reduce -> e1) (reduce -> e2)) = VEqualInt e1 e2
+    reduceExpr (VEqualBool (reduceView -> VBoolConst e1) (reduceView -> VBoolConst e2)) = VBoolConst $ Cbool (e1 == e2)
+    reduceExpr (VEqualBool (reduce -> e1) (reduce -> e2)) = VEqualBool e1 e2
+    reduceExpr (VEqualString (reduceView -> VStringConst e1) (reduceView -> VStringConst e2)) = VBoolConst $ Cbool (e1 == e2)
+    reduceExpr (VEqualString (reduce -> e1) (reduce -> e2)) = VEqualString e1 e2
+    reduceExpr (VGezInt (reduceView -> (VIntConst (Cint x)))) = vbool $ x >= 0
+    reduceExpr (VGezInt (reduce -> e)) = VGezInt e
+    reduceExpr (VNot (reduceView -> (VBoolConst (Cbool b)))) = vbool b
+    reduceExpr (VNot (reduce -> e)) = VNot e
+    reduceExpr (VAnd (Set.map reduceView -> es)) | all isBoolConst es = vbool $ foldr (&&) True (Set.map getBool es)
+    reduceExpr (VAnd (Set.map reduce -> es)) = VAnd es
+    --reduceExpr (view -> Vstrinre { })                                  =
+    --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
+
+instance Reduce ValExprStringView where
+    --reduceExpr (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         =
+    --reduceExpr (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
+    --reduceExpr (view -> Viscstr { })                                   =
+    --reduceExpr (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
+    reduceExpr (VStringConst con) = VStringConst con
+    reduceExpr (VStringVar v) = VStringVar v
+    reduceExpr (VStringIte (reduceView -> VBoolConst c) (reduceView -> e1) (reduceView -> e2)) = if toBool c then e1 else e2
+    reduceExpr (VStringIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = VStringIte c e1 e2
+    reduceExpr (VAt (reduceView -> (VStringConst (Cstring s))) (reduceView -> (VIntConst (Cint i)))) = vtext $ charAt s i -- TODO are these semantics the same as in SMT2?
+    reduceExpr (VAt (reduce -> e1) (reduce -> e2)) = VAt e1 e2
+    reduceExpr (VConcat (fmap reduceView -> es)) | all isStringConst es = vtext $ Text.concat $ fmap getText es
+    reduceExpr (VConcat (fmap reduce -> e)) = VConcat e
+    --reduceExpr (view -> Vstrinre { })                                  =
+    --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
+
+--isConst :: ValExprView -> Bool
+isIntConst (VIntConst _) = True
+isIntConst _ = False
+isBoolConst (VBoolConst _) = True
+isBoolConst _ = False
+isStringConst (VStringConst _) = True
+isStringConst _ = False
+--getConst :: ValExprView -> Constant
+getIntConst (VIntConst c) = c
+getBoolConst (VBoolConst c) = c
+getStringConst (VStringConst c) = c
+--getInt :: ValExprView -> Integer
+getInt = Const.toInteger . getIntConst
+--getBool :: ValExprView -> Bool
+getBool = toBool . getBoolConst
+--getText :: ValExprView -> Text
+getText = toText . getStringConst
+
 -- variations of reduceExpr that work on ValExprs or produce ValExprs. Note that this is only to make the type checker happy.
-reduceView :: ValExpr -> ValExprView
+reduceView :: Reduce t => ValExpr t -> t
 reduceView = reduceExpr . view
-reduce :: ValExpr -> ValExpr
+reduce :: Reduce t => ValExpr t -> ValExpr t
 reduce = ValExpr . reduceView
-vbool :: Bool -> ValExprView
-vbool = Vconst . Cbool
-vint :: Integer -> ValExprView
-vint = Vconst . Cint
-vtext :: Text -> ValExprView
-vtext = Vconst . Cstring
+--vbool :: Bool -> ValExprView
+vbool = VBoolConst . Cbool
+--vint :: Integer -> ValExprView
+vint = VIntConst . Cint
+--vtext :: Text -> ValExprView
+vtext = VStringConst . Cstring
 textLength :: Text -> Integer
 textLength = Prelude.toInteger . Text.length
 charAt :: Text -> Integer -> Text
 charAt t i = Text.pack $ if i > Prelude.toInteger (Text.length t) then [Text.index t (fromInteger i)] else "" 
 
-typeOfExpr = sortOf'
+class TypeableExpr t where
+    typeOfExpr :: ValExpr t -> Type
 
-sortOf' :: ValExpr -> Type
---sortOf' (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         = fs
---sortOf' (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         = cs
---sortOf' (view -> Viscstr { })                                   = BoolType
---sortOf' (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  = ca!!p
-sortOf' (view -> Vconst con)                                    = constType con
-sortOf' (view -> Vvar (Variable _  t))                          = t
-sortOf' (view -> Vite _cond vexp1 _vexp2)                       = sortOf' vexp1
-sortOf' (view -> Vequal { })                                    = BoolType
-sortOf' (view -> Vnot { })                                      = BoolType
-sortOf' (view -> Vand { })                                      = BoolType
-sortOf' (view -> Vsum { })                                      = IntType
-sortOf' (view -> Vproduct { })                                  = IntType
-sortOf' (view -> Vmodulo { })                                   = IntType
-sortOf' (view -> Vdivide { })                                   = IntType
-sortOf' (view -> Vgez { })                                      = BoolType
-sortOf' (view -> Vlength { })                                   = IntType
-sortOf' (view -> Vat { })                                       = StringType
-sortOf' (view -> Vconcat { })                                   = StringType
---sortOf' (view -> Vstrinre { })                                  = BoolType
---sortOf' (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   = fs
+instance TypeableExpr ValExprIntView where
+    typeOfExpr _ = IntType
+
+instance TypeableExpr ValExprBoolView where
+    typeOfExpr _ = BoolType
+
+instance TypeableExpr ValExprStringView where
+    typeOfExpr _ = StringType
 
 -- | only needed for CNECTDEF
 data PredefKind     = AST     -- Algebraic To String
