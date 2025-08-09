@@ -20,8 +20,13 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE ViewPatterns #-}
 module Lattest.Model.Symbolic.ValExpr.ValExprDefs
-( ValExprView(..)
+( ValExprIntView(..)
+, ValExprBoolView(..)
+, ValExprStringView(..)
 , ValExpr(..)       -- for local usage only!
+, ValExprInt
+, ValExprBool
+, ValExprString
 , eval
 , PredefKind(..)
 , Variable(..)
@@ -217,18 +222,25 @@ eval = evalView . view
 
 class Reduce v => Eval v where
     evalView :: v -> Either String Constant
+    isConst :: v -> Bool
 
 instance Eval ValExprIntView where
     evalView (reduceExpr -> VIntConst v) = Right v
     evalView x          = Left $ "Value Expression is not a constant value " ++ show x
+    isConst (VIntConst _) = True
+    isConst _ = False
 
 instance Eval ValExprBoolView where
     evalView (reduceExpr -> VBoolConst v) = Right v
     evalView x          = Left $ "Value Expression is not a constant value " ++ show x
+    isConst (VBoolConst _) = True
+    isConst _ = False
 
 instance Eval ValExprStringView where
     evalView (reduceExpr -> VStringConst v) = Right v
     evalView x          = Left $ "Value Expression is not a constant value " ++ show x
+    isConst (VStringConst _) = True
+    isConst _ = False
 
 class Reduce v where
     reduceExpr :: v -> v
@@ -242,9 +254,9 @@ instance Reduce ValExprIntView where
     reduceExpr (VIntVar v) = VIntVar v
     reduceExpr (VIntIte (reduceView -> VBoolConst c) (reduceView -> e1) (reduceView -> e2)) = if toBool c then e1 else e2
     reduceExpr (VIntIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = VIntIte c e1 e2
-    reduceExpr (VIntSum (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isIntConst es = vint $ foldrTerms (+) 0 (mapFreeMonoidX getInt es)
+    reduceExpr (VIntSum (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (+) 0 (mapFreeMonoidX getInt es)
     reduceExpr (VIntSum (mapFreeMonoidX reduce -> es)) = VIntSum es
-    reduceExpr (VIntProduct (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isIntConst es = vint $ foldrTerms (*) 1 (mapFreeMonoidX getInt es)
+    reduceExpr (VIntProduct (mapFreeMonoidX reduceView -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (*) 1 (mapFreeMonoidX getInt es)
     reduceExpr (VIntProduct (mapFreeMonoidX reduce -> es)) = VIntProduct es
     reduceExpr (VIntModulo (reduceView -> (VIntConst (Cint x))) (reduceView -> (VIntConst (Cint y)))) = vint $ x `mod` y
     reduceExpr (VIntModulo (reduce -> e1) (reduce -> e2)) = VIntModulo e1 e2
@@ -274,7 +286,7 @@ instance Reduce ValExprBoolView where
     reduceExpr (VGezInt (reduce -> e)) = VGezInt e
     reduceExpr (VNot (reduceView -> (VBoolConst (Cbool b)))) = vbool b
     reduceExpr (VNot (reduce -> e)) = VNot e
-    reduceExpr (VAnd (Set.map reduceView -> es)) | all isBoolConst es = vbool $ foldr (&&) True (Set.map getBool es)
+    reduceExpr (VAnd (Set.map reduceView -> es)) | all isConst es = vbool $ foldr (&&) True (Set.map getBool es)
     reduceExpr (VAnd (Set.map reduce -> es)) = VAnd es
     --reduceExpr (view -> Vstrinre { })                                  =
     --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
@@ -290,18 +302,11 @@ instance Reduce ValExprStringView where
     reduceExpr (VStringIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = VStringIte c e1 e2
     reduceExpr (VAt (reduceView -> (VStringConst (Cstring s))) (reduceView -> (VIntConst (Cint i)))) = vtext $ charAt s i -- TODO are these semantics the same as in SMT2?
     reduceExpr (VAt (reduce -> e1) (reduce -> e2)) = VAt e1 e2
-    reduceExpr (VConcat (fmap reduceView -> es)) | all isStringConst es = vtext $ Text.concat $ fmap getText es
+    reduceExpr (VConcat (fmap reduceView -> es)) | all isConst es = vtext $ Text.concat $ fmap getText es
     reduceExpr (VConcat (fmap reduce -> e)) = VConcat e
     --reduceExpr (view -> Vstrinre { })                                  =
     --reduceExpr (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
 
---isConst :: ValExprView -> Bool
-isIntConst (VIntConst _) = True
-isIntConst _ = False
-isBoolConst (VBoolConst _) = True
-isBoolConst _ = False
-isStringConst (VStringConst _) = True
-isStringConst _ = False
 --getConst :: ValExprView -> Constant
 getIntConst (VIntConst c) = c
 getBoolConst (VBoolConst c) = c
