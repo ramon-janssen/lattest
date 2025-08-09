@@ -30,7 +30,7 @@ import Lattest.Model.Symbolic.ValExpr.ValExprDefs
 -- | Data structure to store the information of a Function Definition:
 -- * A list of variables
 -- * A body (possibly using the variables)
-data  FuncDef v      = FuncDef    [v] ValExpr
+data  FuncDef v i    = FuncDef    [v] (ValExpr i)
      deriving (Eq,Ord,Show)
 
 -- ----------------------------------------------------------------------------------------- --
