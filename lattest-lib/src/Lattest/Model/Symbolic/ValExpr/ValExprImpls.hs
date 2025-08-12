@@ -21,6 +21,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE MonoLocalBinds      #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -156,7 +157,7 @@ cstrAccess c n p e = ValExpr (Vaccess c n p e)
 --isConst _                  = False
 
 -- | Get the integer value of a constant.
-getIntVal :: ValExpr -> Integer
+getIntVal :: ValExprInt -> Integer
 getIntVal (view -> VIntConst (Cint i)) = i
 getIntVal (view -> VIntConst _)        =
     error "ValExprImpls.hs - getIntVal - Unexpected Constant"
@@ -531,22 +532,50 @@ cstrPredef p f a = ValExpr (Vpredef p f a)
 
 type Valuation = Map.Map Variable Constant
 
-newtype VarModel = VarModel (Map.Map Variable ValExpr)
+-- TODO ideally we statically match the variable and expr types, see remark at the definition of Variable
+data VarModel = VarModel {
+    intVars :: Map.Map Variable ValExprInt,
+    boolVars :: Map.Map Variable ValExprBool,
+    stringVars :: Map.Map Variable ValExprString
+    }
 
-assignedExpr :: Variable -> VarModel -> Maybe ValExpr
-assignedExpr v (VarModel map) = Map.lookup v map
+assignedExpr :: Variable -> VarModel -> Maybe (ValExpr t)
+assignedExpr v (VarModel ints bools strings) = case varType v of
+    IntType -> Map.lookup v ints
+    BoolType -> Map.lookup v bools
+    StringType -> Map.lookup v strings
 
-assignedExprWithDefault :: Variable -> VarModel -> ValExpr
-assignedExprWithDefault v (VarModel map) = Map.findWithDefault (cstrVar v) v map
+assignedExprWithDefault :: Variable -> VarModel -> ValExpr t
+assignedExprWithDefault v (VarModel ints bools strings) =  case varType v of
+    IntType -> Map.findWithDefault (cstrVar v) v ints
+    BoolType -> Map.findWithDefault (cstrVar v) v bools
+    StringType -> Map.findWithDefault (cstrVar v) v strings
 
-assignment :: [(Variable, ValExpr)] -> VarModel
-assignment = VarModel . Map.fromList
+assignment :: [VarModel -> VarModel] -> VarModel
+assignment fs = foldr assign noAssignment fs
 
-assign :: Variable -> ValExpr -> VarModel -> VarModel
-assign v e (VarModel map) = VarModel $ Map.insert v e map
+class Assignable t where
+    assign :: Variable -> ValExpr t -> VarModel -> VarModel
+
+--(:=) = assign
+
+instance Assignable Integer where
+    assign v e m = case varType v of
+        IntType -> m {intVars = Map.insert v e (intVars m)}
+        _ -> error $ "assigned Integer expression to Variable " ++ show v
+
+instance Assignable Bool where
+    assign v e m = case varType v of
+        BoolType -> m {boolVars = Map.insert v e (boolVars m)}
+        _ -> error $ "assigned Bool expression to Variable " ++ show v
+
+instance Assignable String where
+    assign v e m = case varType v of
+        StringType -> m {stringVars = Map.insert v e (stringVars m)}
+        _ -> error $ "assigned String expression to Variable " ++ show v
 
 noAssignment :: VarModel
-noAssignment = VarModel Map.empty
+noAssignment = VarModel Map.empty Map.empty Map.empty
 
 instance Show VarModel where
     show (VarModel map) = "{" ++ (List.intercalate ", " showList) ++ "}"
@@ -554,10 +583,10 @@ instance Show VarModel where
         showList = showAssign <$> Map.toList map
         showAssign (v,e) = show v ++ ":=" ++ show e
 
-evalConst :: Valuation -> ValExpr -> Either String Constant
+evalConst :: Valuation -> (ValExpr t) -> Either String Constant
 evalConst valuation = eval . evalConst' valuation
 
-evalConst' :: Valuation -> ValExpr -> ValExpr
+evalConst' :: Valuation -> (ValExpr t) -> (ValExpr t)
 evalConst' valuation e = subst (VarModel $ Map.map cstrConst valuation) Map.empty e
 
 -- | Substitute variables by value expressions in a value expression.
@@ -566,7 +595,7 @@ evalConst' valuation e = subst (VarModel $ Map.map cstrConst valuation) Map.empt
 --
 subst :: Subst e
       => VarModel      -- ^ Map from variables to value expressions.
-      -> Map.Map FuncId (FuncDef w) -- ^ Map from identifiers to their
+      -> Map.Map FuncId (FuncDef w t) -- ^ Map from identifiers to their
                                     -- definitions, this is used to replace
                                     -- function calls by their bodies if all
                                     -- the arguments of the function are
@@ -578,10 +607,10 @@ subst :: Subst e
 subst ve fis x = subst' ve fis (view x)
 
 class Subst e where
-    subst' :: VarModel -> Map.Map FuncId (FuncDef w) -> e -> ValExpr e
+    subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> e -> ValExpr e
 
 instance Subst ValExprIntView where
-    subst' :: VarModel -> Map.Map FuncId (FuncDef w) -> ValExprBoolView -> ValExpr
+    subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ValExprBoolView -> ValExpr
     subst' _  _   (VIntConst const')          = cstrConst const'
     subst' ve _   (VIntVar vid)               = assignedExprWithDefault vid ve
     --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
@@ -598,7 +627,7 @@ instance Subst ValExprIntView where
     --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
 
 instance Subst ValExprBoolView where
-    subst' :: VarModel -> Map.Map FuncId (FuncDef w) -> ValExprBoolView -> ValExpr
+    subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ValExprBoolView -> ValExpr
     subst' _  _   (VBoolConst const')         = cstrConst const'
     subst' ve _   (VBoolVar vid)              = assignedExprWithDefault vid ve
     --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
@@ -629,12 +658,12 @@ instance Subst ValExprStringView where
     --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
     --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
 
-compSubst :: CompSubst t => VarModel -> Map.Map FuncId (FuncDef v) -> ValExpr t -> ValExpr t
+compSubst :: CompSubst t => VarModel -> Map.Map FuncId (FuncDef v t) -> ValExpr t -> ValExpr t
 -- compSubst ve _ _ | ve == Map.empty = error "TXS Subst compSubst: variables must be substitute, yet varenv empty\n"
 compSubst ve fis x                 = compSubst' ve fis (view x)
 
 class CompSubst e where
-    compSubst' :: VarModel -> Map.Map FuncId (FuncDef v) -> e -> ValExpr e
+    compSubst' :: VarModel -> Map.Map FuncId (FuncDef v e) -> e -> ValExpr e
 
 instance CompSubst ValExprIntView where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
