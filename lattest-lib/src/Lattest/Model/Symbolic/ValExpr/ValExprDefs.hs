@@ -71,6 +71,7 @@ instance Show Type where
     show BoolType = "Bool"
     show BoolType = "String"
 
+-- TODO ideally the Variable has a parameter t that denotes the type, so that the typechecker can match it to ValExprs with the same type t
 data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
 
 instance Show Variable where

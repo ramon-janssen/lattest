@@ -26,7 +26,7 @@ stsExample =
         ok = SymInteract (OutputGate "ok") [pvar]
         coffee = SymInteract (OutputGate "coffee") []
         waterGuard = binaryAnd (cstrLE (intConst 1) pvarexpr) (cstrLE pvarexpr (intConst 10))
-        waterAssign = assignment [(xvar,cstrPlus xvarexpr pvarexpr)]
+        waterAssign = assignment [xvar := cstrPlus xvarexpr pvarexpr]
         okGuard = cstrEqual xvarexpr pvarexpr
         coffeeGuard = cstrGE xvarexpr (intConst 15)
         initConf = NonDet [0] :: NonDet Integer
