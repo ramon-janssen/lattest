@@ -34,6 +34,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , varName
 , varType
 , constType
+, isConst
 )
 where
 
