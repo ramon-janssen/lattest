@@ -239,20 +239,20 @@ instance IteExpr ValExprStringView where
     cstrITE c (view -> VBoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
     -- if (not c) then tb else fb <==> if c then fb else tb
     cstrITE (view -> Vnot n) tb fb              = ValExpr (Vite n fb tb)-}
-    cstrITE cs tb fb                            = ValExpr (VBoolIte cs tb fb)
+    cstrITE cs tb fb                            = ValExpr (VStringIte cs tb fb)
 
 -- | Create a variable as a value expression.
 class EqExpr t where
     cstrEqual :: ValExpr t -> ValExpr t -> ValExprBool
     
 instance EqExpr ValExprIntView where
-    cstrEqual = VEqualInt
+    cstrEqual x y = ValExpr $ VEqualInt x y
 
 instance EqExpr ValExprBoolView where
-    cstrEqual = VEqualBool
+    cstrEqual x y = ValExpr $ VEqualBool x y
 
 instance EqExpr ValExprStringView where
-    cstrEqual = VEqualString
+    cstrEqual x y = ValExpr $ VEqualString x y
 
 
 
@@ -303,7 +303,7 @@ cstrNot ve                                  = ValExpr (VNot ve)
 -- Preconditions are /not/ checked.
 cstrAnd :: Set.Set ValExprBool -> ValExprBool
 --cstrAnd = cstrAnd' . flattenAnd
-cstrAnd = ValExpr . Vand . flattenAnd
+cstrAnd = ValExpr . VAnd . flattenAnd
     where
         flattenAnd :: Set.Set ValExprBool -> Set.Set ValExprBool
         flattenAnd = Set.unions . map fromValExpr . Set.toList
@@ -395,7 +395,7 @@ cstrSum' ms =
         case FMX.toOccurList retMS of
             []         -> cstrConst (Cint 0)                                -- sum of nothing equal zero
             [(term,1)] -> summand term
-            _          -> ValExprInt (Vsum retMS)
+            _          -> ValExpr (VIntSum retMS)
 
 -- Product
 
@@ -438,7 +438,7 @@ cstrProduct' ms =
                         case FMX.toDistinctAscOccurListT nonvals of
                             []          ->  cstrConst (Cint productVals)
                             [(term, 1)] ->  cstrSum (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
-                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (ValExprInt (VIntProduct nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
+                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (ValExpr (VIntProduct nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
                             0   ->  cstrConst (Cint 0)      -- 0 * x == 0
@@ -472,7 +472,7 @@ cstrGEZ :: ValExprInt -> ValExprBool
 -- Simplification Values
 cstrGEZ (view -> VIntConst (Cint v)) = cstrConst (Cbool (0 <= v))
 cstrGEZ (view -> VLength _)       = cstrConst (Cbool True)        -- length of string is always Greater or equal to zero
-cstrGEZ ve                        = ValExpr (VIntGez ve)
+cstrGEZ ve                        = ValExpr (VGezInt ve)
 
 
 -- | Apply operator Length on the provided value expression.
@@ -539,11 +539,6 @@ data VarModel = VarModel {
     stringVars :: Map.Map Variable ValExprString
     }
 
-assignedExpr :: Variable -> VarModel -> Maybe (ValExpr t)
-assignedExpr v (VarModel ints bools strings) = case varType v of
-    IntType -> Map.lookup v ints
-    BoolType -> Map.lookup v bools
-    StringType -> Map.lookup v strings
 
 assignedExprWithDefault :: Variable -> VarModel -> ValExpr t
 assignedExprWithDefault v (VarModel ints bools strings) =  case varType v of
@@ -556,23 +551,34 @@ assignment fs = foldr assign noAssignment fs
 
 class Assignable t where
     assign :: Variable -> ValExpr t -> VarModel -> VarModel
+    assignedExpr :: Variable -> VarModel -> Maybe (ValExpr t)
 
 --(:=) = assign
 
-instance Assignable Integer where
+instance Assignable ValExprIntView where
     assign v e m = case varType v of
         IntType -> m {intVars = Map.insert v e (intVars m)}
         _ -> error $ "assigned Integer expression to Variable " ++ show v
+    assignedExpr v (VarModel ints bools strings) = case varType v of
+        IntType -> Map.lookup v ints
+        _ -> error $ "cannot lookup Integer Value for variable " ++ show v
 
-instance Assignable Bool where
+
+instance Assignable ValExprBoolView where
     assign v e m = case varType v of
         BoolType -> m {boolVars = Map.insert v e (boolVars m)}
         _ -> error $ "assigned Bool expression to Variable " ++ show v
+    assignedExpr v (VarModel ints bools strings) = case varType v of
+        BoolType -> Map.lookup v bools
+        _ -> error $ "cannot lookup Bool Value for variable " ++ show v
 
-instance Assignable String where
+instance Assignable ValExprStringView where
     assign v e m = case varType v of
         StringType -> m {stringVars = Map.insert v e (stringVars m)}
         _ -> error $ "assigned String expression to Variable " ++ show v
+    assignedExpr v (VarModel ints bools strings) = case varType v of
+        StringType -> Map.lookup v strings
+        _ -> error $ "cannot lookup String Value for variable " ++ show v
 
 noAssignment :: VarModel
 noAssignment = VarModel Map.empty Map.empty Map.empty
