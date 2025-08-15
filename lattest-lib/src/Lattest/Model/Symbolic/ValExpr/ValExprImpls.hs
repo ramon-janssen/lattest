@@ -594,13 +594,13 @@ evalConst :: Valuation -> (ValExpr t) -> Either String Constant
 evalConst valuation = eval . evalConst' valuation
 
 valuationToVarModel :: Valuation -> VarModel
-valuationToVarModel vals = foldr (uncurry insertConstantInVarModel) noAssignment $ Map.toList vals
+valuationToVarModel vals = foldr (uncurry assignConstant) noAssignment $ Map.toList vals
 
-insertConstantInVarModel :: Variable -> Constant -> VarModel -> VarModel
-insertConstantInVarModel var@(Variable _ IntType) val@(Cint _) = assign var (cstrConst val)
-insertConstantInVarModel var@(Variable _ BoolType) val@(Cbool _) = assign var (cstrConst val)
-insertConstantInVarModel var@(Variable _ StringType) val@(Cstring _) = assign var (cstrConst val)
-insertConstantInVarModel var val = error $ "cannot assign value " ++ show val ++ " to variable " ++ show var
+assignConstant :: Variable -> Constant -> VarModel -> VarModel
+assignConstant var@(Variable _ IntType) val@(Cint _) = assign var (cstrConst val)
+assignConstant var@(Variable _ BoolType) val@(Cbool _) = assign var (cstrConst val)
+assignConstant var@(Variable _ StringType) val@(Cstring _) = assign var (cstrConst val)
+assignConstant var val = error $ "cannot assign value " ++ show val ++ " to variable " ++ show var
 
 evalConst' :: Subst t => Valuation -> (ValExpr t) -> (ValExpr t)
 evalConst' valuation e = subst (valuationToVarModel valuation) Map.empty e
