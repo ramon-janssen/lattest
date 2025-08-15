@@ -539,15 +539,15 @@ data VarModel = VarModel {
     stringVars :: Map.Map Variable ValExprString
     }
 
-
+{-
 assignedExprWithDefault :: Variable -> VarModel -> ValExpr t
 assignedExprWithDefault v (VarModel ints bools strings) =  case varType v of
     IntType -> Map.findWithDefault (cstrVar v) v ints
     BoolType -> Map.findWithDefault (cstrVar v) v bools
     StringType -> Map.findWithDefault (cstrVar v) v strings
-
+-}
 assignment :: [VarModel -> VarModel] -> VarModel
-assignment fs = foldr assign noAssignment fs
+assignment fs = foldr ($) noAssignment fs
 
 class Assignable t where
     assign :: Variable -> ValExpr t -> VarModel -> VarModel
@@ -584,15 +584,16 @@ noAssignment :: VarModel
 noAssignment = VarModel Map.empty Map.empty Map.empty
 
 instance Show VarModel where
-    show (VarModel map) = "{" ++ (List.intercalate ", " showList) ++ "}"
+    show (VarModel ints bools strings) = (toString ints) ++ (toString bools) ++ (toString strings)
         where
-        showList = showAssign <$> Map.toList map
+        toString map = "{" ++ (List.intercalate ", " $ showList map) ++ "}"
+        showList map = showAssign <$> Map.toList map
         showAssign (v,e) = show v ++ ":=" ++ show e
 
 evalConst :: Valuation -> (ValExpr t) -> Either String Constant
 evalConst valuation = eval . evalConst' valuation
 
-evalConst' :: Valuation -> (ValExpr t) -> (ValExpr t)
+evalConst' :: Subst t => Valuation -> (ValExpr t) -> (ValExpr t)
 evalConst' valuation e = subst (VarModel $ Map.map cstrConst valuation) Map.empty e
 
 -- | Substitute variables by value expressions in a value expression.
