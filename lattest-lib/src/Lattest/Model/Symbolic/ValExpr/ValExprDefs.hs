@@ -27,6 +27,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , ValExprInt
 , ValExprBool
 , ValExprString
+, Eval
 , eval
 , PredefKind(..)
 , Variable(..)
