@@ -58,73 +58,73 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 
 -- | Apply operator Or (\\\/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-cstrOr :: Set.Set ValExpr -> ValExpr
+cstrOr :: Set.Set (ValExprBool) -> ValExprBool
 -- a \/ b == not (not a /\ not b)
 cstrOr = cstrNot . cstrAnd . Set.map cstrNot
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-cstrXor :: ValExpr -> ValExpr -> ValExpr
+cstrXor :: ValExprBool -> ValExprBool -> ValExprBool
 cstrXor a b = cstrOr (Set.fromList [ cstrAnd (Set.fromList [a, cstrNot b])
                                    , cstrAnd (Set.fromList [cstrNot a, b])
                                    ])
 
 -- | Apply operator Implies (=>) on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrImplies :: ValExpr -> ValExpr -> ValExpr
+cstrImplies :: ValExprBool -> ValExprBool -> ValExprBool
 -- a => b == not a \/ b == not (a /\ not b)
 cstrImplies a b = (cstrNot . cstrAnd) (Set.insert a (Set.singleton (cstrNot b)))
 
 -- | Apply unary operator Plus on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrUnaryPlus :: ValExpr -> ValExpr
+cstrUnaryPlus :: ValExprInt -> ValExprInt
 cstrUnaryPlus = id
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrUnaryMinus :: ValExpr -> ValExpr
+cstrUnaryMinus :: ValExprInt -> ValExprInt
 cstrUnaryMinus v = cstrSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Add on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrPlus :: ValExpr -> ValExpr -> ValExpr
+cstrPlus :: ValExprInt -> ValExprInt -> ValExprInt
 cstrPlus a b = cstrSum (fromListT [a,b])
 
 -- | Apply operator Minus on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrMinus :: ValExpr -> ValExpr -> ValExpr
+cstrMinus :: ValExprInt -> ValExprInt -> ValExprInt
 cstrMinus a b = cstrSum (fromOccurListT [(a,1),(b,-1)])
 
 -- | Apply operator Times on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrTimes :: ValExpr -> ValExpr -> ValExpr
+cstrTimes :: ValExprInt -> ValExprInt -> ValExprInt
 cstrTimes a b = cstrProduct (fromListT [a,b])
 
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrAbs :: ValExpr -> ValExpr
+cstrAbs :: ValExprInt -> ValExprInt
 cstrAbs a = cstrITE (cstrGEZ a) a (cstrUnaryMinus a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrLT :: ValExpr -> ValExpr -> ValExpr
+cstrLT :: ValExprInt -> ValExprInt -> ValExprBool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
 cstrLT ve1 ve2 = cstrNot (cstrGEZ (cstrSum (fromOccurListT [(ve1,1),(ve2,-1)])))
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrGT :: ValExpr -> ValExpr -> ValExpr
+cstrGT :: ValExprInt -> ValExprInt -> ValExprBool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
 cstrGT ve1 ve2 = cstrNot (cstrGEZ (cstrSum (fromOccurListT [(ve1,-1),(ve2,1)])))
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrLE :: ValExpr -> ValExpr -> ValExpr
+cstrLE :: ValExprInt -> ValExprInt -> ValExprBool
 -- a <= b <==> 0 <= b - a
 cstrLE ve1 ve2 = cstrGEZ (cstrSum (fromOccurListT [(ve1,-1),(ve2,1)]))
 
 -- | Apply operator GE (>=) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrGE :: ValExpr -> ValExpr -> ValExpr
+cstrGE :: ValExprInt -> ValExprInt -> ValExprBool
 -- a >= b <==> a - b >= 0
 cstrGE ve1 ve2 = cstrGEZ (cstrSum (fromOccurListT [(ve1,1),(ve2,-1)]))
