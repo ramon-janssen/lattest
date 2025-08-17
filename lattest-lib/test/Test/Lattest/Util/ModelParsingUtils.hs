@@ -21,16 +21,16 @@ expectedTransitions =
 
 testReadAutFile :: Test
 testReadAutFile = TestCase $ do
-    let filePath = "./dummy.aut"
-        expectedInAlphabet = ["take_cup_i", "select_coffee_i", "coin_i"]
-        expectedOutAlphabet = ["ready_o"]
+    let filePath = "./test/Test/Lattest/Util/dummy.aut"
+        expectedInAlphabet = Set.fromList ["take_cup_i", "select_coffee_i", "coin_i"]
+        expectedOutAlphabet = Set.fromList ["ready_o"]
         expectedStates = Set.fromList ["Idle", "Brewing", "CoinInserted", "Ready"]
         expectedInitState = "Idle"
 
     (inputAlphabet, outputAlphabet, states, initialState, Just transitions) <- readAutFile filePath
 
-    assertEqual "IAlphabet" expectedInAlphabet inputAlphabet
-    assertEqual "OAlphabet" expectedOutAlphabet outputAlphabet
+    assertEqual "IAlphabet" expectedInAlphabet (Set.fromList inputAlphabet)
+    assertEqual "OAlphabet" expectedOutAlphabet (Set.fromList outputAlphabet)
     assertEqual "Expected states" expectedStates states
     assertEqual "Initial state" "Idle" initialState
     assertEqual "Transitions" expectedTransitions transitions
