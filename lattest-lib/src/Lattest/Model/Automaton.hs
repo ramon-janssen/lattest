@@ -71,7 +71,7 @@ import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), eval, constType, varType, evalConst, assignedExpr, subst)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), ValExprInt, ValExprBool, ValExprString, eval, constType, varType, evalConst, assignedExpr, Eval, Subst, subst)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 ------------
@@ -371,39 +371,27 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
-<<<<<<< HEAD
 instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
-    move (IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 =
-        let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
-            valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
-        in if not $ Grisette.evalSymToCon valuation guard -- guard is false
-            then implicitDestination gv
-            else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case assignedExpr v assign of
-                                                    Nothing -> xval
-                                                    Just assignExpr -> evaluate assignExpr valuation) varMap
-                 in return $ IntrpState l2 varMap2
-=======
-
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
-    after = monadicAfter $ withStep (\(IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 ->
+    move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> addTypedVal x xval m) gateValuation stateValuation
             valuation = stateValuation `Map.union` gateValuation
         in if not $ evalBool valuation guard
             then implicitDestination gv
-            else let stateValuation2 = Map.mapWithKey (\var@(Variable _ _) val -> case assignedExpr var assign of
-                                                    Nothing -> val
-                                                    Just assignExpr -> evalVal valuation assignExpr) stateValuation
+            else let stateValuation2 = Map.mapWithKey (\var val -> assignNewValue var val valuation assign) stateValuation
                  in return $ IntrpState l2 stateValuation2)
         where
+        assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
+        -- the following case distinctino could be removed if constants were also typed
+        assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
+        assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
+        assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         buildGateValuation :: [Variable] -> [Constant] -> Valuation
         buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
-        evalVal :: Valuation -> ValExpr -> Constant
+        evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
         evalVal valuation = fromRight . evalConst valuation
-        evalBool :: Valuation -> ValExpr -> Bool
+        evalBool :: Valuation -> ValExprBool-> Bool
         evalBool valuation = toBool . evalVal valuation
-
->>>>>>> c519a74 (WIP unify data structures of TorXakis and Lattest)
 
 -------------------------
 -- Auxiliary functions --
