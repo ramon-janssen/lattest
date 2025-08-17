@@ -12,7 +12,7 @@ import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asS
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,assignment,noAssignment,cstrAnd,cstrLE,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,assignment,noAssignment,cstrAnd,cstrLE,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr,ValExprInt,(=:))
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..))
 
 
@@ -25,10 +25,10 @@ stsExample =
         water = SymInteract (InputGate "water") [pvar]
         ok = SymInteract (OutputGate "ok") [pvar]
         coffee = SymInteract (OutputGate "coffee") []
-        waterGuard = binaryAnd (cstrLE (intConst 1) pvarexpr) (cstrLE pvarexpr (intConst 10))
-        waterAssign = assignment [xvar := cstrPlus xvarexpr pvarexpr]
-        okGuard = cstrEqual xvarexpr pvarexpr
-        coffeeGuard = cstrGE xvarexpr (intConst 15)
+        waterGuard = (intConst 1 .<= pvarexpr) .&& (pvarexpr .<= intConst 10)
+        waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
+        okGuard = xvarexpr .== pvarexpr
+        coffeeGuard = xvarexpr .>= (intConst 15)
         initConf = NonDet [0] :: NonDet Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
@@ -43,10 +43,13 @@ stsExample =
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = NonDet [IntrpState loc $ Map.singleton (Variable "x" IntType) (Cint val)]
 
-binaryAnd :: ValExpr -> ValExpr -> ValExpr
-binaryAnd a b = cstrAnd $ Set.union (Set.singleton a) (Set.singleton b)
+(.&&) a b = cstrAnd $ Set.union (Set.singleton a) (Set.singleton b)
+(.<=) = cstrLE
+(.>=) = cstrGE
+(.+) = cstrPlus
+(.==) = cstrEqual
 
-intConst :: Integer -> ValExpr
+intConst :: Integer -> ValExprInt
 intConst i = cstrConst $ Cint i
 
 testSTSHappyFlow :: Test

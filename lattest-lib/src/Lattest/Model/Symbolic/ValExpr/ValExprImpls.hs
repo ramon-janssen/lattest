@@ -76,11 +76,13 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , assign
 , Valuation
 , evalConst
+, Subst
 , subst
 , compSubst         -- changes type
 , assignedExpr
 , assignment
 , noAssignment
+, (=:)
 )
 where
 
@@ -547,7 +549,9 @@ class Assignable t where
     assignedExpr :: Variable -> VarModel -> Maybe (ValExpr t)
     assignedExprWithDefault :: Variable -> VarModel -> ValExpr t
 
---(:=) = assign
+(=:) :: Assignable t => Variable -> ValExpr t -> VarModel -> VarModel
+(=:) = assign
+infixr 0 =:
 
 instance Assignable ValExprIntView where
     assign v e m = case varType v of

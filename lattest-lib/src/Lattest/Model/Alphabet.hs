@@ -59,7 +59,7 @@ where
 
 import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
 import qualified Data.List as List (intercalate)
-import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, ValExpr(..), Type(..), constType, varType, assign)
+import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, ValExpr(..), ValExprBool, Type(..), constType, varType, assign)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 {- |
@@ -276,7 +276,7 @@ data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 instance (Show i, Show o) => Show (SymInteract i o) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
-type SymGuard = ValExpr -- TODO should be boolean
+type SymGuard = ValExprBool -- TODO should be boolean
 
 data GateValue i o = GateValue (Gate i o) [Constant] deriving (Eq, Ord)
 
