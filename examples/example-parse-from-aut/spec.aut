@@ -1,0 +1,12 @@
+des (PickEither,11,8)
+(PickEither, 0_i, PickEitherIn),
+(PickEither, 1_o, Picked1),
+(PickEither, 2_o, Picked2),
+(PickEitherIn, 1_o, Confirm1),
+(PickEitherIn, 2_o, Confirm2),
+(Picked1, 0_i, Confirm1),
+(Picked2, 0_i, Confirm2),
+(Confirm1, 1_o, Confirmed1),
+(Confirm2, 2_o, Confirmed2),
+(Confirmed1, 1_i, PickEither),
+(Confirmed2, 2_i, PickEither)
