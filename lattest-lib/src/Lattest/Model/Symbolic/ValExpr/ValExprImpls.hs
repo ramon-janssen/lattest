@@ -596,9 +596,9 @@ noAssignment :: VarModel
 noAssignment = VarModel Map.empty Map.empty Map.empty
 
 instance Show VarModel where
-    show (VarModel ints bools strings) = (toString ints) ++ (toString bools) ++ (toString strings)
+    show (VarModel ints bools strings) = showMapList $ showList ints ++ showList bools ++ showList strings
         where
-        toString map = "{" ++ (List.intercalate ", " $ showList map) ++ "}"
+        showMapList map = "{" ++ (List.intercalate ", " map) ++ "}"
         showList map = showAssign <$> Map.toList map
         showAssign (v,e) = show v ++ ":=" ++ show e
 
