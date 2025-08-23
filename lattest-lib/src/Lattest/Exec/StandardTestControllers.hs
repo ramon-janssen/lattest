@@ -286,3 +286,20 @@ printActions = testSideEffect () (\_ _ act _ -> putStrLn $ show act)
 -}
 printState :: Show (m q) => TestSideEffect m loc q t tdest act ()
 printState = testSideEffect () (\_ _ _ mq -> putStrLn $ show mq)
+
+{-
+TODO open an SMT connection. Snippet from TxsCore:
+let cfg    = IOC.config envc
+                   smtLog = Config.smtLog cfg
+                   -- An error will be thrown if the selected solver is not in
+                   -- the list of available solvers. The sanity of the
+                   -- configuration is checked outside this function, however
+                   -- nothing prevents a client of this function from injecting
+                   -- a wrong configuration. A nicer error handling requires
+                   -- some refactoring of the TorXakis core to take this into
+                   -- account.
+                   smtProc = fromJust (Config.getProc cfg)
+               smtEnv         <- lift $ SMT.createSMTEnv smtProc smtLog
+               (info,smtEnv') <- lift $ runStateT SMT.openSolver smtEnv
+               (_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
+-}
