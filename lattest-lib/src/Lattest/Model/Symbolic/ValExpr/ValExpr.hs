@@ -32,6 +32,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , Type(..)
 , varName
 , varType
+, Constant(..)
 , constType
 , Variable(..)
 , VarModel
@@ -45,6 +46,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 )
 where
 
+import           Lattest.Model.Symbolic.ValExpr.Constant
 import           Lattest.Model.Symbolic.ValExpr.Id
 import           Lattest.Model.Symbolic.ValExpr.ValExprDefs
 import           Lattest.Model.Symbolic.ValExpr.ValExprImpls

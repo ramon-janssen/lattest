@@ -34,6 +34,7 @@ import qualified Data.Text         as T
 --import           CstrDef
 --import           CstrId
 import           Lattest.SMT.SMTHappy
+import           Lattest.Model.Symbolic.ValExpr.ValExpr(Type(..), Constant(..))
 --import           SortId
 
 
@@ -62,25 +63,25 @@ lookupConstructor cstrMap sid n
 
 -- | convert an SMT expression to a ValExpr given a varName the varName is the
 -- name of a SMT identifier that refers to a SMT variable.
-smtValueToValExpr :: SMTValue -> Map.Map CstrId CstrDef -> SortId -> Either String Constant
-smtValueToValExpr (SMTBool b) _ srt
-  =  if sortIdBool == srt
+smtValueToValExpr :: SMTValue -> {-Map.Map CstrId CstrDef ->-} Type -> Either String Constant
+smtValueToValExpr (SMTBool b) srt
+  =  if BoolType == srt
        then Right $ Cbool b
        else Left $ "TXS SMT2TXS smtValueToValExpr: Type mismatch - " ++
                      "Bool expected, got " ++ show srt ++ "\n"
 
-smtValueToValExpr (SMTInt i) _ srt
-  =  if sortIdInt == srt
+smtValueToValExpr (SMTInt i) srt
+  =  if IntType == srt
        then Right $ Cint i
        else Left $ "TXS SMT2TXS smtValueToValExpr: Type mismatch - " ++
                      "Int expected, got " ++ show srt ++ "\n"
 
-smtValueToValExpr (SMTString s) _ srt
-  =  if sortIdString == srt
+smtValueToValExpr (SMTString s) srt
+  =  if StringType == srt
        then Right $ Cstring s
        else Left $ "TXS SMT2TXS smtValueToValExpr: Type mismatch - " ++
                      "String expected, got " ++ show srt ++ "\n"
-
+{-
 smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =
     let nameSort = SortId.name srt in
         if T.isPrefixOf (nameSort <> "$") cname
@@ -101,3 +102,4 @@ smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =
                                       " vs actual " ++ show (length argValues) ++ "\n"
             else Left $ "TXS SMT2TXS smtValueToValExpr: CstrName " ++ show cname ++
                           " does not start with sort " ++ show nameSort ++ "\n"
+-}

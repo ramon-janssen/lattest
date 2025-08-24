@@ -21,7 +21,8 @@ where
 
 import           Control.Concurrent
 import           Control.Exception   (onException)
-import           Control.Monad.State (get, gets, lift, modify, unless)
+import           Control.Monad.State (get, gets, lift, modify)
+import           Control.Monad (unless)
 
 import qualified Data.List           as List
 import qualified Data.Map            as Map
@@ -33,15 +34,15 @@ import           System.Exit
 import           System.IO
 import           System.Process
 
-import           Constant
-import           SMT2TXS
-import           SMTAlex
-import           SMTData
-import           SMTHappy
-import           SolveDefs
-import           TXS2SMT
-import           ValExpr
-import           Variable
+--import           Constant
+import           Lattest.SMT.SMT2TXS
+import           Lattest.SMT.SMTAlex
+import           Lattest.SMT.SMTData
+import           Lattest.SMT.SMTHappy
+--import           Lattest.SMT.SolveDefs
+import           Lattest.SMT.TXS2SMT
+import           Lattest.Model.Symbolic.ValExpr.ValExpr
+--import           Variable
 
 -- ----------------------------------------------------------------------------------------- --
 -- opens a connection to the SMTLIB interactive shell
