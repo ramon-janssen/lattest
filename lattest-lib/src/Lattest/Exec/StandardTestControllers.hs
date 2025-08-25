@@ -25,6 +25,9 @@ TestSelector,
 randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
+randomDataTestSelector,
+randomDataTestSelectorFromSeed,
+randomDataTestSelectorFromGen,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
@@ -49,10 +52,11 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
-import Lattest.Model.Automaton(AutIntrpr(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue)
+import Lattest.Model.Automaton(AutIntrpr(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState, STStdest)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)
+import Lattest.SMT.SMT(SMTRef)
 
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
@@ -107,12 +111,58 @@ randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
 randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
     => g -> TestSelector m loc q t tdest act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
+    {-
+TODO open an SMT connection. Snippet from TxsCore:
+let cfg    = IOC.config envc
+                   smtLog = Config.smtLog cfg
+                   -- An error will be thrown if the selected solver is not in
+                   -- the list of available solvers. The sanity of the
+                   -- configuration is checked outside this function, however
+                   -- nothing prevents a client of this function from injecting
+                   -- a wrong configuration. A nicer error handling requires
+                   -- some refactoring of the TorXakis core to take this into
+                   -- account.
+                   smtProc = fromJust (Config.getProc cfg)
+               smtEnv         <- lift $ SMT.createSMTEnv smtProc smtLog
+               (info,smtEnv') <- lift $ runStateT SMT.openSolver smtEnv
+               (_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
+-}
     where
     randomSelectTest g aut _ =
         let ins = takeJusts $ actToChoice <$> specifiedMenu aut
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
+
+{- |
+    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
+-}
+randomDataTestSelector :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
+    => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) StdGen i)
+randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromGen smt
+
+{- |
+    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
+    the given random seed.
+-}
+randomDataTestSelectorFromSeed :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
+    => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) StdGen i
+randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStdGen i
+
+{- |
+    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
+    given random generator.
+-}
+randomDataTestSelectorFromGen :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), RandomGen g)
+    => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) g i
+randomDataTestSelectorFromGen smt g = undefined "TODO test selection with SMT solving not yet implemented" {-selector g randomSelectTest (\s _ _ _ -> return $ Just s)
+    where
+    randomSelectTest g aut _ =
+        let ins = takeJusts $ actToChoice <$> specifiedMenu aut
+        in if null ins
+            then error "random test selector found an empty menu"
+            else return $ Just $ takeRandom g ins
+    -}
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
@@ -286,20 +336,3 @@ printActions = testSideEffect () (\_ _ act _ -> putStrLn $ show act)
 -}
 printState :: Show (m q) => TestSideEffect m loc q t tdest act ()
 printState = testSideEffect () (\_ _ _ mq -> putStrLn $ show mq)
-
-{-
-TODO open an SMT connection. Snippet from TxsCore:
-let cfg    = IOC.config envc
-                   smtLog = Config.smtLog cfg
-                   -- An error will be thrown if the selected solver is not in
-                   -- the list of available solvers. The sanity of the
-                   -- configuration is checked outside this function, however
-                   -- nothing prevents a client of this function from injecting
-                   -- a wrong configuration. A nicer error handling requires
-                   -- some refactoring of the TorXakis core to take this into
-                   -- account.
-                   smtProc = fromJust (Config.getProc cfg)
-               smtEnv         <- lift $ SMT.createSMTEnv smtProc smtLog
-               (info,smtEnv') <- lift $ runStateT SMT.openSolver smtEnv
-               (_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
--}

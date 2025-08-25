@@ -16,8 +16,8 @@ module Lattest.SMT.SMT
 ( createSMTEnv
 , openSolver
 , close
-, addDefinitions
-, addDeclarations
+--, addDefinitions
+--, addDeclarations
 , addAssertions
 , getSolvable
 , getSolution
@@ -26,6 +26,11 @@ module Lattest.SMT.SMT
 , put
 , putT
 , valExprToString
+, SMTRef
+, createSMTRef
+, newSMTRef
+, runSTM
+, readSMTRef
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -34,3 +39,4 @@ module Lattest.SMT.SMT
 where
 
 import           Lattest.SMT.SMTInternal
+import           Lattest.SMT.SMTData

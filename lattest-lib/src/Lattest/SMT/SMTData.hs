@@ -20,6 +20,10 @@ module Lattest.SMT.SMTData
 , SmtEnv(..)
 --, EnvNames(..)
 --, EnvDefs (..)
+, SMTRef
+, newSMTRef
+, runSTM
+, readSMTRef
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -34,6 +38,7 @@ import           System.IO
 import           System.Process
 
 import qualified Data.Map            as Map
+import           Data.IORef
 {-
 import           CstrDef
 import           CstrId
@@ -68,6 +73,21 @@ data  SmtEnv  =  SmtEnv     { inHandle          :: Handle
                | SmtEnvError
 
 type  SMT a   =  StateT SmtEnv IO a
+
+type SMTRef = IORef SmtEnv
+
+newSMTRef :: SmtEnv -> IO SMTRef
+newSMTRef = newIORef
+
+readSMTRef :: SMTRef -> IO SmtEnv
+readSMTRef = readIORef
+
+runSTM :: SMTRef -> SMT a -> IO a
+runSTM smtRef smtComp = do
+    smtEnv <- readIORef smtRef
+    (x, smtEnv') <- runStateT smtComp smtEnv
+    writeIORef smtRef smtEnv'
+    return x
 
 --instance Show SmtEnv where
 --  show smtEnv =  show $ envNames smtEnv

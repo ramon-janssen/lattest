@@ -24,7 +24,8 @@ module Lattest.SMT.TXS2SMT
 --, basicDefinitionsSMT
 --, sortdefsToSMT      
 --, funcdefsToSMT      
-assertionsToSMT    
+SMTExpr
+, assertionsToSMT    
 --, declarationsToSMT          
 , valexprToSMT       
 )
