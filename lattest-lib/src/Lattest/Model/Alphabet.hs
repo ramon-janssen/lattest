@@ -276,7 +276,7 @@ data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 instance (Show i, Show o) => Show (SymInteract i o) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
-type SymGuard = ValExprBool -- TODO should be boolean
+type SymGuard = ValExprBool
 
 data GateValue i o = GateValue (Gate i o) [Constant] deriving (Eq, Ord)
 

@@ -39,7 +39,7 @@ import           Lattest.SMT.SMT2TXS
 import           Lattest.SMT.SMTAlex
 import           Lattest.SMT.SMTData
 import           Lattest.SMT.SMTHappy
---import           Lattest.SMT.SolveDefs
+import           Lattest.SMT.SolveDefs
 import           Lattest.SMT.TXS2SMT
 import           Lattest.Model.Symbolic.ValExpr.ValExpr
 --import           Variable
@@ -53,7 +53,7 @@ openSolver :: SMT String
 openSolver = do
     n <- getInfo "name"
     v <- getInfo "version"
-    SMTInternal.init
+    Lattest.SMT.SMTInternal.init
     push
     return $ n ++ " [" ++ v ++ "]"
 
@@ -87,6 +87,9 @@ pop = put "(pop 1)"
 -- ----------------------------------------------------------------------------------------- --
 -- SMT communication functions via process fork
 -- ----------------------------------------------------------------------------------------- --
+
+createSMTRef :: CreateProcess -> Bool -> IO SMTRef
+createSMTRef cmd lgFlag = createSMTEnv cmd lgFlag >>= newSMTRef
 
 createSMTEnv :: CreateProcess -> Bool -> IO SmtEnv
 createSMTEnv cmd lgFlag =  do
@@ -135,13 +138,14 @@ createSMTEnv cmd lgFlag =  do
                    hout
                    ph
                    lg
-                   initialEnvNames
-                   (EnvDefs Map.empty Map.empty Map.empty)
+                   --initialEnvNames
+                   --(EnvDefs Map.empty Map.empty Map.empty)
             )
 
 -- ----------------------------------------------------------------------------------------- --
 -- addDefinitions
 -- ----------------------------------------------------------------------------------------- --
+{-
 addDefinitions :: EnvDefs -> SMT ()
 addDefinitions edefs =  do
     enames <- gets envNames
@@ -181,14 +185,14 @@ addDeclarations vs  =  do
     mapI <- gets envNames
     putT ( declarationsToSMT mapI vs )
     return ()
-
+-}
 -- ----------------------------------------------------------------------------------------- --
 -- addAssertions
 -- ----------------------------------------------------------------------------------------- --
-addAssertions :: (Variable v) => [ValExpr v] -> SMT ()
+addAssertions :: [ValExprBool] -> SMT ()
 addAssertions vexps  =  do
-    mapI <- gets envNames
-    putT ( assertionsToSMT mapI vexps )
+    --mapI <- gets envNames
+    putT ( assertionsToSMT vexps )
     return ()
 
 -- ----------------------------------------------------------------------------------------- --
@@ -208,18 +212,18 @@ getSolvable = do
 -- ----------------------------------------------------------------------------------------- --
 -- getSolution
 -- ----------------------------------------------------------------------------------------- --
-getSolution :: (Variable v) => [v] -> SMT (Solution v)
+getSolution :: [Variable] -> SMT (Solution Variable)
 getSolution []    = return Map.empty
 getSolution vs    = do
-    putT ("(get-value (" <> T.intercalate " " (map vname vs) <>"))")
+    putT ("(get-value (" <> T.intercalate " " (map (T.pack . varName) vs) <>"))")
     s <- getSMTresponse
     let vnameSMTValueMap = Map.mapKeys T.pack . smtParser . smtLexer $ s
-    edefs <- gets envDefs
-    return $ Map.fromList (map (toConst edefs vnameSMTValueMap) vs)
+--    edefs <- gets envDefs
+    return $ Map.fromList (map (toConst vnameSMTValueMap) vs)
   where
-    toConst :: (Variable v) => EnvDefs -> Map.Map Text SMTValue -> v -> (v, Constant)
-    toConst edefs mp v = case Map.lookup (vname v) mp of
-                            Just smtValue   -> case smtValueToValExpr smtValue (cstrDefs edefs) (vsort v) of
+    toConst :: Map.Map Text SMTValue -> Variable -> (Variable, Constant)
+    toConst mp v = case Map.lookup (T.pack $ varName v) mp of
+                            Just smtValue   -> case smtValueToValExpr smtValue (varType v) of
                                                     Left t -> error $ "getSolution - SMT parse error:\n" ++ t
                                                     Right val -> (v,val)
                             Nothing         -> error "getSolution - SMT hasn't returned the value of requested variable."
@@ -254,7 +258,7 @@ init  =  do
     put "(set-option :produce-models true)"
     put "(set-logic ALL)"
     put "(set-info :smt-lib-version 2.5)"
-    putT basicDefinitionsSMT
+    --putT basicDefinitionsSMT
     return ()
 
 -- | execute the SMT command given as a string
@@ -273,10 +277,10 @@ putT :: Text -> SMT ()
 putT = put . T.unpack
 
 -- | Transform value expression to an SMT string.
-valExprToString :: Variable v => ValExpr v -> SMT Text
+valExprToString :: SMTExpr t => ValExpr t -> SMT Text
 valExprToString v = do
-  mapI <- gets envNames
-  return $ valexprToSMT mapI v
+--  mapI <- gets envNames
+  return $ valexprToSMT v
 
 -- ----------------------------------------------------------------------------------------- --
 --  return error messages if any are present
