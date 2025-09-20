@@ -82,8 +82,8 @@ newSMTRef = newIORef
 readSMTRef :: SMTRef -> IO SmtEnv
 readSMTRef = readIORef
 
-runSTM :: SMTRef -> SMT a -> IO a
-runSTM smtRef smtComp = do
+runSMT :: SMTRef -> SMT a -> IO a
+runSMT smtRef smtComp = do
     smtEnv <- readIORef smtRef
     (x, smtEnv') <- runStateT smtComp smtEnv
     writeIORef smtRef smtEnv'
