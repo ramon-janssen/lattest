@@ -4,8 +4,10 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
+import Data.Maybe(fromJust)
 import qualified Data.Set as Set
 
+import Lattest.Exec.StandardTestControllers
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),GateValue(..))
@@ -14,6 +16,8 @@ import qualified Data.Map as Map (empty, fromList,singleton)
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,assignment,noAssignment,cstrAnd,cstrLE,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr,ValExprInt,(=:))
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..))
+import qualified Lattest.SMT.Config as Config
+import qualified Lattest.SMT.SMT as SMT
 
 
 stsExample :: STSIntrp NonDet Integer String String
@@ -115,3 +119,20 @@ testPrintSTS = TestCase $ do
     2 ――Out "ok" [p:Int]⟶ []
     -}
     printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(([(-1,1),(p:Int,1)]) > 0)\8743(([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[([(-15,1),(x:Int,1)]) > 0]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(x:Int) = (p:Int)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"
+
+testSTSTestSelection :: Test
+testSTSTestSelection = TestCase $ do
+    let nrSteps = 20
+        smtLog = Config.smtLog Config.defaultConfig
+        smtProc = fromJust (Config.getProc Config.defaultConfig)
+    smt <- SMT.createSMTRef smtProc smtLog
+    let testSelector = randomDataTestSelectorFromSeed smt 456 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    
+    {-
+    -- TODO create implementation with *concrete* values, and test that against the stsExample using the testSelector
+    imp <- impFDetIncorrectOutput
+    let model = interpretQuiescentInputAttemptConcrete sf
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
+    -}
+    return $ error "TODO unfinished"

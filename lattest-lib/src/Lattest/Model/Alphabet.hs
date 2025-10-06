@@ -280,3 +280,11 @@ type SymGuard = ValExprBool
 
 data GateValue i o = GateValue (Gate i o) [Constant] deriving (Eq, Ord)
 
+instance {-# OVERLAPS #-} Refusable (GateValue i o)
+
+data GateInputValue i = GateInputValue i [Constant] deriving (Eq, Ord)
+
+instance TestChoice (GateInputValue i) (GateValue i o) where
+    choiceToActs (GateInputValue i consts) = [GateValue (InputGate i) consts]
+    actToChoice (GateValue (InputGate i) consts) = Just $ GateInputValue i consts
+    actToChoice (GateValue (OutputGate _) _) = Nothing
