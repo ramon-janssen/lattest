@@ -63,6 +63,7 @@ import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import qualified Data.Map as Map (keys)
 import qualified Data.Set as Set (size, elemAt, fromList, union)
+import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
 {- |
@@ -137,7 +138,7 @@ randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStd
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomDataTestSelectorFromGen :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), RandomGen g)
+randomDataTestSelectorFromGen :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
     => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) i
 randomDataTestSelectorFromGen g = do 
     -- initialization
@@ -148,18 +149,31 @@ randomDataTestSelectorFromGen g = do
     (info,smtEnv') <- lift $ runStateT SMT.openSolver smtEnv
     --(_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
     smtRef <- newSMTRef smtEnv'
-    return $ selector (g, smtEnv) randomSelectTest (\s _ _ _ -> return $ Just s)
+    return $ selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
     
     where
-    randomSelectTest g aut _ =
-        -- TODO merge this non-STS-specific implementation with solveInput
-        let ins = takeJusts $ actToChoice <$> specifiedMenu aut
-        in if null ins
+    -- state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))
+    -- (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (i, (g,SMTRef)))
+    randomSelectTest (g,smtRef) aut _ =
+        let symbolicAlph = alphabet aut
+        in if null symbolicAlph
             then error "random test selector found an empty menu"
-            else return $ Just $ takeRandom g ins
-    solveInput smtRef = do
-        s <- runSMT smtRef getSolvable
-        case s of
+            else let
+                    guards = alphToGuards symbolicGuards
+                    (guards', g') = shuffle guards g
+                in (g,) <$> solveAlph smtRef symbolicAlph
+    solveAlph _ [] = error "random test selector found an empty menu"
+    alphToGuards symbolicAlph = alphToGuards' symbolicAlph ([],[])
+    alphToGuards' [] guards = guards
+    alphToGuards' () (inGuards, quiescenceGuard) = 
+    solveAlph smtRef (act:alph) = do
+        maybeSolved <- solveInput smtRef act
+        case maybeSolved of
+            Nothing -> solveAlph smtRef alph
+            Just solved -> return solved
+    solveInput smtRef act = do
+        solveOutcome <- runSMT smtRef getSolvable
+        case solveOutcome of
             Sat -> do
                 runSMT smtRef push
                 -- TODO define guards and vars
