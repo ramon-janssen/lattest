@@ -105,10 +105,8 @@ automaton' = automaton . pure
     The transition relation as a function. Note that this function is partial, and only defined for transition labels in the alphabet of the
     automaton.
 -}
-trans :: Ord t => AutSyntax m loc t tdest -> loc -> t -> m (tdest, loc)
-trans aut loc t = case Map.lookup t (transRel aut loc) of
-    Just x -> x
-    Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
+trans :: Ord t => AutSyntax m loc t tdest -> loc -> t -> Maybe (m (tdest, loc))
+trans aut loc t = Map.lookup t (transRel aut loc)
 
 ---------------
 -- interpret --
@@ -165,6 +163,11 @@ class (Ord t, Completable act) => TransitionSemantics t act where
         Nothing -> LocationMove $ pure loc
         Just t -> TransitionMove (t, trans' t)
 
+takeTransition' :: (TransitionSemantics t act, BoundedApplicative m) => loc -> Set t -> act -> (t -> m (Maybe (tdest, loc))) -> Maybe (Move m t tdest loc)
+takeTransition' loc alph act trans' = case takeTransition loc alph act trans' of
+    Just move -> -- like takeTransition, but with some Maybe's
+    Nothing -> 
+
 {- |
     Data structure needed to express that an automaton may transition from one location to another, but it may also 'transition'
     within a single state, e.g. the passing of time in a timed automaton.
@@ -197,16 +200,17 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after intrpr act' = 
     let aut = syntacticAutomaton intrpr
-    in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act' }
+    in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (trans aut) act' }
 
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
-after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act ((!) (transMap $ asLoc q)) of
-    LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
+after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> t -> Maybe (m (tdest, loc))) -> act -> q -> m q
+after' alph transMap act q = Monad.join $ case takeTransition' (asLoc q) alph act (transMap $ asLoc q) of
+    Nothing -> ...
+    Just (LocationMove mloc) -> move q act (nothingTTdest transMap) <$> mloc
         where
          -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
         nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
         nothingTTdest _ = Nothing
-    TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
+    Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
 
