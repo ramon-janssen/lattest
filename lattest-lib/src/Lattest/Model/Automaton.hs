@@ -158,15 +158,12 @@ class (Ord t, Completable act) => TransitionSemantics t act where
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    takeTransition :: (BoundedApplicative m) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
+    takeTransition :: (BoundedApplicative m) => loc -> Set t -> act -> (t -> Maybe (m (tdest, loc))) -> Maybe (Move m t tdest loc)
     takeTransition loc alph act trans' = case asTransition loc alph act of
-        Nothing -> LocationMove $ pure loc
-        Just t -> TransitionMove (t, trans' t)
-
-takeTransition' :: (TransitionSemantics t act, BoundedApplicative m) => loc -> Set t -> act -> (t -> m (Maybe (tdest, loc))) -> Maybe (Move m t tdest loc)
-takeTransition' loc alph act trans' = case takeTransition loc alph act trans' of
-    Just move -> -- like takeTransition, but with some Maybe's
-    Nothing -> 
+        Nothing -> Just $ LocationMove $ pure loc
+        Just t -> case trans' t of
+            Just t' -> Just $ TransitionMove (t, t')
+            Nothing -> Nothing
 
 {- |
     Data structure needed to express that an automaton may transition from one location to another, but it may also 'transition'
@@ -197,27 +194,28 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another.
 -}
-after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> Maybe (AutIntrpr m loc q t tdest act)
 after intrpr act' = 
     let aut = syntacticAutomaton intrpr
     in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (trans aut) act' }
 
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> t -> Maybe (m (tdest, loc))) -> act -> q -> m q
-after' alph transMap act q = Monad.join $ case takeTransition' (asLoc q) alph act (transMap $ asLoc q) of
-    Nothing -> ...
-    Just (LocationMove mloc) -> move q act (nothingTTdest transMap) <$> mloc
+after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> t -> Maybe (m (tdest, loc))) -> act -> q -> Maybe (m q)
+after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
+    Nothing -> Nothing
+    Just (LocationMove mloc) -> Just $ move q act (nothingTTdest transMap) <$> mloc
         where
          -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
         nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
         nothingTTdest _ = Nothing
-    Just (TransitionMove (t, mloc)) -> moveAlongTransition q act t <$> mloc
+    Just (TransitionMove (t, mloc)) -> Just $ moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
-afters aut [] = aut
-afters aut (act:acts) = aut `after` act `afters` acts
+afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> Maybe (AutIntrpr m loc q t tdest act)
+afters aut acts = foldr (=<<) aut (flip after <$> acts)
+--afters aut [] = aut
+--afters aut (act:acts) = aut `after` act `afters` acts
 
 ------------------------------------------------------------------
 -- utility function to obtain the menu of outgoing transitions --

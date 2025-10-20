@@ -80,3 +80,11 @@ takeArbitrary set
 -- | Remove duplicates from a list by sorting, grouping and taking only the first element of each group. Returns ordered and filtered list.
 removeDuplicates :: Ord a => [a] -> [a]
 removeDuplicates = map head . group . sort
+
+-- | Sequentially compose a number of monadic actions, passing every value of a step to the next step
+--(>>*) :: (Monad m, Foldable f) => m a -> f (a -> m a) -> m a
+--(>>*) = foldr =<<
+--(>>*) x [] = x
+--(>>*) x (f:fs) = m a >>= f >>* fs
+
+--infixl 1  >>*
