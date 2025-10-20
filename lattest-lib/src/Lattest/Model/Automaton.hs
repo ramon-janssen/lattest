@@ -34,6 +34,8 @@ StateSemantics,
 StepSemantics,
 after,
 afters,
+-- ** Exceptions
+AutomatonException(..),
 -- ** Finite Transition Labels
 FiniteMenu,
 specifiedMenu,
@@ -67,6 +69,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
+import GHC.Stack(CallStack,callStack)
 import Grisette.Core as Grisette
 import Grisette.SymPrim as GSymPrim
 
@@ -198,7 +201,8 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after intrpr act' = 
     let aut = syntacticAutomaton intrpr
-    in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act' }
+        stateConf' = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act'
+    in intrpr { stateConf = stateConf' }
 
 after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
 after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
@@ -214,14 +218,24 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
     lookupAction :: Ord k => Map k a -> k -> a
     lookupAction m k = case Map.lookup k m of
         Just v -> v
-        Nothing -> throw ActionOutsideAlphabet
+        Nothing -> throw $ ActionOutsideAlphabet callStack
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
-data AutomatonException = ActionOutsideAlphabet deriving (Eq, Show)
+-- | Exceptions that can occur when working with automata.
+data AutomatonException
+    -- | Thrown during a computation of `after` for an action outside the automaton alphabet.
+    = ActionOutsideAlphabet CallStack
+    deriving (Show)
+instance Eq AutomatonException where
+    (==) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
+    (==) _ _ = False
+instance Ord AutomatonException where
+    (<=) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
+    (<=) _ _ = False
 
 instance Exception AutomatonException
 
