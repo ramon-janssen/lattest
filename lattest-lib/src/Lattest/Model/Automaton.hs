@@ -57,6 +57,7 @@ import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfi
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
+import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map, (!))
@@ -192,7 +193,7 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
 {- |
-    Take a step for the given action, according to the step semantics to move from one state configuration to another.
+    Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after intrpr act' = 
@@ -200,7 +201,7 @@ after intrpr act' =
     in intrpr { stateConf = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act' }
 
 after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
-after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act ((!) (transMap $ asLoc q)) of
+after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
         where
          -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
@@ -209,11 +210,20 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
     TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+    where
+    lookupAction :: Ord k => Map k a -> k -> a
+    lookupAction m k = case Map.lookup k m of
+        Just v -> v
+        Nothing -> throw ActionOutsideAlphabet
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
+
+data AutomatonException = ActionOutsideAlphabet deriving (Eq, Show)
+
+instance Exception AutomatonException
 
 ------------------------------------------------------------------
 -- utility function to obtain the menu of outgoing transitions --
