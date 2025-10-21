@@ -44,6 +44,7 @@ interpretConcrete,
 ConcreteSuspAutIntrpr,
 interpretQuiescentConcrete,
 ConcreteSuspInputAttemptAutIntrpr,
+interpretInputAttemptConcrete,
 interpretQuiescentInputAttemptConcrete,
 interpretSTS,
 STSIntrp
