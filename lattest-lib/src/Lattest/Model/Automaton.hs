@@ -4,7 +4,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-
 {-|
     This module contains the definitions and interpretations of automata models.
 -}
@@ -32,9 +31,11 @@ Completable,
 implicitDestination,
 TransitionSemantics,
 StateSemantics,
-AutomatonSemantics,
+StepSemantics,
 after,
 afters,
+-- ** Exceptions
+AutomatonException(..),
 -- ** Finite Transition Labels
 FiniteMenu,
 specifiedMenu,
@@ -58,14 +59,17 @@ import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfi
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
+import Control.Exception(throw,Exception)
+import qualified Control.Monad as Monad(join)
 import qualified Data.Foldable as Foldable
-import Data.Map (Map)
+import Data.Map (Map, (!))
 import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
+import GHC.Stack(CallStack,callStack)
 import Grisette.Core as Grisette
 import Grisette.SymPrim as GSymPrim
 
@@ -134,7 +138,7 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (AutomatonSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
+interpret :: (StepSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
 interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
@@ -160,7 +164,7 @@ class (Ord t, Completable act) => TransitionSemantics t act where
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    takeTransition :: (BoundedApplicative m, Ord t) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
+    takeTransition :: (BoundedApplicative m) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
     takeTransition loc alph act trans' = case asTransition loc alph act of
         Nothing -> LocationMove $ pure loc
         Just t -> TransitionMove (t, trans' t)
@@ -180,38 +184,60 @@ class StateSemantics loc q where
     asLoc :: q -> loc
 
 {- |
-    Automaton interpret expresses that we can take steps, to move from one state configuration to another. 
+    StepSemantics expresses that we can move through an automaton run with state semantics by applying the transition semantics
+    The transition consists of two parts: one global part outside the configuration monad (e.g. describing the action that applies to that transition),
+    described by the transition semantics, and a local part inside the monad, bound to the destination state (e.g. to update symbolic variables for a state).
 -}
-class BoundedMonad m => AutomatonSemantics m loc q t tdest act where
-    -- | Take a transition for the given action.
-    after :: AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepSemantics m loc q t tdest act where
+    {- |
+        Given the current state, an action and the transition matching that action, and a new location and local transition, produce the new state
+        The case of no transition (i.e. no transition applies in the TransitionSemantics) can be used to move within a location.
+    -}
+    move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
 {- |
-    Standard monadic implementation of the 'after' function: take a monadic step. The first argument describes how to take a step, i.e., how to
-    produce a new state configuration from the transition relation, the action taken, and the previous state.
+    Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-monadicAfter :: (BoundedMonad m, Ord t) => (Set t -> (loc -> t -> m (tdest, loc)) -> act -> q -> m q) -> AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-monadicAfter step autRun act' =
-    let aut = syntacticAutomaton autRun 
-    in autRun { stateConf = stateConf autRun >>= step (alphabet aut) (trans aut) act' }
+after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after intrpr act' = 
+    let aut = syntacticAutomaton intrpr
+        stateConf' = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act'
+    in intrpr { stateConf = stateConf' }
 
-{- |
-    Default stepping function for the 'monadicAfter' function: find the transition in the transition mapping corresponding to the given action, and
-    take a monadic step from the current state configuration.
--}
-withStep :: (TransitionSemantics t act, StateSemantics loc q, BoundedMonad m) => (q -> act -> Maybe (t, tdest) -> loc -> m q) -> Set t -> (loc -> t -> m (tdest, loc)) -> act -> q -> m q
-withStep move alph transMap act q = case takeTransition (asLoc q) alph act (transMap $ asLoc q) of
-    LocationMove mloc -> mloc >>= moveWithinLocation q act Nothing
+after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
+after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+    LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
         where
-        moveWithinLocation q act nottdest loc = move q act nottdest loc
-    TransitionMove (t, mloc) -> mloc >>= moveAlongTransition q act t
+         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
+        nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
+        nothingTTdest _ = Nothing
+    TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+    where
+    lookupAction :: Ord k => Map k a -> k -> a
+    lookupAction m k = case Map.lookup k m of
+        Just v -> v
+        Nothing -> throw $ ActionOutsideAlphabet callStack
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (AutomatonSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
+
+-- | Exceptions that can occur when working with automata.
+data AutomatonException
+    -- | Thrown during a computation of `after` for an action outside the automaton alphabet.
+    = ActionOutsideAlphabet CallStack
+    deriving (Show)
+instance Eq AutomatonException where
+    (==) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
+    (==) _ _ = False
+instance Ord AutomatonException where
+    (<=) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
+    (<=) _ _ = False
+
+instance Exception AutomatonException
 
 ------------------------------------------------------------------
 -- utility function to obtain the menu of outgoing transitions --
@@ -235,7 +261,7 @@ actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedAppli
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (AutomatonSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
+specifiedMenu :: (StepSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -255,9 +281,8 @@ instance (Ord act) => FiniteMenu act act where
 instance StateSemantics q q where
     asLoc = id
 
-instance (TransitionSemantics t act, BoundedMonad m) => AutomatonSemantics m q q t () act
-    where
-    after = monadicAfter $ withStep (\_ _ _ q -> pure q)
+instance (TransitionSemantics t act, BoundedMonad m) => StepSemantics m q q t () act where
+    move _ _ _ q = pure q
 
 ----------------
 -- quiescence --
@@ -351,9 +376,8 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
-
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
-    after = monadicAfter $ withStep (\(IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 ->
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
+    move (IntrpState l1 varMap) gv@(GateValue g ws) (Just (SymInteract g2 ps, STSLoc (guard,assign))) l2 =
         let pValuation = List.foldr (\(v,w) m -> addTypedVar v w m) Grisette.emptyModel (zip ps ws)
             valuation = Map.foldrWithKey (\x xval m -> addTypedVar x xval m) pValuation varMap
         in if not $ Grisette.evalSymToCon valuation guard -- guard is false
@@ -361,7 +385,7 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => AutomatonSemantics m loc (In
             else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case assignedExpr v assign of
                                                     Nothing -> xval
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
-                 in return $ IntrpState l2 varMap2)
+                 in return $ IntrpState l2 varMap2
 
 -------------------------
 -- Auxiliary functions --

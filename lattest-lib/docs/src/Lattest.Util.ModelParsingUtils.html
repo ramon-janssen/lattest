@@ -1,0 +1,352 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Util.ModelParsingUtils</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Util.ModelParsingUtils.html#readAutFile"><span class="hs-identifier">readAutFile</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Util.ModelParsingUtils.html#dumpLTSdot"><span class="hs-identifier">dumpLTSdot</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-4"></span><span>
+</span><span id="line-5"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html"><span class="hs-identifier">Lattest.Model.Alphabet</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier">IOAct</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Util.Utils.html"><span class="hs-identifier">Lattest.Util.Utils</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Util.Utils.html#removeDuplicates"><span class="hs-identifier">removeDuplicates</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text.IO</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">TIO</span></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Set</span></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">mapMaybe</span></span><span class="hs-special">)</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.FilePath</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">replaceExtension</span></span><span class="hs-special">)</span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">isSuffixOf</span></span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span>
+</span><span id="line-14"></span><span class="annot"><span class="hs-comment">{-|
+    Read an .aut file representing an LTS from the provided filepath, parse its content and return:
+    - [String]: Input Alphabet
+    - [String]: Output Alphabet
+    - Set.Set String: Set of all LTS states
+    - String: Initial state
+    - Maybe [(String, IOAct String String, String)]: List of LTS transition tuples as (InitialState, Action, EndState)
+    NOTE: In order to parse actions correctly, inputs and outputs must end in _i and _o respectively. The first line of the .aut file must follow the structure des (initState,nEdges,nStates).
+-}</span></span><span>
+</span><span id="line-23"></span><span class="annot"><a href="Lattest.Util.ModelParsingUtils.html#readAutFile"><span class="hs-identifier hs-type">readAutFile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Set.Set</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span id="readAutFile"><span class="annot"><span class="annottext">readAutFile :: [Char]
+-&gt; IO
+     ([[Char]], [[Char]], Set [Char], [Char],
+      Maybe [([Char], IOAct [Char] [Char], [Char])])
+</span><a href="Lattest.Util.ModelParsingUtils.html#readAutFile"><span class="hs-identifier hs-var hs-var">readAutFile</span></a></span></span><span> </span><span id="local-6989586621679293731"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293731"><span class="hs-identifier hs-var">path</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-25"></span><span>    </span><span id="local-6989586621679293732"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293732"><span class="hs-identifier hs-var">contents</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IO Text
+</span><span class="hs-identifier hs-var">TIO.readFile</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293731"><span class="hs-identifier hs-var">path</span></a></span><span>
+</span><span id="line-26"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293734"><span class="annot"><span class="annottext">linesT :: [Text]
+</span><a href="#local-6989586621679293734"><span class="hs-identifier hs-var hs-var">linesT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; [Text]
+</span><span class="hs-identifier hs-var">T.lines</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293732"><span class="hs-identifier hs-var">contents</span></a></span><span>
+</span><span id="line-27"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679293734"><span class="hs-identifier hs-var">linesT</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-28"></span><span>      </span><span id="local-6989586621679293736"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293736"><span class="hs-identifier hs-var">firstLine</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679293737"><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679293737"><span class="hs-identifier hs-var">restLines</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-29"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Maybe [Char]
+</span><a href="Lattest.Util.ModelParsingUtils.html#parseInitialState"><span class="hs-identifier hs-var">parseInitialState</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293736"><span class="hs-identifier hs-var">firstLine</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-30"></span><span>          </span><span class="annot"><span class="annottext">Maybe [Char]
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char]
+-&gt; IO
+     ([[Char]], [[Char]], Set [Char], [Char],
+      Maybe [([Char], IOAct [Char] [Char], [Char])])
+forall a. HasCallStack =&gt; [Char] -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;Error: Could not parse initial state from header.&quot;</span></span><span>
+</span><span id="line-31"></span><span>          </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679293740"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293740"><span class="hs-identifier hs-var">initialState</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-32"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293741"><span class="annot"><span class="annottext">parsed :: [([Char], IOAct [Char] [Char], [Char])]
+</span><a href="#local-6989586621679293741"><span class="hs-identifier hs-var hs-var">parsed</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Maybe ([Char], IOAct [Char] [Char], [Char]))
+-&gt; [Text] -&gt; [([Char], IOAct [Char] [Char], [Char])]
+forall a b. (a -&gt; Maybe b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">mapMaybe</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Maybe ([Char], IOAct [Char] [Char], [Char])
+</span><a href="Lattest.Util.ModelParsingUtils.html#parseTupleLine"><span class="hs-identifier hs-var">parseTupleLine</span></a></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679293737"><span class="hs-identifier hs-var">restLines</span></a></span><span>
+</span><span id="line-33"></span><span>                </span><span id="local-6989586621679293747"><span class="annot"><span class="annottext">inputAlphabet :: [[Char]]
+</span><a href="#local-6989586621679293747"><span class="hs-identifier hs-var hs-var">inputAlphabet</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; [[Char]]
+forall a. Ord a =&gt; [a] -&gt; [a]
+</span><a href="Lattest.Util.Utils.html#removeDuplicates"><span class="hs-identifier hs-var">removeDuplicates</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293748"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#In"><span class="hs-identifier hs-type">In</span></a></span><span> </span><span id="local-6989586621679293748"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293748"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span>  </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[([Char], IOAct [Char] [Char], [Char])]
+</span><a href="#local-6989586621679293741"><span class="hs-identifier hs-var">parsed</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-34"></span><span>                </span><span id="local-6989586621679293752"><span class="annot"><span class="annottext">outputAlphabet :: [[Char]]
+</span><a href="#local-6989586621679293752"><span class="hs-identifier hs-var hs-var">outputAlphabet</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; [[Char]]
+forall a. Ord a =&gt; [a] -&gt; [a]
+</span><a href="Lattest.Util.Utils.html#removeDuplicates"><span class="hs-identifier hs-var">removeDuplicates</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293753"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#Out"><span class="hs-identifier hs-type">Out</span></a></span><span> </span><span id="local-6989586621679293753"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293753"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[([Char], IOAct [Char] [Char], [Char])]
+</span><a href="#local-6989586621679293741"><span class="hs-identifier hs-var">parsed</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-35"></span><span>                </span><span id="local-6989586621679293757"><span class="annot"><span class="annottext">allStates :: Set [Char]
+</span><a href="#local-6989586621679293757"><span class="hs-identifier hs-var hs-var">allStates</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; Set [Char]
+forall a. Ord a =&gt; [a] -&gt; Set a
+</span><span class="hs-identifier hs-var">Set.fromList</span></span><span> </span><span class="annot"><span class="annottext">([[Char]] -&gt; Set [Char]) -&gt; [[Char]] -&gt; Set [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-36"></span><span>                            </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293759"><span class="hs-identifier hs-var">s1</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679293759"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293759"><span class="hs-identifier hs-var">s1</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">IOAct [Char] [Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[([Char], IOAct [Char] [Char], [Char])]
+</span><a href="#local-6989586621679293741"><span class="hs-identifier hs-var">parsed</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; [[Char]] -&gt; [[Char]]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span>
+</span><span id="line-37"></span><span>                            </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293760"><span class="hs-identifier hs-var">s2</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">IOAct [Char] [Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293760"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293760"><span class="hs-identifier hs-var">s2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[([Char], IOAct [Char] [Char], [Char])]
+</span><a href="#local-6989586621679293741"><span class="hs-identifier hs-var">parsed</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-38"></span><span>            </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">([[Char]], [[Char]], Set [Char], [Char],
+ Maybe [([Char], IOAct [Char] [Char], [Char])])
+-&gt; IO
+     ([[Char]], [[Char]], Set [Char], [Char],
+      Maybe [([Char], IOAct [Char] [Char], [Char])])
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[[Char]]
+</span><a href="#local-6989586621679293747"><span class="hs-identifier hs-var">inputAlphabet</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[[Char]]
+</span><a href="#local-6989586621679293752"><span class="hs-identifier hs-var">outputAlphabet</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Set [Char]
+</span><a href="#local-6989586621679293757"><span class="hs-identifier hs-var">allStates</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293740"><span class="hs-identifier hs-var">initialState</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[([Char], IOAct [Char] [Char], [Char])]
+-&gt; Maybe [([Char], IOAct [Char] [Char], [Char])]
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">[([Char], IOAct [Char] [Char], [Char])]
+</span><a href="#local-6989586621679293741"><span class="hs-identifier hs-var">parsed</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="annot"><span class="hs-comment">-- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).</span></span><span>
+</span><span id="line-41"></span><span class="annot"><a href="Lattest.Util.ModelParsingUtils.html#parseInitialState"><span class="hs-identifier hs-type">parseInitialState</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">T.Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-42"></span><span id="parseInitialState"><span class="annot"><span class="annottext">parseInitialState :: Text -&gt; Maybe [Char]
+</span><a href="Lattest.Util.ModelParsingUtils.html#parseInitialState"><span class="hs-identifier hs-var hs-var">parseInitialState</span></a></span></span><span> </span><span id="local-6989586621679293761"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293761"><span class="hs-identifier hs-var">line</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Maybe Text
+</span><span class="hs-identifier hs-var">T.stripPrefix</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;des (&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.strip</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293761"><span class="hs-identifier hs-var">line</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-44"></span><span>    </span><span class="annot"><span class="annottext">Maybe Text
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe [Char]
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-45"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679293764"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293764"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-46"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293770"><span class="annot"><span class="annottext">elems :: [Text]
+</span><a href="#local-6989586621679293770"><span class="hs-identifier hs-var hs-var">elems</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; Text -&gt; [Text]
+</span><span class="hs-identifier hs-var">T.split</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">','</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HasCallStack =&gt; Text -&gt; Text -&gt; Text -&gt; Text
+Text -&gt; Text -&gt; Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.replace</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;),&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293764"><span class="hs-identifier hs-var">rest</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>      </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679293770"><span class="hs-identifier hs-var">elems</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-48"></span><span>           </span><span class="hs-special">(</span><span id="local-6989586621679293773"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293773"><span class="hs-identifier hs-var">s</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[Text]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Maybe [Char]
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; [Char]
+</span><span class="hs-identifier hs-var">T.unpack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.strip</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293773"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span>           </span><span class="annot"><span class="annottext">[Text]
+</span><span class="hs-identifier">_</span></span><span>     </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe [Char]
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- | Parse a text line of the form (state, action, state), and return the transition tuple</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- | NOTE: only action labels finished in &quot;_i&quot; or &quot;_o&quot; are considered</span><span>
+</span><span id="line-53"></span><span class="annot"><a href="Lattest.Util.ModelParsingUtils.html#parseTupleLine"><span class="hs-identifier hs-type">parseTupleLine</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">T.Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span id="parseTupleLine"><span class="annot"><span class="annottext">parseTupleLine :: Text -&gt; Maybe ([Char], IOAct [Char] [Char], [Char])
+</span><a href="Lattest.Util.ModelParsingUtils.html#parseTupleLine"><span class="hs-identifier hs-var hs-var">parseTupleLine</span></a></span></span><span> </span><span id="local-6989586621679293775"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293775"><span class="hs-identifier hs-var">line</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293776"><span class="annot"><span class="annottext">stripped :: Text
+</span><a href="#local-6989586621679293776"><span class="hs-identifier hs-var hs-var">stripped</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.strip</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293775"><span class="hs-identifier hs-var">line</span></a></span><span> </span><span class="hs-comment">-- Remove trailing whitespaces</span><span>
+</span><span id="line-56"></span><span>        </span><span id="local-6989586621679293789"><span class="annot"><span class="annottext">removedParen :: Text
+</span><a href="#local-6989586621679293789"><span class="hs-identifier hs-var hs-var">removedParen</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HasCallStack =&gt; Text -&gt; Text -&gt; Text -&gt; Text
+Text -&gt; Text -&gt; Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.replace</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;)&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Text) -&gt; (Text -&gt; Text) -&gt; Text -&gt; Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HasCallStack =&gt; Text -&gt; Text -&gt; Text -&gt; Text
+Text -&gt; Text -&gt; Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.replace</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;(&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Text) -&gt; (Text -&gt; Text) -&gt; Text -&gt; Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HasCallStack =&gt; Text -&gt; Text -&gt; Text -&gt; Text
+Text -&gt; Text -&gt; Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.replace</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;),&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293776"><span class="hs-identifier hs-var">stripped</span></a></span><span>
+</span><span id="line-57"></span><span>        </span><span id="local-6989586621679293792"><span class="annot"><span class="annottext">transition :: [Text]
+</span><a href="#local-6989586621679293792"><span class="hs-identifier hs-var hs-var">transition</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; Text -&gt; [Text]
+</span><span class="hs-identifier hs-var">T.split</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">','</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293789"><span class="hs-identifier hs-var">removedParen</span></a></span><span>
+</span><span id="line-58"></span><span>    </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679293792"><span class="hs-identifier hs-var">transition</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-59"></span><span>        </span><span class="hs-special">[</span><span id="local-6989586621679293793"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293793"><span class="hs-identifier hs-var">s1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293794"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293794"><span class="hs-identifier hs-var">act</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293795"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293795"><span class="hs-identifier hs-var">s2</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-60"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293796"><span class="annot"><span class="annottext">actionStr :: [Char]
+</span><a href="#local-6989586621679293796"><span class="hs-identifier hs-var hs-var">actionStr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; [Char]
+</span><span class="hs-identifier hs-var">T.unpack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.strip</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293794"><span class="hs-identifier hs-var">act</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span>                </span><span id="local-6989586621679293797"><span class="annot"><span class="annottext">initState :: [Char]
+</span><a href="#local-6989586621679293797"><span class="hs-identifier hs-var hs-var">initState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; [Char]
+</span><span class="hs-identifier hs-var">T.unpack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.strip</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293793"><span class="hs-identifier hs-var">s1</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>                </span><span id="local-6989586621679293798"><span class="annot"><span class="annottext">endState :: [Char]
+</span><a href="#local-6989586621679293798"><span class="hs-identifier hs-var hs-var">endState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; [Char]
+</span><span class="hs-identifier hs-var">T.unpack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.strip</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679293795"><span class="hs-identifier hs-var">s2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span>            </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;_i&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
+forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
+</span><span class="hs-operator hs-var">`isSuffixOf`</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293796"><span class="hs-identifier hs-var">actionStr</span></a></span><span> </span><span class="hs-keyword">then</span><span>
+</span><span id="line-64"></span><span>                   </span><span class="annot"><span class="annottext">([Char], IOAct [Char] [Char], [Char])
+-&gt; Maybe ([Char], IOAct [Char] [Char], [Char])
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293797"><span class="hs-identifier hs-var">initState</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IOAct [Char] [Char]
+forall i o. i -&gt; IOAct i o
+</span><a href="Lattest.Model.Alphabet.html#In"><span class="hs-identifier hs-var">In</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293796"><span class="hs-identifier hs-var">actionStr</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293798"><span class="hs-identifier hs-var">endState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>               </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;_o&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
+forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
+</span><span class="hs-operator hs-var">`isSuffixOf`</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293796"><span class="hs-identifier hs-var">actionStr</span></a></span><span> </span><span class="hs-keyword">then</span><span>
+</span><span id="line-66"></span><span>                   </span><span class="annot"><span class="annottext">([Char], IOAct [Char] [Char], [Char])
+-&gt; Maybe ([Char], IOAct [Char] [Char], [Char])
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293797"><span class="hs-identifier hs-var">initState</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IOAct [Char] [Char]
+forall i o. o -&gt; IOAct i o
+</span><a href="Lattest.Model.Alphabet.html#Out"><span class="hs-identifier hs-var">Out</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293796"><span class="hs-identifier hs-var">actionStr</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293798"><span class="hs-identifier hs-var">endState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>               </span><span class="hs-keyword">else</span><span>
+</span><span id="line-68"></span><span>                   </span><span class="annot"><span class="annottext">Maybe ([Char], IOAct [Char] [Char], [Char])
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-comment">-- Non-valid action</span><span>
+</span><span id="line-69"></span><span>        </span><span class="annot"><span class="annottext">[Text]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe ([Char], IOAct [Char] [Char], [Char])
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>  </span><span class="hs-comment">-- Malformed line</span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="annot"><span class="hs-comment">-- | Build a .dot file representation of LTS transitions and save it in the specified File Path</span></span><span>
+</span><span id="line-72"></span><span id="local-6989586621679293701"><span id="local-6989586621679293702"><span id="local-6989586621679293703"><span class="annot"><a href="Lattest.Util.ModelParsingUtils.html#dumpLTSdot"><span class="hs-identifier hs-type">dumpLTSdot</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679293701"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679293701"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679293702"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679293702"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679293703"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679293703"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679293701"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679293702"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679293703"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679293701"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-73"></span><span id="dumpLTSdot"><span class="annot"><span class="annottext">dumpLTSdot :: forall s i o.
+(Ord s, Show s, Ord i, Show i, Ord o, Show o) =&gt;
+[Char] -&gt; [(s, IOAct i o, s)] -&gt; IO ()
+</span><a href="Lattest.Util.ModelParsingUtils.html#dumpLTSdot"><span class="hs-identifier hs-var hs-var">dumpLTSdot</span></a></span></span><span> </span><span id="local-6989586621679293813"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293813"><span class="hs-identifier hs-var">path</span></a></span></span><span> </span><span id="local-6989586621679293814"><span class="annot"><span class="annottext">[(s, IOAct i o, s)]
+</span><a href="#local-6989586621679293814"><span class="hs-identifier hs-var">transitions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-74"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293829"><span class="annot"><span class="annottext">edges :: [([Char], [Char], [Char])]
+</span><a href="#local-6989586621679293829"><span class="hs-identifier hs-var hs-var">edges</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">s -&gt; [Char]
+forall a. Show a =&gt; a -&gt; [Char]
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">s
+</span><a href="#local-6989586621679293831"><span class="hs-identifier hs-var">from</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Text -&gt; [Char]
+</span><span class="hs-identifier hs-var">T.unpack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HasCallStack =&gt; Text -&gt; Text -&gt; Text -&gt; Text
+Text -&gt; Text -&gt; Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.replace</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;!&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Text) -&gt; (Text -&gt; Text) -&gt; Text -&gt; Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HasCallStack =&gt; Text -&gt; Text -&gt; Text -&gt; Text
+Text -&gt; Text -&gt; Text -&gt; Text
+</span><span class="hs-identifier hs-var">T.replace</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;?&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Text) -&gt; Text -&gt; Text
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Text
+</span><span class="hs-identifier hs-var">T.pack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IOAct i o -&gt; [Char]
+forall a. Show a =&gt; a -&gt; [Char]
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">IOAct i o
+</span><a href="#local-6989586621679293833"><span class="hs-keyword hs-var">label</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">s -&gt; [Char]
+forall a. Show a =&gt; a -&gt; [Char]
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">s
+</span><a href="#local-6989586621679293834"><span class="hs-identifier hs-var">to</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span>                </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679293831"><span class="annot"><span class="annottext">s
+</span><a href="#local-6989586621679293831"><span class="hs-identifier hs-var">from</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293833"><span class="annot"><span class="annottext">IOAct i o
+</span><a href="#local-6989586621679293833"><span class="hs-keyword hs-var">label</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293834"><span class="annot"><span class="annottext">s
+</span><a href="#local-6989586621679293834"><span class="hs-identifier hs-var">to</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[(s, IOAct i o, s)]
+</span><a href="#local-6989586621679293814"><span class="hs-identifier hs-var">transitions</span></a></span><span> </span><span class="hs-special">]</span><span>
+</span><span id="line-76"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679293839"><span class="annot"><span class="annottext">dotPath :: [Char]
+</span><a href="#local-6989586621679293839"><span class="hs-identifier hs-var hs-var">dotPath</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;.dot&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
+forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
+</span><span class="hs-operator hs-var">`isSuffixOf`</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293813"><span class="hs-identifier hs-var">path</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293813"><span class="hs-identifier hs-var">path</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293813"><span class="hs-identifier hs-var">path</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;.dot&quot;</span></span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">writeFile</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293839"><span class="hs-identifier hs-var">dotPath</span></a></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; IO ()) -&gt; [Char] -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-78"></span><span>        </span><span class="annot"><span class="annottext">[[Char]] -&gt; [Char]
+</span><span class="hs-identifier hs-var">unlines</span></span><span> </span><span class="annot"><span class="annottext">([[Char]] -&gt; [Char]) -&gt; [[Char]] -&gt; [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-79"></span><span>            </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;digraph Automaton {&quot;</span></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; [[Char]] -&gt; [[Char]]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span>
+</span><span id="line-80"></span><span>            </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;    &quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293842"><span class="hs-identifier hs-var">from</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot; -&gt; &quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293843"><span class="hs-identifier hs-var">to</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot; [label=&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293844"><span class="hs-keyword hs-var">label</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;];&quot;</span></span><span> </span><span>
+</span><span id="line-81"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679293842"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293842"><span class="hs-identifier hs-var">from</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293844"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293844"><span class="hs-keyword hs-var">label</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679293843"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293843"><span class="hs-identifier hs-var">to</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[([Char], [Char], [Char])]
+</span><a href="#local-6989586621679293829"><span class="hs-identifier hs-var">edges</span></a></span><span>
+</span><span id="line-82"></span><span>            </span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; [[Char]] -&gt; [[Char]]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;}&quot;</span></span><span class="hs-special">]</span><span>
+</span><span id="line-83"></span><span>    </span><span class="annot"><span class="annottext">[Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">putStrLn</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; IO ()) -&gt; [Char] -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;DOT file written to: &quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679293839"><span class="hs-identifier hs-var">dotPath</span></a></span></pre></body></html>

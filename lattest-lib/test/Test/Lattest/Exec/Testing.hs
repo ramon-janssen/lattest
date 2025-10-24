@@ -4,7 +4,8 @@ testTraceFailsAtLastOutput,
 testTraceFailsBeforeLastOutput,
 testTraceIncompleteAtLastOutput,
 testTraceIncompleteBeforeLastOutput,
-testTraceFailsWithQuiescence
+testTraceFailsWithQuiescence,
+testOutputOutsideAlphabet
 )
 where
 
@@ -16,7 +17,14 @@ import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
 import Lattest.Model.BoundedMonad
 import qualified Data.Map as Map (insert, fromList)
+import Data.Maybe (fromJust)
 import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter,acceptingInputs)
+
+import Lattest.Adapter.StandardAdapters(Adapter,pureAdapter,acceptingInputs)
+import System.Random(StdGen, uniformR, mkStdGen)
+import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete, detConcTransFromRel, interpretQuiescentConcrete)
+import Lattest.Exec.StandardTestControllers
+
 
 testTraceHappy :: Test
 testTraceHappy = TestCase $ do
@@ -128,6 +136,31 @@ traceAdapter steps = pureMealyAdapter traceTrans traceOutput steps
     traceOutput (In _:_) Nothing = [Out Quiescence] -- the adapter is waiting for an input but doesn't receive one, so show a timeout.
     traceOutput (Out os:_) _ = [Out $ OutSusp os] -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
 
+testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 50
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+
+data IF = A deriving (Show, Eq, Ord)
+data OF = X | Y deriving (Show, Eq, Ord)
+data StateFDet = Q0fd deriving (Show, Eq, Ord)
+xf = Out X
+yf = Out Y
+af = In A
+q0f = pure Q0fd
+tWithX Q0fd = Map.fromList [(af, Q0fd), (xf, Q0fd)]
+impWithX = pureAdapter (mkStdGen 123) 0.0 tWithX Q0fd
+
+menuWithY = [af, yf]
+tWithY = fromJust $ detConcTransFromRel [(Q0fd, af, Q0fd), (Q0fd, yf, Q0fd)]
+specWithY = automaton q0f menuWithY tWithY
+
+testOutputOutsideAlphabet :: Test
+testOutputOutsideAlphabet = TestCase $ do
+    imp <- impWithX
+    let model = interpretQuiescentInputAttemptConcrete specWithY
+    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
+    case verdict of
+        Inconclusive _ -> return ()
+        v -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
 
 
 

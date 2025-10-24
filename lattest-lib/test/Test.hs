@@ -47,6 +47,7 @@ hunitTests = TestList [
     testTraceIncompleteAtLastOutput,
     testTraceIncompleteBeforeLastOutput,
     testTraceFailsWithQuiescence,
+    testOutputOutsideAlphabet,
     testSpecF,
     testPrintSpecF,
     testSpecG,

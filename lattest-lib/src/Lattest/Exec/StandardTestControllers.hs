@@ -50,7 +50,7 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
-import Lattest.Model.Automaton(AutIntrpr(..), AutomatonSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
@@ -88,7 +88,7 @@ selector state sel upd = TestController {
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomTestSelector :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
+randomTestSelector :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
     => IO (TestSelector m loc q t tdest act StdGen i)
 randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
 
@@ -96,7 +96,7 @@ randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomTestSelectorFromSeed :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
+randomTestSelectorFromSeed :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
     => Int -> TestSelector m loc q t tdest act StdGen i
 randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
 
@@ -104,7 +104,7 @@ randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomTestSelectorFromGen :: (AutomatonSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
+randomTestSelectorFromGen :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
     => g -> TestSelector m loc q t tdest act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where

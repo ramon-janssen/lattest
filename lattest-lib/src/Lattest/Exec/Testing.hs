@@ -36,15 +36,18 @@ runExperiment,
 TestController(..),
 makeTester,
 runTester,
-Verdict(..)
+Verdict(..),
+InconclusiveReason(..)
 )
 where
 
 import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
-import Lattest.Model.Automaton(AutomatonSemantics, AutIntrpr, after, stateConf)
+import Lattest.Model.Automaton(StepSemantics, AutIntrpr, after, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
+import Control.Exception(catch,evaluate)
+--import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
 
 -- | The controller of an experiment.
@@ -60,7 +63,10 @@ data ActionController act i r state = ActionController {
     }
 
 -- | The verdict resulting from a testing experiment: did the system under test pass the test?
-data Verdict = Pass | Fail deriving (Ord, Eq, Show, Read)
+data Verdict = Pass | Fail | Inconclusive InconclusiveReason deriving (Ord, Eq, Show)
+
+-- | In case of an inconclusive verdict, details on why the test is inconclusive
+data InconclusiveReason = AutomatonException AutomatonException deriving (Ord, Eq, Show)
 
 {- |
     The controller of a testing experiment. The tester may return a result at the end of a testing experiment. Note that it does
@@ -90,7 +96,7 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (AutomatonSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
@@ -110,19 +116,25 @@ makeTester initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (AutomatonSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
+        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
             (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
-            let spec' = spec `after` act
-            let verdict = actToVerd (stateConf spec') act
-            next <- updateTestController testController (testControllerState testController) spec' act (stateConf spec)
-            case next of
-                Right r -> return $ Right (verdict, r)
-                Left state' -> if isConclusive (stateConf spec') || verdict == Fail
-                    then do
-                        r <- handleTestClose testController state'
-                        return $ Right (verdict, r)
-                    else return $ Left (spec', testController { testControllerState = state' })
+            let spec' = spec `after` act 
+            confOrAutomatonException <- catchAutomatonException $ stateConf spec'
+            case confOrAutomatonException of
+                Left conf' -> do
+                    let verdict = actToVerd conf' act
+                    next <- updateTestController testController (testControllerState testController) spec' act (stateConf spec)
+                    case next of
+                        Right r -> return $ Right (verdict, r)
+                        Left state' -> if isConclusive conf' || verdict == Fail
+                            then do
+                                r <- handleTestClose testController state'
+                                return $ Right (verdict, r)
+                            else return $ Left (spec', testController { testControllerState = state' })
+                Right e -> do
+                    r <- handleTestClose testController (testControllerState testController)
+                    return $ Right (Inconclusive $ AutomatonException e, r)
         makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
@@ -133,7 +145,10 @@ makeTester initSpec initTestController = ActionController {
         actToVerd :: (BoundedConfiguration m, Refusable act) => (m x) -> act -> Verdict
         actToVerd p act = case pToVerd p of -- this is effectively just && between two verdicts, one from the observed action and one from the state configuration
             Fail -> Fail
-            Pass -> if  (isAccepted act) then Pass else Fail 
+            Pass -> if  (isAccepted act) then Pass else Fail
+
+catchAutomatonException :: a -> IO (Either a AutomatonException)
+catchAutomatonException a = (Left <$> evaluate a) `catch` (\e -> return $ Right e)
 
 {- |
     Run an experiment by interacting with the given adapter, controlled by the given action controller. The experiment
@@ -173,7 +188,7 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (AutomatonSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 
