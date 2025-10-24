@@ -35,7 +35,9 @@ runExperiment,
 -}
 TestController(..),
 makeTester,
+makeTesterWithInconclusiveReason,
 runTester,
+runTesterWithInconclusiveReason,
 Verdict(..),
 InconclusiveReason(..)
 )
@@ -47,6 +49,7 @@ import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidde
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
 import Control.Exception(catch,evaluate)
+import Data.Either.Combinators(mapRight)
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
 
@@ -63,10 +66,10 @@ data ActionController act i r state = ActionController {
     }
 
 -- | The verdict resulting from a testing experiment: did the system under test pass the test?
-data Verdict = Pass | Fail | Inconclusive InconclusiveReason deriving (Ord, Eq, Show)
+data Verdict = Pass | Fail | Inconclusive deriving (Ord, Eq, Show)
 
 -- | In case of an inconclusive verdict, details on why the test is inconclusive
-data InconclusiveReason = AutomatonException AutomatonException deriving (Ord, Eq, Show)
+data InconclusiveReason act = AutomatonException (AutomatonException act) deriving (Ord, Eq, Show)
 
 {- |
     The controller of a testing experiment. The tester may return a result at the end of a testing experiment. Note that it does
@@ -98,7 +101,22 @@ data TestController m loc q t tdest act state i r = TestController {
 -}
 makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester initSpec initTestController = ActionController {
+makeTester initSpec initTestController =
+    let tester = makeTesterWithInconclusiveReason initSpec initTestController
+    in tester {
+        select = \aut -> mapRight dropInconclusiveReason <$> select tester aut,
+        update = \aut act -> mapRight dropInconclusiveReason <$> update tester aut act,
+        handleClose = \aut -> dropInconclusiveReason <$> handleClose tester aut
+        }
+    where
+    dropInconclusiveReason ((v, _), r) = (v,r)
+
+{- |
+    Create an action controller, see `makeTester`, but also return the `InconclusiveReason` next to the test verdict, if there is such a reason.
+-}
+makeTesterWithInconclusiveReason :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i ((Verdict, Maybe InconclusiveReason act), r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeTesterWithInconclusiveReason initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
     update = makeUpdate,
@@ -107,17 +125,17 @@ makeTester initSpec initTestController = ActionController {
     where
         makeSelect :: (TestChoice i act, BoundedConfiguration m)
             => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-            -> IO (Either (i, (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)) (Verdict, r))
+            -> IO (Either (i, (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)) ((Verdict, Maybe (InconclusiveReason act)), r))
         makeSelect (spec, testController) = do
             next <- selectTest testController (testControllerState testController) spec (stateConf spec)
             case next of
-                Right r -> return $ Right (pToVerd $ stateConf spec, r)
+                Right r -> return $ Right (asConclusive $ pToVerd $ stateConf spec, r)
                 Left (i, state') -> return $ Left (i, (spec, testController { testControllerState = state' }))
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
         makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
-            (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
+            (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) ((Verdict, Maybe (InconclusiveReason act)), r))
         makeUpdate (spec, testController) act = do
             let spec' = spec `after` act 
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
@@ -126,19 +144,19 @@ makeTester initSpec initTestController = ActionController {
                     let verdict = actToVerd conf' act
                     next <- updateTestController testController (testControllerState testController) spec' act (stateConf spec)
                     case next of
-                        Right r -> return $ Right (verdict, r)
+                        Right r -> return $ Right (asConclusive verdict, r)
                         Left state' -> if isConclusive conf' || verdict == Fail
                             then do
                                 r <- handleTestClose testController state'
-                                return $ Right (verdict, r)
+                                return $ Right (asConclusive verdict, r)
                             else return $ Left (spec', testController { testControllerState = state' })
                 Right e -> do
                     r <- handleTestClose testController (testControllerState testController)
-                    return $ Right (Inconclusive $ AutomatonException e, r)
-        makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
+                    return $ Right ((Inconclusive, Just $ AutomatonException e), r)
+        makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO ((Verdict, Maybe (InconclusiveReason act)), r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
-            return (pToVerd $ stateConf spec, r) 
+            return (asConclusive $ pToVerd $ stateConf spec, r) 
         pToVerd :: (BoundedConfiguration m) => (m x) -> Verdict
         pToVerd p | isForbidden p = Fail
                   | otherwise     = Pass
@@ -146,6 +164,7 @@ makeTester initSpec initTestController = ActionController {
         actToVerd p act = case pToVerd p of -- this is effectively just && between two verdicts, one from the observed action and one from the state configuration
             Fail -> Fail
             Pass -> if  (isAccepted act) then Pass else Fail
+        asConclusive v = (v, Nothing)
 
 catchAutomatonException :: a -> IO (Either a AutomatonException)
 catchAutomatonException a = (Left <$> evaluate a) `catch` (\e -> return $ Right e)
@@ -191,6 +210,13 @@ runExperiment controller adapter = do
 runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
+
+{- |
+    Runs a tester, see `runTester`, but in case of an Inconclusive verdict, let the tester also return the reason.
+-}
+runTesterWithInconclusiveReason :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO ((Verdict, Maybe InconclusiveReason), r)
+runTesterWithInconclusiveReason spec testSelection adapter = runExperiment (makeTesterWithInconclusiveReason spec testSelection) adapter
 
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
 --runStepper spec controller = runExperiment controller (simulateSpec spec)

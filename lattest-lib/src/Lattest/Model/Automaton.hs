@@ -68,6 +68,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
+import Data.Typeable
 import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
 import Grisette.Core as Grisette
@@ -198,13 +199,13 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: (StepSemantics m loc q t tdest act, Typeable act) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after intrpr act' = 
     let aut = syntacticAutomaton intrpr
         stateConf' = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act'
     in intrpr { stateConf = stateConf' }
 
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
+after' :: (StepSemantics m loc q t tdest act, Typeable act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
 after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
         where
@@ -215,10 +216,10 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
     where
-    lookupAction :: Ord k => Map k a -> k -> a
-    lookupAction m k = case Map.lookup k m of
+    lookupAction :: (Ord k, Typeable act) => Map k act -> k -> act
+    lookupAction m act = case Map.lookup act m of
         Just v -> v
-        Nothing -> throw $ ActionOutsideAlphabet callStack
+        Nothing -> throw $ ActionOutsideAlphabet act callStack
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
@@ -226,18 +227,17 @@ afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
 -- | Exceptions that can occur when working with automata.
-data AutomatonException
+data AutomatonException act
     -- | Thrown during a computation of `after` for an action outside the automaton alphabet.
-    = ActionOutsideAlphabet CallStack
-    deriving (Show)
-instance Eq AutomatonException where
-    (==) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
-    (==) _ _ = False
-instance Ord AutomatonException where
-    (<=) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
-    (<=) _ _ = False
+    = ActionOutsideAlphabet act CallStack
+instance Eq act => Eq (AutomatonException act) where
+    (==) (ActionOutsideAlphabet a1 _) (ActionOutsideAlphabet a2 _) = a1 == a2
+instance Ord act => Ord (AutomatonException act) where
+    (<=) (ActionOutsideAlphabet a1 _) (ActionOutsideAlphabet a2 _) = a1 <= a2
+instance Show (AutomatonException act) where
+    show (ActionOutsideAlphabet _ _) = "ActionOutsideAlphabet"
 
-instance Exception AutomatonException
+instance Typeable act => Exception (AutomatonException act)
 
 ------------------------------------------------------------------
 -- utility function to obtain the menu of outgoing transitions --

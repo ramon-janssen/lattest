@@ -11,8 +11,8 @@ where
 
 import Test.HUnit hiding (Path, path)
 
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Model.Automaton(AutSyntax, automaton)
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, runTesterWithInconclusiveReason, Verdict(Pass), InconclusiveReason(AutomatonException))
+import Lattest.Model.Automaton(AutSyntax, automaton, AutomatonException(ActionOutsideAlphabet))
 import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
 import Lattest.Model.BoundedMonad
@@ -155,11 +155,12 @@ specWithY = automaton q0f menuWithY tWithY
 
 testOutputOutsideAlphabet :: Test
 testOutputOutsideAlphabet = TestCase $ do
+    -- test a specification model with only output Y against an implementation under test with inputs X and Y
     imp <- impWithX
     let model = interpretQuiescentInputAttemptConcrete specWithY
-    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
-    case verdict of
-        Inconclusive _ -> return ()
+    ((verdict, maybeReason), ((observed, maybeMq), _)) <- runTesterWithInconclusiveReason model testSelector imp
+    case (verdict, maybeReason) of
+        (Inconclusive, Just (AutomatonException (ActionOutsideAlphabet act))) -> assertEqual "unexpected action outside alphabet" xf act
         v -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
 
 
