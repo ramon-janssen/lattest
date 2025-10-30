@@ -48,17 +48,18 @@ printState
 )
 where
 
+import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
-import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import qualified Data.Map as Map (keys)
-import qualified Data.Set as Set (size, elemAt, fromList, union)
+import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
 {- |
@@ -113,6 +114,37 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
+
+adgTestSelector :: (Eq l) => Evidence l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector adg delta = TestController {
+        testControllerState = adg,
+        selectTest = adgSelectTest,
+        updateTestController = adgUpdateTest,
+        handleTestClose = \testState -> return Set.empty
+    }
+    where
+    adgSelectTest testState specIntrpState _ =
+        return $ case testState of
+    -- Nil | Prefix b (Evidence b) | Plus [Evidence b]
+            Nil -> Right Set.empty
+            Prefix l next -> Left (Just l, testState)
+            Plus _ -> Left (Nothing,testState)
+
+    adgUpdateTest testState specIntrpState ioact _ = --state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
+        return $ case testState of
+            Nil -> Right Set.empty
+            Prefix l next -> if ioact == In l then Left next else error "Error: expected to have selected an input but seeing some ioact"
+            Plus ls ->
+                let nextList = takeJusts $ fmap (\ev -> case ev of
+                        Nil -> Nothing
+                        Prefix l next -> if l == delta
+                                            then if ioact == Out Quiescence then Just next else Nothing
+                                         else if ioact == Out (OutSusp l) then Just next else Nothing
+                        Plus _ -> Nothing) ls
+                in case nextList of
+                    [next] -> Left next
+                    _ -> error "Error: unexpected output"
+
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
