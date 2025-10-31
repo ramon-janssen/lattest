@@ -47,14 +47,17 @@ printActions,
 printState
 )
 where
-
+import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
+import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..))
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
+import Control.DeepSeq(NFData)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
@@ -115,8 +118,14 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
 
-adgTestSelector :: (Eq l) => Evidence l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
-adgTestSelector adg delta = TestController {
+--  i.p.v. Evidence l
+adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector aut delta =
+    let adgaut = case adgAutFromAutomaton aut delta of
+                    Just a -> a
+                    Nothing ->  error "could not transform Lattest auomaton into ADG automaton"
+        adg = computeAdaptiveDistGraphPure adgaut False False True
+    in TestController {
         testControllerState = adg,
         selectTest = adgSelectTest,
         updateTestController = adgUpdateTest,
@@ -143,7 +152,7 @@ adgTestSelector adg delta = TestController {
                         Plus _ -> Nothing) ls
                 in case nextList of
                     [next] -> Left next
-                    _ -> error "Error: unexpected output"
+                    _ -> error "Error: expected to have observed an output ot quiescence but seeing some ioact"
 
 
 {- |

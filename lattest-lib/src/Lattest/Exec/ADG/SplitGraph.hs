@@ -238,7 +238,7 @@ mergeLCAsearchResult (a1,b1,c1) (a2,b2,c2) = (Set.union a1 a2, b1 || b2, Map.uni
 makeRoot :: (Aut a b) -> (SplitGraph a b)
 makeRoot aut = SplitGraph (Aut.states aut) (Map.singleton (Aut.states aut) (SplitNode (Aut.states aut) Set.empty Nothing)) -- Nothing))
 
-assignChildren :: (Ord a, Ord b, Show a, Show b) => (SplitGraph a b) -> (SplitNode a b) -> (Set (Set (State a b))) -> Evidence b -> (SplitGraph a b)
+assignChildren :: (Ord a, Ord b) => (SplitGraph a b) -> (SplitNode a b) -> (Set (Set (State a b))) -> Evidence b -> (SplitGraph a b)
 assignChildren (SplitGraph r nodeMap) oldNode@(SplitNode states _ _ ) newChildren evidence
     = if (isLeaf oldNode)
         then let newNode = SplitNode states newChildren (Just evidence)
@@ -248,13 +248,13 @@ assignChildren (SplitGraph r nodeMap) oldNode@(SplitNode states _ _ ) newChildre
                     (SplitGraph r newNodeMap)
         else error ("Cannot assign child nodes to non-leaf node!")
 
-buildSplitGraph :: (Ord a, Ord b, Show a, Show b) => (Aut a b) -> Set ((State a b),(State a b)) -> SplitGraphAdmin -> ((SplitGraph a b), SplitGraphAdmin)
+buildSplitGraph :: (Ord a, Ord b) => (Aut a b) -> Set ((State a b),(State a b)) -> SplitGraphAdmin -> ((SplitGraph a b), SplitGraphAdmin)
 buildSplitGraph aut compRel admin =
     let g = makeRoot aut
     in if Set.size compRel == (Set.size $ Aut.states aut) * (Set.size $ Aut.states aut) then (g,admin) -- all states of automaton are compatible
        else buildSplitGraphSimple aut g (Set.singleton $ nodeMap g ! root g) Set.empty compRel admin
 
-buildSplitGraphSimple :: (Ord a, Ord b, Show a, Show b) => (Aut a b) -> (SplitGraph a b) -> Set (SplitNode a b) -> Set (SplitNode a b) -> Set ((State a b),(State a b)) -> SplitGraphAdmin -> ((SplitGraph a b), SplitGraphAdmin)
+buildSplitGraphSimple :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> Set (SplitNode a b) -> Set (SplitNode a b) -> Set ((State a b),(State a b)) -> SplitGraphAdmin -> ((SplitGraph a b), SplitGraphAdmin)
 buildSplitGraphSimple aut graph todo notSplitYet compRel admin =
     if (Set.null todo) && (Set.null notSplitYet) then (graph, admin)
     else if Set.null todo then buildSplitGraphSimple aut graph notSplitYet Set.empty compRel admin
@@ -275,7 +275,7 @@ buildSplitGraphSimple aut graph todo notSplitYet compRel admin =
                                                                                (Set.delete node todo)
                                                                                (children $ (nodeMap newGraph) ! nodeStates node)) notSplitYet compRel nadmin
 
-splitNode :: (Ord a, Ord b, Show a, Show b) => (Aut a b) -> (SplitGraph a b) -> (SplitNode a b) -> Set ((State a b),(State a b)) -> SplitGraphAdmin -> (Maybe (SplitGraph a b),SplitGraphAdmin)
+splitNode :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> (SplitNode a b) -> Set ((State a b),(State a b)) -> SplitGraphAdmin -> (Maybe (SplitGraph a b),SplitGraphAdmin)
 splitNode aut graph node compRel admin =
     let  outputSplitRes = getSplitOnOutputTransition aut graph node compRel (doBestSplit admin)
          inputSplitRes = getSplitOnInputTransition aut graph node compRel (doBestSplit admin) (addInputStates admin)
@@ -304,7 +304,7 @@ getSymbolSplitNodeMap aut graph node symbols isTrivial =
                  then (False:(fst res), (snd res))
                  else (True:(fst res), Map.insert mu lcaNodes (snd res)))) ([],Map.empty) symbols
 
-selectSplitNodeForLabel :: (Ord a, Ord b, Show a) => (Aut a b) -> Set (State a b) -> Set (State a b, State a b) -> Map b (Set (SplitNode a b)) -> Bool -> Map b (Maybe (SplitNode a b))
+selectSplitNodeForLabel :: (Ord a, Ord b) => (Aut a b) -> Set (State a b) -> Set (State a b, State a b) -> Map b (Set (SplitNode a b)) -> Bool -> Map b (Maybe (SplitNode a b))
 selectSplitNodeForLabel aut stateSet compRel spMap doBestSplit =
     Map.foldrWithKey (\mu splitNodes selMap -> if Set.null splitNodes -- if isTrivial mu in getSymbolSplitNodeMap
                                                then Map.insert mu Nothing selMap
@@ -323,7 +323,7 @@ getFirstSplitNode splitNodes =
     if Set.null splitNodes then error "cannot select best of zero items"
     else Set.elemAt 0 splitNodes
                                     --                           Just children evidence isInjective | Nothing=no split
-getSplitOnOutputTransition :: (Ord a, Ord b, Show a) => (Aut a b) -> (SplitGraph a b) -> (SplitNode a b) -> Set ((State a b),(State a b)) -> Bool -> Maybe ((Set (Set (State a b))), Evidence b)
+getSplitOnOutputTransition :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> (SplitNode a b) -> Set ((State a b),(State a b)) -> Bool -> Maybe ((Set (Set (State a b))), Evidence b)
 getSplitOnOutputTransition aut graph node compRel doBestSplit =
     case outputCondition aut graph node compRel of
      Nothing -> Nothing
@@ -356,7 +356,7 @@ addNonEnabledStatesToChildren indsplit states input =
 
 data ATup a b = ATup b (Maybe (SplitNode a b)) deriving (Eq,Ord)
 
-getSplitOnInputTransition :: (Ord a, Ord b, Show a, Show b) => (Aut a b) -> (SplitGraph a b) -> SplitNode a b -> Set ((State a b),(State a b))
+getSplitOnInputTransition :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> SplitNode a b -> Set ((State a b),(State a b))
                                                         -> Bool -> Bool -> Maybe (Set (Set (State a b)), Evidence b)
 getSplitOnInputTransition aut graph node compRel doBestSplit addInputStates =
     case inputCondition aut graph node compRel of
@@ -367,9 +367,9 @@ getSplitOnInputTransition aut graph node compRel doBestSplit addInputStates =
                                                       then getBestSplitNode aut (nodeStates node) compRel (\(ATup a (Just n)) -> n) splitNodePerLabel
                                                       else getFirstSplitNode splitNodePerLabel
                            (indsplit, ev) = getChildsEvForSplitNode aut node a (Just bestNode)
-                       in if Set.null indsplit then error $ "no children for " ++ (show node) ++
-                                "with after set " ++ (show $ Set.map Aut.sid $ Aut.afterSet (nodeStates node) a aut) ++
-                                " using splitter: " ++ (show bestNode)
+                       in if Set.null indsplit then error $ "no children for node" ++ -- (show node) ++
+                                "with after set .." ++ -- (show $ Set.map Aut.sid $ Aut.afterSet (nodeStates node) a aut) ++
+                                " using splitter: .." -- ++ (show bestNode)
                           else if addInputStates
                                then Just (addNonEnabledStatesToChildren indsplit (nodeStates node) a, ev)
                                else Just (indsplit, ev)

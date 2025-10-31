@@ -15,11 +15,11 @@ import qualified Lattest.Exec.ADG.Aut as Aut
 import Lattest.Exec.ADG.Aut as Aut (Aut, State)
 
 
-buildDistGraph :: (Ord a, Ord b, Show a, Show b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Bool -> Evidence b
+buildDistGraph :: (Ord a, Ord b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Bool -> Evidence b
 buildDistGraph aut graph stateSet compRel useBucketLCA =
     buildDistGraph' aut graph stateSet Nil compRel (Map.singleton (Aut.states aut) (Set.singleton $ SplitGraph.getRootNode graph)) useBucketLCA
 
-buildDistGraph' :: (Ord a, Ord b, Show a, Show b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Evidence b -> Set ((State a b),(State a b)) -> Map (Set (State a b)) (Set (SplitNode a b)) -> Bool -> Evidence b
+buildDistGraph' :: (Ord a, Ord b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Evidence b -> Set ((State a b),(State a b)) -> Map (Set (State a b)) (Set (SplitNode a b)) -> Bool -> Evidence b
 buildDistGraph' aut graph stateSet dg compRel lcaMap useBucketLCA =
     if (SplitGraph.isUnsplittable stateSet compRel)
     then -- Trace.trace ((++) "Unsplittable: " $ show $ Set.map Aut.sid stateSet)

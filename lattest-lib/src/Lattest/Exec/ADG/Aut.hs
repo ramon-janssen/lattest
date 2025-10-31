@@ -3,7 +3,7 @@
 {-# LANGUAGE  DefaultSignatures #-}
 
 module Lattest.Exec.ADG.Aut(Aut(..),State(..),show,after,computeCompRel,inp,out,enab,trans,initial,states,inputs,outputs,outSet,afterSet,
-        statesToAut,addDelta,afterSequence,inSet,getAccesSequences,
+        statesToAut,addDelta,afterSequence,inSet,getAccesSequences, adgAutFromAutomaton,
         getTransitionExtendedAccesSequences,union,constrAut,printCompRel,getDistingCompPairs) where
 
 import Data.Set as Set (Set)
@@ -75,13 +75,13 @@ afterSequence state (mu:mus) aut =
         Nothing -> Nothing
         Just s -> afterSequence s mus aut
 
-computeCompRel :: (Ord a, Ord b, Show b, Show a) => Aut a b -> Set (State a b,State a b)
+computeCompRel :: (Ord a, Ord b) => Aut a b -> Set (State a b,State a b)
 computeCompRel aut = computeCompRelAbstract aut firstCompRel expandCompRel
 
 firstCompRel :: (Ord a, Ord b) => (Aut a b) -> Set (State a b,State a b)
 firstCompRel aut = Set.fromList [(q,q') | q <- Set.toList (states aut),  q' <- Set.toList (states aut)]
 
-expandCompRel :: (Ord a, Ord b, Show a) => (Aut a b) -> Set (State a b,State a b) -> Set (State a b,State a b)
+expandCompRel :: (Ord a, Ord b) => (Aut a b) -> Set (State a b,State a b) -> Set (State a b,State a b)
 expandCompRel aut@(Aut _ states _ _ _) rel =
     Set.fromList [(q,q') | q <- Set.toList states, q' <- Set.toList states,
              let mem = compMemFunc aut rel q q',
@@ -100,16 +100,16 @@ pexpandCompRel aut@(Aut _ states _ _ _) rel =
                  [(q,q') | q <- Set.toList states, q' <- Set.toList states])
 -}
 
-compMemFunc :: (Ord a, Ord b, Show a) => (Aut a b) -> Set (State a b,State a b) -> State a b -> State a b -> b -> Bool
+compMemFunc :: (Ord a, Ord b) => (Aut a b) -> Set (State a b,State a b) -> State a b -> State a b -> b -> Bool
 compMemFunc aut rel q q' c = Set.member (Maybe.fromJust $ after q c aut, Maybe.fromJust $ after q' c aut)  rel
 
-computeCompRelAbstract :: (Ord a, Ord b, Eq c, Show c, Show b) => Aut a b -> (Aut a b -> c) -> (Aut a b -> c -> c) -> c
+computeCompRelAbstract :: (Ord a, Ord b, Eq c) => Aut a b -> (Aut a b -> c) -> (Aut a b -> c -> c) -> c
 computeCompRelAbstract aut firstAbstract expand =
     let first = firstAbstract aut
         second = expand aut first
     in computeCompRecAbstract first second (expand aut)
 
-computeCompRecAbstract :: (Eq c, Show c) => c -> c -> (c -> c) -> c
+computeCompRecAbstract :: (Eq c) => c -> c -> (c -> c) -> c
 computeCompRecAbstract first second f = if first == second then first
                                         else computeCompRecAbstract second (f second) f
 

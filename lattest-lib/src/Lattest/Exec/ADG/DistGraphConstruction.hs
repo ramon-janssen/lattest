@@ -1,4 +1,4 @@
-module Lattest.Exec.ADG.DistGraphConstruction (getAutomaton,getDistGraph,readSerializedFile) where
+module Lattest.Exec.ADG.DistGraphConstruction (getAutomaton,getDistGraph,readSerializedFile,computeAdaptiveDistGraphPure) where
 
 import qualified Data.List   as List
 import Data.Set as Set (Set)
@@ -73,3 +73,9 @@ computeAdaptiveDistGraph aut graph compRel fileStorageDir storeName dgStates use
     -- putStrLn $ show $ Set.map (Set.map Aut.sid) nonInjective
     saveSerializedFile fileStorageDir ("ADG" ++ storeName) (dg,nonInjective)
     return (dg, nonInjective)
+
+computeAdaptiveDistGraphPure :: (Ord a, Ord b, NFData a, NFData b) => Aut a b -> Bool -> Bool -> Bool -> Evidence b
+computeAdaptiveDistGraphPure aut doBestSplit splitOutputFirst useBucketLCA = let
+    compRel = Aut.computeCompRel aut
+    (splitGraph,nadmin) = SplitGraph.buildSplitGraph aut compRel (SplitGraph.initializeSplitGraphAdmin doBestSplit splitOutputFirst True)
+    in DistGraph.buildDistGraph aut splitGraph (Aut.states aut) compRel useBucketLCA
