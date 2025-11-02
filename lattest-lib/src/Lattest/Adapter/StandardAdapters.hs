@@ -318,7 +318,9 @@ withQuiescence timeoutDiff adap = do
         getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
             lastTime <- readTMVar lastObservationTime -- blocking, in case of Nothing
             let targetTime = addUTCTime timeoutDiff lastTime
-            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime)
+                currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
+                                                        -- currentTime, in particular when blocking on reading lastObservationTime
+            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
         waitUntilQuiescence = do -- wait until the target timeout. Blocks if there is no target timeout yet.
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
