@@ -41,6 +41,7 @@ hunitTests = TestList [
     testAdapterAcceptingInput,
     testJSONSocketAdapterInt,
     testJSONSocketAdapterObject,
+    testQuiscence,
     testTraceHappy,
     testTraceFailsAtLastOutput,
     testTraceFailsBeforeLastOutput,
