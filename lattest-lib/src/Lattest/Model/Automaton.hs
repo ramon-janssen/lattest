@@ -421,6 +421,31 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
+accessSequences :: (Ord loc) => AutSyntax m loc t tdest -> f loc -> Map loc [t]
+accessSequences aut locations =
+    let initalMap = (Map.fromList $ foldr (\l m -> addStateAndAccSeq m l [])  Map.empty locations)
+    in accessSequences' initialMap $ Set.fromList $ Foldable.toList locations
+    where
+    accessSequences' accMap boundary = case takeArbitrary boundary of
+        Nothing -> accMap
+        Just (q, boundaryRem) ->
+            let ts = transRel aut q
+                (accMap',new) = foldr (\(label,destConf) (m,new) -> insertLabelAndDestLocInAccMap q label destConf m new) (accMap,Set.empty) $ Map.toList ts
+            in accessSequences' accMap' (boundaryRem `Set.union` new)
+
+    insertLabelAndDestLocInAccMap q label destConf accMap new = case Map.lookup q m of
+        Nothing -> error "could not lookup known location for acess sequence"
+        Just accSeq -> case addStateAndAccSeq accMap destConf (accSeq ++ [label]) of
+            (newMap,Nothing) -> (newMap, new)
+            (newMap, Just q) -> (newMap, Set.insert q new)
+    addStateAndAccSeq accMap conf accSeq = case conf of
+        Nothing -> (accMap, Nothing)
+        Just (q, boundaryRem) -> case Map.lookup q of
+            Nothing -> (Map.insert q accSeq accMap, Just q)
+            Just oldAccSeq -> (accMap, Nothing)
+
+
+
 prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)
 
