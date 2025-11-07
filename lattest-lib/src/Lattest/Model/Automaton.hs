@@ -48,6 +48,7 @@ stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
+accessSequences,
 prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp
@@ -421,25 +422,25 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
-accessSequences :: (Ord loc, Ord tdest, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Map loc [t]
+--accessSequences :: (Ord loc, Ord tdest, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Map loc [t]
 accessSequences aut locations =
     let locSet = Set.fromList $ Foldable.toList locations
         initialMap = foldr (\q m -> Map.insert q [] m)  Map.empty locSet
-    in fst $ accessSequences' aut initialMap locSet
+    in (initialMap, {- fst $ -} accessSequences' aut initialMap locSet)
 
-accessSequences' :: (Ord loc, Ord tdest, Foldable m) => AutSyntax m loc t tdest -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
+-- accessSequences' :: (Ord loc, Ord tdest, Foldable m) => AutSyntax m loc t tdest -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
 accessSequences' aut accMap boundary = case takeArbitrary boundary of
     Nothing -> (accMap, Set.empty)
     Just (q, boundaryRem) ->
         let ts = transRel aut q
-            labelsdests = Map.toList $ Map.map (snd . Foldable.maximum) ts
-            (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) $ labelsdests
-        in accessSequences' aut accMap' (boundaryRem `Set.union` new)
+            labelqs = Map.toList $ fmap (snd . Foldable.maximum) ts
+           -- (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) $ labelqs
+        in (Map.fromList labelqs, Set.empty) -- accessSequences' aut accMap' (boundaryRem `Set.union` new))
 
 insertLabelAndDestLocInAccMap :: (Ord loc) => loc -> t -> loc -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
 insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap of
-    Nothing -> error "could not lookup known location for acess sequence"
-    Just accSeq -> case addStateAndAccSeq accMap (dq) (accSeq ++ [label]) of
+    Nothing -> error "could not lookup known location for access sequence"
+    Just accSeq -> case addStateAndAccSeq accMap dq (accSeq ++ [label]) of
         (newMap,Nothing) -> (newMap, new)
         (newMap, Just q) -> (newMap, Set.insert q new)
 

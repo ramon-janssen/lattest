@@ -1,22 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS)
+module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS, testAccSeq)
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, accessSequences)
 import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..), assignment, noAssignment)
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
-import qualified Data.Map as Map (empty, fromList,singleton)
+import qualified Data.Map as Map (empty, fromList,singleton, size)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
 import qualified Control.Exception as Exception
 
-
-stsExample :: STSIntrp NonDet Integer String String
-stsExample =
+stsSyntax =
     let pvar = (Variable "p" IntType)
         xvar = (Variable "x" IntType)
         psym = ssym "p"
@@ -34,9 +32,12 @@ stsExample =
                                 (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
             1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
-        initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
-        sts = automaton initConf (Set.fromList [water,ok,coffee]) switches
-    in interpretSTS sts initAssign
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+
+stsExample :: STSIntrp NonDet Integer String String
+stsExample =
+    let initAssign l = IntrpState l (Map.singleton (Variable "x" IntType) (IntVal 0))
+    in interpretSTS stsSyntax initAssign
 
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
@@ -105,3 +106,9 @@ testPrintSTS = TestCase $ do
     2 ――Out "ok" [p:Int]⟶ []
     -}
     printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,IntVal 0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(&& (<= 1 p) (<= -10 (- p)))]] {x:Int:=(+ x p)},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[(< 15 x)]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(= x p)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"
+
+testAccSeq :: Test
+testAccSeq = TestCase $ do
+    let (ini, accMap) = accessSequences stsSyntax [0]
+    error $ "< " ++ (show $ Map.size ini) ++ " > " ++ (show $ Map.size $ fst accMap)
+    -- assertEqual "wrong size of accMap" 10 (Map.size accMap)
