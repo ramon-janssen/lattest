@@ -421,28 +421,32 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
-accessSequences :: (Ord loc) => AutSyntax m loc t tdest -> f loc -> Map loc [t]
+accessSequences :: (Ord loc, Ord tdest, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Map loc [t]
 accessSequences aut locations =
-    let initalMap = (Map.fromList $ foldr (\l m -> addStateAndAccSeq m l [])  Map.empty locations)
-    in accessSequences' initialMap $ Set.fromList $ Foldable.toList locations
-    where
-    accessSequences' accMap boundary = case takeArbitrary boundary of
-        Nothing -> accMap
-        Just (q, boundaryRem) ->
-            let ts = transRel aut q
-                (accMap',new) = foldr (\(label,destConf) (m,new) -> insertLabelAndDestLocInAccMap q label destConf m new) (accMap,Set.empty) $ Map.toList ts
-            in accessSequences' accMap' (boundaryRem `Set.union` new)
+    let locSet = Set.fromList $ Foldable.toList locations
+        initialMap = foldr (\q m -> Map.insert q [] m)  Map.empty locSet
+    in fst $ accessSequences' aut initialMap locSet
 
-    insertLabelAndDestLocInAccMap q label destConf accMap new = case Map.lookup q m of
-        Nothing -> error "could not lookup known location for acess sequence"
-        Just accSeq -> case addStateAndAccSeq accMap destConf (accSeq ++ [label]) of
-            (newMap,Nothing) -> (newMap, new)
-            (newMap, Just q) -> (newMap, Set.insert q new)
-    addStateAndAccSeq accMap conf accSeq = case conf of
-        Nothing -> (accMap, Nothing)
-        Just (q, boundaryRem) -> case Map.lookup q of
-            Nothing -> (Map.insert q accSeq accMap, Just q)
-            Just oldAccSeq -> (accMap, Nothing)
+accessSequences' :: (Ord loc, Ord tdest, Foldable m) => AutSyntax m loc t tdest -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
+accessSequences' aut accMap boundary = case takeArbitrary boundary of
+    Nothing -> (accMap, Set.empty)
+    Just (q, boundaryRem) ->
+        let ts = transRel aut q
+            labelsdests = Map.toList $ Map.map (snd . Foldable.maximum) ts
+            (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) $ labelsdests
+        in accessSequences' aut accMap' (boundaryRem `Set.union` new)
+
+insertLabelAndDestLocInAccMap :: (Ord loc) => loc -> t -> loc -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
+insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap of
+    Nothing -> error "could not lookup known location for acess sequence"
+    Just accSeq -> case addStateAndAccSeq accMap (dq) (accSeq ++ [label]) of
+        (newMap,Nothing) -> (newMap, new)
+        (newMap, Just q) -> (newMap, Set.insert q new)
+
+addStateAndAccSeq :: (Ord loc) => Map loc [t] -> loc -> [t] -> (Map loc [t], Maybe loc)
+addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
+        Nothing -> (Map.insert q accSeq accMap, Just q)
+        Just oldAccSeq -> (accMap, Nothing)
 
 
 
