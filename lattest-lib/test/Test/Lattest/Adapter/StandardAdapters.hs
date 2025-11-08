@@ -363,6 +363,23 @@ testQuiscence = TestCase $ do
     sendWithDelay impQueue "11" halfDeltaMillis
     assertObserve' (OutSusp "11") adap
 
+    -- sending nothing will observe a quiescence before processing the next input 
+    send Nothing adap
+    send (Just "i") adap
+    sendWithDelay impQueue "12" 0
+    t10 <- getCurrentTime
+    assertObserve' Quiescence adap
+    assertObserveIO (In "i") adap
+    assertObserve' (OutSusp "12") adap
+    
+    -- sending nothing will block until an output is received (before the quiescence timeout)
+    sendWithDelay impQueue "13" halfDeltaMillis
+    send Nothing adap
+    send (Just "j") adap
+    t11 <- getCurrentTime
+    assertObserve' (OutSusp "13") adap
+    assertObserveIO (In "j") adap
+
     atomically $ writeTQueue impQueue Nothing -- close the implementation
 
 
