@@ -355,11 +355,7 @@ withQuiescence timeoutDiff adap = do
         ensureObservationTime
         case mInCmd of
             Just (Just inCmd) -> Streams.write (Just inCmd) $ inputCommandsToSut adap
-            Just Nothing -> atomically $ do -- Just Nothing input means waiting, on an input or until a timeout
-                hasInput <- hasObservation
-                if hasInput
-                    then return ()
-                    else retry
+            Just Nothing -> atomically $ waitUntil $ not <$> isEmptyTQueue observedQueue -- Just Nothing input means waiting, on an output or until a timeout
             Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
     forkIO quiescenceMonitor
     forkIO actMonitor
