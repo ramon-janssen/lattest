@@ -10,6 +10,9 @@ ifMM,
 whileM,
 transformWhile,
 doMaybe,
+-- * STM Control flow
+waitUntil,
+doAfter,
 -- * Encoding state in IO monads
 statefulIO,
 statefulIO'
@@ -17,7 +20,7 @@ statefulIO'
 where
 
 import Control.Monad (void)
-import GHC.Conc(newTVarIO, readTVar, writeTVar, atomically)
+import GHC.Conc(newTVarIO, readTVar, writeTVar, atomically, STM, retry)
 
 -- | While-loop for monads. Any state passed between loop iterations should be carried by the monad.
 whileM :: (Monad m) => m Bool -> m () -> m ()
@@ -69,3 +72,17 @@ statefulIO' transitionFunction initialState = do
         let (state', output) = transitionFunction state i
         writeTVar stateRef state'
         return output
+
+-- | An STM action that waits for the given STM condition
+waitUntil :: STM Bool -> STM ()
+waitUntil condition = do
+    mayContinue <- condition
+    if mayContinue
+        then return ()
+        else retry
+
+-- | An STM action that waits for the given STM condition, and then performs the given STM action
+doAfter :: STM Bool -> STM a -> STM a
+doAfter condition action = do
+    waitUntil condition
+    action

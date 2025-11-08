@@ -39,9 +39,11 @@ parseJSONActionsFromSut,
 -- ** Observing Inputs
 acceptingInputs,
 acceptingInputsWithIncompletenessAsFailures,
--- ** Observing Quiescences
+-- ** Timing and Quiescences
 withQuiescence,
-withQuiescenceMillis
+withQuiescenceMillis,
+withInputDelay,
+withInputDelayMillis
 )
 where
 
@@ -49,11 +51,11 @@ import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,ma
 import qualified Lattest.Adapter.Adapter as Adap(map)
 import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended)
 import Lattest.Model.Alphabet(IOAct)
-import Lattest.Util.IOUtils(ifM_, ifM)
+import Lattest.Util.IOUtils(ifM_, ifM, waitUntil)
 import Control.Applicative((<|>))
-import Control.Monad(forever)
+import Control.Monad(forever,void)
 import Control.Monad.Extra ((||^))
-import Control.Concurrent.STM.TMVar(TMVar, newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar)
+import Control.Concurrent.STM.TMVar(TMVar, newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar, takeTMVar)
 import Control.Concurrent.STM.TQueue(newTQueueIO, readTQueue, writeTQueue, isEmptyTQueue)
 import Control.Concurrent.Thread.Delay(delay)
 import Data.Aeson(FromJSON,ToJSON)
@@ -67,7 +69,7 @@ import System.IO.Streams (makeOutputStream)
 import qualified System.IO.Streams as Streams (write)
 import System.IO.Streams.Network(socketToStreams)
 import System.IO.Streams.Synchronized(fromInputStreamBuffered,makeTInputStream,hasInput)
-import qualified System.IO.Streams.Synchronized as Streams (read)
+import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
 
 import Data.Aeson(fromJSON,encode,Result(Error, Success),FromJSON,ToJSON)
 import Data.Aeson.Parser(jsonNoDup)
@@ -85,13 +87,13 @@ import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Su
 import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
 import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
 import qualified System.IO.Streams as Streams (write, writeTo)
-import GHC.Conc (forkIO, STM)
+import GHC.Conc (forkIO, STM, orElse)
 import qualified Data.Map as Map (Map, filterWithKey, null, lookup, toList)
 import Control.Exception(handle,Exception,PatternMatchFail, SomeException)
 import System.Random(RandomGen)
 import Control.Concurrent.STM.TMVar(newEmptyTMVarIO, putTMVar)
 import Lattest.Util.Utils(flipCoin, takeRandom)
-import Lattest.Util.IOUtils(whileM, statefulIO, statefulIO')
+import Lattest.Util.IOUtils(whileM, statefulIO, statefulIO', doAfter)
 import Data.List(singleton)
 import System.IO.Streams.Combinators(contramap)
 
@@ -295,11 +297,21 @@ pureAdapter g p transitionFunction initialState = do
                             in randomOutputTransitions' t g'' q' ((Out $ OutSusp $ fromOutput o) : outs) False
         prependInput i (q, acts) = (q, In i:acts)
 
--- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given number of milliseconds, after any other observation.
+-- |  Transform the given Adapter by introducing quiescence (timeout observations). See 'withQuiescence', where the waiting time given in milliseconds.
 withQuiescenceMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
 withQuiescenceMillis timeoutMillis = withQuiescence $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
 
--- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given timeout duration, after any other observation.
+{-|
+    Transform the given Adapter by introducing quiescence (timeout observations). Inputs can be sent as 'Just' inputs, and 'IOAct' observations can be
+    done as in the provided adapter, where the outputs in the 'IOAct' are wrapped in 'SuspAct' to denote that they are real outputs. Additionally:
+    
+    * An artificial 'Quiescence' output observation is made after the provided timeout value. This timeout is measured since the last 'Just' input or
+    'SuspOut' output has been received.
+    
+    * An artificial 'Nothing' input can be made, which indicates waiting for an output. Sending a 'Nothing' will block until any output is received,
+    which may be a real 'SuspAct' output or 'Quiescence'. This is guaranteed to happen within the given timeout value, give or take a few milliseconds
+    for processing.
+-}
 withQuiescence :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
 withQuiescence timeoutDiff adap = do
     lastObservationTime <- newEmptyTMVarIO -- time of the last observed action. Nothing if observing hasn't started yet.
@@ -353,11 +365,7 @@ withQuiescence timeoutDiff adap = do
         ensureObservationTime
         case mInCmd of
             Just (Just inCmd) -> Streams.write (Just inCmd) $ inputCommandsToSut adap
-            Just Nothing -> atomically $ do -- Just Nothing input means waiting, on an input or until a timeout
-                hasInput <- hasObservation
-                if hasInput
-                    then return ()
-                    else retry
+            Just Nothing -> atomically $ waitUntil $ not <$> isEmptyTQueue observedQueue -- Just Nothing input means waiting, on an output or until a timeout
             Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
     forkIO quiescenceMonitor
     forkIO actMonitor
@@ -366,6 +374,79 @@ withQuiescence timeoutDiff adap = do
         actionsFromSut = actionsFromSut',
         close = ensureObservationTime >> close adap
         }
+
+-- | Transform the given Adapter by introducing a short delay after every provided input. See 'withInputDelay', where the delay time given in milliseconds.
+withInputDelayMillis :: Int -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withInputDelayMillis timeDelayMillis = withInputDelay $ secondsToNominalDiffTime $ 0.001 * realToFrac timeDelayMillis
+
+{-|
+    Transform the given Adapter by introducing a short delay after every provided input. After an input is provided, then observing the adapter (or
+    even calling `hasObservation`) will block until the specified time duration has passed, or until an output is observed, or until the action stream
+    of the adapter closes, whichever comes first.
+    
+    This may be used to slow down a tester which performs inputs too fast for observation responses to occur.
+-}
+withInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withInputDelay timeDelayDiff adap = do
+    lastInputTime <- newEmptyTMVarIO
+    observationBlocked <- newTVarIO False
+    let updateInputTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
+            mLastTime <- tryReadTMVar lastInputTime
+            case mLastTime of
+                Nothing -> writeTMVar lastInputTime currentTime
+                Just lastTime -> ifM_ (lastTime < currentTime) $ writeTMVar lastInputTime currentTime
+        getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
+            lastTime <- readTMVar lastInputTime -- should never be nothing, the unblocker ensures this
+            let targetTime = addUTCTime timeDelayDiff lastTime
+                currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
+                                                        -- currentTime, in particular when blocking on reading lastObservationTime
+            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
+        waitUntilDelay = do
+            inputTime <- atomically $ readTMVar lastInputTime
+            currentTime <- getCurrentTime
+            waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
+            ifM_ (waitTimeMicros > 0) $ do
+                delay waitTimeMicros
+                waitUntilDelay
+        unblocker = do
+            atomically $ waitUntil $ readTVar observationBlocked
+            waitUntilDelay
+            atomically $ writeTVar observationBlocked False
+            unblocker
+        waitUntilUnblocked = waitUntil $ not <$> readTVar observationBlocked
+        waitUntilOutputOrClosed =
+            doAfter (hasInput $ actionsFromSut adap) $ do -- retry if there is no action present (and hence specifically no output)
+                mAct <- Streams.read $ actionsFromSut adap -- 'peek' an action (putting the action back later, because we need to peek more)
+                case mAct of
+                    Nothing -> return () -- the stream closed, waiting has finished
+                    Just act -> do
+                        case act of
+                            Out _ -> writeTVar observationBlocked False -- we've found an output, so waiting has finished
+                            In _ -> waitUntilOutputOrClosed -- recursively peek more, which will either find an output or retry on an absent action
+                        Streams.unRead act $ actionsFromSut adap -- now put the 'peeked' action back on the queue
+        readFromSut = do
+            waitUntilUnblocked `orElse` waitUntilOutputOrClosed
+            Streams.read $ actionsFromSut adap
+        hasObservation = readTVar observationBlocked ||^ hasInput (actionsFromSut adap)
+    void $ forkIO unblocker
+    inputCommandsToSut' <- makeOutputStream $ \mInCmd -> do
+        case mInCmd of
+            Just inCmd -> do
+                -- waiting is only necessary if the user of the adapter sends a second input without observing an action after the first input
+                atomically $ waitUntil $ not <$> readTVar observationBlocked
+                currentTime <- getCurrentTime
+                atomically $ do
+                    updateInputTime currentTime
+                    writeTVar observationBlocked True
+                Streams.write (Just inCmd) $ inputCommandsToSut adap
+            Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
+    actionsFromSut' <- makeTInputStream readFromSut hasObservation
+    return $ Adapter {
+        inputCommandsToSut = inputCommandsToSut',
+        actionsFromSut = actionsFromSut',
+        close = close adap
+        }
+
 
 --------------------
 -- socket adapter --
