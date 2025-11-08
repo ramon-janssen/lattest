@@ -297,11 +297,21 @@ pureAdapter g p transitionFunction initialState = do
                             in randomOutputTransitions' t g'' q' ((Out $ OutSusp $ fromOutput o) : outs) False
         prependInput i (q, acts) = (q, In i:acts)
 
--- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given number of milliseconds, after any other observation.
+-- |  Transform the given Adapter by introducing quiescence (timeout observations). See 'withQuiescence', where the waiting time given in milliseconds.
 withQuiescenceMillis :: Int -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
 withQuiescenceMillis timeoutMillis = withQuiescence $ secondsToNominalDiffTime $ 0.001 * realToFrac timeoutMillis
 
--- | Transform the given Adapter by introducing timeout observations. A timeout is observed after the given timeout duration, after any other observation.
+{-|
+    Transform the given Adapter by introducing quiescence (timeout observations). Inputs can be sent as 'Just' inputs, and 'IOAct' observations can be
+    done as in the provided adapter, where the outputs in the 'IOAct' are wrapped in 'SuspAct' to denote that they are real outputs. Additionally:
+    
+    * An artificial 'Quiescence' output observation is made after the provided timeout value. This timeout is measured since the last 'Just' input or
+    'SuspOut' output has been received.
+    
+    * An artificial 'Nothing' input can be made, which indicates waiting for an output. Sending a 'Nothing' will block until any output is received,
+    which may be a real 'SuspAct' output or 'Quiescence'. This is guaranteed to happen within the given timeout value, give or take a few milliseconds
+    for processing.
+-}
 withQuiescence :: NominalDiffTime -> Adapter (IOAct i o) i -> IO (Adapter (IOSuspAct i o) (Maybe i))
 withQuiescence timeoutDiff adap = do
     lastObservationTime <- newEmptyTMVarIO -- time of the last observed action. Nothing if observing hasn't started yet.
@@ -365,10 +375,7 @@ withQuiescence timeoutDiff adap = do
         close = ensureObservationTime >> close adap
         }
 
-{-|
-    Transform the given Adapter by introducing a short delay after every provided input. Observing the adapter will block for the specified number
-    of milliseconds after providing an input. This may be used to slow down a tester which performs inputs too fast for observation responses to occur.
--}
+-- | Transform the given Adapter by introducing a short delay after every provided input. See 'withInputDelay', where the delay time given in milliseconds.
 withInputDelayMillis :: Int -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
 withInputDelayMillis timeDelayMillis = withInputDelay $ secondsToNominalDiffTime $ 0.001 * realToFrac timeDelayMillis
 
