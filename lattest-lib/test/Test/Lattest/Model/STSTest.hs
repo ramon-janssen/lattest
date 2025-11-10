@@ -1,16 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS, testAccSeq)
+module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS, testNonDetAccSeq)
 where
 
 import Prelude hiding (take)
 import Test.HUnit
 import qualified Data.Set as Set
 
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, accessSequences)
-import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
+import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp,accessSequences)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..), assignment, noAssignment)
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
-import qualified Data.Map as Map (empty, fromList,singleton, size)
+import qualified Data.Map as Map (Map,empty, fromList,singleton, lookup)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
 import qualified Control.Exception as Exception
 
@@ -107,8 +107,11 @@ testPrintSTS = TestCase $ do
     -}
     printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,IntVal 0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(&& (<= 1 p) (<= -10 (- p)))]] {x:Int:=(+ x p)},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[(< 15 x)]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(= x p)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"
 
-testAccSeq :: Test
-testAccSeq = TestCase $ do
-    let (ini, accMap) = accessSequences stsSyntax [0]
-    error $ "< " ++ (show $ Map.size ini) ++ " > " ++ (show $ Map.size $ fst accMap)
+testNonDetAccSeq :: Test
+testNonDetAccSeq = TestCase $ do
+    let accMap = accessSequences stsSyntax 0
+    assertEqual "empty seq for loc 0" (Just []) $ Map.lookup 0 accMap
+    assertEqual "water for loc 1" (Just $ [SymInteract (InputGate "water") [(Variable "p" IntType)]]) $ Map.lookup 1 accMap
+    assertEqual "water for loc 2" (Just $ [SymInteract (OutputGate "coffee") []]) $ Map.lookup 2 accMap
+    -- error $ "< " ++ (show $ accMap) ++ " > " -- ++ (show $ Map.size $ fst accMap)
     -- assertEqual "wrong size of accMap" 10 (Map.size accMap)
