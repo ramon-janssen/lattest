@@ -35,7 +35,7 @@ runQuickCheckTests = do
 
 hunitTests :: Test
 hunitTests = TestList [
-    testAccSeq,
+    testNonDetAccSeq,
     testConsumeBufferedWith,
     testConsumeBufferedWith_short,
     testJSONSocketAdapterByte,

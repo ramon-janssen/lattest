@@ -19,6 +19,9 @@ transRel,
 -- ** Constructing Syntactical Automata
 automaton,
 automaton',
+-- ** Syntactical Automata lookup
+SyntaxDestStates,
+getStates,
 -- * Semantical Automaton Model
 -- ** Definition
 AutIntrpr,
@@ -48,7 +51,6 @@ stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
-accessSequences,
 prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp
@@ -57,7 +59,7 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
@@ -115,6 +117,21 @@ trans :: Ord t => AutSyntax m loc t tdest -> loc -> t -> m (tdest, loc)
 trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
+
+class SyntaxDestStates m loc tdest where getStates :: m (tdest, loc) -> [loc]--toTuples :: Map t (m (tdest, loc)) -> [(t,loc)]
+
+instance SyntaxDestStates Det loc tdest where
+    getStates destConf = case destConf of
+        Det (tdest,qdest) -> [qdest]
+        ForbiddenDet -> []
+        UnderspecDet -> []
+        _ -> error "could not extract location from deterministic transition destination"
+
+instance SyntaxDestStates NonDet loc tdest where
+    getStates destConf = case destConf of
+        NonDet tds -> fmap snd tds
+        UnderspecNonDet -> []
+        _ -> error "could not extract location from nondeterministic transition destination"
 
 ---------------
 -- interpret --
@@ -421,33 +438,6 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 acc' = acc `Set.union` new
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
-
---accessSequences :: (Ord loc, Ord tdest, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Map loc [t]
-accessSequences aut locations =
-    let locSet = Set.fromList $ Foldable.toList locations
-        initialMap = foldr (\q m -> Map.insert q [] m)  Map.empty locSet
-    in (initialMap, {- fst $ -} accessSequences' aut initialMap locSet)
-
--- accessSequences' :: (Ord loc, Ord tdest, Foldable m) => AutSyntax m loc t tdest -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
-accessSequences' aut accMap boundary = case takeArbitrary boundary of
-    Nothing -> (accMap, Set.empty)
-    Just (q, boundaryRem) ->
-        let ts = transRel aut q
-            labelqs = Map.toList $ fmap (snd . Foldable.maximum) ts
-           -- (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) $ labelqs
-        in (Map.fromList labelqs, Set.empty) -- accessSequences' aut accMap' (boundaryRem `Set.union` new))
-
-insertLabelAndDestLocInAccMap :: (Ord loc) => loc -> t -> loc -> Map loc [t] -> Set loc -> (Map loc [t], Set loc)
-insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap of
-    Nothing -> error "could not lookup known location for access sequence"
-    Just accSeq -> case addStateAndAccSeq accMap dq (accSeq ++ [label]) of
-        (newMap,Nothing) -> (newMap, new)
-        (newMap, Just q) -> (newMap, Set.insert q new)
-
-addStateAndAccSeq :: (Ord loc) => Map loc [t] -> loc -> [t] -> (Map loc [t], Maybe loc)
-addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
-        Nothing -> (Map.insert q accSeq accMap, Just q)
-        Just oldAccSeq -> (accMap, Nothing)
 
 
 
