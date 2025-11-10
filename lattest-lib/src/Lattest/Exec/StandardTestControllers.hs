@@ -51,9 +51,9 @@ import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..))
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
@@ -61,8 +61,8 @@ import Control.DeepSeq(NFData)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
-import qualified Data.Map as Map (keys)
-import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set)
+import qualified Data.Map as Map (keys, (!))
+import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set, singleton)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
 {- |
@@ -117,8 +117,25 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
+{-
+--Result Bool is True when access sequence has been followed and false when the SUT deviated
+accessSeqSelector :: ConcreteSuspAutIntrpr Det q l l -> q ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) [l] l Bool
+accessSeqSelector aut initLoc =
+    let accSeqs = accessSequences (syntacticAutomaton aut) initLoc
+    in TestController {
+        testControllerState = (Map.!) accSeqs initLoc,
+        selectTest = accSeqSelectTest,
+        updateTestController = accSeqUpdateTest,
+        handleTestClose = \testState -> return $ case testState of [] ->  True; _ -> False
+    }
+    where
+    accSeqSelectTest [] specIntrpState _ = return $ Right True
+    accSeqSelectTest [l:ls] specIntrpState _ = return $ if isInput l then Left (Just l, [l:ls]) else Left (Nothing, [l:ls])
+    accSeqUpdateTest [] specIntrpState label _ = return $ Right True
+    accSeqUpdateTest [l:ls] specIntrpState label _ = return $ if l == label then Left ls else Right False
+-}
 
---  i.p.v. Evidence l
+
 adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
 adgTestSelector aut delta =
     let adgaut = case adgAutFromAutomaton aut delta of
