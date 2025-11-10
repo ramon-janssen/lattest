@@ -117,9 +117,9 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
-{-
+
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
-accessSeqSelector :: ConcreteSuspAutIntrpr Det q l l -> q ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) [l] l Bool
+accessSeqSelector :: ConcreteSuspAutIntrpr Det q l l -> q ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) [l] (Maybe l) Bool
 accessSeqSelector aut initLoc =
     let accSeqs = accessSequences (syntacticAutomaton aut) initLoc
     in TestController {
@@ -133,7 +133,7 @@ accessSeqSelector aut initLoc =
     accSeqSelectTest [l:ls] specIntrpState _ = return $ if isInput l then Left (Just l, [l:ls]) else Left (Nothing, [l:ls])
     accSeqUpdateTest [] specIntrpState label _ = return $ Right True
     accSeqUpdateTest [l:ls] specIntrpState label _ = return $ if l == label then Left ls else Right False
--}
+
 
 
 adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
