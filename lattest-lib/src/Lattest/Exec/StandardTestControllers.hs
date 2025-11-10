@@ -119,7 +119,7 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
             else return $ Just $ takeRandom g ins
 
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
-accessSeqSelector :: ConcreteSuspAutIntrpr Det q l l -> q ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) [l] (Maybe l) Bool
+accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q ->  TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
 accessSeqSelector aut initLoc =
     let accSeqs = accessSequences (syntacticAutomaton aut) initLoc
     in TestController {
@@ -130,9 +130,9 @@ accessSeqSelector aut initLoc =
     }
     where
     accSeqSelectTest [] specIntrpState _ = return $ Right True
-    accSeqSelectTest [l:ls] specIntrpState _ = return $ if isInput l then Left (Just l, [l:ls]) else Left (Nothing, [l:ls])
+    accSeqSelectTest (l:ls) specIntrpState _ = return $ if isInput l then Left (Just l, (l:ls)) else Left (Nothing, (l:ls))
     accSeqUpdateTest [] specIntrpState label _ = return $ Right True
-    accSeqUpdateTest [l:ls] specIntrpState label _ = return $ if l == label then Left ls else Right False
+    accSeqUpdateTest (l:ls) specIntrpState label _ = return $ if l == label then Left ls else Right False
 
 
 
