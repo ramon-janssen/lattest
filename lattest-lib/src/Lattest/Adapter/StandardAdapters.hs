@@ -348,17 +348,23 @@ withQuiescence timeoutDiff adap = do
                 ifM_ quiescent $ do
                     writeTQueue observedQueue (Just $ Out Quiescence)
                     updateObservationTime currentTime
-        actMonitor = forever $ do --background task that waits for outputs, updates the observation time and unsets the quiescence state
+        actMonitor = do --background task that waits for outputs, updates the observation time and unsets the quiescence state
             mAct <- atomically $ do
                 writeTVar isProcessingObservation True
                 Streams.read $ actionsFromSut adap
             currentTime <- getCurrentTime
-            atomically $ do
+            continue <- atomically $ do
                 -- observation has been made
                 updateObservationTime currentTime -- update the observation time
                 writeTVar isProcessingObservation False
-                let timedMAct = asSuspended <$> mAct
-                writeTQueue observedQueue timedMAct -- pass the action to the timeout adapter
+                case mAct of
+                    Nothing -> do
+                        writeTQueue observedQueue Nothing -- action adapter closed, pass on the Nothing once and then stop
+                        return False
+                    Just act -> do
+                        writeTQueue observedQueue $ Just $ asSuspended act -- pass the action to the timeout adapter
+                        return True
+            ifM_ continue actMonitor -- repeat until close
         hasObservation = readTVar isProcessingObservation ||^ (not <$> isEmptyTQueue observedQueue) ||^ hasInput (actionsFromSut adap)
     actionsFromSut' <- makeTInputStream (readTQueue observedQueue) hasObservation
     inputCommandsToSut' <- makeOutputStream $ \mInCmd -> do
