@@ -171,6 +171,46 @@ adgTestSelector aut delta =
                     [next] -> Left next
                     _ -> error "Error: expected to have observed an output ot quiescence but seeing some ioact"
 
+andThen :: TestController m loc q t tdest act1 state1 i1 r1 -> TestController m loc q t tdest act2 state2 i2 r2 -> TestController m loc q t tdest (Either act1 act2) (Either state1 state2) (Either i1 i2) r2
+andThen tester1 tester2 =
+    TestController {
+        testControllerState = (Left $ testControllerState tester1),
+        selectTest = andThenSelect,
+        updateTestController = andThenUpdate,
+        handleTestClose = return $ \state -> case state of
+            (Left s) -> handleTestClose tester1 s
+            (Right s) -> handleTestClose tester2 s
+    }
+    where
+        andThenSelect testState specState mq = case testState of
+            (Left s) -> do
+                res <- selectTest tester1 s specState mq
+                return $ case res of
+                    Left (i1,s1) -> (Left (Left i1, Left s1))
+                    Right r1 -> do
+                        res2 <- selectTest tester2 (testControllerState tester2) specState mq
+                        return $ case res2 of
+                            (Left (i2,s2)) -> Left (Right i2, Right s2)
+                            (Right r2) -> Right r2
+            (Right s) -> do
+                res2 <- selectTest tester2 s specState mq
+                return $ case res2 of
+                    Left (i2,s2) -> Left (Left i2, Right s2)
+                    Right r2 -> Right r2
+        andThenUpdate testState specState ioact mq = case (testState,ioact) of
+            (Left s, Left i) -> do
+                res1 <- updateTestController tester1 s specState i mq
+                return $ case res1 of
+                    Left s1 ->  Left $ Left s1
+                    Right r1 -> Left $ Right $ testControllerState tester2
+            (Right s, Right i) -> do
+                res2 <- updateTestController tester2 s specState i mq
+                return $ case res2 of
+                    Left s2 ->  Left $ Right s2
+                    Right r2 -> Right r2
+            _ -> error "Error: did not get tuple of Left-Left or Right-Right in andThen updateTestController"
+
+
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
