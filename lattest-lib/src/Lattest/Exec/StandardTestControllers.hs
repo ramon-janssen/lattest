@@ -121,7 +121,7 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
 accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q ->  TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
 accessSeqSelector aut initLoc =
-    let accSeqs = accessSequences (syntacticAutomaton aut) initLoc
+    let accSeqs = accessSequences aut initLoc
     in TestController {
         testControllerState = (Map.!) accSeqs initLoc,
         selectTest = accSeqSelectTest,
@@ -171,44 +171,43 @@ adgTestSelector aut delta =
                     [next] -> Left next
                     _ -> error "Error: expected to have observed an output ot quiescence but seeing some ioact"
 
-andThen :: TestController m loc q t tdest act1 state1 i1 r1 -> TestController m loc q t tdest act2 state2 i2 r2 -> TestController m loc q t tdest (Either act1 act2) (Either state1 state2) (Either i1 i2) r2
+andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
 andThen tester1 tester2 =
     TestController {
         testControllerState = (Left $ testControllerState tester1),
         selectTest = andThenSelect,
         updateTestController = andThenUpdate,
-        handleTestClose = return $ \state -> case state of
-            (Left s) -> handleTestClose tester1 s
+        handleTestClose = \state -> case state of
+            (Left s) -> handleTestClose tester2 (testControllerState tester2)
             (Right s) -> handleTestClose tester2 s
     }
     where
         andThenSelect testState specState mq = case testState of
             (Left s) -> do
                 res <- selectTest tester1 s specState mq
+                res2 <- selectTest tester2 (testControllerState tester2) specState mq
                 return $ case res of
-                    Left (i1,s1) -> (Left (Left i1, Left s1))
-                    Right r1 -> do
-                        res2 <- selectTest tester2 (testControllerState tester2) specState mq
-                        return $ case res2 of
-                            (Left (i2,s2)) -> Left (Right i2, Right s2)
-                            (Right r2) -> Right r2
+                    Left (i1,s1) -> Left (i1, Left s1)
+                    Right r1 -> case res2 of
+                        Left (i2,s2) -> Left (i2, Right s2)
+                        Right r2 -> Right r2
             (Right s) -> do
                 res2 <- selectTest tester2 s specState mq
                 return $ case res2 of
-                    Left (i2,s2) -> Left (Left i2, Right s2)
+                    Left (i2,s2) -> Left (i2, Right s2)
                     Right r2 -> Right r2
-        andThenUpdate testState specState ioact mq = case (testState,ioact) of
-            (Left s, Left i) -> do
-                res1 <- updateTestController tester1 s specState i mq
+
+        andThenUpdate testState specState ioact mq = case testState of
+            Left s -> do
+                res1 <- updateTestController tester1 s specState ioact mq
                 return $ case res1 of
                     Left s1 ->  Left $ Left s1
                     Right r1 -> Left $ Right $ testControllerState tester2
-            (Right s, Right i) -> do
-                res2 <- updateTestController tester2 s specState i mq
+            Right s -> do
+                res2 <- updateTestController tester2 s specState ioact mq
                 return $ case res2 of
                     Left s2 ->  Left $ Right s2
                     Right r2 -> Right r2
-            _ -> error "Error: did not get tuple of Left-Left or Right-Right in andThen updateTestController"
 
 
 

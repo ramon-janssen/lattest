@@ -53,7 +53,7 @@ STSIntrp
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc,transRel,SyntaxDestStates,getStates)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc,transRel,SyntaxDestStates,getStates,syntacticAutomaton)
 import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import Lattest.Util.Utils(takeArbitrary)
 
@@ -185,10 +185,10 @@ concTransFromFunc fTrans alph loc = Map.fromSet (fTransConc) (foldableAsSet alph
 foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld
 
-accessSequences :: (Ord loc, SyntaxDestStates m loc tdest) => AutSyntax m loc t tdest -> loc -> Map loc [t]
+accessSequences :: (Ord loc, SyntaxDestStates m loc tdest) => AutIntrpr m loc loc t tdest act -> loc -> Map loc [t]
 accessSequences aut initLoc =
     let initialMap = Map.singleton initLoc []
-    in fst $ accessSequences' aut initialMap $ Set.singleton initLoc
+    in fst $ accessSequences' (syntacticAutomaton aut) initialMap $ Set.singleton initLoc
 
 accessSequences' :: (Ord loc, SyntaxDestStates m loc tdest) => AutSyntax m loc t tdest -> Map loc [t] -> Set.Set loc -> (Map loc [t], Set.Set loc)
 accessSequences' aut accMap boundary = case takeArbitrary boundary of
