@@ -25,6 +25,8 @@ TestSelector,
 randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
+accessSeqSelector,
+adgTestSelector,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
@@ -119,11 +121,11 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
             else return $ Just $ takeRandom g ins
 
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
-accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q ->  TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
-accessSeqSelector aut initLoc =
+accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
+accessSeqSelector aut initLoc targetLoc =
     let accSeqs = accessSequences aut initLoc
     in TestController {
-        testControllerState = (Map.!) accSeqs initLoc,
+        testControllerState = (Map.!) accSeqs targetLoc,
         selectTest = accSeqSelectTest,
         updateTestController = accSeqUpdateTest,
         handleTestClose = \testState -> return $ case testState of [] ->  True; _ -> False
