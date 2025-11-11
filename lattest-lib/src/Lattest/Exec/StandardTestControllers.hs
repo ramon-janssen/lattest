@@ -27,6 +27,7 @@ randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
 accessSeqSelector,
 adgTestSelector,
+andThen,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
@@ -121,7 +122,8 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
             else return $ Just $ takeRandom g ins
 
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
-accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
+-- accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
+accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
 accessSeqSelector aut initLoc targetLoc =
     let accSeqs = accessSequences aut initLoc
     in TestController {
@@ -132,9 +134,11 @@ accessSeqSelector aut initLoc targetLoc =
     }
     where
     accSeqSelectTest [] specIntrpState _ = return $ Right True
-    accSeqSelectTest (l:ls) specIntrpState _ = return $ if isInput l then Left (Just l, (l:ls)) else Left (Nothing, (l:ls))
+    accSeqSelectTest (l:ls) specIntrpState _ = return $ case l of
+        In i -> Left (Just i, (l:ls))
+        _ -> Left (Nothing, (l:ls))
     accSeqUpdateTest [] specIntrpState label _ = return $ Right True
-    accSeqUpdateTest (l:ls) specIntrpState label _ = return $ if l == label then Left ls else Right False
+    accSeqUpdateTest (l:ls) specIntrpState label _ = return $ if (asSuspended l) == label then Left ls else Right False
 
 
 

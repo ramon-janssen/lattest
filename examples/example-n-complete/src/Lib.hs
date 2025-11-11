@@ -31,7 +31,7 @@ initialConfiguration = pure PickEither
 spec = automaton initialConfiguration alphabet trans
 
 nrSteps = 50
-testSelector = \model -> accessSeqSelector model PickEither Confirmed2 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
+testSelector = \model -> andThen (accessSeqSelector model PickEither Confirmed2) (adgTestSelector model 3) `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 -- randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
