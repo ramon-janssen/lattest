@@ -36,7 +36,8 @@ spec = automaton initialConfiguration alphabet trans
 
 nrSteps = 3
 seed = 456
-testSelector = \model ->  accessSeqSelector model PickEither Confirmed2 `andThen` (randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps)  `andThen` adgTestSelector model 4 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
+targetState = Confirmed2 -- supply all states as targetStates to obtain n-complete test suite
+testSelector = \model targetState ->  accessSeqSelector model PickEither targetState `andThen` (randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps)  `andThen` adgTestSelector model 4 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 -- randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
@@ -47,7 +48,7 @@ someFunc = do
     imp <- withQuiescenceMillis 200 adap
     let model = interpretQuiescentConcrete spec
     putStrLn $ "starting test..."
-    (verdict, (observed, maybeMq)) <- runTester model (testSelector model) imp
+    (verdict, (observed, maybeMq)) <- runTester model (testSelector model targetState) imp
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed
     putStrLn $ "final state: " ++ show maybeMq
