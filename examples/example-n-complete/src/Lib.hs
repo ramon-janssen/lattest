@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Lib
     ( someFunc
     ) where
@@ -9,8 +10,11 @@ import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.StandardTestControllers(accessSeqSelector)
 --import Network.Socket(withSocketsDo)
+import Control.DeepSeq(NFData)
+import GHC.Generics (Generic)
 
-data State = PickEither | PickEitherIn | Picked2 | Picked1 | Confirm1 | Confirmed1 | Confirm2 | Confirmed2 deriving (Eq, Ord, Show)
+data State = PickEither | PickEitherIn | Picked2 | Picked1 | Confirm1 | Confirmed1 | Confirm2 | Confirmed2 deriving (Eq, Ord, Show, Generic)
+instance NFData State
 
 Just trans = detConcTransFromRel
     [   (PickEither, In 0, PickEitherIn),
@@ -30,8 +34,9 @@ initialConfiguration = pure PickEither
 
 spec = automaton initialConfiguration alphabet trans
 
-nrSteps = 50
-testSelector = \model -> andThen (accessSeqSelector model PickEither Confirmed2) (adgTestSelector model 3) `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
+nrSteps = 3
+seed = 456
+testSelector = \model ->  accessSeqSelector model PickEither Confirmed2 `andThen` (randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps)  `andThen` adgTestSelector model 4 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 -- randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
