@@ -27,6 +27,8 @@ randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
 accessSeqSelector,
 adgTestSelector,
+nCompleteSingleState,
+runNCompleteTestSuite,
 andThen,
 -- * Stop Conditions
 StopCondition,
@@ -50,20 +52,21 @@ printActions,
 printState
 )
 where
+import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.Testing(TestController(..))
+import Lattest.Exec.Testing(TestController(..), runTester)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Control.DeepSeq(NFData)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
-import Data.Foldable(toList)
+import Data.Foldable(toList, forM_)
 import qualified Data.Map as Map (keys, (!))
 import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set, singleton)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
@@ -176,6 +179,25 @@ adgTestSelector aut delta =
                 in case nextList of
                     [next] -> Left next
                     _ -> error "Error: expected to have observed an output ot quiescence but seeing some ioact"
+
+nCompleteSingleState model targetState seed nrSteps delta accessState observer =
+    accessSeqSelector model accessState targetState
+        `andThen` randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps
+            `andThen` adgTestSelector model delta `observingOnly` observer
+
+runNCompleteTestSuite adapter spec seed nrSteps delta targetStates = do
+    forM_ targetStates $ \targetState -> do
+        putStrLn $ "connecting..."
+        adap <- adapter
+        imp <- withQuiescenceMillis 200 adap
+        let model = interpretQuiescentConcrete spec
+        putStrLn $ "starting test..."
+        putStrLn $ "accessing state: " ++ (show targetState)
+        (verdict, (observed, maybeMq)) <- runTester model (testSelector model targetState) imp
+        putStrLn $ "verdict: " ++ show verdict
+        putStrLn $ "observed: " ++ show observed
+        putStrLn $ "final state: " ++ show maybeMq
+    where testSelector model targetState = nCompleteSingleState model targetState seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
 andThen tester1 tester2 =

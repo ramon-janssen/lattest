@@ -39,7 +39,7 @@ testADG = TestCase $ do
 testAccSeq :: Test
 testAccSeq = TestCase $ do
     let accMap = accessSequences model 1
-    assertEqual "empty seq for loc 0" (Just []) $ Map.lookup 1 accMap
+    assertEqual "empty seq for loc 1" (Just []) $ Map.lookup 1 accMap
     assertEqual "axy expected for loc 2" (Just $ [In "a", Out "x", Out "y"]) $ Map.lookup 2 accMap
-    assertEqual "a expected for loc 1" (Just $ [In "a"]) $ Map.lookup 3 accMap
-    assertEqual "ax expected for loc 1" (Just $ [In "a", Out "x"]) $ Map.lookup 4 accMap
+    assertEqual "a expected for loc 3" (Just $ [In "a"]) $ Map.lookup 3 accMap
+    assertEqual "ax expected for loc 4" (Just $ [In "a", Out "x"]) $ Map.lookup 4 accMap

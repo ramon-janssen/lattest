@@ -1,15 +1,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Lib
-    ( someFunc
+    ( runNCompleteTestSuiteExample
     ) where
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata
+import Lattest.Model.Automaton(reachable)
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.StandardTestControllers(accessSeqSelector)
---import Network.Socket(withSocketsDo)
 import Control.DeepSeq(NFData)
 import GHC.Generics (Generic)
 
@@ -36,19 +35,12 @@ spec = automaton initialConfiguration alphabet trans
 
 nrSteps = 3
 seed = 456
-targetState = Confirmed2 -- supply all states as targetStates to obtain n-complete test suite
-testSelector = \model targetState ->  accessSeqSelector model PickEither targetState `andThen` (randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps)  `andThen` adgTestSelector model 4 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
+delta = 4
+-- testSelector = \model -> nCompleteSingleState model targetState seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
+-- accessSeqSelector model PickEither targetState `andThen` (randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps)  `andThen` adgTestSelector model 4 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
--- randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
-someFunc :: IO () -- FIXME give this function a sensible name
-someFunc = do
-    putStrLn $ "connecting..."
-    adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    imp <- withQuiescenceMillis 200 adap
-    let model = interpretQuiescentConcrete spec
-    putStrLn $ "starting test..."
-    (verdict, (observed, maybeMq)) <- runTester model (testSelector model targetState) imp
-    putStrLn $ "verdict: " ++ show verdict
-    putStrLn $ "observed: " ++ show observed
-    putStrLn $ "final state: " ++ show maybeMq
+runNCompleteTestSuiteExample :: IO ()
+runNCompleteTestSuiteExample = runNCompleteTestSuite adapter spec seed nrSteps delta (reachable spec)
+    where adapter = connectJSONSocketAdapterAcceptingInputs  :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
+
