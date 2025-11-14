@@ -25,7 +25,6 @@ TestSelector,
 randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
-randomTestSelectorWithMemory,
 randomTestSelectorWithMemoryFromState,
 RandomMemState(..),
 -- * Stop Conditions
@@ -120,11 +119,12 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
                 return $ Just $ takeRandom g ins
 
 {- |
-    TBC 
+    TBC
 -}
 data RandomMemState q i g = RandomMemState
-  { usedInputs :: Map.Map q (Set.Set i)
+  { usedInputs :: Map.Map (q, [i]) (Set.Set i)
   , randGen    :: g
+  , inputHist  :: [i]
   } deriving (Show)
 
 randomTestSelectorWithMemoryFromState
@@ -146,19 +146,32 @@ randomTestSelectorWithMemoryFromState
 randomTestSelectorWithMemoryFromState g0 initMem =
   selector (initMem { randGen = g0 }) selectStep updateStep
   where
-    selectStep (RandomMemState used g) aut _ = do
-      let allActs   = takeJusts $ actToChoice <$> specifiedMenu aut
-          stateKey  = stateConf aut
-          tried     = Map.findWithDefault Set.empty stateKey used
-          remaining = filter (`Set.notMember` tried) allActs
-      if null remaining
-        then do
-          let (actChoice, g') = takeRandom g allActs
-          return (Just (actChoice, RandomMemState used g'))
-        else do
-          let (actChoice, g') = takeRandom g remaining
-              used' = Map.insertWith Set.union stateKey (Set.singleton actChoice) used
-          return (Just (actChoice, RandomMemState used' g'))
+    selectStep (RandomMemState used g inputHist) aut _ = do
+        let allActs   = takeJusts $ actToChoice <$> specifiedMenu aut
+            stateKey  = (stateConf aut, inputHist)
+            tried     = Map.findWithDefault Set.empty stateKey used
+            remaining = filter (`Set.notMember` tried) allActs
+        
+        putStrLn "Current state:"
+        print stateKey
+        putStrLn "All possible inputs:"
+        print allActs
+        putStrLn "Inputs left to try:"
+        print remaining
+        
+        case (remaining, allActs) of
+            ([], []) -> do
+                putStrLn "Warning: no available actions in this state!"
+                return Nothing
+            ([], _) -> do
+                let (actChoice, g') = takeRandom g allActs
+                    hist' = take 15 (actChoice : inputHist)
+                return (Just (actChoice, RandomMemState used g' hist'))
+            _ -> do
+                let (actChoice, g') = takeRandom g remaining
+                    used' = Map.insertWith Set.union stateKey (Set.singleton actChoice) used
+                    hist' = take 15 (actChoice : inputHist)
+                return (Just (actChoice, RandomMemState used' g' hist'))
 
     updateStep st _ _ _ = return (Just st)
 {- |
