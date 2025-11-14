@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 {- |
     A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
@@ -74,7 +75,8 @@ import Control.Monad(ap)
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet
-
+deriving instance (Eq a, Ord a) => Eq (Det a)
+deriving instance (Ord a) => Ord (Det a)
 instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
