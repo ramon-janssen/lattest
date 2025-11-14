@@ -25,10 +25,10 @@ Just trans = detConcTransFromRel
         (Picked2, In 0, Confirm2),
         (Confirm1, Out 1, Confirmed1),
         (Confirm2, Out 2, Confirmed2),
-        (Confirmed1, In 1, PickEither),
-        (Confirmed2, In 2, PickEither)
+        (Confirmed1, In (-1), PickEither),
+        (Confirmed2, In (-2), PickEither)
     ]
-alphabet = ioAlphabet [0, 1, 2] [1, 2]
+alphabet = ioAlphabet [0, -1, -2] [1, 2]
 initialConfiguration = pure PickEither
 
 spec = automaton initialConfiguration alphabet trans
@@ -41,6 +41,6 @@ delta = 4
 
 
 runNCompleteTestSuiteExample :: IO ()
-runNCompleteTestSuiteExample = runNCompleteTestSuite adapter spec seed nrSteps delta (reachable spec)
+runNCompleteTestSuiteExample = runNCompleteTestSuite adapter spec nrSteps delta (reachable spec)
     where adapter = connectJSONSocketAdapterAcceptingInputs  :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
 

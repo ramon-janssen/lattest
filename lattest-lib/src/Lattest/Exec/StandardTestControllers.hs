@@ -61,7 +61,7 @@ import Lattest.Exec.Testing(TestController(..), runTester)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
-import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det(..))
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Control.DeepSeq(NFData)
@@ -127,9 +127,12 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
 -- accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
-accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
-accessSeqSelector aut initLoc targetLoc =
-    let accSeqs = accessSequences aut initLoc
+accessSeqSelector :: (Ord q, Eq i, Eq o, Show i, Show o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
+accessSeqSelector aut targetLoc =
+    let initLoc = case stateConf aut of
+            Det q -> q
+            _ -> error "Access sequence: model must be in a specified initial state"
+        accSeqs = accessSequences aut initLoc
     in TestController {
         testControllerState = (Map.!) accSeqs targetLoc,
         selectTest = accSeqSelectTest,
@@ -146,7 +149,7 @@ accessSeqSelector aut initLoc targetLoc =
 
 
 
-adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l, Show l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
 adgTestSelector aut delta =
     let adgaut = case adgAutFromAutomaton aut delta of
                     Just a -> a
@@ -161,32 +164,34 @@ adgTestSelector aut delta =
     where
     adgSelectTest testState specIntrpState _ =
         return $ case testState of
-    -- Nil | Prefix b (Evidence b) | Plus [Evidence b]
             Nil -> Right Set.empty
             Prefix l next -> Left (Just l, testState)
             Plus _ -> Left (Nothing,testState)
 
-    adgUpdateTest testState specIntrpState ioact _ = --state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
-        return $ case testState of
+    adgUpdateTest testState specIntrpState ioact _ =
+       return $ case testState of
             Nil -> Right Set.empty
             Prefix l next -> if ioact == In l then Left next else error "Error: expected to have selected an input but seeing some ioact"
             Plus ls ->
-                let nextList = takeJusts $ fmap (\ev -> case ev of
-                        Nil -> Nothing
-                        Prefix l next -> if l == delta
-                                            then if ioact == Out Quiescence then Just next else Nothing
-                                         else if ioact == Out (OutSusp l) then Just next else Nothing
-                        Plus _ -> Nothing) ls
+                let nextList = concat $ fmap getNextState ls
                 in case nextList of
                     [next] -> Left next
-                    _ -> error "Error: expected to have observed an output ot quiescence but seeing some ioact"
+                    _ -> error "ADG error: expected to have observed one output or quiescence"
+                where
+                getNextState ev = case ev of
+                    Nil -> []
+                    Prefix l next -> if l == delta
+                                        then if ioact == Out Quiescence then [next] else []
+                                     else if ioact == Out (OutSusp l) then [next] else []
+                    Plus ls -> concat $ fmap getNextState ls
 
-nCompleteSingleState model targetState seed nrSteps delta accessState observer =
-    accessSeqSelector model accessState targetState
-        `andThen` randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps
+nCompleteSingleState model nrSteps delta targetState observer = do
+    myRandomTestSelector <- randomTestSelector
+    return $ accessSeqSelector model targetState
+        `andThen` myRandomTestSelector `untilCondition` stopAfterSteps nrSteps
             `andThen` adgTestSelector model delta `observingOnly` observer
 
-runNCompleteTestSuite adapter spec seed nrSteps delta targetStates = do
+runNCompleteTestSuite adapter spec nrSteps delta targetStates = do
     forM_ targetStates $ \targetState -> do
         putStrLn $ "connecting..."
         adap <- adapter
@@ -194,12 +199,13 @@ runNCompleteTestSuite adapter spec seed nrSteps delta targetStates = do
         let model = interpretQuiescentConcrete spec
         putStrLn $ "starting test..."
         putStrLn $ "accessing state: " ++ (show targetState)
-        (verdict, (observed, maybeMq)) <- runTester model (testSelector model targetState) imp
+        testSelector <- testSelectorIO  model targetState
+        (verdict, (observed, maybeMq)) <- runTester model testSelector imp
         putStrLn $ "verdict: " ++ show verdict
         putStrLn $ "observed: " ++ show observed
         putStrLn $ "final state: " ++ show maybeMq
         close adap
-    where testSelector model targetState = nCompleteSingleState model targetState seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
+    where testSelectorIO model targetState = nCompleteSingleState model nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
 andThen tester1 tester2 =
