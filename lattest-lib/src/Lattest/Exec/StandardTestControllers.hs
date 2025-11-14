@@ -52,6 +52,7 @@ printActions,
 printState
 )
 where
+import Lattest.Adapter.Adapter(close)
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
@@ -197,6 +198,7 @@ runNCompleteTestSuite adapter spec seed nrSteps delta targetStates = do
         putStrLn $ "verdict: " ++ show verdict
         putStrLn $ "observed: " ++ show observed
         putStrLn $ "final state: " ++ show maybeMq
+        close adap
     where testSelector model targetState = nCompleteSingleState model targetState seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
