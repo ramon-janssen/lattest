@@ -115,7 +115,6 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         in if null ins
             then error "random test selector found an empty menu"
             else do
-                traceShowM ("ins", ins)
                 return $ Just $ takeRandom g ins
 
 {- |
