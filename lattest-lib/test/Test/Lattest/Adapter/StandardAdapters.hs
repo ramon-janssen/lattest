@@ -5,13 +5,16 @@ module Test.Lattest.Adapter.StandardAdapters (
 testJSONSocketAdapterByte,
 testAdapterAcceptingInput,
 testJSONSocketAdapterInt,
-testJSONSocketAdapterObject
+testJSONSocketAdapterObject,
+testQuiscence,
+testInputDelay
 )
 where
 
-import Lattest.Model.Alphabet(IOAct(..))
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), IOSuspAct)
 import Lattest.Adapter.Adapter(send, Adapter(..), close, observe)
-import Lattest.Adapter.StandardAdapters(connectJSONSocketAdapterAcceptingInputs,connectSocketAdapter, acceptingInputs)
+import qualified Lattest.Adapter.Adapter as Adap
+import qualified Lattest.Adapter.StandardAdapters as SA
 import System.IO.Streams.Synchronized(fromBuffer)
 
 import Control.Concurrent(threadDelay)
@@ -21,8 +24,11 @@ import Data.Aeson(FromJSON,ToJSON)
 import Data.ByteString(ByteString)
 import qualified Data.ByteString.Char8 as C8 (pack)
 import Data.Text(unpack, pack)
-import Data.Text.Encoding(decodeUtf8, encodeUtf8)
+import Data.Text.Encoding(decodeUtf8, decodeUtf8With, encodeUtf8)
+import Data.Text.Encoding.Error(lenientDecode)
+import Data.Time.Clock(UTCTime,getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,secondsToNominalDiffTime,nominalDiffTimeToSeconds)
 import Data.Functor(void)
+import GHC.Conc (forkIO)
 import GHC.Generics (Generic)
 import Network.Socket(withSocketsDo, accept, SockAddr(SockAddrInet), tupleToHostAddress, setSocketOption, Socket, SocketOption(ReuseAddr,RecvTimeOut))
 import qualified Network.Socket as Socket(gracefulClose)
@@ -40,7 +46,7 @@ testJSONSocketAdapterByte = TestCase $ withSocketsDo $ do
     let addr = tupleToHostAddress (127, 0, 0, 1)
     listenSock <- listenTCPAddr (SockAddrInet 2929 addr) 10 -- the SUT listens for adapter connections
     setSocketOption listenSock ReuseAddr 1
-    adap <- connectSocketAdapter :: IO (Adapter ByteString ByteString)
+    adap <- SA.connectSocketAdapter :: IO (Adapter ByteString ByteString)
     (listenConn, _) <- accept listenSock -- the SUT accepts the adapter connection
 
     void $ send (C8.pack "1") adap -- the adapter sends 1
@@ -75,7 +81,7 @@ testAdapterAcceptingInput = TestCase $ do
     actQueue <- newTQueueIO
     actionsFromSut' <- fromBuffer actQueue
     let rawAdap = Adapter { inputCommandsToSut = ics, actionsFromSut = actionsFromSut', close = error ""}
-    adap <- (acceptingInputs rawAdap) :: IO (Adapter (IOAct Int Int) Int)
+    adap <- (SA.acceptingInputs rawAdap) :: IO (Adapter (IOAct Int Int) Int)
     
     void $ send 1 adap -- send an input
     assertObserve 1 adap -- input is observed
@@ -124,7 +130,7 @@ testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
     let addr = tupleToHostAddress (127, 0, 0, 1)
     listenSock <- listenTCPAddr (SockAddrInet 2929 addr) 10 -- the SUT listens for adapter connections
     setSocketOption listenSock ReuseAddr 1
-    adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
+    adap <- SA.connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
     (listenConn, _) <- accept listenSock -- the SUT accepts the adapter connection
 
     void $ send 1 adap -- the adapter sends 1
@@ -196,6 +202,13 @@ assertObserve expected adap = do
     fromIOAct (Out a) = a
     fromIOAct (In a) = a
 
+assertObserveIO expected adap = do
+    maybeObserved <- timeout 100000 $ observe adap
+    case maybeObserved of
+        Nothing -> assertFailure $ "Adapter observation timeout while observing '" ++ show expected ++ "'"
+        Just Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
+        Just (Just observed) -> assertEqual ("receiving wrong observation on adap") expected observed
+
 assertObserveNonDet expected1 expected2 adap = do
     maybeObserved <- timeout 100000 $ observe adap
     case maybeObserved of
@@ -212,6 +225,12 @@ assertObserveNonDet expected1 expected2 adap = do
     fromIOAct (Out a) = a
     fromIOAct (In a) = a
 
+assertObserve' expected adap = do
+    maybeObserved <- observe adap
+    case maybeObserved of
+        Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
+        Just observed -> assertEqual ("receiving wrong output on adap") (Out expected) observed
+
 data List = Cons { element :: Double, comment :: String, tail :: List } | Nil deriving (Show, Generic, Ord, Eq)
 instance FromJSON List
 instance ToJSON List
@@ -222,7 +241,7 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
     let addr = tupleToHostAddress (127, 0, 0, 1)
     listenSock <- listenTCPAddr (SockAddrInet 2929 addr) 10 -- the SUT listens for adapter connections
     setSocketOption listenSock ReuseAddr 1
-    adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct List List) List) -- the adapter connects, with explicit typing because it should know how to parse incoming data
+    adap <- SA.connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct List List) List) -- the adapter connects, with explicit typing because it should know how to parse incoming data
     (listenConn, _) <- accept listenSock -- the SUT accepts the adapter connection
 
     let list12 = Cons 1 "first!" $ Cons 2 "second!" Nil
@@ -260,5 +279,215 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
 
 
 
+waitMillis x = threadDelay $ 1000*x
+
+testQuiscence :: Test
+testQuiscence = TestCase $ do
+    -- NOTE this tests the timing behaviour of quiescence so is inherently timing-dependent, and therefore potentially unstable. Raise the deltaMillis
+    -- and/or marginMillis for increased stability (and increased duration of this test)
+    let deltaMillis = 50
+    let marginMillis = 20
+    let halfDeltaMillis = deltaMillis `div` 2
+    let twoAndHalfDeltaMillis = (deltaMillis * 5) `div` 2
+    let threeAndHalfDeltaMillis = (deltaMillis * 7) `div` 2
+    icQueue <- newTQueueIO
+    ics <- makeOutputStream $ atomically . writeTQueue icQueue
+    actQueue <- newTQueueIO
+    actionsFromSut' <- fromBuffer actQueue
+    let rawAdap = Adapter { inputCommandsToSut = ics, actionsFromSut = actionsFromSut', close = error ""}
+    stringAdap' <- (Adap.mapTestChoices $ unpack . decodeUtf8With lenientDecode) rawAdap
+    stringAdap <- (Adap.mapActionsFromSut $ encodeUtf8 . pack) stringAdap'
+    parsingAdap <- SA.parseJSONActionsFromSut stringAdap
+    jsonAdap <- SA.encodeJSONTestChoices parsingAdap :: IO (Adapter String String)
+    acceptingAdap <- SA.acceptingInputs jsonAdap
+    adap <- (SA.withQuiescenceMillis deltaMillis acceptingAdap) :: IO (Adapter (IOSuspAct String String) (Maybe String))
+
+    impQueue <- newTQueueIO
+    void $ forkIO $ impFromQueue impQueue actQueue
+    
+    -- TODO also make a test case which starts with 1) an output, 2) Quiescence, and 3) a Nothing input
+    waitMillis halfDeltaMillis
+    send (Just "a") adap
+    assertObserveIO (In "a") adap
+    t1 <- getCurrentTime
+    assertObserve' Quiescence adap
+    assertObserve' Quiescence adap
+    assertObserve' Quiescence adap
+    t2 <- getCurrentTime
+    assertEqualWithMargin ("t2 - t1") marginMillis (deltaMillis*3) (diffMillis t2 t1)
+    sendWithDelay impQueue "1" 0
+    assertObserve' (OutSusp "1") adap
+    sendWithDelay impQueue "2" 0
+    sendWithDelay impQueue "3" 0
+    sendWithDelay impQueue "4" 0
+    assertObserve' (OutSusp "2") adap
+    assertObserve' (OutSusp "3") adap
+    assertObserve' (OutSusp "4") adap
+    sendWithDelay impQueue "5" halfDeltaMillis
+    sendWithDelay impQueue "6" halfDeltaMillis
+    sendWithDelay impQueue "7" halfDeltaMillis
+    sendWithDelay impQueue "8" halfDeltaMillis
+    sendWithDelay impQueue "9" threeAndHalfDeltaMillis
+    sendWithDelay impQueue "10" halfDeltaMillis
+    assertObserve' (OutSusp "5") adap
+    assertObserve' (OutSusp "6") adap
+    assertObserve' (OutSusp "7") adap
+    assertObserve' (OutSusp "8") adap
+    assertObserve' Quiescence adap
+    assertObserve' Quiescence adap
+    assertObserve' Quiescence adap
+    assertObserve' (OutSusp "9") adap
+    assertObserve' (OutSusp "10") adap
+    send (Just "b") adap
+    send (Just "c") adap
+    assertObserveIO (In "b") adap
+    assertObserveIO (In "c") adap
+    assertObserve' Quiescence adap
+    waitMillis halfDeltaMillis
+    send (Just "d") adap
+    assertObserveIO (In "d") adap
+    waitMillis halfDeltaMillis
+    send (Just "e") adap
+    assertObserveIO (In "e") adap
+    waitMillis halfDeltaMillis
+    send (Just "f") adap
+    assertObserveIO (In "f") adap
+    waitMillis halfDeltaMillis
+    send (Just "g") adap
+    assertObserveIO (In "g") adap
+    waitMillis twoAndHalfDeltaMillis
+    send (Just "h") adap
+    assertObserve' Quiescence adap
+    assertObserve' Quiescence adap
+    assertObserveIO (In "h") adap
+    sendWithDelay impQueue "11" halfDeltaMillis
+    assertObserve' (OutSusp "11") adap
+
+    -- sending nothing will observe a quiescence before processing the next input 
+    send Nothing adap
+    send (Just "i") adap
+    sendWithDelay impQueue "12" 0
+    t10 <- getCurrentTime
+    assertObserve' Quiescence adap
+    assertObserveIO (In "i") adap
+    assertObserve' (OutSusp "12") adap
+    
+    -- sending nothing will block until an output is received (before the quiescence timeout)
+    sendWithDelay impQueue "13" halfDeltaMillis
+    send Nothing adap
+    send (Just "j") adap
+    t11 <- getCurrentTime
+    assertObserve' (OutSusp "13") adap
+    assertObserveIO (In "j") adap
+
+    atomically $ writeTQueue impQueue Nothing -- close the implementation
 
 
+testInputDelay :: Test
+testInputDelay = TestCase $ do
+    -- NOTE this tests the timing behaviour of input delays so is inherently timing-dependent, and therefore potentially unstable. Raise the deltaMillis
+    -- and/or marginMillis for increased stability (and increased duration of this test)
+    let delayMillis = 50
+    let halfDelayMillis = delayMillis `div` 2
+    let deltaMillis = 2*delayMillis
+    let oneAndHalfDeltaMillis = (deltaMillis * 3) `div` 2
+    let marginMillis = 20
+    
+    icQueue <- newTQueueIO
+    ics <- makeOutputStream $ atomically . writeTQueue icQueue
+    actQueue <- newTQueueIO
+    actionsFromSut' <- fromBuffer actQueue
+    let rawAdap = Adapter { inputCommandsToSut = ics, actionsFromSut = actionsFromSut', close = error ""}
+    stringAdap' <- (Adap.mapTestChoices $ unpack . decodeUtf8With lenientDecode) rawAdap
+    stringAdap <- (Adap.mapActionsFromSut $ encodeUtf8 . pack) stringAdap'
+    parsingAdap <- SA.parseJSONActionsFromSut stringAdap
+    jsonAdap <- SA.encodeJSONTestChoices parsingAdap :: IO (Adapter String String)
+    acceptingAdap <- SA.acceptingInputs jsonAdap
+    adap' <- SA.withQuiescenceMillis deltaMillis acceptingAdap :: IO (Adapter (IOSuspAct String String) (Maybe String))
+    adap <- (SA.withInputDelayMillis delayMillis adap') :: IO (Adapter (IOSuspAct String String) (Maybe String))
+
+    impQueue <- newTQueueIO
+    void $ forkIO $ impFromQueue impQueue actQueue
+
+    t1 <- getCurrentTime
+    send (Just "a") adap
+    assertObserveIO (In "a") adap
+    t2 <- getCurrentTime
+    assertEqualWithMargin ("t2 - t1") marginMillis delayMillis (diffMillis t2 t1)
+
+    t3 <- getCurrentTime
+    send (Just "b") adap
+    sendWithDelay impQueue "1" 0
+    assertObserveIO (In "b") adap
+    t4 <- getCurrentTime
+    assertObserve' (OutSusp "1") adap
+    assertEqualWithMargin ("t4 - t3") marginMillis 0 (diffMillis t4 t3)
+
+    t5 <- getCurrentTime
+    send (Just "c") adap
+    sendWithDelay impQueue "2" halfDelayMillis
+    assertObserveIO (In "c") adap
+    t6' <- getCurrentTime
+    assertObserve' (OutSusp "2") adap
+    t6 <- getCurrentTime
+    assertEqualWithMargin ("t6' - t5") marginMillis halfDelayMillis (diffMillis t6' t5)
+    assertEqualWithMargin ("t6 - t5") marginMillis halfDelayMillis (diffMillis t6 t5)
+
+    t7 <- getCurrentTime
+    send (Just "d") adap
+    sendWithDelay impQueue "3" oneAndHalfDeltaMillis
+    assertObserveIO (In "d") adap
+    t8' <- getCurrentTime
+    assertObserve' Quiescence adap
+    assertObserve' (OutSusp "3") adap
+    t8 <- getCurrentTime
+    assertEqualWithMargin ("t8' - t7") marginMillis delayMillis (diffMillis t8' t7)
+    assertEqualWithMargin ("t8 - t7") marginMillis oneAndHalfDeltaMillis (diffMillis t8 t7)
+
+    sendWithDelay impQueue "Just to reset the quiescence timer" 0
+    assertObserve' (OutSusp "Just to reset the quiescence timer") adap
+
+    t9 <- getCurrentTime
+    sendWithDelay impQueue "4" halfDelayMillis
+    send Nothing adap
+    waitMillis $ oneAndHalfDeltaMillis
+    t10 <- getCurrentTime
+    assertObserve' (OutSusp "4") adap
+    assertObserve' Quiescence adap
+    assertEqualWithMargin ("t10 - t9") marginMillis (halfDelayMillis + oneAndHalfDeltaMillis) (diffMillis t10 t9)
+
+    sendWithDelay impQueue "Just to reset the quiescence timer" 0
+    assertObserve' (OutSusp "Just to reset the quiescence timer") adap
+
+    t11 <- getCurrentTime
+    sendWithDelay impQueue "5" oneAndHalfDeltaMillis
+    send Nothing adap
+    t12' <- getCurrentTime
+    assertObserve' Quiescence adap
+    assertObserve' (OutSusp "5") adap
+    t12 <- getCurrentTime
+    assertEqualWithMargin ("t12' - t11") marginMillis deltaMillis (diffMillis t12' t11)
+    assertEqualWithMargin ("t12 - t11") marginMillis oneAndHalfDeltaMillis (diffMillis t12 t11)
+
+    atomically $ writeTQueue impQueue Nothing -- close the implementation
+
+assertEqualWithMargin :: String -> Int -> Int -> Int -> Assertion
+assertEqualWithMargin msg margin expected actual = 
+    let msg' = msg ++ ": expected " ++ show expected ++ "±" ++ show margin ++ ", was " ++ show actual
+    in assertBool msg' $ actual <= expected + margin && actual >= expected - margin
+
+diffMillis t2 t1 = ceiling $ 1000 * (nominalDiffTimeToSeconds $ diffUTCTime t2 t1)
+
+impFromQueue :: TQueue (Maybe (String, Int)) -> TQueue (Maybe String) -> IO ()
+impFromQueue impQueue actQueue = do
+    mOut <- atomically $ readTQueue impQueue
+    case mOut of
+        Just (out, delay) -> do
+            waitMillis delay
+            atomically $ writeTQueue actQueue $ Just out
+            impFromQueue impQueue actQueue
+        Nothing -> return ()
+
+sendWithDelay :: TQueue (Maybe (String, Int)) -> String -> Int -> IO ()
+sendWithDelay impQueue act delay = do
+    atomically $ writeTQueue impQueue $ Just (show act, delay)
