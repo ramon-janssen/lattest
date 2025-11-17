@@ -11,6 +11,8 @@ import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(
 import Lattest.Exec.StandardTestControllers
 import Control.DeepSeq(NFData)
 import GHC.Generics (Generic)
+import Control.Monad (forM_)
+import qualified Data.Set as Set
 
 data State = PickEither | PickEitherIn | Picked2 | Picked1 | Confirm1 | Confirmed1 | Confirm2 | Confirmed2 deriving (Eq, Ord, Show, Generic)
 instance NFData State
@@ -33,7 +35,7 @@ initialConfiguration = pure PickEither
 
 spec = automaton initialConfiguration alphabet trans
 
-nrSteps = 3
+nrSteps = 10
 seed = 456
 delta = 4
 -- testSelector = \model -> nCompleteSingleState model targetState seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
@@ -41,6 +43,12 @@ delta = 4
 
 
 runNCompleteTestSuiteExample :: IO ()
-runNCompleteTestSuiteExample = runNCompleteTestSuite adapter spec nrSteps delta (reachable spec)
+runNCompleteTestSuiteExample = do
+    results <- runNCompleteTestSuite adapter spec nrSteps delta (Set.toList (reachable spec))
+    
+    forM_ results $ \(state, verdict, observed, maybeMq) -> do
+        putStrLn $ "state: " ++ show state
+        putStrLn $ "verdict: " ++ show verdict
+        putStrLn $ "observed: " ++ show observed
+        putStrLn $ "final state: " ++ show maybeMq
     where adapter = connectJSONSocketAdapterAcceptingInputs  :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
-

@@ -68,6 +68,7 @@ import Control.DeepSeq(NFData)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList, forM_)
+import Control.Monad (forM)
 import qualified Data.Map as Map (keys, (!))
 import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set, singleton)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
@@ -81,7 +82,7 @@ type TestSelector m loc q t tdest act s i = TestController m loc q t tdest act s
     Create a 'TestSelector'. Requires one function to select an input, also updating the state, and one function to update the state when observing
     an action.
 -}
-selector :: TestChoice i act => 
+selector :: TestChoice i act =>
     state ->
     (state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))) ->
     (state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe state)) ->
@@ -192,19 +193,18 @@ nCompleteSingleState model nrSteps delta targetState observer = do
             `andThen` adgTestSelector model delta `observingOnly` observer
 
 runNCompleteTestSuite adapter spec nrSteps delta targetStates = do
-    forM_ targetStates $ \targetState -> do
-        putStrLn $ "connecting..."
-        adap <- adapter
-        imp <- withQuiescenceMillis 200 adap
-        let model = interpretQuiescentConcrete spec
-        putStrLn $ "starting test..."
-        putStrLn $ "accessing state: " ++ (show targetState)
-        testSelector <- testSelectorIO  model targetState
-        (verdict, (observed, maybeMq)) <- runTester model testSelector imp
-        putStrLn $ "verdict: " ++ show verdict
-        putStrLn $ "observed: " ++ show observed
-        putStrLn $ "final state: " ++ show maybeMq
-        close adap
+        results <- forM targetStates $ \targetState -> do
+            putStrLn $ "connecting..."
+            adap <- adapter
+            imp <- withQuiescenceMillis 200 adap
+            let model = interpretQuiescentConcrete spec
+            putStrLn $ "starting test..."
+            putStrLn $ "accessing state: " ++ (show targetState)
+            testSelector <- testSelectorIO model targetState
+            (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+            close adap
+            return (targetState, verdict, observed, maybeMq)
+        return results
     where testSelectorIO model targetState = nCompleteSingleState model nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
@@ -386,7 +386,7 @@ stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) r
 inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return
     where
-    makeSelection _ aut _ mq = 
+    makeSelection _ aut _ mq =
         let mq' = stateConf aut
         in return $ Just $ if isConclusive mq' then mq else mq'
 
