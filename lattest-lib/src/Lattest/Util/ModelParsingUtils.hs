@@ -99,7 +99,7 @@ readMultipleAutFiles dir = do
             initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
             completeTransitions = transitions ++ initTransitions
 
-        return ( mergedInput, mergedOutput, StateName "Initial", transitions )
+        return ( mergedInput, mergedOutput, StateName "Initial", completeTransitions )
 
 -- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
 parseInitialState :: T.Text -> Maybe String
