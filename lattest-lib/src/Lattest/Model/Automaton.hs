@@ -19,6 +19,9 @@ transRel,
 -- ** Constructing Syntactical Automata
 automaton,
 automaton',
+-- ** Syntactical Automata lookup
+SyntaxDestStates,
+getStates,
 -- * Semantical Automaton Model
 -- ** Definition
 AutIntrpr,
@@ -26,6 +29,7 @@ stateConf,
 syntacticAutomaton,
 -- ** Constructing Syntactical Automata
 interpret,
+toConfiguration,
 -- ** Type Classes for Semantics
 Completable,
 implicitDestination,
@@ -55,7 +59,7 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
@@ -114,6 +118,21 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
 
+class SyntaxDestStates m loc tdest where getStates :: m (tdest, loc) -> [loc]--toTuples :: Map t (m (tdest, loc)) -> [(t,loc)]
+
+instance SyntaxDestStates Det loc tdest where
+    getStates destConf = case destConf of
+        Det (tdest,qdest) -> [qdest]
+        ForbiddenDet -> []
+        UnderspecDet -> []
+        _ -> error "could not extract location from deterministic transition destination"
+
+instance SyntaxDestStates NonDet loc tdest where
+    getStates destConf = case destConf of
+        NonDet tds -> fmap snd tds
+        UnderspecNonDet -> []
+        _ -> error "could not extract location from nondeterministic transition destination"
+
 ---------------
 -- interpret --
 ---------------
@@ -140,6 +159,9 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
 -}
 interpret :: (StepSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
 interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
+
+toConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
+toConfiguration aut conf = aut {stateConf = conf}
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
 class Completable act where
@@ -416,6 +438,8 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 acc' = acc `Set.union` new
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
+
+
 
 prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)

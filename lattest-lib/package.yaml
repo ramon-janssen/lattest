@@ -34,6 +34,9 @@ dependencies:
   - stm >= 2.5.1.0
   - grisette >= 0.9.0.0
   - filepath == 1.4.301.0
+  - cereal
+  - deepseq
+  - parallel
 
 ghc-options:
 - -Wall

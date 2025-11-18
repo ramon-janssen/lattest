@@ -10,13 +10,11 @@ import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,Intr
 import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),Variable(..),Type(..),Value(..),GateValue(..),SymExpr(..), assignment, noAssignment)
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
-import qualified Data.Map as Map (empty, fromList,singleton)
+import qualified Data.Map as Map (Map,empty, fromList,singleton)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
 import qualified Control.Exception as Exception
 
-
-stsExample :: STSIntrp NonDet Integer String String
-stsExample =
+stsSyntax =
     let pvar = (Variable "p" IntType)
         xvar = (Variable "x" IntType)
         psym = ssym "p"
@@ -34,9 +32,12 @@ stsExample =
                                 (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
             1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
-        initAssign l = IntrpState l (Map.singleton xvar (IntVal 0))
-        sts = automaton initConf (Set.fromList [water,ok,coffee]) switches
-    in interpretSTS sts initAssign
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+
+stsExample :: STSIntrp NonDet Integer String String
+stsExample =
+    let initAssign l = IntrpState l (Map.singleton (Variable "x" IntType) (IntVal 0))
+    in interpretSTS stsSyntax initAssign
 
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
