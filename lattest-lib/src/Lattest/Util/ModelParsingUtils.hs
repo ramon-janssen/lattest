@@ -11,6 +11,8 @@ import Data.Maybe (mapMaybe)
 import System.FilePath (replaceExtension)
 import Data.List (isSuffixOf)
 
+newtype StateName = StateName String
+    deriving (Eq, Ord, Show)
 {-|
     Read an .aut file representing an LTS from the provided filepath, parse its content and return:
     - [String]: Input Alphabet
@@ -20,8 +22,8 @@ import Data.List (isSuffixOf)
     - Maybe [(String, IOAct String String, String)]: List of LTS transition tuples as (InitialState, Action, EndState)
     NOTE: In order to parse actions correctly, inputs and outputs must end in _i and _o respectively. The first line of the .aut file must follow the structure des (initState,nEdges,nStates).
 -}
-readAutFile :: FilePath -> IO ([String], [String], Set.Set String, String, Maybe [(String, IOAct String String, String)])
-readAutFile path = do
+readAutFile :: FilePath -> Maybe String -> IO ([String], [String], Set.Set String, String, Maybe [(String, IOAct String String, String)])
+readAutFile path mSuffix = do
     contents <- TIO.readFile path
     let linesT = T.lines contents
     case linesT of
@@ -32,10 +34,66 @@ readAutFile path = do
             let parsed = mapMaybe parseTupleLine restLines
                 inputAlphabet  = removeDuplicates [s | (_, In s, _)  <- parsed]
                 outputAlphabet = removeDuplicates [s | (_, Out s, _) <- parsed]
+                suffix = maybe "" id mSuffix
+                renamedParsed = [ (s1 ++ suffix, t, s2 ++ suffix) | (s1, t, s2) <- parsed ]
                 allStates = Set.fromList $
-                            [s1 | (s1, _, _) <- parsed] ++
-                            [s2 | (_, _, s2) <- parsed]
-            in return (inputAlphabet, outputAlphabet, allStates, initialState, Just parsed)
+                            [s1 | (s1, _, _) <- renamedParsed] ++
+                            [s2 | (_, _, s2) <- renamedParsed]
+            in return (inputAlphabet, outputAlphabet, allStates, initialState, Just renamedParsed)
+
+readMultipleAutFiles 
+  :: FilePath 
+  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)])
+readMultipleAutFiles dir = do
+    entries <- listDirectory dir
+    let files = [ dir </> f | f <- entries, takeExtension f == ".aut" ]
+    let suffixes = map (("_" ++) . takeBaseName) files
+    parsedResults <- zipWithM (\fp s -> readAutFile fp (Just s)) files suffixes
+
+    case parsedResults of
+      [] -> return ([], [], StateName "", [])
+      _  -> do
+        let transitionsRaw :: [(String, IOAct String String, String)]
+            transitionsRaw =
+              concatMap
+                (\(_, _, _, _, mts) ->
+                    case mts of
+                      Just ts -> ts
+                      Nothing -> [])
+                parsedResults
+
+            inputAlphabets  = [ inp | (inp, _, _, _, _) <- parsedResults ]
+            outputAlphabets = [ out | (_, out, _, _, _) <- parsedResults ]
+            initialsRaw     = [ ini | (_,_,_,ini,_) <- parsedResults ]
+
+            mergedInput  = removeDuplicates (concat inputAlphabets)
+            mergedOutput = removeDuplicates (concat outputAlphabets)
+
+            allStateStrings =
+                 removeDuplicates
+                   ( initialsRaw
+                  ++ [ s1 | (s1,_,_) <- transitionsRaw ]
+                  ++ [ s2 | (_,_,s2) <- transitionsRaw ]
+                   )
+
+            transitions =
+                [ ( StateName s1
+                    , t
+                    , atom (StateName s2)
+                    )
+                | (s1,t,s2) <- transitionsRaw
+                ]
+
+            atoms = [ atom (StateName s) | s <- initialsRaw ]
+            initialState =
+                case atoms of
+                  [] -> error "No initial states found"
+                  _  -> foldr1 (\/) atoms
+            
+            initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
+            completeTransitions = transitions ++ initTransitions
+
+        return ( mergedInput, mergedOutput, StateName "Initial", transitions )
 
 -- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
 parseInitialState :: T.Text -> Maybe String
