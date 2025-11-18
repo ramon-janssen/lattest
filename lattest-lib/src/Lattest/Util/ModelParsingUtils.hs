@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lattest.Util.ModelParsingUtils (readAutFile, dumpLTSdot) where
+module Lattest.Util.ModelParsingUtils (readAutFile, readMultipleAutFiles, dumpLTSdot) where
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Util.Utils(removeDuplicates)
@@ -8,8 +8,14 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
-import System.FilePath (replaceExtension)
-import Data.List (isSuffixOf)
+import System.FilePath (replaceExtension, takeBaseName, takeExtension, (</>))
+import Data.List (isSuffixOf, sort)
+import System.Directory (listDirectory)
+import Control.Monad (zipWithM)
+import Debug.Trace (trace, traceShow)
+import Lattest.Model.StandardAutomata((\/), (/\), atom, FreeLattice)
+import qualified Data.Map as M
+import qualified Data.IntMap as IM
 
 newtype StateName = StateName String
     deriving (Eq, Ord, Show)
