@@ -45,10 +45,11 @@ readAutFile path mSuffix = do
                 allStates = Set.fromList $
                             [s1 | (s1, _, _) <- renamedParsed] ++
                             [s2 | (_, _, s2) <- renamedParsed]
-            in return (inputAlphabet, outputAlphabet, allStates, initialState, Just renamedParsed)
+                initStateWSuffix = initialState ++ suffix
+            in return (inputAlphabet, outputAlphabet, allStates, initStateWSuffix, Just renamedParsed)
 
-readMultipleAutFiles 
-  :: FilePath 
+readMultipleAutFiles
+  :: FilePath
   -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)])
 readMultipleAutFiles dir = do
     entries <- listDirectory dir
@@ -94,8 +95,8 @@ readMultipleAutFiles dir = do
             initialState =
                 case atoms of
                   [] -> error "No initial states found"
-                  _  -> foldr1 (\/) atoms
-            
+                  _  -> foldr1 (/\) atoms
+
             initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
             completeTransitions = transitions ++ initTransitions
 
@@ -141,7 +142,7 @@ dumpLTSdot path transitions = do
     writeFile dotPath $
         unlines $
             ["digraph Automaton {"] ++
-            [ "    " ++ from ++ " -> " ++ to ++ " [label=" ++ label ++ "];" 
+            [ "    " ++ from ++ " -> " ++ to ++ " [label=" ++ label ++ "];"
             | (from, label, to) <- edges
             ] ++ ["}"]
     putStrLn $ "DOT file written to: " ++ dotPath
