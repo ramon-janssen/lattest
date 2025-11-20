@@ -44,9 +44,11 @@ delta = 4
 
 runNCompleteTestSuiteExample :: IO ()
 runNCompleteTestSuiteExample = do
-    results <- runNCompleteTestSuite adapter spec nrSteps delta (Set.toList (reachable spec))
+    let targetStates = Set.toList (reachable spec)
+    let seeds = [seed + n | n <- [1..(length targetStates)]]
+    results <- runNCompleteTestSuite adapter spec nrSteps delta (zip targetStates seeds)
     
-    forM_ results $ \(state, verdict, observed, maybeMq) -> do
+    forM_ results $ \(state, verdict, (observed, maybeMq)) -> do
         putStrLn $ "state: " ++ show state
         putStrLn $ "verdict: " ++ show verdict
         putStrLn $ "observed: " ++ show observed
