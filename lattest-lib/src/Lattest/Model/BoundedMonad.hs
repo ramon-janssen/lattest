@@ -62,7 +62,10 @@ BoundedApplicative,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
-(\/)
+(\/),
+-- ** Determinisation
+determinize,
+undeterminize
 )
 where
 
@@ -277,3 +280,14 @@ class JoinSemiLattice a where
 --instance Lattice a => JoinSemiLattice a where
 --    join = (L.\/)
 
+-- | transform any `BoundedConfiguration` to the deterministic configuration `Det`, preserving `forbidden` and `underspecified`.
+determinize :: BoundedConfiguration m => m q -> Det (m q)
+determinize c
+    | isForbidden c = forbidden
+    | isUnderspecified c = underspecified
+    | otherwise = Det c
+
+undeterminize BoundedConfiguration m => Det (m q) -> m q -- TODO better name?
+undeterminize ForbiddenDet = forbidden
+undeterminize UnderspecDet = underspecified
+undeterminize (Det c) = c
