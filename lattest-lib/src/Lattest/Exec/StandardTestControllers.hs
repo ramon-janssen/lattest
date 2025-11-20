@@ -202,9 +202,9 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds = do
             let model = interpretQuiescentConcrete spec
             putStrLn $ "starting test..."
             putStrLn $ "accessing state: " ++ (show targetState)
-            (verdict,result) <- runTester model (testSelector model seed targetState) imp
+            (verdict,(observed, maybeMq)) <- runTester model (testSelector model seed targetState) imp
             close adap
-            return (targetState, verdict, result)
+            return (targetState, verdict, observed, maybeMq)
         return results
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
