@@ -49,7 +49,8 @@ reachable,
 reachableFrom,
 prettyPrint,
 prettyPrintFrom,
-prettyPrintIntrp
+prettyPrintIntrp,
+determinize
 )
 where
 
