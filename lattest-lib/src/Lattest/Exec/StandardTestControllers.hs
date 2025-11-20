@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
@@ -57,7 +58,7 @@ import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptin
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.Testing(TestController(..), runTester)
+import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
@@ -186,26 +187,26 @@ adgTestSelector aut delta =
                                      else if ioact == Out (OutSusp l) then [next] else []
                     Plus ls -> concat $ fmap getNextState ls
 
-nCompleteSingleState model nrSteps delta targetState observer = do
-    myRandomTestSelector <- randomTestSelector
+-- nCompleteSingleState :: ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q -> TestController Det q q (IOAct l l) () (IOSuspAct l lo) (Maybe (Det q)) () (Maybe (Det q))
+nCompleteSingleState model seed nrSteps delta targetState observer = do
     return $ accessSeqSelector model targetState
-        `andThen` myRandomTestSelector `untilCondition` stopAfterSteps nrSteps
+        `andThen` randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps
             `andThen` adgTestSelector model delta `observingOnly` observer
 
-runNCompleteTestSuite adapter spec nrSteps delta targetStates = do
-        results <- forM targetStates $ \targetState -> do
+-- runNCompleteTestSuite :: (Monad (TestController Det q q (IOAct l l) () (IOSuspAct l l) () (Maybe l))) => IO (Adapter act l) -> ConcreteSuspAutIntrpr Det q l l -> Int -> o -> [(q,Int)] -> IO (q, Verdict, Maybe (Det q))
+runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds = do
+        results <- forM targetStatesAndSeeds $ \(targetState,seed) -> do
             putStrLn $ "connecting..."
             adap <- adapter
             imp <- withQuiescenceMillis 200 adap
             let model = interpretQuiescentConcrete spec
             putStrLn $ "starting test..."
             putStrLn $ "accessing state: " ++ (show targetState)
-            testSelector <- testSelectorIO model targetState
-            (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+            (verdict,result) <- runTester model (testSelector model seed targetState) imp
             close adap
-            return (targetState, verdict, observed, maybeMq)
+            return (targetState, verdict, result)
         return results
-    where testSelectorIO model targetState = nCompleteSingleState model nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
+    where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
 andThen tester1 tester2 =
