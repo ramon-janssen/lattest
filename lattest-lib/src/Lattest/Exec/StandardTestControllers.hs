@@ -196,15 +196,16 @@ nCompleteSingleState model seed nrSteps delta targetState observer = do
 -- runNCompleteTestSuite :: (Monad (TestController Det q q (IOAct l l) () (IOSuspAct l l) () (Maybe l))) => IO (Adapter act l) -> ConcreteSuspAutIntrpr Det q l l -> Int -> o -> [(q,Int)] -> IO (q, Verdict, Maybe (Det q))
 runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds = do
         results <- forM targetStatesAndSeeds $ \(targetState,seed) -> do
-            putStrLn $ "connecting..."
+            putStrLn "connecting..."
             adap <- adapter
             imp <- withQuiescenceMillis 200 adap
             let model = interpretQuiescentConcrete spec
-            putStrLn $ "starting test..."
+            putStrLn "starting test..."
             putStrLn $ "accessing state: " ++ (show targetState)
-            (verdict,(observed, maybeMq)) <- runTester model (testSelector model seed targetState) imp
+            selector <- testSelector model seed targetState
+            (verdict,(observed, maybeMq)) <- runTester model selector imp
             close adap
-            return (targetState, verdict, observed, maybeMq)
+            return (targetState, verdict, (observed, maybeMq))
         return results
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
