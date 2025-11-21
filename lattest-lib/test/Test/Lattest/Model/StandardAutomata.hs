@@ -8,6 +8,7 @@ OG(..),
 sg,
 testSpecF,
 testPrintSpecF,
+testSpecFdet,
 testSpecG,
 testSpecGQuiescent
 )
@@ -19,7 +20,7 @@ import Test.HUnit
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint, determinize)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, Det(..), underspecified)
 import qualified Data.Map as Map (toList, insert, fromList)
 
 data IF = A | B deriving (Show, Eq, Ord)
@@ -78,10 +79,10 @@ testPrintSpecF = TestCase $ do
 testSpecFdet :: Test
 testSpecFdet = TestCase $ do
     let rf = interpretConcrete $ determinize sf
-    assertEqual "sf after ?A !X" q0f (stateConf $ rf `after` af `after` x)
-    -- assertEqual "sf after ?A !Y" (q0f /\ q2f) (stateConf $ rf `after` af `after` y)
-    -- assertEqual "sf after ?A !A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
-    -- assertEqual "sf after ?A !B" top (stateConf $ rf `after` af `after` bf)
+    assertEqual "sf after ?A !X" (Det q0f) (stateConf $ rf `after` af `after` x)
+    assertEqual "sf after ?A !Y" (Det (q0f /\ q2f)) (stateConf $ rf `after` af `after` y)
+    assertEqual "sf after ?A !A" (Det (q0f /\ (q1f \/ q2f))) (stateConf $ rf `after` af `after` af)
+    assertEqual "sf after ?A !B" underspecified (stateConf $ rf `after` af `after` bf)
 
 data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
 data OG = C | T | CM | TM deriving (Show, Eq, Ord)

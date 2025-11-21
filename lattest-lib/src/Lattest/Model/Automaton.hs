@@ -444,16 +444,22 @@ data AutSyntax m loc t tdest = Automaton {
     transRel :: loc -> Map t (m (tdest, loc))
     }
 -}
--- determinize :: AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
+determinize :: (BoundedMonad m, Ord t) => AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
 determinize aut = Automaton {
     initConf = BM.determinize $ initConf aut,
     alphabet = alphabet aut, 
-    transRel = \detloc ->
-        let loc = BM.undeterminize detloc
-            t = transRel aut $ loc
-            handleTDests = \m -> fmap addTDest . BM.determinize . fmap stripTDest -- (m ((), loc)) -> (Det ((), m loc))
-        in Map.map (handleTDests loc) t
+    transRel = \mloc ->
+        let ft = \t -> addTDest <$> (BM.determinize $ takeMTransition t mloc)
+        in transitionsAsMap ft
     }
     where
-    stripTDest ((), loc) = loc
+    takeMTransition t mloc = Monad.join (takeTransition t <$> mloc) -- t -> m loc -> m loc
+    takeTransition t loc = stripTDest <$> (transRel aut loc Map.! t) -- t -> loc -> m loc
+    transitionsAsMap ft = Map.fromSet ft $ alphabet aut -- :: (t -> a) -> Map t a
     addTDest loc = ((), loc)
+    stripTDest ((), loc) = loc
+
+
+
+
+

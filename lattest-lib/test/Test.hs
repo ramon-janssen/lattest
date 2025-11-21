@@ -50,6 +50,7 @@ hunitTests = TestList [
     testOutputOutsideAlphabet,
     testSpecF,
     testPrintSpecF,
+    testSpecFdet,
     testSpecG,
     testSpecGQuiescent,
     testRandomFCorrect,
