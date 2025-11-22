@@ -77,9 +77,7 @@ import qualified Data.Set as Set
 import Control.Monad(ap)
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
-data Det q = Det q | ForbiddenDet | UnderspecDet
-deriving instance (Eq a, Ord a) => Eq (Det a)
-deriving instance (Ord a) => Ord (Det a)
+data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
 instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
@@ -287,7 +285,7 @@ determinize c
     | isUnderspecified c = underspecified
     | otherwise = Det c
 
-undeterminize BoundedConfiguration m => Det (m q) -> m q -- TODO better name?
+undeterminize :: BoundedConfiguration m => Det (m q) -> m q -- TODO better name?
 undeterminize ForbiddenDet = forbidden
 undeterminize UnderspecDet = underspecified
 undeterminize (Det c) = c

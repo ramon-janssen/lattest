@@ -53,14 +53,15 @@ reachable,
 reachableFrom,
 prettyPrint,
 prettyPrintFrom,
-prettyPrintIntrp
+prettyPrintIntrp,
+determinize
 )
 where
 
 import Prelude hiding (lookup)
 
+import qualified Lattest.Model.BoundedMonad as BM (determinize, undeterminize,Det)
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
-import qualified Lattest.Model.BoundedMonad as BM (determinize, undeterminize)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
@@ -467,16 +468,22 @@ data AutSyntax m loc t tdest = Automaton {
     transRel :: loc -> Map t (m (tdest, loc))
     }
 -}
-determinize :: AutSyntax m loc t () -> AutSyntax Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
-determinize aut = AutSyntax {
+determinize :: (BoundedMonad m, Ord t) => AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
+determinize aut = Automaton {
     initConf = BM.determinize $ initConf aut,
     alphabet = alphabet aut, 
-    transRel = \detloc ->
-        let loc = BM.undeterminize detloc
-            t = transRel aut $ loc
-            handleTDests = \m -> fmap addTDest . BM.determinize . fmap stripTDest -- (m ((), loc)) -> (Det ((), m loc))
-        in Map.map handleTDests t
+    transRel = \mloc ->
+        let ft = \t -> addTDest <$> (BM.determinize $ takeMTransition t mloc)
+        in transitionsAsMap ft
     }
     where
-    stripTDest ((), loc) = loc
+    takeMTransition t mloc = Monad.join (takeTransition t <$> mloc) -- t -> m loc -> m loc
+    takeTransition t loc = stripTDest <$> (transRel aut loc Map.! t) -- t -> loc -> m loc
+    transitionsAsMap ft = Map.fromSet ft $ alphabet aut -- :: (t -> a) -> Map t a
     addTDest loc = ((), loc)
+    stripTDest ((), loc) = loc
+
+
+
+
+
