@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
@@ -59,7 +60,7 @@ import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptin
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.Testing(TestController(..), runTester)
+import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
@@ -126,6 +127,129 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         let ins = takeJusts $ actToChoice <$> specifiedMenu aut
         in if null ins
             then error "random test selector found an empty menu"
+            else return $ Just $ takeRandom g ins
+
+--Result Bool is True when access sequence has been followed and false when the SUT deviated
+-- accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
+accessSeqSelector :: (Ord q, Eq i, Eq o, Show i, Show o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
+accessSeqSelector aut targetLoc =
+    let initLoc = case stateConf aut of
+            Det q -> q
+            _ -> error "Access sequence: model must be in a specified initial state"
+        accSeqs = accessSequences aut initLoc
+    in TestController {
+        testControllerState = (Map.!) accSeqs targetLoc,
+        selectTest = accSeqSelectTest,
+        updateTestController = accSeqUpdateTest,
+        handleTestClose = \testState -> return $ case testState of [] ->  True; _ -> False
+    }
+    where
+    accSeqSelectTest [] specIntrpState _ = return $ Right True
+    accSeqSelectTest (l:ls) specIntrpState _ = return $ case l of
+        In i -> Left (Just i, (l:ls))
+        _ -> Left (Nothing, (l:ls))
+    accSeqUpdateTest [] specIntrpState label _ = return $ Right True
+    accSeqUpdateTest (l:ls) specIntrpState label _ = return $ if (asSuspended l) == label then Left ls else Right False
+
+
+
+adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l, Show l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector aut delta =
+    let adgaut = case adgAutFromAutomaton aut delta of
+                    Just a -> a
+                    Nothing ->  error "could not transform Lattest auomaton into ADG automaton"
+        adg = computeAdaptiveDistGraphPure adgaut False False True
+    in TestController {
+        testControllerState = adg,
+        selectTest = adgSelectTest,
+        updateTestController = adgUpdateTest,
+        handleTestClose = \testState -> return Set.empty
+    }
+    where
+    adgSelectTest testState specIntrpState _ =
+        return $ case testState of
+            Nil -> Right Set.empty
+            Prefix l next -> Left (Just l, testState)
+            Plus _ -> Left (Nothing,testState)
+
+    adgUpdateTest testState specIntrpState ioact _ =
+       return $ case testState of
+            Nil -> Right Set.empty
+            Prefix l next -> if ioact == In l then Left next else error "Error: expected to have selected an input but seeing some ioact"
+            Plus ls ->
+                let nextList = concat $ fmap getNextState ls
+                in case nextList of
+                    [next] -> Left next
+                    _ -> error "ADG error: expected to have observed one output or quiescence"
+                where
+                getNextState ev = case ev of
+                    Nil -> []
+                    Prefix l next -> if l == delta
+                                        then if ioact == Out Quiescence then [next] else []
+                                     else if ioact == Out (OutSusp l) then [next] else []
+                    Plus ls -> concat $ fmap getNextState ls
+
+-- nCompleteSingleState :: ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q -> TestController Det q q (IOAct l l) () (IOSuspAct l lo) (Maybe (Det q)) () (Maybe (Det q))
+nCompleteSingleState model seed nrSteps delta targetState observer = do
+    return $ accessSeqSelector model targetState
+        `andThen` randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps
+            `andThen` adgTestSelector model delta `observingOnly` observer
+
+-- runNCompleteTestSuite :: (Monad (TestController Det q q (IOAct l l) () (IOSuspAct l l) () (Maybe l))) => IO (Adapter act l) -> ConcreteSuspAutIntrpr Det q l l -> Int -> o -> [(q,Int)] -> IO (q, Verdict, Maybe (Det q))
+runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds = do
+        results <- forM targetStatesAndSeeds $ \(targetState,seed) -> do
+            putStrLn "connecting..."
+            adap <- adapter
+            imp <- withQuiescenceMillis 200 adap
+            let model = interpretQuiescentConcrete spec
+            putStrLn "starting test..."
+            putStrLn $ "accessing state: " ++ (show targetState)
+            selector <- testSelector model seed targetState
+            (verdict,(observed, maybeMq)) <- runTester model selector imp
+            close adap
+            return (targetState, verdict, (observed, maybeMq))
+        return results
+    where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
+
+andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
+andThen tester1 tester2 =
+    TestController {
+        testControllerState = (Left $ testControllerState tester1),
+        selectTest = andThenSelect,
+        updateTestController = andThenUpdate,
+        handleTestClose = \state -> case state of
+            (Left s) -> handleTestClose tester2 (testControllerState tester2)
+            (Right s) -> handleTestClose tester2 s
+    }
+    where
+        andThenSelect testState specState mq = case testState of
+            (Left s) -> do
+                res <- selectTest tester1 s specState mq
+                res2 <- selectTest tester2 (testControllerState tester2) specState mq
+                return $ case res of
+                    Left (i1,s1) -> Left (i1, Left s1)
+                    Right r1 -> case res2 of
+                        Left (i2,s2) -> Left (i2, Right s2)
+                        Right r2 -> Right r2
+            (Right s) -> do
+                res2 <- selectTest tester2 s specState mq
+                return $ case res2 of
+                    Left (i2,s2) -> Left (i2, Right s2)
+                    Right r2 -> Right r2
+
+        andThenUpdate testState specState ioact mq = case testState of
+            Left s -> do
+                res1 <- updateTestController tester1 s specState ioact mq
+                return $ case res1 of
+                    Left s1 ->  Left $ Left s1
+                    Right r1 -> Left $ Right $ testControllerState tester2
+            Right s -> do
+                res2 <- updateTestController tester2 s specState ioact mq
+                return $ case res2 of
+                    Left s2 ->  Left $ Right s2
+                    Right r2 -> Right r2
+
+
             else do
                 return $ Just $ takeRandom g ins
 
