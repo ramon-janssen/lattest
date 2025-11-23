@@ -6,6 +6,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 {- |
     A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
@@ -75,9 +76,13 @@ import Algebra.Lattice(Lattice)
 import qualified Algebra.Lattice as L ((/\), (\/))
 import qualified Data.Set as Set
 import Control.Monad(ap)
+import GHC.Generics (Generic)
+import Control.DeepSeq(NFData)
+
+
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
-data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
+data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq, Generic)
 instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
@@ -115,7 +120,7 @@ instance Show a => Show (Det a) where
 
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
-data NonDet q = NonDet [q] | UnderspecNonDet
+data NonDet q = NonDet [q] | UnderspecNonDet deriving Generic
 
 instance BoundedConfiguration NonDet where
     isForbidden (NonDet []) = True
@@ -164,7 +169,10 @@ instance JoinSemiLattice (NonDet a) where
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
 -}
-newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
+newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Ord, Functor, Foldable, Lattice, Generic)
+instance Ord a => Ord (Free a)
+instance NFData a => NFData (FreeLattice a)
+instance NFData a => NFData (Free a)
 
 -- | A single state embedded in a free distributive lattice.
 atom :: a -> FreeLattice a

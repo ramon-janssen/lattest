@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Test.Lattest.Util.ModelParsingUtils (
 testReadAutFile
 )
@@ -10,6 +12,8 @@ import qualified Data.Set as Set
 
 import Lattest.Util.ModelParsingUtils(readAutFile)
 import Lattest.Model.Alphabet(IOAct(..))
+import Lattest.Model.BoundedMonad(FreeLattice(..))
+import Algebra.Lattice.Free(Free)
 
 expectedTransitions :: [(String, IOAct String String, String)]
 expectedTransitions = 
@@ -27,10 +31,12 @@ testReadAutFile = TestCase $ do
         expectedStates = Set.fromList ["Idle", "Brewing", "CoinInserted", "Ready"]
         expectedInitState = "Idle"
 
-    (inputAlphabet, outputAlphabet, states, initialState, Just transitions) <- readAutFile filePath
+    (inputAlphabet, outputAlphabet, states, initialState, Just transitions) <- readAutFile "" (Just filePath)
 
     assertEqual "IAlphabet" expectedInAlphabet (Set.fromList inputAlphabet)
     assertEqual "OAlphabet" expectedOutAlphabet (Set.fromList outputAlphabet)
     assertEqual "Expected states" expectedStates states
     assertEqual "Initial state" "Idle" initialState
     assertEqual "Transitions" expectedTransitions transitions
+
+

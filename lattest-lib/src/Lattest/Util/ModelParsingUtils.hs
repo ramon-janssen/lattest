@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Lattest.Util.ModelParsingUtils (readAutFile, readMultipleAutFiles, dumpLTSdot) where
 
@@ -16,9 +17,12 @@ import Debug.Trace (trace, traceShow)
 import Lattest.Model.StandardAutomata((\/), (/\), atom, FreeLattice)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
+import Control.DeepSeq(NFData)
+import qualified GHC.Generics as Generics
 
 newtype StateName = StateName String
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generics.Generic)
+instance NFData StateName
 {-|
     Read an .aut file representing an LTS from the provided filepath, parse its content and return:
     - [String]: Input Alphabet
