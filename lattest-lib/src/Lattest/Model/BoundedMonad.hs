@@ -65,6 +65,11 @@ JoinSemiLattice,
 )
 where
 
+import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBool, ValExprBoolView(VBoolConst), ValExpr(..))
+import Lattest.Model.Symbolic.ValExpr.ValExprImpls(cstrAnd)
+import Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension(cstrOr)
+import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
+
 import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
 import Algebra.Lattice(Lattice)
@@ -275,3 +280,24 @@ class JoinSemiLattice a where
 --instance Lattice a => JoinSemiLattice a where
 --    join = (L.\/)
 
+class BooleanConfiguration m where -- TODO: possibly this class can be less ad-hoc, e.g. via some lattice-theoretic concept
+    asValExpr :: m ValExprBool -> ValExprBool
+    --asValExprInverted :: m ValExprBool -> ValExprBool
+
+instance BooleanConfiguration Det where
+    asValExpr (Det q) = q
+    asValExpr ForbiddenDet = ValExpr $ VBoolConst $ Cbool False
+    asValExpr UnderspecDet = ValExpr $ VBoolConst $ Cbool True
+
+instance BooleanConfiguration NonDet where
+    asValExpr (NonDet qs) = cstrOr $ Set.fromList qs
+    asValExpr UnderspecNonDet = ValExpr $ VBoolConst $ Cbool True
+
+instance BooleanConfiguration FreeLattice where
+    asValExpr (FreeLattice Top) = ValExpr $ VBoolConst $ Cbool True
+    asValExpr (FreeLattice Bottom) = ValExpr $ VBoolConst $ Cbool False
+    asValExpr (FreeLattice (Levitate a)) = asValExpr' a
+        where
+        asValExpr' (Var a) = a
+        asValExpr' (x :\/: y) = cstrOr $ Set.fromList [asValExpr' x, asValExpr' y]
+        asValExpr' (x :/\: y) = cstrAnd $ Set.fromList [asValExpr' x, asValExpr' y]

@@ -165,12 +165,13 @@ randomDataTestSelectorFromGen g = do
     solveAlph _ [] = error "random test selector found an empty menu"
     alphToGuards symbolicAlph = alphToGuards' symbolicAlph ([],[])
     alphToGuards' [] guards = guards
-    alphToGuards' () (inGuards, quiescenceGuard) = 
+    alphToGuards' () (inGuards, quiescenceGuard) = ...
     solveAlph smtRef (act:alph) = do
         maybeSolved <- solveInput smtRef act
         case maybeSolved of
             Nothing -> solveAlph smtRef alph
             Just solved -> return solved
+    solveAlph _ [] = ...
     solveInput smtRef act = do
         solveOutcome <- runSMT smtRef getSolvable
         case solveOutcome of

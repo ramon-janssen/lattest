@@ -379,7 +379,7 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpSt
         in if not $ evalBool valuation guard
             then implicitDestination gv
             else let stateValuation2 = Map.mapWithKey (\var val -> assignNewValue var val valuation assign) stateValuation
-                 in return $ IntrpState l2 stateValuation2)
+                 in return $ IntrpState l2 stateValuation2
         where
         assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
         -- the following case distinctino could be removed if constants were also typed

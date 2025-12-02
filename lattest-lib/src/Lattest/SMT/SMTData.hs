@@ -22,7 +22,7 @@ module Lattest.SMT.SMTData
 --, EnvDefs (..)
 , SMTRef
 , newSMTRef
-, runSTM
+, runSMT
 , readSMTRef
 )
 

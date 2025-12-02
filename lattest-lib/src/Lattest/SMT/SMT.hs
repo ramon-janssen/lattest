@@ -29,7 +29,7 @@ module Lattest.SMT.SMT
 , SMTRef
 , createSMTRef
 , newSMTRef
-, runSTM
+, runSMT
 , readSMTRef
 )
 
