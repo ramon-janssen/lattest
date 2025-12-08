@@ -154,24 +154,29 @@ randomDataTestSelectorFromGen g = do
     where
     -- state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))
     -- (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (i, (g,SMTRef)))
-    randomSelectTest (g,smtRef) aut _ =
-        let symbolicAlph = alphabet aut
+    randomSelectTest (g,smtRef) intrpr _ =
+        let gates = alphabet intrpr -- symbolic transition labels
         in if null symbolicAlph
             then error "random test selector found an empty menu"
-            else let
-                    guards = alphToGuards symbolicGuards
+            else do
+                let guards = gateToGuard intrpr <$> gates
                     (guards', g') = shuffle guards g
-                in (g,) <$> solveAlph smtRef symbolicAlph
+                solution <- solveAlph smtRef guards
+                return (g', solution)
     solveAlph _ [] = error "random test selector found an empty menu"
-    alphToGuards symbolicAlph = alphToGuards' symbolicAlph ([],[])
-    alphToGuards' [] guards = guards
-    alphToGuards' () (inGuards, quiescenceGuard) = ...
+    gateToGuard intrpr gate = let
+            aut = syntacticAutomaton intrpr
+            mloc = stateConf aut
+        in asDualValExpr $ stateAndGateToGuard aut gate <$> mloc
+    stateAndGateToGuard aut gate (IntrpState loc valuation) = let
+            tmloc = (transRel aut) loc Map.! gate
+        in evalConst' valuation . fst <$> tmloc
     solveAlph smtRef (act:alph) = do
         maybeSolved <- solveInput smtRef act
         case maybeSolved of
             Nothing -> solveAlph smtRef alph
             Just solved -> return solved
-    solveAlph _ [] = ...
+    solveAlph _ [] = undefined "TODO finish"
     solveInput smtRef act = do
         solveOutcome <- runSMT smtRef getSolvable
         case solveOutcome of
@@ -182,8 +187,8 @@ randomDataTestSelectorFromGen g = do
                 solution <- runSMT smtRef $ getSolution vars -- map v constant
                 runSMT smtRef pop
                 -- TODO extract input values from solution
-            Unsat -> -- TODO
-            Unknown -> -- TODO
+            Unsat -> undefined "TODO finish"
+            Unknown -> undefined "TODO finish"
 
 
 {- |

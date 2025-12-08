@@ -61,12 +61,16 @@ BoundedApplicative,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
-(\/)
+(\/),
+-- ** Mapping between lattices and boolean expressions
+BooleanConfiguration,
+asValExpr,
+asDualValExpr
 )
 where
 
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBool, ValExprBoolView(VBoolConst), ValExpr(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls(cstrAnd)
+import Lattest.Model.Symbolic.ValExpr.ValExprImpls(cstrAnd, cstrNot)
 import Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension(cstrOr)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
 
@@ -301,3 +305,6 @@ instance BooleanConfiguration FreeLattice where
         asValExpr' (Var a) = a
         asValExpr' (x :\/: y) = cstrOr $ Set.fromList [asValExpr' x, asValExpr' y]
         asValExpr' (x :/\: y) = cstrAnd $ Set.fromList [asValExpr' x, asValExpr' y]
+
+asDualValExpr :: (Functor m, BooleanConfiguration m) => m ValExprBool -> ValExprBool
+asDualValExpr m = cstrNot $ asValExpr $ cstrNot <$> m

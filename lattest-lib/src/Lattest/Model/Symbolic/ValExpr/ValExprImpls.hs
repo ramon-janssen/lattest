@@ -76,6 +76,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , assign
 , Valuation
 , evalConst
+, evalConst'
 , Subst
 , subst
 , compSubst         -- changes type
