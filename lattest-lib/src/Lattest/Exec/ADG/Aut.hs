@@ -11,10 +11,7 @@ import qualified Data.Set as Set
 import Data.Map as Map (Map, (!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
-import qualified Data.Serialize as Serialize
-import qualified GHC.Generics as Generics
 import qualified Data.List as List
-import qualified Control.DeepSeq as DeepSeq
 import qualified Data.Foldable as Foldable
 import qualified Lattest.Model.Automaton as Automaton
 import qualified Lattest.Model.StandardAutomata as StandardAutomata
