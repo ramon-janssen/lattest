@@ -53,10 +53,10 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
-import qualified Lattest.SMT.Config as Config(Config(..),getProc)
-import Lattest.SMT.SMT(SMTRef)
+import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
+import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,newSMTRef)
 import qualified Lattest.SMT.SMT as SMT (createSMTEnv,openSolver)
 import Lattest.SMT.SolveDefs(SolvableProblem(..))
 import Lattest.Util.Utils(takeRandom, takeJusts)
@@ -145,7 +145,7 @@ randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (SymInter
     => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) i
 randomDataTestSelectorFromGen g = do 
     -- initialization
-    let cfg = IOC.config envc
+    let cfg = Config.defaultConfig
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtEnv         <- lift $ SMT.createSMTEnv smtProc smtLog
@@ -166,7 +166,6 @@ randomDataTestSelectorFromGen g = do
                     (guards', g') = shuffle guards g
                 solution <- solveAlph smtRef guards
                 return (g', solution)
-    solveAlph _ [] = error "random test selector found an empty menu"
     gateToGuard intrpr gate = let
             aut = syntacticAutomaton intrpr
             mloc = stateConf aut
@@ -174,6 +173,7 @@ randomDataTestSelectorFromGen g = do
     stateAndGateToGuard aut gate (IntrpState loc valuation) = let
             tmloc = (transRel aut) loc Map.! gate
         in evalConst' valuation . fst <$> tmloc
+--    solveAlph _ [] = error "random test selector found an empty menu"
     solveAlph smtRef (act:alph) = do
         maybeSolved <- solveInput smtRef act
         case maybeSolved of
