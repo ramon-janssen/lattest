@@ -56,7 +56,7 @@ where
 import Lattest.Adapter.Adapter(close)
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
-import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
+import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
@@ -65,7 +65,6 @@ import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det(..))
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
-import Control.DeepSeq(NFData)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList, forM_)
@@ -151,12 +150,12 @@ accessSeqSelector aut targetLoc =
 
 
 
-adgTestSelector :: (Ord q, Ord l, Eq l, NFData q, NFData l, Show l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector :: (Ord q, Ord l, Eq l, Show l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
 adgTestSelector aut delta =
     let adgaut = case adgAutFromAutomaton aut delta of
                     Just a -> a
                     Nothing ->  error "could not transform Lattest auomaton into ADG automaton"
-        adg = computeAdaptiveDistGraphPure adgaut False False True
+        adg = computeAdaptiveDistGraph adgaut False False True
     in TestController {
         testControllerState = adg,
         selectTest = adgSelectTest,

@@ -24,9 +24,6 @@ import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct(..),Suspen
 import Debug.Trace as Trace
 
 data Aut a b = Aut {initial :: (State a b), states :: Set (State a b), idStateMap :: (Map a (State a b)), inputs ::  (Set b), outputs :: (Set b)}
-    deriving (Generics.Generic, DeepSeq.NFData)
-
-instance (Serialize.Serialize a, Serialize.Serialize b, Ord a, Ord b) => Serialize.Serialize (Aut a b)
 
 instance (Show a, Show b) => Show (Aut a b) where
     show (Aut initial states map inps outs) = "Initial: " ++ (show initial) ++ "\n" ++
@@ -36,12 +33,10 @@ instance (Show a, Show b) => Show (Aut a b) where
                                         --"IdStateMap: " ++ (show $ (Map.mapKeys Util.stateToName . Map.map (Util.stateToName . sid)) map)
 
 data State a b = State {sid :: a, inp :: Set b, out :: Set b, trans :: Map b a}
-    deriving (Ord, Generics.Generic, DeepSeq.NFData)
+    deriving (Ord)
 
 instance (Show a) => (Show (State a b)) where
     show s = show $ sid s
-
-instance (Serialize.Serialize a, Serialize.Serialize b, Ord a, Ord b) => Serialize.Serialize (State a b)
 
 instance (Eq a) => Eq (State a b) where
     (==) s1 s2 = (sid s1) == (sid s2)

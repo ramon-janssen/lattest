@@ -1,5 +1,5 @@
 {-# LANGUAGE ViewPatterns        #-}
-module Lattest.Exec.ADG.DistGraph(buildDistGraph,getPairsForState,getStartStatesLeaves,getEvidenceStats,prune,getEvTrans) where
+module Lattest.Exec.ADG.DistGraph(getPairsForState,getStartStatesLeaves,getEvidenceStats,computeAdaptiveDistGraph) where
 
 import Data.Set as Set (Set)
 import qualified Data.Set as Set
@@ -14,12 +14,17 @@ import Lattest.Exec.ADG.SplitGraph as SplitGraph (SplitGraph, SplitNode,Evidence
 import qualified Lattest.Exec.ADG.Aut as Aut
 import Lattest.Exec.ADG.Aut as Aut (Aut, State)
 
+computeAdaptiveDistGraph :: (Ord a, Ord b) => Aut a b -> Bool -> Bool -> Bool -> Evidence b
+computeAdaptiveDistGraph aut doBestSplit splitOutputFirst useBucketLCA = let
+    compRel = Aut.computeCompRel aut
+    (splitGraph,nadmin) = SplitGraph.buildSplitGraph aut compRel (SplitGraph.initializeSplitGraphAdmin doBestSplit splitOutputFirst True)
+    in buildDistGraph aut splitGraph (Aut.states aut) compRel useBucketLCA
 
-buildDistGraph :: (Ord a, Ord b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Bool -> Evidence b
+buildDistGraph :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Bool -> Evidence b
 buildDistGraph aut graph stateSet compRel useBucketLCA =
     buildDistGraph' aut graph stateSet Nil compRel (Map.singleton (Aut.states aut) (Set.singleton $ SplitGraph.getRootNode graph)) useBucketLCA
 
-buildDistGraph' :: (Ord a, Ord b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Evidence b -> Set ((State a b),(State a b)) -> Map (Set (State a b)) (Set (SplitNode a b)) -> Bool -> Evidence b
+buildDistGraph' :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Evidence b -> Set ((State a b),(State a b)) -> Map (Set (State a b)) (Set (SplitNode a b)) -> Bool -> Evidence b
 buildDistGraph' aut graph stateSet dg compRel lcaMap useBucketLCA =
     if (SplitGraph.isUnsplittable stateSet compRel)
     then -- Trace.trace ((++) "Unsplittable: " $ show $ Set.map Aut.sid stateSet)
@@ -31,10 +36,10 @@ buildDistGraph' aut graph stateSet dg compRel lcaMap useBucketLCA =
         Prefix mu bexp -> -- Trace.trace (((++) "P= " $ show $ Set.map Aut.sid stateSet) ++ " mu= " ++ mu)
                             Prefix mu (buildDistGraph' aut graph (Aut.afterSet stateSet mu aut) bexp compRel lcaMap useBucketLCA)
         Plus bexps -> let todoList = (List.map (\bexp -> buildDistGraph' aut graph stateSet bexp compRel lcaMap useBucketLCA) bexps)
-                          resList = todoList `Parallel.using` Parallel.parList Parallel.rdeepseq
+                          resList = todoList `Parallel.using` Parallel.parList Parallel.rpar
                       in Plus resList
 
-getEvFromLCA :: (Ord a, Ord b, Parallel.NFData a, Parallel.NFData b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Map (Set (State a b)) (Set (SplitNode a b)) -> Bool -> (Evidence b, Map (Set (State a b)) (Set (SplitNode a b)))
+getEvFromLCA :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Map (Set (State a b)) (Set (SplitNode a b)) -> Bool -> (Evidence b, Map (Set (State a b)) (Set (SplitNode a b)))
 getEvFromLCA aut graph stateSet compRel lcaMap useBucketLCA =
     let (lcas,nlcaMap) = case Map.lookup stateSet lcaMap of
                             Just lcaNodes -> (lcaNodes, lcaMap)

@@ -15,9 +15,6 @@ import Data.Map as Map (Map, (!))
 import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 import qualified Data.Foldable as Foldable
-import qualified Data.Serialize as Serialize
-import qualified GHC.Generics as Generics
-import Control.DeepSeq as DeepSeq
 import qualified Control.Parallel.Strategies as ParallelS
 import qualified Control.Parallel as Parallel
 
@@ -25,9 +22,7 @@ import qualified Lattest.Exec.ADG.Aut as Aut
 import Lattest.Exec.ADG.Aut as Aut (Aut, State)
 
 data SplitNode a b = SplitNode {nodeStates :: (Set (State a b)), children :: Set (Set (State a b)), evidence :: Maybe (Evidence b)} -- , isInjective :: Maybe Bool} --, splittedStates :: Maybe (Set SuspState)
-    deriving (Eq,Ord, Generics.Generic, NFData)
-
-instance (Ord a, Ord b, Serialize.Serialize a, Serialize.Serialize b) => Serialize.Serialize (SplitNode a b)
+    deriving (Eq,Ord)
 
 instance (Ord a, Ord b, Show a, Show b) => Show (SplitNode a b) where
     show (SplitNode s c e) = "node: " ++ (show $ Set.toList $  Set.map  (Aut.sid) s) ++ ", " ++
@@ -35,17 +30,12 @@ instance (Ord a, Ord b, Show a, Show b) => Show (SplitNode a b) where
                                "evidence: " ++ (case e of Nothing -> "No evidence"; Just ev -> show ev)
 
 data SplitGraph a b = SplitGraph {root :: (Set (State a b)), nodeMap :: Map (Set (State a b)) (SplitNode a b)} --, lcaMap :: Map (Set SuspState) (Set SplitNode)
-    deriving (Generics.Generic, NFData)
-
-instance (Ord a, Ord b, Serialize.Serialize a, Serialize.Serialize b) => Serialize.Serialize (SplitGraph a b)
 
 instance (Ord a, Ord b, Show a, Show b) => Show (SplitGraph a b) where
     show (SplitGraph r map) = Map.foldr (\s str -> str ++ (show s) ++ "\n\n") "" map
 
 data Evidence b = Nil | Prefix b (Evidence b) | Plus [Evidence b]
-    deriving (Eq,Ord, Generics.Generic, NFData)
-
-instance (Ord b, Serialize.Serialize b) => Serialize.Serialize (Evidence b)
+    deriving (Eq,Ord)
 
 instance (Show b) => Show (Evidence b) where
     show Nil = "Nil"
@@ -72,7 +62,6 @@ getWeight (mu : sigma) (Plus evs) states aut =
      case List.find (\ev -> case ev of (Prefix nu _) -> nu == mu) evs of
         Just (Prefix _ nuev) -> (getWeight sigma nuev (Aut.afterSet states mu aut) aut) * (List.length [ev | ev <- evs, case ev of (Prefix nu _) -> Set.member nu (Aut.outSet states) ; otherwise -> False])
         Nothing -> error $ "Plus: observation not matching evidence: " ++ (show mu) ++ " " ++ (show evs)
-
 
 getNodeSizeCount :: (SplitGraph a b) -> Map Int Int
 getNodeSizeCount (SplitGraph _ nodeMap) =
@@ -182,10 +171,10 @@ getLCAgreedyStep graph states node =
                 Nothing -> Nothing
                 Just a -> a
 
-getAllLCAsTopDown :: (Ord a, Ord b, NFData a, NFData b) => (SplitGraph a b) -> Set (State a b) -> Set (SplitNode a b)
+getAllLCAsTopDown :: (Ord a, Ord b) => (SplitGraph a b) -> Set (State a b) -> Set (SplitNode a b)
 getAllLCAsTopDown graph states = getAllLCAs graph states (getRootNode graph)
 
-getAllLCAs :: (Ord a, Ord b, NFData a, NFData b) => (SplitGraph a b) -> Set (State a b) -> (SplitNode a b) -> Set (SplitNode a b)
+getAllLCAs :: (Ord a, Ord b) => (SplitGraph a b) -> Set (State a b) -> (SplitNode a b) -> Set (SplitNode a b)
 getAllLCAs graph states node =
     if isLeaf node then Set.empty
     else let cont = Set.filter (\ch -> Set.isSubsetOf states ch) (children node)
@@ -193,7 +182,7 @@ getAllLCAs graph states node =
             else List.foldl  Set.union
                             Set.empty
                             (let todoList = List.map (\ch -> getAllLCAs graph states ((nodeMap graph) ! ch)) (Set.toList cont)
-                             in todoList `ParallelS.using` ParallelS.parList ParallelS.rdeepseq)
+                             in todoList `ParallelS.using` ParallelS.parList ParallelS.rpar)
 
 isLCA :: (Ord a, Ord b) => (SplitNode a b) -> Set (State a b) -> Bool
 isLCA node lcaStates =
