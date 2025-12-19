@@ -52,7 +52,7 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue,SymGuard)
 import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
@@ -64,7 +64,7 @@ import Lattest.Util.Utils(takeRandom, takeJusts)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
-import qualified Data.Map as Map (keys,(!))
+import qualified Data.Map as Map (keys,(!), lookup)
 import qualified Data.Set as Set (size, elemAt, fromList, union)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
@@ -136,6 +136,13 @@ randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromG
 randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
     => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i
 randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStdGen i
+
+getNegatedInterpretedGuard :: (SymInteract i o) -> (IntrpState loc) -> SymGuard
+getNegatedInterpretedGuard t intrpr@(IntrpState l valuation) =
+    let aut = syntacticAutomaton intrpr
+    in case Map.lookup t (transRel aut) of
+        Nothing -> error "tried to select interaction that is not enabled"
+        Just mtdestloc -> _
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
