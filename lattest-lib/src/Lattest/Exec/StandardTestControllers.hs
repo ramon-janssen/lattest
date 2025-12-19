@@ -53,15 +53,18 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState, STStdest)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
-import Lattest.Util.Utils(takeRandom, takeJusts)
+import qualified Lattest.SMT.Config as Config(Config(..),getProc)
 import Lattest.SMT.SMT(SMTRef)
+import qualified Lattest.SMT.SMT as SMT (createSMTEnv,openSolver)
+import Lattest.SMT.SolveDefs(SolvableProblem(..))
+import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
-import qualified Data.Map as Map (keys)
+import qualified Data.Map as Map (keys,(!))
 import qualified Data.Set as Set (size, elemAt, fromList, union)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
@@ -122,7 +125,7 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomDataTestSelector :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
+randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
     => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
 randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromGen smt
 
@@ -130,7 +133,7 @@ randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromG
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomDataTestSelectorFromSeed :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
+randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
     => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i
 randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStdGen i
 
@@ -138,7 +141,7 @@ randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStd
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomDataTestSelectorFromGen :: (AutomatonSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
+randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
     => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) i
 randomDataTestSelectorFromGen g = do 
     -- initialization
