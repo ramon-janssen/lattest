@@ -50,7 +50,8 @@ reachableFrom,
 prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp,
-determinize
+determinize,
+determinizeSyntax
 )
 where
 
@@ -437,15 +438,34 @@ prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\
     where
     printStateConf = show $ stateConf intrp
     printAut = prettyPrint $ syntacticAutomaton intrp
+
 {-
-data AutSyntax m loc t tdest = Automaton {
-    initConf :: m loc,
-    alphabet :: Set t,
-    transRel :: loc -> Map t (m (tdest, loc))
+data AutIntrpr m loc q t tdest act = AutInterpretation {
+    stateConf :: m q,
+    syntacticAutomaton :: AutSyntax m loc t tdest
     }
+
 -}
-determinize :: (BoundedMonad m, Ord t) => AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
-determinize aut = Automaton {
+
+--after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+
+--automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
+
+determinize :: (BoundedMonad m, Ord t) => AutIntrpr m loc q t tdest act -> AutIntrpr BM.Det (m loc) (m loc) t () t
+determinize intrpr = AutInterpretation {
+    stateConf = BM.determinize $ stateConf intrpr,
+    syntacticAutomaton = let
+            aut = syntacticAutomaton intrp
+            ft = \mq t -> intrpr {stateConf = mq} `after` t
+            transitions = \mq -> Map.fromSet $ ft q $ alphabet aut
+        in automaton 
+            (BM.determinize $ initConf aut)
+            (alphabet aut)
+            transitions
+    }
+
+determinizeSyntax :: (BoundedMonad m, Ord t) => AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
+determinizeSyntax aut = Automaton {
     initConf = BM.determinize $ initConf aut,
     alphabet = alphabet aut, 
     transRel = \mloc ->
@@ -454,12 +474,9 @@ determinize aut = Automaton {
     }
     where
     takeMTransition t mloc = Monad.join (takeTransition t <$> mloc) -- t -> m loc -> m loc
-    takeTransition t loc = stripTDest <$> (transRel aut loc Map.! t) -- t -> loc -> m loc
+    takeTransition t loc = stripTDest <$> trans aut loc t -- t -> loc -> m loc
     transitionsAsMap ft = Map.fromSet ft $ alphabet aut -- :: (t -> a) -> Map t a
     addTDest loc = ((), loc)
     stripTDest ((), loc) = loc
-
-
-
 
 
