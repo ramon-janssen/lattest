@@ -53,8 +53,9 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue,SymGuard)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet)
-import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
+import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, underspecified)
+import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
 import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,newSMTRef)
 import qualified Lattest.SMT.SMT as SMT (createSMTEnv,openSolver)
@@ -137,12 +138,13 @@ randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (SymInte
     => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i
 randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStdGen i
 
-getNegatedInterpretedGuard :: (SymInteract i o) -> (IntrpState loc) -> SymGuard
-getNegatedInterpretedGuard t intrpr@(IntrpState l valuation) =
-    let aut = syntacticAutomaton intrpr
-    in case Map.lookup t (transRel aut) of
+getSolverGuards :: (AutSyntax m loc (SymInteract i o) (SymGuard, x)) -> (SymInteract i o) -> (IntrpState loc) -> m SymGuard
+getSolverGuards aut t intrpr@(IntrpState l valuation) =
+    case Map.lookup t (transRel aut l) of
         Nothing -> error "tried to select interaction that is not enabled"
-        Just mtdestloc -> _
+        Just mtdestloc -> fmap (\((tguard,_), destLoc) ->
+            if underspecified destLoc then underspecified
+                else evalConst' valuation tguard) mtdestloc --saturation needed
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
@@ -180,7 +182,7 @@ randomDataTestSelectorFromGen g = do
     stateAndGateToGuard aut gate (IntrpState loc valuation) = let
             tmloc = (transRel aut) loc Map.! gate
         in evalConst' valuation . fst <$> tmloc
---    solveAlph _ [] = error "random test selector found an empty menu"
+    solveAlph _ [] = error "random test selector found an empty menu"
     solveAlph smtRef (act:alph) = do
         maybeSolved <- solveInput smtRef act
         case maybeSolved of
