@@ -53,22 +53,29 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue,SymGuard)
-import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet)
-import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, underspecified)
+import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet))
+import Lattest.Model.StandardAutomata(STS, STSIntrp)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, underspecified, asDualValExpr)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
-import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,newSMTRef)
-import qualified Lattest.SMT.SMT as SMT (createSMTEnv,openSolver)
+import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,createSMTRef,openSolver)
 import Lattest.SMT.SolveDefs(SolvableProblem(..))
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
+import Control.Arrow((&&&))
+import Control.Exception(throw)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import qualified Data.Map as Map (keys,(!), lookup)
+import Data.Maybe(fromJust)
 import qualified Data.Set as Set (size, elemAt, fromList, union)
+import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
+
+
 
 {- |
     'Testselector's are test controllers that are only concerned with selecting inputs for testing. They do not return any testing results.
@@ -128,61 +135,51 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 -}
 randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
     => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
-randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromGen smt
+randomDataTestSelector smt = randomDataTestSelectorWith smt Config.defaultConfig
+
+{- |
+    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
+-}
+randomDataTestSelectorWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
+    => SMTRef -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
+randomDataTestSelectorWith smt cfg = do
+    g <- initStdGen
+    randomDataTestSelectorFromGenWith smt g cfg
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
-    => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i
-randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt $ mkStdGen i
-
-getSolverGuards :: (AutSyntax m loc (SymInteract i o) (SymGuard, x)) -> (SymInteract i o) -> (IntrpState loc) -> m SymGuard
-getSolverGuards aut t intrpr@(IntrpState l valuation) =
-    case Map.lookup t (transRel aut l) of
-        Nothing -> error "tried to select interaction that is not enabled"
-        Just mtdestloc -> fmap (\((tguard,_), destLoc) ->
-            if underspecified destLoc then underspecified
-                else evalConst' valuation tguard) mtdestloc --saturation needed
+randomDataTestSelectorFromSeedWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
+    => SMTRef -> Int -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
+randomDataTestSelectorFromSeedWith smt i cfg = randomDataTestSelectorFromGenWith smt (mkStdGen i) cfg
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
-    => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) i
-randomDataTestSelectorFromGen g = do 
+randomDataTestSelectorFromGenWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
+    => SMTRef -> g -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) i)
+randomDataTestSelectorFromGenWith smt g cfg = do
     -- initialization
-    let cfg = Config.defaultConfig
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtEnv         <- lift $ SMT.createSMTEnv smtProc smtLog
-    (info,smtEnv') <- lift $ runStateT SMT.openSolver smtEnv
+    let smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg) -- TODO proper error handling in case of Nothing
+    smtRef <- createSMTRef smtProc smtLog
+    info <- runSMT smtRef openSolver
     --(_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
-    smtRef <- newSMTRef smtEnv'
     return $ selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
     
+-- state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))
+randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
+    => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (i, (g,SMTRef)))
+randomSelectTest (g,smtRef) intrpr _ = do
+    let interactions = alphabet $ syntacticAutomaton intrpr -- symbolic transition labels
+        interactionsWithGuards = (id &&& interactToGuard intrpr) <$> interactions
+        (interactionsWithGuards', g') = shuffle interactionsWithGuards g
+    (interaction, solution, smtRef') <- solveAlph smtRef interactionsWithGuards'
+    return $ Just (valuationToGateValue interaction solution, (g', smtRef')) -- TODO pass on Nothing's
     where
-    -- state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))
-    -- (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (i, (g,SMTRef)))
-    randomSelectTest (g,smtRef) intrpr _ =
-        let gates = alphabet intrpr -- symbolic transition labels
-        in if null symbolicAlph
-            then error "random test selector found an empty menu"
-            else do
-                let guards = gateToGuard intrpr <$> gates
-                    (guards', g') = shuffle guards g
-                solution <- solveAlph smtRef guards
-                return (g', solution)
-    gateToGuard intrpr gate = let
-            aut = syntacticAutomaton intrpr
-            mloc = stateConf aut
-        in asDualValExpr $ stateAndGateToGuard aut gate <$> mloc
-    stateAndGateToGuard aut gate (IntrpState loc valuation) = let
-            tmloc = (transRel aut) loc Map.! gate
-        in evalConst' valuation . fst <$> tmloc
-    solveAlph _ [] = error "random test selector found an empty menu"
+    solveAlph _ [] = error "random test selector found an empty menu" -- TODO replace by Nothing
     solveAlph smtRef (act:alph) = do
         maybeSolved <- solveInput smtRef act
         case maybeSolved of
@@ -201,6 +198,27 @@ randomDataTestSelectorFromGen g = do
                 -- TODO extract input values from solution
             Unsat -> undefined "TODO finish"
             Unknown -> undefined "TODO finish"
+
+valuationToGateValue :: SymInteract i o -> Valuation -> GateValue i o
+valuationToGateValue = undefined "TODO finish"
+
+interactToGuard :: STSIntrp m loc i o -> SymInteract i o -> SymGuard
+interactToGuard intrpr interaction = let
+        aut = syntacticAutomaton intrpr
+    in asDualValExpr $ stateAndInteractToGuards aut interaction <$> stateConf aut
+
+stateAndInteractToGuards :: STS m loc i o -> SymInteract i o -> IntrpState loc -> m SymGuard
+--stateAndGateToGuards :: AutSyntax m loc (SymInteract i o) (SymGuard, x) -> SymInteract i o -> IntrpState loc -> m SymGuard
+stateAndInteractToGuards aut t intrpr@(IntrpState l valuation) =
+    case Map.lookup t (transRel aut l) of
+        Nothing -> throw $ ActionOutsideAlphabet callStack
+        Just mtdestloc -> fmap guardAndLocToGuard mtdestloc --saturation needed
+    where
+    guardAndLocToGuard ((tguard,_), destLoc) =
+        if underspecified destLoc
+            then underspecified -- shouldn't this be boolean symbolic expression TRUE?
+            else evalConst' valuation tguard
+
 
 
 {- |
