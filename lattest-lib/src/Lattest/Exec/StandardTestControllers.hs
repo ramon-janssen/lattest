@@ -52,15 +52,14 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), GateValue(..),SymGuard,Gate(..))
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), GateValue(..),SymGuard,Gate(..),GateInputValue(..), isInputInteraction)
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet))
 import Lattest.Model.StandardAutomata(STS, STSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, underspecified, asDualValExpr)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
-import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,createSMTRef,openSolver)
-import Lattest.SMT.SolveDefs(SolvableProblem(..))
+import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,createSMTRef,openSolver,Solution,SolvableProblem(..),SMT)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Control.Arrow((&&&))
@@ -70,7 +69,7 @@ import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import qualified Data.Map as Map (keys,(!), lookup)
 import Data.Maybe(fromJust)
-import qualified Data.Set as Set (size, elemAt, fromList, union)
+import qualified Data.Set as Set (size, elemAt, fromList, union,filter)
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
@@ -134,14 +133,14 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
 randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
-    => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
+    => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
 randomDataTestSelector smt = randomDataTestSelectorWith smt Config.defaultConfig
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
 randomDataTestSelectorWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
-    => SMTRef -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
+    => SMTRef -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
 randomDataTestSelectorWith smt cfg = do
     g <- initStdGen
     randomDataTestSelectorFromGenWith smt g cfg
@@ -151,7 +150,7 @@ randomDataTestSelectorWith smt cfg = do
     the given random seed.
 -}
 randomDataTestSelectorFromSeedWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o))
-    => SMTRef -> Int -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) i)
+    => SMTRef -> Int -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
 randomDataTestSelectorFromSeedWith smt i cfg = randomDataTestSelectorFromGenWith smt (mkStdGen i) cfg
 
 {- |
@@ -159,7 +158,7 @@ randomDataTestSelectorFromSeedWith smt i cfg = randomDataTestSelectorFromGenWith
     given random generator.
 -}
 randomDataTestSelectorFromGenWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
-    => SMTRef -> g -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) i)
+    => SMTRef -> g -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) (GateInputValue i))
 randomDataTestSelectorFromGenWith smt g cfg = do
     -- initialization
     let smtLog = Config.smtLog cfg
@@ -171,34 +170,36 @@ randomDataTestSelectorFromGenWith smt g cfg = do
     
 -- state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))
 randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
-    => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (i, (g,SMTRef)))
+    => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateInputValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
     let interactions = alphabet $ syntacticAutomaton intrpr -- symbolic transition labels
-        interactionsWithGuards = (id &&& interactToGuard intrpr) <$> interactions
+        interactionsWithGuards = (id &&& interactToGuard intrpr) <$> (Set.filter isInputInteraction interactions)
         (interactionsWithGuards', g') = shuffle (toList interactionsWithGuards) g
-    (interaction, solution, smtRef') <- solveAlph smtRef interactionsWithGuards'
-    let GateValue (InputGate gate) values = valuationToGateValue interaction solution -- TODO type i of testcontroller forces throwing away values of gatevalue for input gate i
-    return $ Just (gate, (g', smtRef')) -- TODO pass on Nothing's
-    where
-    solveAlph _ [] = error "random test selector found an empty menu" -- TODO replace by Nothing
-    solveAlph smtRef (act:alph) = do
-        maybeSolved <- solveInput smtRef act
-        case maybeSolved of
-            Nothing -> solveAlph smtRef alph
-            Just solved -> return solved
-    solveAlph _ [] = undefined "TODO finish"
-    solveInput smtRef act = do
-        solveOutcome <- runSMT smtRef getSolvable
-        case solveOutcome of
-            Sat -> do
-                runSMT smtRef push
-                -- TODO define guards and vars
-                runSMT smtRef $ addAssertions guards
-                solution <- runSMT smtRef $ getSolution vars -- map v constant
-                runSMT smtRef pop
-                -- TODO extract input values from solution
-            Unsat -> undefined "TODO finish"
-            Unknown -> undefined "TODO finish"
+    (interaction, solution) <- runSMT smtRef $ solveAlph interactionsWithGuards'
+    return $ Just (gateValueToInput $ valuationToGateValue interaction solution, (g', smtRef)) -- TODO pass on Nothing's
+
+solveAlph :: [(SymInteract i o,SymGuard)] -> SMT (SymInteract i o, Valuation)
+solveAlph [] = error "random test selector found an empty menu" -- TODO replace by Nothing
+solveAlph ((interact,guard):alph) = do
+    maybeSolved <- solveInput guard
+    case maybeSolved of
+        Nothing -> solveAlph alph
+        Just solved -> return (interact, solved)
+solveAlph [] = undefined "TODO finish"
+
+solveInput :: SymGuard -> SMT (Maybe Valuation)
+solveInput guards = do
+    solveOutcome <- getSolvable
+    case solveOutcome of
+        Sat -> do
+            push
+            -- TODO define guards and vars
+            addAssertions guards
+            solution <- getSolution vars -- map v constant
+            pop
+            -- TODO extract input values from solution
+        Unsat -> return Nothing
+        Unknown -> return Nothing
 
 valuationToGateValue :: SymInteract i o -> Valuation -> GateValue i o
 valuationToGateValue (SymInteract gate params) valuation =
@@ -209,6 +210,10 @@ valuationToGateValue (SymInteract gate params) valuation =
                 Just value -> value
                 Nothing -> randomValueForType (varType var)
         randomValueForType varType = undefined  "TODO finish"
+
+gateValueToInput :: GateValue i o -> GateInputValue i
+gateValueToInput (GateValue (InputGate gate) values) = GateInputValue gate values
+gateValueToInput _ =  error "cannot convert OutputGate to InputGate"
 
 interactToGuard :: STSIntrp m loc i o -> SymInteract i o -> SymGuard
 interactToGuard intrpr interaction = let

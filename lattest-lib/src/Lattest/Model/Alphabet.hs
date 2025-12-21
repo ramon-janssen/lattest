@@ -53,7 +53,9 @@ SymInteract(..),
 SymGuard,
 GateValue(..),
 Gate(..),
+GateInputValue(..),
 addTypedVal,
+isInputInteraction
 )
 where
 
@@ -288,3 +290,7 @@ instance TestChoice (GateInputValue i) (GateValue i o) where
     choiceToActs (GateInputValue i consts) = [GateValue (InputGate i) consts]
     actToChoice (GateValue (InputGate i) consts) = Just $ GateInputValue i consts
     actToChoice (GateValue (OutputGate _) _) = Nothing
+
+isInputInteraction :: SymInteract i o -> Bool
+isInputInteraction (SymInteract (InputGate _) _) = True
+isInputInteraction _ = False

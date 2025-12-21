@@ -31,6 +31,9 @@ module Lattest.SMT.SMT
 , newSMTRef
 , runSMT
 , readSMTRef
+, Solution
+, SolvableProblem(..)
+, SMT
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -40,3 +43,4 @@ where
 
 import           Lattest.SMT.SMTInternal
 import           Lattest.SMT.SMTData
+import           Lattest.SMT.SolveDefs
