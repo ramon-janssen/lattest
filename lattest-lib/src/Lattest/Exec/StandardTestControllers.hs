@@ -52,11 +52,11 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract, GateValue,SymGuard)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), GateValue(..),SymGuard,Gate(..))
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet))
 import Lattest.Model.StandardAutomata(STS, STSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, underspecified, asDualValExpr)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
 import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,createSMTRef,openSolver)
@@ -175,9 +175,10 @@ randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STSt
 randomSelectTest (g,smtRef) intrpr _ = do
     let interactions = alphabet $ syntacticAutomaton intrpr -- symbolic transition labels
         interactionsWithGuards = (id &&& interactToGuard intrpr) <$> interactions
-        (interactionsWithGuards', g') = shuffle interactionsWithGuards g
+        (interactionsWithGuards', g') = shuffle (toList interactionsWithGuards) g
     (interaction, solution, smtRef') <- solveAlph smtRef interactionsWithGuards'
-    return $ Just (valuationToGateValue interaction solution, (g', smtRef')) -- TODO pass on Nothing's
+    let GateValue (InputGate gate) values = valuationToGateValue interaction solution -- TODO type i of testcontroller forces throwing away values of gatevalue for input gate i
+    return $ Just (gate, (g', smtRef')) -- TODO pass on Nothing's
     where
     solveAlph _ [] = error "random test selector found an empty menu" -- TODO replace by Nothing
     solveAlph smtRef (act:alph) = do
@@ -200,7 +201,14 @@ randomSelectTest (g,smtRef) intrpr _ = do
             Unknown -> undefined "TODO finish"
 
 valuationToGateValue :: SymInteract i o -> Valuation -> GateValue i o
-valuationToGateValue = undefined "TODO finish"
+valuationToGateValue (SymInteract gate params) valuation =
+    GateValue gate $ fmap (getValueForVar valuation) params
+    where
+        getValueForVar valuation var =
+            case Map.lookup var valuation of
+                Just value -> value
+                Nothing -> randomValueForType (varType var)
+        randomValueForType varType = undefined  "TODO finish"
 
 interactToGuard :: STSIntrp m loc i o -> SymInteract i o -> SymGuard
 interactToGuard intrpr interaction = let
