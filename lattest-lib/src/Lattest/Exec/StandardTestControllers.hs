@@ -70,7 +70,7 @@ import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import qualified Data.Map as Map (keys,(!), lookup)
 import Data.Maybe(fromJust)
-import qualified Data.Set as Set (size, elemAt, fromList, union,filter)
+import qualified Data.Set as Set (size, elemAt, fromList, union)
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
@@ -173,9 +173,9 @@ randomDataTestSelectorFromGenWith smt g cfg = do
 randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, RandomGen g)
     => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateInputValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
-    let interactions = alphabet $ syntacticAutomaton intrpr -- symbolic transition labels
-        interactionsWithGuards = (id &&& interactToGuard intrpr) <$> (Set.filter isInputInteraction interactions)
-        (interactionsWithGuards', g') = shuffle (toList interactionsWithGuards) g
+    let interactions = filter isInputInteraction $ toList $ alphabet $ syntacticAutomaton intrpr -- symbolic transition labels
+        interactionsWithGuards = (id &&& interactToGuard intrpr) <$> interactions
+        (interactionsWithGuards', g') = shuffle (interactionsWithGuards) g
     (interaction, solution) <- runSMT smtRef $ solveAlph interactionsWithGuards'
     return $ Just (gateValueToInput $ valuationToGateValue interaction solution, (g', smtRef)) -- TODO pass on Nothing's
 
@@ -222,11 +222,10 @@ interactToGuard intrpr interaction = let
     in asDualValExpr $ join $ stateAndInteractToGuards aut interaction <$> stateConf intrpr
 
 stateAndInteractToGuards :: STS m loc i o -> SymInteract i o -> IntrpState loc -> m SymGuard
---stateAndGateToGuards :: AutSyntax m loc (SymInteract i o) (SymGuard, x) -> SymInteract i o -> IntrpState loc -> m SymGuard
-stateAndInteractToGuards aut t intrpr@(IntrpState l valuation) =
-    case Map.lookup t (transRel aut l) of
+stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
+    case Map.lookup interaction (transRel aut l) of
         Nothing -> throw $ ActionOutsideAlphabet callStack
-        Just mtdestloc -> fmap guardAndLocToGuard mtdestloc --saturation needed
+        Just mtdestloc -> fmap guardAndLocToGuard mtdestloc
     where
     guardAndLocToGuard ((tguard,_), destLoc) =
         if underspecified destLoc
