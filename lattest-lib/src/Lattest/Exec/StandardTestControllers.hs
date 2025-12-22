@@ -182,7 +182,6 @@ randomDataTestSelectorFromGen smt g = randomDataTestSelectorFromGenWith smt g Co
 randomDataTestSelectorFromGenWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
     => SMTRef -> g -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) (GateInputValue i))
 randomDataTestSelectorFromGenWith smt g cfg = do
-    -- initialization
     let smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg) -- TODO proper error handling in case of Nothing
     smtRef <- createSMTRef smtProc smtLog
@@ -190,24 +189,24 @@ randomDataTestSelectorFromGenWith smt g cfg = do
     --(_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
     return $ selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
     
--- state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))
 randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
     => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateInputValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
-    let interactions = filter isInputInteraction $ toList $ alphabet $ syntacticAutomaton intrpr -- symbolic transition labels
+    let interactions = filter isInputInteraction $ toList $ alphabet $ syntacticAutomaton intrpr
         interactionsWithGuards = (id &&& interactToGuard intrpr) <$> interactions
         (interactionsWithGuards', g') = shuffle (interactionsWithGuards) g
-    (interaction, solution) <- runSMT smtRef $ solveAlph interactionsWithGuards'
-    return $ Just (gateValueToInput $ valuationToGateValue interaction solution, (g', smtRef)) -- TODO pass on Nothing's
+    maybeResult <- runSMT smtRef $ solveAlph interactionsWithGuards'
+    return $ case maybeResult of
+        Nothing -> Nothing
+        Just (interaction, solution) -> Just (gateValueToInput $ valuationToGateValue interaction solution, (g', smtRef))
 
-solveAlph :: [(SymInteract i o,SymGuard)] -> SMT (SymInteract i o, Valuation)
-solveAlph [] = error "random test selector found an empty menu" -- TODO replace by Nothing
+solveAlph :: [(SymInteract i o,SymGuard)] -> SMT (Maybe (SymInteract i o, Valuation))
+solveAlph [] = return Nothing
 solveAlph ((interact@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveInput vars guard
     case maybeSolved of
         Nothing -> solveAlph alph
-        Just solved -> return (interact, solved)
-solveAlph [] = undefined "TODO finish"
+        Just solved -> return $ Just (interact, solved)
 
 solveInput :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
 solveInput vars guard = do
@@ -230,7 +229,7 @@ valuationToGateValue (SymInteract gate params) valuation =
             case Map.lookup var valuation of
                 Just value -> value
                 Nothing -> randomValueForType (varType var)
-        randomValueForType varType = undefined  "TODO finish"
+        randomValueForType varType = undefined  "valuationToGateValue: wrong type" -- should never occur. Could be removed with an input-only variant of SymInteract, which would also get rid of many "o" type parameters
 
 gateValueToInput :: GateValue i o -> GateInputValue i
 gateValueToInput (GateValue (InputGate gate) values) = GateInputValue gate values
