@@ -64,6 +64,7 @@ import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Control.Arrow((&&&))
 import Control.Exception(throw)
+import Control.Monad(join)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
@@ -215,10 +216,10 @@ gateValueToInput :: GateValue i o -> GateInputValue i
 gateValueToInput (GateValue (InputGate gate) values) = GateInputValue gate values
 gateValueToInput _ =  error "cannot convert OutputGate to InputGate"
 
-interactToGuard :: STSIntrp m loc i o -> SymInteract i o -> SymGuard
+interactToGuard :: Monad m => STSIntrp m loc i o -> SymInteract i o -> SymGuard
 interactToGuard intrpr interaction = let
         aut = syntacticAutomaton intrpr
-    in asDualValExpr $ stateAndInteractToGuards aut interaction <$> stateConf aut
+    in asDualValExpr $ join $ stateAndInteractToGuards aut interaction <$> stateConf intrpr
 
 stateAndInteractToGuards :: STS m loc i o -> SymInteract i o -> IntrpState loc -> m SymGuard
 --stateAndGateToGuards :: AutSyntax m loc (SymInteract i o) (SymGuard, x) -> SymInteract i o -> IntrpState loc -> m SymGuard
