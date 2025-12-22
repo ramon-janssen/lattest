@@ -42,7 +42,7 @@ specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
 Valuation,
-STStdest,
+STStdest(STSLoc),
 stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,

@@ -126,7 +126,8 @@ testSTSTestSelection = TestCase $ do
         smtLog = Config.smtLog Config.defaultConfig
         smtProc = fromJust (Config.getProc Config.defaultConfig)
     smt <- SMT.createSMTRef smtProc smtLog
-    let testSelector = randomDataTestSelectorFromSeed smt 456 `untilCondition` stopAfterSteps nrSteps
+    dataTestSelector <- randomDataTestSelectorFromSeed smt 456
+    let testSelector = dataTestSelector `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     
     {-

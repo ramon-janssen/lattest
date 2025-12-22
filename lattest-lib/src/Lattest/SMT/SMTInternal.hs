@@ -212,7 +212,7 @@ getSolvable = do
 -- ----------------------------------------------------------------------------------------- --
 -- getSolution
 -- ----------------------------------------------------------------------------------------- --
-getSolution :: [Variable] -> SMT (Solution Variable)
+getSolution :: [Variable] -> SMT Valuation
 getSolution []    = return Map.empty
 getSolution vs    = do
     putT ("(get-value (" <> T.intercalate " " (map (T.pack . varName) vs) <>"))")
