@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 
 import Lattest.Exec.StandardTestControllers
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
-import Lattest.Model.StandardAutomata(interpretSTS,STSIntrp)
+import Lattest.Model.StandardAutomata(interpretSTS, STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),GateValue(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
@@ -120,6 +120,15 @@ testPrintSTS = TestCase $ do
     -}
     printSTS = "current state configuration: [IntrpState 0 (fromList [(x:Int,0)])]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213In \"water\" [p:Int]\10230 [([[(([(-1,1),(p:Int,1)]) > 0)\8743(([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]\n0 \8213\8213Out \"coffee\" []\10230 [([[([(-15,1),(x:Int,1)]) > 0]] {},2)]\n0 \8213\8213Out \"ok\" [p:Int]\10230 []\n1 \8213\8213In \"water\" [p:Int]\10230 []\n1 \8213\8213Out \"coffee\" []\10230 []\n1 \8213\8213Out \"ok\" [p:Int]\10230 [([[(x:Int) = (p:Int)]] {},0)]\n2 \8213\8213In \"water\" [p:Int]\10230 []\n2 \8213\8213Out \"coffee\" []\10230 []\n2 \8213\8213Out \"ok\" [p:Int]\10230 []"
 
+
+data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
+
+tExampleCorrect (L0, x) = Map.fromList $
+    [((GateValue (InputGate "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (OutputGate "coffee") []), (L2, 0)) | x > 15]
+tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (OutputGate "ok") [Cint x]), (L1, x))]
+tExampleCorrect (L2, _) = Map.fromList $ []
+impExampleCorrect = pureAdapter (mkStdGen 123) 0.5 tExampleCorrect 0
+
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 20
@@ -129,11 +138,7 @@ testSTSTestSelection = TestCase $ do
     dataTestSelector <- randomDataTestSelectorFromSeed smt 456
     let testSelector = dataTestSelector `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    
-    {-
-    -- TODO create implementation with *concrete* values, and test that against the stsExample using the testSelector
-    imp <- impFDetIncorrectOutput
-    let model = interpretQuiescentInputAttemptConcrete sf
+    imp <- impExampleCorrect
+    let model = interpretInputAttemptConcrete sf
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
-    -}
     return $ error "TODO unfinished"
