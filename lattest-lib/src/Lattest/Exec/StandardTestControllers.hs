@@ -52,7 +52,7 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, gate, isInput, maybeFromInput)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction)
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc))
 import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
@@ -159,30 +159,24 @@ randomSelectTest :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) ST
     => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
     let interactions = inputInteractions $ syntacticAutomaton intrpr
-        interactionsWithGuards = (id &&& interactToGuard In intrpr) <$> interactions
+        interactionsWithGuards = (id &&& (interactToGuard intrpr . fmap In)) <$> interactions
         (interactionsWithGuards', g') = shuffle (interactionsWithGuards) g
-    maybeResult <- runSMT smtRef $ solveAlph interactionsWithGuards'
-    return $ case maybeResult of
-        Nothing -> Nothing
-        Just (interaction, solution) -> Just (valuationToGateValue interaction solution, (g', smtRef))
+    maybeValue <- runSMT smtRef $ solveAny interactionsWithGuards'
+    return $ fmap (,(g', smtRef)) maybeValue -- append the new state to the solved value, if any
     where
     inputInteractions :: IOSTS m loc i o -> [SymInteract i]
     inputInteractions = takeJusts . fmap maybeFromInputInteraction . toList . alphabet
-    maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
-    maybeFromInputInteraction (SymInteract gate vars) = case maybeFromInput gate of
-        Just i -> Just $ SymInteract i vars
-        Nothing -> Nothing
 
-solveAlph :: [(SymInteract g,SymGuard)] -> SMT (Maybe (SymInteract g, Valuation))
-solveAlph [] = return Nothing
-solveAlph ((interact@(SymInteract _ vars),guard):alph) = do
-    maybeSolved <- solveInput vars guard
+solveAny :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+solveAny [] = return Nothing
+solveAny ((interact@(SymInteract _ vars),guard):alph) = do
+    maybeSolved <- solveGuard vars guard
     case maybeSolved of
-        Nothing -> solveAlph alph
-        Just solved -> return $ Just (interact, solved)
+        Nothing -> solveAny alph
+        Just solved -> return $ Just $ valuationToGateValue interact solved
 
-solveInput :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
-solveInput vars guard = do
+solveGuard :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
+solveGuard vars guard = do
     solveOutcome <- getSolvable
     case solveOutcome of
         Sat -> do
@@ -201,28 +195,20 @@ valuationToGateValue (SymInteract gate params) valuation =
         getValueForVar valuation var =
             case Map.lookup var valuation of
                 Just value -> value
-                Nothing -> randomValueForType (varType var)
-        randomValueForType varType = undefined  "valuationToGateValue: wrong type" -- should never occur. Could be removed with an input-only variant of SymInteract, which would also get rid of many "o" type parameters
+                Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
-gateValueToInput :: GateValue i -> IOGateValue i o
---gateValueToInput (GateValue (InputGate gate) values) = GateInputValue gate values
-gateValueToInput _ =  error "cannot convert OutputGate to InputGate"
-
-interactToGuard :: (Monad m, BooleanConfiguration m, Ord g) => (i -> g) -> STSIntrp m loc g -> SymInteract i -> SymGuard
-interactToGuard f intrpr interaction = let
+interactToGuard :: (Monad m, BooleanConfiguration m, Ord g) => STSIntrp m loc g -> SymInteract g -> SymGuard
+interactToGuard intrpr interaction = let
         aut = syntacticAutomaton intrpr
-    in asDualValExpr $ join $ stateAndInteractToGuards f aut interaction <$> stateConf intrpr
+    in asDualValExpr $ join $ stateAndInteractToGuards aut interaction <$> stateConf intrpr
 
-stateAndInteractToGuards :: (Ord g, Functor m) => (i -> g) -> STS m loc g -> SymInteract i -> IntrpState loc -> m SymGuard
-stateAndInteractToGuards f aut interaction intrpr@(IntrpState l valuation) =
-    case Map.lookup (f <$> interaction) (transRel aut l) of
+stateAndInteractToGuards :: (Ord g, Functor m) => STS m loc g -> SymInteract g -> IntrpState loc -> m SymGuard
+stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
+    case Map.lookup interaction (transRel aut l) of
         Nothing -> throw $ ActionOutsideAlphabet callStack
         Just mtdestloc -> fmap guardAndLocToGuard mtdestloc
     where
     guardAndLocToGuard (STSLoc (tguard,_), _) = evalConst' valuation tguard
-
-isInputInteraction :: IOSymInteract i o -> Bool
-isInputInteraction = isInput . gate
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not

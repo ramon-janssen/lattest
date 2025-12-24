@@ -59,6 +59,8 @@ GateValue(..),
 IOGateValue,
 gateValueAsIOAct,
 ioActAsGateValue,
+maybeFromInputInteraction,
+maybeFromOutputInteraction,
 addTypedVal,
 gate
 )
@@ -307,6 +309,16 @@ gateValueAsIOAct (GateValue (Out o) vals) = Out (GateValue o vals)
 ioActAsGateValue :: IOAct (GateValue i) (GateValue o) -> IOGateValue i o
 ioActAsGateValue (In (GateValue i vals)) = GateValue (In i) vals
 ioActAsGateValue (Out (GateValue o vals)) = GateValue (Out o) vals
+
+maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
+maybeFromInputInteraction (SymInteract gate vars) = case maybeFromInput gate of
+    Just i -> Just $ SymInteract i vars
+    Nothing -> Nothing
+
+maybeFromOutputInteraction :: IOSymInteract i o -> Maybe (SymInteract o)
+maybeFromOutputInteraction (SymInteract gate vars) = case maybeFromOutput gate of
+    Just o -> Just $ SymInteract o vars
+    Nothing -> Nothing
 
 --instance {-# OVERLAPS #-} Refusable (GateValue t)
 instance Refusable (GateValue g)
