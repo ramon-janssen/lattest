@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 {-|
     This module contains the definitions and semantics of different forms of observable actions, and inputs used in testing experiments.
@@ -16,7 +17,9 @@ IOAct(..),
 isInput,
 isOutput,
 fromInput,
+maybeFromInput,
 fromOutput,
+maybeFromOutput,
 -- ** Observable Quiescence
 {- |
     Observable actions that may be either inputs provided to a system, or outputs from that system, where the 'output' may also be an artificial
@@ -50,12 +53,12 @@ asSuspendedInputAttempt,
 fromSuspendedInputAttempt,
 -- * STS
 SymInteract(..),
+IOSymInteract,
 SymGuard,
 GateValue(..),
-Gate(..),
-GateInputValue(..),
+IOGateValue,
 addTypedVal,
-isInputInteraction
+gate
 )
 where
 
@@ -132,10 +135,25 @@ fromInput :: IOAct i o -> i
 fromInput (In i) = i
 
 {- |
+    Unpacks an input.
+-}
+maybeFromInput :: IOAct i o -> Maybe i
+maybeFromInput (In i) = Just i
+maybeFromInput _ = Nothing
+
+{- |
     Partially defined function that unpacks an outputs.
 -}
 fromOutput :: IOAct i o -> o
 fromOutput (Out o) = o
+
+{- |
+    Unpacks an output.
+-}
+maybeFromOutput :: IOAct i o -> Maybe o
+maybeFromOutput (Out o) = Just o
+maybeFromOutput _ = Nothing
+
 
 {- |
     Add observation of quiescence to a type of observable actions.
@@ -260,38 +278,31 @@ fromSuspendedInputAttempt(Out (OutSusp o)) = Out o
 
 
 -- STS data types
-
-data Gate i o = InputGate i | OutputGate o deriving (Eq, Ord)
-
-instance (Show i, Show o) => Show (Gate i o) where
-    show (InputGate i) = "In " ++ show i
-    show (OutputGate o) = "Out " ++ show o
-
 addTypedVal :: Variable -> Constant -> Valuation -> Valuation
 addTypedVal v c | not (varType v == constType c) = error $ "expression "  ++ show c ++ " :: " ++ show (constType c) ++ " assigned to variable " ++ varName v ++ " :: " ++ show (varType v)
 addTypedVal v c = Map.insert v c
 --addTypedVal (Variable v BoolType) (Cbool w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Bool) w m
 --addTypedVal (Variable v IntType) (Cint w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Integer) w m
 
-data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
+data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
+type IOSymInteract i o = SymInteract (IOAct i o)
 
-isInputInteraction :: SymInteract i o -> Bool
-isInputInteraction (SymInteract (InputGate _) _) = True
-isInputInteraction _ = False
+gate :: SymInteract g -> g
+gate (SymInteract gate _) = gate
 
-instance (Show i, Show o) => Show (SymInteract i o) where
+instance (Show g) => Show (SymInteract g) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
 type SymGuard = ValExprBool
 
-data GateValue i o = GateValue (Gate i o) [Constant] deriving (Eq, Ord)
+data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
+type IOGateValue i o = GateValue (IOAct i o)
 
-instance {-# OVERLAPS #-} Refusable (GateValue i o)
+--instance {-# OVERLAPS #-} Refusable (GateValue t)
+instance Refusable (GateValue g)
 
-data GateInputValue i = GateInputValue i [Constant] deriving (Eq, Ord)
-
-instance TestChoice (GateInputValue i) (GateValue i o) where
-    choiceToActs (GateInputValue i consts) = [GateValue (InputGate i) consts]
-    actToChoice (GateValue (InputGate i) consts) = Just $ GateInputValue i consts
-    actToChoice (GateValue (OutputGate _) _) = Nothing
+instance TestChoice (GateValue i) (GateValue (IOAct i o)) where
+    choiceToActs (GateValue i consts) = [GateValue (In i) consts]
+    actToChoice (GateValue (In i) consts) = Just $ GateValue i consts
+    actToChoice (GateValue (Out _) _) = Nothing
 

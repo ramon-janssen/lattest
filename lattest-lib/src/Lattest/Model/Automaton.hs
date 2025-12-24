@@ -57,7 +57,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..), SymGuard, addTypedVal,Gate(..))
+    SymInteract(..),GateValue(..), SymGuard, addTypedVal)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
@@ -352,15 +352,15 @@ stsTLoc g a = STSLoc (g,a)
 
 instance Show STStdest where
     show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
-
+{-
 instance (Completable (GateValue i o)) where
     implicitDestination (GateValue (OutputGate _) _) = forbidden
     implicitDestination _ = underspecified
-
+-}
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
-instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o) where
+instance (Ord g) => TransitionSemantics (SymInteract g) (GateValue g) where
     asTransition _ alf (GateValue gate values) =
         case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
@@ -371,7 +371,7 @@ instance (Ord i, Ord o) => TransitionSemantics (SymInteract i o) (GateValue i o)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) where
+instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g) where
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> addTypedVal x xval m) gateValuation stateValuation

@@ -52,9 +52,9 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), GateValue(..),SymGuard,Gate(..),GateInputValue(..), isInputInteraction)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, gate, isInput, maybeFromInput)
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc))
-import Lattest.Model.StandardAutomata(STS, STSIntrp)
+import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), ValExpr(..))
@@ -135,38 +135,45 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
-    => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
+randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
+    => SMTRef -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i))
 randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromGen smt
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
-    => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i)
+randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
+    => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i)
 randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt (mkStdGen i)
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) (GateInputValue i)
+randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
+    => SMTRef -> g -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (GateValue i)
 randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
     
-randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateInputValue i, (g,SMTRef)))
+randomSelectTest :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
+    => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
-    let interactions = filter isInputInteraction $ toList $ alphabet $ syntacticAutomaton intrpr
-        interactionsWithGuards = (id &&& interactToGuard intrpr) <$> interactions
+    let interactions = inputInteractions $ syntacticAutomaton intrpr
+        interactionsWithGuards = (id &&& interactToGuard In intrpr) <$> interactions
         (interactionsWithGuards', g') = shuffle (interactionsWithGuards) g
     maybeResult <- runSMT smtRef $ solveAlph interactionsWithGuards'
     return $ case maybeResult of
         Nothing -> Nothing
-        Just (interaction, solution) -> Just (gateValueToInput $ valuationToGateValue interaction solution, (g', smtRef))
+        Just (interaction, solution) -> Just (valuationToGateValue interaction solution, (g', smtRef))
+    where
+    inputInteractions :: IOSTS m loc i o -> [SymInteract i]
+    inputInteractions = takeJusts . fmap maybeFromInputInteraction . toList . alphabet
+    maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
+    maybeFromInputInteraction (SymInteract gate vars) = case maybeFromInput gate of
+        Just i -> Just $ SymInteract i vars
+        Nothing -> Nothing
 
-solveAlph :: [(SymInteract i o,SymGuard)] -> SMT (Maybe (SymInteract i o, Valuation))
+solveAlph :: [(SymInteract g,SymGuard)] -> SMT (Maybe (SymInteract g, Valuation))
 solveAlph [] = return Nothing
 solveAlph ((interact@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveInput vars guard
@@ -187,7 +194,7 @@ solveInput vars guard = do
         Unsat -> return Nothing
         Unknown -> return Nothing
 
-valuationToGateValue :: SymInteract i o -> Valuation -> GateValue i o
+valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
 valuationToGateValue (SymInteract gate params) valuation =
     GateValue gate $ fmap (getValueForVar valuation) params
     where
@@ -197,24 +204,25 @@ valuationToGateValue (SymInteract gate params) valuation =
                 Nothing -> randomValueForType (varType var)
         randomValueForType varType = undefined  "valuationToGateValue: wrong type" -- should never occur. Could be removed with an input-only variant of SymInteract, which would also get rid of many "o" type parameters
 
-gateValueToInput :: GateValue i o -> GateInputValue i
-gateValueToInput (GateValue (InputGate gate) values) = GateInputValue gate values
+gateValueToInput :: GateValue i -> IOGateValue i o
+--gateValueToInput (GateValue (InputGate gate) values) = GateInputValue gate values
 gateValueToInput _ =  error "cannot convert OutputGate to InputGate"
 
-interactToGuard :: (Monad m, BooleanConfiguration m, Ord i, Ord o) => STSIntrp m loc i o -> SymInteract i o -> SymGuard
-interactToGuard intrpr interaction = let
+interactToGuard :: (Monad m, BooleanConfiguration m, Ord g) => (i -> g) -> STSIntrp m loc g -> SymInteract i -> SymGuard
+interactToGuard f intrpr interaction = let
         aut = syntacticAutomaton intrpr
-    in asDualValExpr $ join $ stateAndInteractToGuards aut interaction <$> stateConf intrpr
+    in asDualValExpr $ join $ stateAndInteractToGuards f aut interaction <$> stateConf intrpr
 
-stateAndInteractToGuards :: (Ord i, Ord o, Functor m) => STS m loc i o -> SymInteract i o -> IntrpState loc -> m SymGuard
-stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
-    case Map.lookup interaction (transRel aut l) of
+stateAndInteractToGuards :: (Ord g, Functor m) => (i -> g) -> STS m loc g -> SymInteract i -> IntrpState loc -> m SymGuard
+stateAndInteractToGuards f aut interaction intrpr@(IntrpState l valuation) =
+    case Map.lookup (f <$> interaction) (transRel aut l) of
         Nothing -> throw $ ActionOutsideAlphabet callStack
         Just mtdestloc -> fmap guardAndLocToGuard mtdestloc
     where
     guardAndLocToGuard (STSLoc (tguard,_), _) = evalConst' valuation tguard
 
-
+isInputInteraction :: IOSymInteract i o -> Bool
+isInputInteraction = isInput . gate
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not

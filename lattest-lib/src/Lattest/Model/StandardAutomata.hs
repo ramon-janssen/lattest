@@ -47,8 +47,10 @@ ConcreteSuspInputAttemptAutIntrpr,
 interpretInputAttemptConcrete,
 interpretQuiescentInputAttemptConcrete,
 STS,
+IOSTS,
 interpretSTS,
-STSIntrp
+STSIntrp,
+IOSTSIntrp
 )
 where
 
@@ -215,9 +217,11 @@ type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () 
 interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
-type STS m loc i o = AutSyntax m loc (SymInteract i o) STStdest
+type STS m loc g = AutSyntax m loc (SymInteract g) STStdest
+type IOSTS m loc i o = STS m loc (IOAct i o)
 
-type STSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o)
+type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
+type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
 
-interpretSTS :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m,Show (m (STStdest, loc))) => STS m loc i o -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o)
+interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m,Show (m (STStdest, loc))) => STS m loc g -> (loc -> IntrpState loc) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
 interpretSTS = interpret

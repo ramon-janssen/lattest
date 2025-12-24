@@ -12,8 +12,8 @@ import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runTester)
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
-import Lattest.Model.StandardAutomata(interpretSTS, STSIntrp)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),GateValue(..))
+import Lattest.Model.StandardAutomata(interpretSTS, IOSTSIntrp)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),GateValue(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map (empty, fromList,singleton)
 import qualified Control.Exception as Exception
@@ -23,15 +23,15 @@ import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 
 
-stsExample :: STSIntrp NonDet Integer String String
+stsExample :: IOSTSIntrp NonDet Integer String String
 stsExample =
     let pvar = (Variable "p" IntType)
         xvar = (Variable "x" IntType)
         pvarexpr = cstrVar pvar
         xvarexpr = cstrVar xvar
-        water = SymInteract (InputGate "water") [pvar]
-        ok = SymInteract (OutputGate "ok") [pvar]
-        coffee = SymInteract (OutputGate "coffee") []
+        water = SymInteract (In "water") [pvar]
+        ok = SymInteract (Out "ok") [pvar]
+        coffee = SymInteract (Out "coffee") []
         waterGuard = (intConst 1 .<= pvarexpr) .&& (pvarexpr .<= intConst 10)
         waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
         okGuard = xvarexpr .== pvarexpr
@@ -62,34 +62,34 @@ intConst i = cstrConst $ Cint i
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExample)
-    let intrp2 = after stsExample (GateValue (InputGate "water") [Cint 7])
+    let intrp2 = after stsExample (GateValue (In "water") [Cint 7])
     assertEqual "after water 7: " (getSTSIntrpState 1 7) (stateConf intrp2)
-    let intrp3 = after intrp2 (GateValue (OutputGate "ok") [Cint 7])
+    let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
     assertEqual "after ok 7: " (getSTSIntrpState 0 7) (stateConf intrp3)
-    let intrp4 = after intrp3 (GateValue (InputGate "water") [Cint 9])
+    let intrp4 = after intrp3 (GateValue (In "water") [Cint 9])
     assertEqual "after water 9: " (getSTSIntrpState 1 16) (stateConf intrp4)
-    let intrp5 = after intrp4 (GateValue (OutputGate "ok") [Cint 16])
+    let intrp5 = after intrp4 (GateValue (Out "ok") [Cint 16])
     assertEqual "after ok 16: " (getSTSIntrpState 0 16) (stateConf intrp5)
-    let intrp6 = after intrp5 (GateValue (OutputGate "coffee") [])
+    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
     assertEqual "after coffee: " (getSTSIntrpState 2 16) (stateConf intrp6)
     return()
 
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
-    let intrp1 = after stsExample (GateValue (OutputGate "water") [Cint 7])
+    let intrp1 = after stsExample (GateValue (Out "water") [Cint 7])
     assertThrowsError "gate not in STS alphabet" (stateConf $ intrp1)
-    let intrp2 = after stsExample (GateValue (InputGate "water") [])
+    let intrp2 = after stsExample (GateValue (In "water") [])
     assertThrowsError "nr of values unequal to nr of parameters" (stateConf $ intrp2)
-    let intrp3 = after stsExample (GateValue (InputGate "water") [Cbool True])
+    let intrp3 = after stsExample (GateValue (In "water") [Cbool True])
     assertThrowsError "type of variable and value do not match" (stateConf $ intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
-    let intrp3 = after stsExample (GateValue (OutputGate "ok") [Cint 0]) -- output not enabled
+    let intrp3 = after stsExample (GateValue (Out "ok") [Cint 0]) -- output not enabled
     assertEqual "after ok: " forbidden (stateConf intrp3)
-    let intrp4 = after stsExample (GateValue (InputGate "water") [Cint 11]) -- value for input does not satisfy guard
+    let intrp4 = after stsExample (GateValue (In "water") [Cint 11]) -- value for input does not satisfy guard
     assertEqual "after water 11: " underspecified (stateConf intrp4)
-    let intrp5 = after stsExample (GateValue (OutputGate "coffee") []) -- value of variable does not satisfy guard
+    let intrp5 = after stsExample (GateValue (Out "coffee") []) -- value of variable does not satisfy guard
     assertEqual "after coffee: " forbidden (stateConf intrp5)
 
 assertThrowsError :: String -> a -> IO ()
@@ -127,8 +127,8 @@ testPrintSTS = TestCase $ do
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 
 tExampleCorrect (L0, x) = Map.fromList $
-    [((GateValue (InputGate "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (OutputGate "coffee") []), (L2, 0)) | x > 15]
-tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (OutputGate "ok") [Cint x]), (L1, x))]
+    [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
+tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L1, x))]
 tExampleCorrect (L2, _) = Map.fromList $ []
 impExampleCorrect = pureAdapter (mkStdGen 123) 0.5 tExampleCorrect 0
 
