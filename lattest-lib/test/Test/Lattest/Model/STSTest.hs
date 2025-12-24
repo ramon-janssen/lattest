@@ -8,20 +8,20 @@ import Data.Maybe(fromJust)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 
+import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runTester)
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTSIntrp)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),GateValue(..))
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct)
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
-import qualified Data.Map as Map (empty, fromList,singleton)
+import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,assignment,noAssignment,cstrAnd,cstrLE,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr,ValExprInt,(=:))
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..))
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
-
 
 stsExample :: IOSTSIntrp NonDet Integer String String
 stsExample =
@@ -130,7 +130,7 @@ tExampleCorrect (L0, x) = Map.fromList $
     [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
 tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L1, x))]
 tExampleCorrect (L2, _) = Map.fromList $ []
-impExampleCorrect = pureAdapter (mkStdGen 123) 0.5 tExampleCorrect 0
+impExampleCorrect = pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) 0
 
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
@@ -144,6 +144,7 @@ testSTSTestSelection = TestCase $ do
 
     let testSelector = randomDataTestSelectorFromSeed smtRef 456 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    imp <- impExampleCorrect
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester stsExample testSelector imp
+    imp' <- impExampleCorrect
+    imp <- Adapter.mapActionsFromSut (fmap ioActAsGateValue) imp'
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester (interpretSTSQuiescentInputAttemptConcrete stsExample) testSelector imp
     return $ error "TODO unfinished"

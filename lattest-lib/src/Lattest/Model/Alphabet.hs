@@ -57,6 +57,8 @@ IOSymInteract,
 SymGuard,
 GateValue(..),
 IOGateValue,
+gateValueAsIOAct,
+ioActAsGateValue,
 addTypedVal,
 gate
 )
@@ -297,6 +299,14 @@ type SymGuard = ValExprBool
 
 data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
 type IOGateValue i o = GateValue (IOAct i o)
+
+gateValueAsIOAct :: IOGateValue i o -> IOAct (GateValue i) (GateValue o)
+gateValueAsIOAct (GateValue (In i) vals) = In (GateValue i vals)
+gateValueAsIOAct (GateValue (Out o) vals) = Out (GateValue o vals)
+
+ioActAsGateValue :: IOAct (GateValue i) (GateValue o) -> IOGateValue i o
+ioActAsGateValue (In (GateValue i vals)) = GateValue (In i) vals
+ioActAsGateValue (Out (GateValue o vals)) = GateValue (Out o) vals
 
 --instance {-# OVERLAPS #-} Refusable (GateValue t)
 instance Refusable (GateValue g)
