@@ -275,6 +275,10 @@ addTypedVal v c = Map.insert v c
 
 data SymInteract i o = SymInteract (Gate i o) [Variable] deriving (Eq, Ord)
 
+isInputInteraction :: SymInteract i o -> Bool
+isInputInteraction (SymInteract (InputGate _) _) = True
+isInputInteraction _ = False
+
 instance (Show i, Show o) => Show (SymInteract i o) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
@@ -291,6 +295,3 @@ instance TestChoice (GateInputValue i) (GateValue i o) where
     actToChoice (GateValue (InputGate i) consts) = Just $ GateInputValue i consts
     actToChoice (GateValue (OutputGate _) _) = Nothing
 
-isInputInteraction :: SymInteract i o -> Bool
-isInputInteraction (SymInteract (InputGate _) _) = True
-isInputInteraction _ = False
