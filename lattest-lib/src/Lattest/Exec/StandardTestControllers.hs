@@ -26,11 +26,8 @@ randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
 randomDataTestSelector,
-randomDataTestSelectorWith,
 randomDataTestSelectorFromSeed,
-randomDataTestSelectorFromSeedWith,
 randomDataTestSelectorFromGen,
-randomDataTestSelectorFromGenWith,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
@@ -64,7 +61,7 @@ import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), V
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
 import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
-import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,createSMTRef,openSolver,Solution,SolvableProblem(..),SMT)
+import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,Solution,SolvableProblem(..),SMT)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Control.Arrow((&&&))
@@ -140,54 +137,23 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 -}
 randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
     => SMTRef -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
-randomDataTestSelector smt = randomDataTestSelectorWith smt Config.defaultConfig
-
-{- |
-    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
--}
-randomDataTestSelectorWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
-    => SMTRef -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
-randomDataTestSelectorWith smt cfg = do
-    g <- initStdGen
-    randomDataTestSelectorFromGenWith smt g cfg
+randomDataTestSelector smt = initStdGen >>= return . randomDataTestSelectorFromGen smt
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
 randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
-    => SMTRef -> Int -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
-randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGenWith smt (mkStdGen i) Config.defaultConfig
-
-{- |
-    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
-    the given random seed.
--}
-randomDataTestSelectorFromSeedWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o)
-    => SMTRef -> Int -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i))
-randomDataTestSelectorFromSeedWith smt i cfg = randomDataTestSelectorFromGenWith smt (mkStdGen i) cfg
+    => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (StdGen,SMTRef) (GateInputValue i)
+randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt (mkStdGen i)
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
 randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => SMTRef -> g -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) (GateInputValue i))
-randomDataTestSelectorFromGen smt g = randomDataTestSelectorFromGenWith smt g Config.defaultConfig
-
-{- |
-    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
-    given random generator.
--}
-randomDataTestSelectorFromGenWith :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => SMTRef -> g -> Config.Config -> IO (TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) (GateInputValue i))
-randomDataTestSelectorFromGenWith smt g cfg = do
-    let smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg) -- TODO proper error handling in case of Nothing
-    smtRef <- createSMTRef smtProc smtLog
-    info <- runSMT smtRef openSolver
-    --(_,smtEnv'')   <- lift $ runStateT (SMT.addDefinitions (SMTData.EnvDefs (TxsDefs.sortDefs tdefs) (TxsDefs.cstrDefs tdefs) (Set.foldr Map.delete (TxsDefs.funcDefs tdefs) (allENDECfuncs tdefs)))) smtEnv'
-    return $ selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
+    => SMTRef -> g -> TestSelector m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o) (g,SMTRef) (GateInputValue i)
+randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
     
 randomSelectTest :: (StepSemantics m loc (IntrpState loc) (SymInteract i o) STStdest (GateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
     => (g,SMTRef) -> STSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateInputValue i, (g,SMTRef)))

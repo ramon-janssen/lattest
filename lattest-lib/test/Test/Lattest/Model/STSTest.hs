@@ -135,11 +135,14 @@ impExampleCorrect = pureAdapter (mkStdGen 123) 0.5 tExampleCorrect 0
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 20
-        smtLog = Config.smtLog Config.defaultConfig
-        smtProc = fromJust (Config.getProc Config.defaultConfig)
-    smt <- SMT.createSMTRef smtProc smtLog
-    dataTestSelector <- randomDataTestSelectorFromSeed smt 456
-    let testSelector = dataTestSelector `untilCondition` stopAfterSteps nrSteps
+        cfg = Config.defaultConfig
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    info <- SMT.runSMT smtRef SMT.openSolver
+    --putStrLn $ show info -- TODO check for expected value instead of printing
+
+    let testSelector = randomDataTestSelectorFromSeed smtRef 456 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester stsExample testSelector imp
