@@ -6,8 +6,11 @@ import Prelude hiding (take)
 import Test.HUnit
 import Data.Maybe(fromJust)
 import qualified Data.Set as Set
+import System.Random(mkStdGen)
 
+import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
+import Lattest.Exec.Testing(runTester)
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, STSIntrp)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),Gate(..),GateValue(..))
@@ -139,6 +142,5 @@ testSTSTestSelection = TestCase $ do
     let testSelector = dataTestSelector `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
-    let model = interpretInputAttemptConcrete sf
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester stsExample testSelector imp
     return $ error "TODO unfinished"
