@@ -56,24 +56,16 @@ import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), a
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc))
 import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), ValExpr(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
-import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
-import qualified Lattest.SMT.Config as Config(Config(..),getProc,defaultConfig)
-import Lattest.SMT.SMT(SMTRef,runSMT,pop,getSolution,addAssertions,getSolvable,push,Solution,SolvableProblem(..),SMT)
+import Lattest.Model.Symbolic.SolveSTS(solveRandom)
+import qualified Lattest.SMT.Config as Config(Config(..))
+import Lattest.SMT.SMT(SMTRef, runSMT)
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
-import Control.Arrow((&&&))
-import Control.Exception(throw)
-import Control.Monad(join)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
-import Data.Foldable(toList)
-import qualified Data.Map as Map (keys,(!), lookup)
+import qualified Data.Map as Map
 import Data.Maybe(fromJust)
 import qualified Data.Set as Set (size, elemAt, fromList, union)
-import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
@@ -158,57 +150,8 @@ randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) randomSelectTest (
 randomSelectTest :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
     => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
-    let interactions = inputInteractions $ syntacticAutomaton intrpr
-        interactionsWithGuards = (id &&& (interactToGuard intrpr . fmap In)) <$> interactions
-        (interactionsWithGuards', g') = shuffle (interactionsWithGuards) g
-    maybeValue <- runSMT smtRef $ solveAny interactionsWithGuards'
-    return $ fmap (,(g', smtRef)) maybeValue -- append the new state to the solved value, if any
-    where
-    inputInteractions :: IOSTS m loc i o -> [SymInteract i]
-    inputInteractions = takeJusts . fmap maybeFromInputInteraction . toList . alphabet
-
-solveAny :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
-solveAny [] = return Nothing
-solveAny ((interact@(SymInteract _ vars),guard):alph) = do
-    maybeSolved <- solveGuard vars guard
-    case maybeSolved of
-        Nothing -> solveAny alph
-        Just solved -> return $ Just $ valuationToGateValue interact solved
-
-solveGuard :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
-solveGuard vars guard = do
-    solveOutcome <- getSolvable
-    case solveOutcome of
-        Sat -> do
-            push
-            addAssertions [guard]
-            solution <- getSolution vars
-            pop
-            return $ Just solution
-        Unsat -> return Nothing
-        Unknown -> return Nothing
-
-valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
-valuationToGateValue (SymInteract gate params) valuation =
-    GateValue gate $ fmap (getValueForVar valuation) params
-    where
-        getValueForVar valuation var =
-            case Map.lookup var valuation of
-                Just value -> value
-                Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
-
-interactToGuard :: (Monad m, BooleanConfiguration m, Ord g) => STSIntrp m loc g -> SymInteract g -> SymGuard
-interactToGuard intrpr interaction = let
-        aut = syntacticAutomaton intrpr
-    in asDualValExpr $ join $ stateAndInteractToGuards aut interaction <$> stateConf intrpr
-
-stateAndInteractToGuards :: (Ord g, Functor m) => STS m loc g -> SymInteract g -> IntrpState loc -> m SymGuard
-stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
-    case Map.lookup interaction (transRel aut l) of
-        Nothing -> throw $ ActionOutsideAlphabet callStack
-        Just mtdestloc -> fmap guardAndLocToGuard mtdestloc
-    where
-    guardAndLocToGuard (STSLoc (tguard,_), _) = evalConst' valuation tguard
+    (maybeGateValue, g') <- runSMT smtRef $ solveRandom intrpr maybeFromInputInteraction g
+    return $ fmap (, (g', smtRef)) maybeGateValue -- append the new state to the solved value, if any
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not

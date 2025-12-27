@@ -13,6 +13,7 @@ flipCoin,
 takeRandom,
 -- * Maybe
 takeJusts,
+distributeFirstMaybe,
 -- * Set
 takeArbitrary,
 -- * List utils
@@ -70,6 +71,11 @@ takeJusts maybes = takeJusts' $ toList maybes
     takeJusts' [] = []
     takeJusts' (Just x : xs) = x : takeJusts' xs
     takeJusts' (Nothing : xs) = takeJusts' xs 
+
+-- | If the first tuple element is a Nothing, then take a Nothing, ignoring the second element, otherwise take a Just of both elements.
+distributeFirstMaybe :: (Maybe a, b) -> Maybe (a, b)
+distributeFirstMaybe (Just a, b) = Just (a, b)
+distributeFirstMaybe (Nothing, _) = Nothing
 
 -- | Remove an arbitrary element from the given set, and return both that element and the remaining set, or `Nothing` if the given set was empty.
 takeArbitrary :: Set a -> Maybe (a, Set a)
