@@ -35,6 +35,7 @@ StepSemantics,
 IOStepSemantics,
 after,
 afters,
+ioAfter,
 -- ** Exceptions
 AutomatonException(..),
 -- ** Finite Transition Labels
@@ -230,13 +231,13 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
         Nothing -> throw $ ActionOutsideAlphabet callStack
 
 -- TODO merge common code with after
-ioAfter :: (IOStepSemantics m loc q t tdest act z, Foldable m) => IORef z -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
+-- TODO are all Ord instances really needed?
+ioAfter :: (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord q, Ord loc) => IORef z -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
 ioAfter iostate intrpr act' = do
     let aut = syntacticAutomaton intrpr
-    stateConf' <- stateConf intrpr >>= ioAfter' iostate (alphabet aut) (transRel $ aut) act'
-    return $ intrpr { stateConf = stateConf' }
+    stateConf' <- ioAfter' iostate (alphabet aut) (transRel $ aut) act' `distributeMonadOverFoldable` stateConf intrpr 
+    return $ intrpr { stateConf = Monad.join stateConf' }
 
--- TODO the Ord-instances should probably be on 
 ioAfter' :: (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord loc) => IORef z -> Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> IO (m q)
 ioAfter' iostate alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> ioMove iostate q act (nothingTTdest transMap) `distributeMonadOverFoldable` mloc
@@ -384,15 +385,14 @@ stsTLoc g a = STSLoc (g,a)
 
 instance Show STStdest where
     show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
-{-
-instance (Completable (GateValue i o)) where
-    implicitDestination (GateValue (OutputGate _) _) = forbidden
-    implicitDestination _ = underspecified
--}
+
+instance (Completable g) => Completable (GateValue g) where
+    implicitDestination (GateValue g _) = implicitDestination g
+
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
-instance (Ord g) => TransitionSemantics (SymInteract g) (GateValue g) where
+instance (Completable g, Ord g) => TransitionSemantics (SymInteract g) (GateValue g) where
     asTransition _ alf (GateValue gate values) =
         case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"

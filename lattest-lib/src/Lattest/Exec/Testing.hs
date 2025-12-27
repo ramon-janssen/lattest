@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-
+{-# LANGUAGE FlexibleContexts #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -35,6 +35,7 @@ runExperiment,
 -}
 TestController(..),
 makeTester,
+makeSMTTester,
 runTester,
 Verdict(..),
 InconclusiveReason(..)
@@ -42,11 +43,14 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
-import Lattest.Model.Automaton(StepSemantics, IOStepSemantics, AutIntrpr, after, stateConf, AutomatonException)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, IOStepSemantics, AutIntrpr, ioAfter, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
+import Lattest.SMT.SMTData(SMTRef, SmtEnv)
+
 
 import Control.Exception(catch,evaluate)
+import Data.IORef(IORef)
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
 
@@ -98,13 +102,25 @@ data TestController m loc q t tdest act state i r = TestController {
 -}
 makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester initSpec initTestController = ActionController {
+makeTester = makeTester' ioStatePlaceholder
+    where
+    ioStatePlaceholder :: IORef ()
+    ioStatePlaceholder = (error "makeTester called with StepSemantics")
+
+makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m) =>
+    SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeSMTTester = makeTester'
+
+makeTester' :: (IOStepSemantics m loc q t tdest act z, TestChoice i act, BoundedConfiguration m) =>
+    IORef z -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeTester' ioState initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
     update = makeUpdate,
     handleClose = makeHandleClose
     }
     where
+        ioAfterz = ioAfter ioState
         makeSelect :: (TestChoice i act, BoundedConfiguration m)
             => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
             -> IO (Either (i, (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)) (Verdict, r))
@@ -116,10 +132,10 @@ makeTester initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
-            (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
+--        makeUpdate :: (IOStepSemantics m loc q t tdest act z, BoundedConfiguration m, Refusable act) =>
+--            (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
-            let spec' = spec `after` act 
+            spec' <- spec `ioAfterz` act 
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do
