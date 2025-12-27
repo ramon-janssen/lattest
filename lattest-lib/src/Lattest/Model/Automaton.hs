@@ -32,6 +32,7 @@ implicitDestination,
 TransitionSemantics,
 StateSemantics,
 StepSemantics,
+IOStepSemantics,
 after,
 afters,
 -- ** Exceptions
@@ -58,13 +59,14 @@ import Prelude hiding (lookup)
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..), SymGuard, addTypedVal)
-import Lattest.Util.Utils((&&&), takeArbitrary)
+import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
 import Data.Either.Utils (fromRight)
 import qualified Data.Foldable as Foldable
-import Data.Map (Map, (!))
+import Data.IORef(IORef)
 import qualified Data.List as List
+import Data.Map (Map, (!))
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -196,6 +198,12 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
+class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
+    ioMove :: IORef z -> q -> act -> Maybe (t, tdest) -> loc -> IO (m q)
+
+instance StepSemantics m loc q t tdest act => IOStepSemantics m loc q t tdest act () where
+    ioMove _ q act t loc = return $ move q act t loc
+
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
@@ -215,6 +223,30 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
     TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+    where
+    lookupAction :: Ord k => Map k a -> k -> a
+    lookupAction m k = case Map.lookup k m of
+        Just v -> v
+        Nothing -> throw $ ActionOutsideAlphabet callStack
+
+-- TODO merge common code with after
+ioAfter :: (IOStepSemantics m loc q t tdest act z, Foldable m) => IORef z -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
+ioAfter iostate intrpr act' = do
+    let aut = syntacticAutomaton intrpr
+    stateConf' <- stateConf intrpr >>= ioAfter' iostate (alphabet aut) (transRel $ aut) act'
+    return $ intrpr { stateConf = stateConf' }
+
+-- TODO the Ord-instances should probably be on 
+ioAfter' :: (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord loc) => IORef z -> Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> IO (m q)
+ioAfter' iostate alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+    LocationMove mloc -> ioMove iostate q act (nothingTTdest transMap) `distributeMonadOverFoldable` mloc
+        where
+         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
+        nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
+        nothingTTdest _ = Nothing
+    TransitionMove (t, mloc) -> moveAlongTransition q act t `distributeMonadOverFoldable` mloc
+        where
+        moveAlongTransition q act t (tdest, loc) = ioMove iostate q act (Just (t, tdest)) loc
     where
     lookupAction :: Ord k => Map k a -> k -> a
     lookupAction m k = case Map.lookup k m of

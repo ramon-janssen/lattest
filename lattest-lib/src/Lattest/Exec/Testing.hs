@@ -42,7 +42,7 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
-import Lattest.Model.Automaton(StepSemantics, AutIntrpr, after, stateConf, AutomatonException)
+import Lattest.Model.Automaton(StepSemantics, IOStepSemantics, AutIntrpr, after, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
