@@ -65,7 +65,7 @@ import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
 import Data.Either.Utils (fromRight)
 import qualified Data.Foldable as Foldable
-import Data.Functor.Identity(Identity)
+import Data.Functor.Identity(Identity(Identity), runIdentity)
 import Data.IORef(IORef)
 import qualified Data.List as List
 import Data.Map (Map, (!))
@@ -204,17 +204,22 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
     ioMove :: IORef z -> q -> act -> Maybe (t, tdest) -> loc -> IO (m q)
 
-instance StepSemantics m loc q t tdest act => IOStepSemantics m loc q t tdest act () where
-    ioMove _ q act t loc = return $ move q act t loc
-
-class ExecAfter m loc q t tdest act ioState where
-    ioAfter :: ioState -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
-
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-after = execAfter () -- TODO fix, with some boilerplate to strip Identity conversions
+after aut act = runIdentity $ afterInternal moveId fmapId aut act
+    where
+    moveId :: StepSemantics m loc q t tdest act => q -> act -> Maybe (t, tdest) -> loc -> Identity (m q)
+    moveId q act mt loc = Identity $ move q act mt loc
+    fmapId :: Functor f => (x -> Identity y) -> f x -> Identity (f y)
+    fmapId f = Identity . fmap (runIdentity . f)
+
+class IOAfter m loc q t tdest act ioState where
+    ioAfter :: ioState -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
+
+instance StepSemantics m loc q t tdest act => IOAfter m loc q t tdest act () where
+    ioAfter () aut act = return $ after aut act
 
 {-instance StepSemantics m loc q t tdest act => ExecAfter m loc q t tdest act () Identity where
     -- afterSemantics :: () -> StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> Identity (AutIntrpr m loc q t tdest act)
@@ -235,7 +240,7 @@ afterInternal internalMove internalFMap intrpr act' = do
     return $ intrpr { stateConf = Monad.join stateConf' }
 
 afterInternal' ::
-    (q -> act -> Maybe (t, tdest) -> loc -> m q) ->
+    (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
     ((x -> execM y) -> m x -> execM (m y)) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
 afterInternal' internalMove internalFMap alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
