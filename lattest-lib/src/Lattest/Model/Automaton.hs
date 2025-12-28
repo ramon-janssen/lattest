@@ -5,6 +5,8 @@
 --{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 {-|
     This module contains the definitions and interpretations of automata models.
 -}
@@ -222,13 +224,12 @@ class IOAfter m loc q t tdest act ioState where
 instance StepSemantics m loc q t tdest act => IOAfter m loc q t tdest act () where
     ioAfter () aut act = return $ after aut act
 
-{-instance StepSemantics m loc q t tdest act => ExecAfter m loc q t tdest act () Identity where
-    -- afterSemantics :: () -> StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> Identity (AutIntrpr m loc q t tdest act)
-    execAfter = afterInternal (error "!!!") (error "!!!")-- TODO finish, this should use afterInternal, instantiating moveInternal and fmapInternal with move and fmap (maybe with some boilerplate identity conversions)
+instance (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
+    ioAfter execState = afterInternal (ioMove execState) distributeMonadOverFoldable'
+        where
+        distributeMonadOverFoldable' :: (Monad execM, Foldable m, Ord x) => (x -> execM y) -> m x -> execM (m y)
+        distributeMonadOverFoldable' = distributeMonadOverFoldable
 
-instance (IOStepSemantics m loc q t tdest act execState, Foldable m, Ord tdest, Ord q, Ord loc) => ExecAfter m loc q t tdest act execState IO where
-    execAfter = afterInternal ioMove distributeMonadOverFoldable
--}
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
 afterInternal :: (Monad m, Monad execM, BoundedConfiguration m, StateSemantics loc q, TransitionSemantics t act) =>
