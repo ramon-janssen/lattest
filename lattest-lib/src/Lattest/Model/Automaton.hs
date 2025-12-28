@@ -65,6 +65,7 @@ import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
 import Data.Either.Utils (fromRight)
 import qualified Data.Foldable as Foldable
+import Data.Functor.Identity(Identity)
 import Data.IORef(IORef)
 import qualified Data.List as List
 import Data.Map (Map, (!))
@@ -76,6 +77,7 @@ import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), ValExprInt, ValExprBool, ValExprString, eval, constType, varType, evalConst, assignedExpr, Eval, Subst, subst)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
+import Lattest.SMT.SMTData(SMTRef)
 
 ------------
 -- syntax --
@@ -205,49 +207,46 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => IOSte
 instance StepSemantics m loc q t tdest act => IOStepSemantics m loc q t tdest act () where
     ioMove _ q act t loc = return $ move q act t loc
 
+class ExecAfter m loc q t tdest act execState execM where
+    execAfter :: execState -> AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
+
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-after intrpr act' = 
-    let aut = syntacticAutomaton intrpr
-        stateConf' = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act'
-    in intrpr { stateConf = stateConf' }
+after = execAfter () -- TODO fix, with some boilerplate to strip Identity conversions
 
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
-after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
-    LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
-        where
-         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
-        nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
-        nothingTTdest _ = Nothing
-    TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
-        where
-        moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
-    where
-    lookupAction :: Ord k => Map k a -> k -> a
-    lookupAction m k = case Map.lookup k m of
-        Just v -> v
-        Nothing -> throw $ ActionOutsideAlphabet callStack
+instance StepSemantics m loc q t tdest act => ExecAfter m loc q t tdest act () Identity where
+    -- afterSemantics :: () -> StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> Identity (AutIntrpr m loc q t tdest act)
+    execAfter = afterInternal (error "!!!") (error "!!!")-- TODO finish, this should use afterInternal, instantiating moveInternal and fmapInternal with move and fmap (maybe with some boilerplate identity conversions)
 
--- TODO merge common code with after
--- TODO are all Ord instances really needed?
-ioAfter :: (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord q, Ord loc) => IORef z -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
-ioAfter iostate intrpr act' = do
+instance (IOStepSemantics m loc q t tdest act execState, Foldable m, Ord tdest, Ord q, Ord loc) => ExecAfter m loc q t tdest act execState IO where
+    execAfter = afterInternal ioMove distributeMonadOverFoldable
+
+-- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
+-- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
+afterInternal ::
+    (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
+    ((x -> execM y) -> m x -> execM (m y)) ->
+    AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
+afterInternal internalMove internalFMap intrpr act' = do
     let aut = syntacticAutomaton intrpr
-    stateConf' <- ioAfter' iostate (alphabet aut) (transRel $ aut) act' `distributeMonadOverFoldable` stateConf intrpr 
+    stateConf' <- afterInternal' internalMove internalFMap (alphabet aut) (transRel $ aut) act' `internalFMap` stateConf intrpr 
     return $ intrpr { stateConf = Monad.join stateConf' }
 
-ioAfter' :: (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord loc) => IORef z -> Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> IO (m q)
-ioAfter' iostate alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
-    LocationMove mloc -> ioMove iostate q act (nothingTTdest transMap) `distributeMonadOverFoldable` mloc
+afterInternal' ::
+    (q -> act -> Maybe (t, tdest) -> loc -> m q) ->
+    ((x -> execM y) -> m x -> execM (m y)) ->
+    Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
+afterInternal' internalMove internalFMap alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+    LocationMove mloc -> internalMove q act (nothingTTdest transMap) `internalFMap` mloc
         where
          -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
         nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
         nothingTTdest _ = Nothing
-    TransitionMove (t, mloc) -> moveAlongTransition q act t `distributeMonadOverFoldable` mloc
+    TransitionMove (t, mloc) -> moveAlongTransition q act t `internalFMap` mloc
         where
-        moveAlongTransition q act t (tdest, loc) = ioMove iostate q act (Just (t, tdest)) loc
+        moveAlongTransition q act t (tdest, loc) = internalMove q act (Just (t, tdest)) loc
     where
     lookupAction :: Ord k => Map k a -> k -> a
     lookupAction m k = case Map.lookup k m of
