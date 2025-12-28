@@ -2,8 +2,9 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+--{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 {-|
     This module contains the definitions and interpretations of automata models.
 -}
@@ -230,26 +231,27 @@ instance (IOStepSemantics m loc q t tdest act execState, Foldable m, Ord tdest, 
 -}
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal ::
+afterInternal :: (Monad m, Monad execM, BoundedConfiguration m, StateSemantics loc q, TransitionSemantics t act) =>
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
-    ((x -> execM y) -> m x -> execM (m y)) ->
+    (forall x y.(x -> execM y) -> m x -> execM (m y)) ->
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
 afterInternal internalMove internalFMap intrpr act' = do
     let aut = syntacticAutomaton intrpr
-    stateConf' <- afterInternal' internalMove internalFMap (alphabet aut) (transRel $ aut) act' `internalFMap` stateConf intrpr 
+        toNewStateConfig = afterInternal' internalMove internalFMap (alphabet aut) (transRel $ aut) act'
+    stateConf' <- toNewStateConfig `internalFMap` stateConf intrpr
     return $ intrpr { stateConf = Monad.join stateConf' }
 
-afterInternal' ::
+afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, TransitionSemantics t act, Functor execM) =>
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
-    ((x -> execM y) -> m x -> execM (m y)) ->
+    (forall x y.(x -> execM y) -> m x -> execM (m y)) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
 afterInternal' internalMove internalFMap alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> internalMove q act (nothingTTdest transMap) `internalFMap` mloc
         where
-         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
+        -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
         nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
         nothingTTdest _ = Nothing
-    TransitionMove (t, mloc) -> moveAlongTransition q act t `internalFMap` mloc
+    TransitionMove (t, mtdestloc) -> moveAlongTransition q act t `internalFMap` mtdestloc
         where
         moveAlongTransition q act t (tdest, loc) = internalMove q act (Just (t, tdest)) loc
     where
