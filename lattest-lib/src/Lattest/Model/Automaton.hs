@@ -207,8 +207,8 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => IOSte
 instance StepSemantics m loc q t tdest act => IOStepSemantics m loc q t tdest act () where
     ioMove _ q act t loc = return $ move q act t loc
 
-class ExecAfter m loc q t tdest act execState execM where
-    execAfter :: execState -> AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
+class ExecAfter m loc q t tdest act ioState where
+    ioAfter :: ioState -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
 
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
@@ -216,13 +216,13 @@ class ExecAfter m loc q t tdest act execState execM where
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after = execAfter () -- TODO fix, with some boilerplate to strip Identity conversions
 
-instance StepSemantics m loc q t tdest act => ExecAfter m loc q t tdest act () Identity where
+{-instance StepSemantics m loc q t tdest act => ExecAfter m loc q t tdest act () Identity where
     -- afterSemantics :: () -> StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> Identity (AutIntrpr m loc q t tdest act)
     execAfter = afterInternal (error "!!!") (error "!!!")-- TODO finish, this should use afterInternal, instantiating moveInternal and fmapInternal with move and fmap (maybe with some boilerplate identity conversions)
 
 instance (IOStepSemantics m loc q t tdest act execState, Foldable m, Ord tdest, Ord q, Ord loc) => ExecAfter m loc q t tdest act execState IO where
     execAfter = afterInternal ioMove distributeMonadOverFoldable
-
+-}
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
 afterInternal ::
