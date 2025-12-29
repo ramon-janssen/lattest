@@ -211,7 +211,7 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => IOSte
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-after aut act = runIdentity $ afterInternal moveId fmapId aut act
+after aut act = runIdentity $ afterInternal moveId fmapId fmapId fmapId aut act
     where
     moveId :: StepSemantics m loc q t tdest act => q -> act -> Maybe (t, tdest) -> loc -> Identity (m q)
     moveId q act mt loc = Identity $ move q act mt loc
@@ -225,34 +225,34 @@ instance StepSemantics m loc q t tdest act => IOAfter m loc q t tdest act () whe
     ioAfter () aut act = return $ after aut act
 
 instance (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
-    ioAfter execState = afterInternal (ioMove execState) distributeMonadOverFoldable'
-        where
-        distributeMonadOverFoldable' :: (Monad execM, Foldable m, Ord x) => (x -> execM y) -> m x -> execM (m y)
-        distributeMonadOverFoldable' = distributeMonadOverFoldable
+    ioAfter execState = afterInternal (ioMove execState) distributeMonadOverFoldable distributeMonadOverFoldable distributeMonadOverFoldable
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
 afterInternal :: (Monad m, Monad execM, BoundedConfiguration m, StateSemantics loc q, TransitionSemantics t act) =>
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
-    (forall x y.(x -> execM y) -> m x -> execM (m y)) ->
+    ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
+    ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
+    (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
-afterInternal internalMove internalFMap intrpr act' = do
+afterInternal internalMove fmapmq fmapmloc fmaptdestloc intrpr act' = do
     let aut = syntacticAutomaton intrpr
-        toNewStateConfig = afterInternal' internalMove internalFMap (alphabet aut) (transRel $ aut) act'
-    stateConf' <- toNewStateConfig `internalFMap` stateConf intrpr
+        toNewStateConfig = afterInternal' internalMove fmapmloc fmaptdestloc (alphabet aut) (transRel $ aut) act'
+    stateConf' <- toNewStateConfig `fmapmq` stateConf intrpr
     return $ intrpr { stateConf = Monad.join stateConf' }
 
 afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, TransitionSemantics t act, Functor execM) =>
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
-    (forall x y.(x -> execM y) -> m x -> execM (m y)) ->
+    ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
+    (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
-afterInternal' internalMove internalFMap alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
-    LocationMove mloc -> internalMove q act (nothingTTdest transMap) `internalFMap` mloc
+afterInternal' internalMove fmapmloc fmaptdestloc alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+    LocationMove mloc -> internalMove q act (nothingTTdest transMap) `fmapmloc` mloc
         where
         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
         nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
         nothingTTdest _ = Nothing
-    TransitionMove (t, mtdestloc) -> moveAlongTransition q act t `internalFMap` mtdestloc
+    TransitionMove (t, mtdestloc) -> moveAlongTransition q act t `fmaptdestloc` mtdestloc
         where
         moveAlongTransition q act t (tdest, loc) = internalMove q act (Just (t, tdest)) loc
     where
