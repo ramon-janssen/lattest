@@ -62,7 +62,10 @@ ioActAsGateValue,
 maybeFromInputInteraction,
 maybeFromOutputInteraction,
 addTypedVal,
-gate
+gate,
+IOSuspGateValue,
+IFGateValue,
+SuspendedIFGateValue
 )
 where
 
@@ -327,4 +330,8 @@ instance TestChoice (GateValue i) (GateValue (IOAct i o)) where
     choiceToActs (GateValue i consts) = [GateValue (In i) consts]
     actToChoice (GateValue (In i) consts) = Just $ GateValue i consts
     actToChoice (GateValue (Out _) _) = Nothing
+
+type IOSuspGateValue i o = IOGateValue i (Suspended o)
+type IFGateValue i o = IOGateValue (InputAttempt i) o
+type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
 
