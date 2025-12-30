@@ -38,6 +38,7 @@ StepSemantics,
 IOStepSemantics,
 after,
 afters,
+IOAfter,
 ioAfter,
 -- ** Exceptions
 AutomatonException(..),

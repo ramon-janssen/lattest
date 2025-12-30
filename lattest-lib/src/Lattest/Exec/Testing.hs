@@ -43,7 +43,7 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, IOStepSemantics, AutIntrpr, ioAfter, stateConf, AutomatonException)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, IOStepSemantics, AutIntrpr, IOAfter, ioAfter, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef, SmtEnv)
@@ -102,17 +102,14 @@ data TestController m loc q t tdest act state i r = TestController {
 -}
 makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester = makeTester' ioStatePlaceholder
-    where
-    ioStatePlaceholder :: IORef ()
-    ioStatePlaceholder = (error "makeTester called with StepSemantics")
+makeTester = makeTester' ()
 
-makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m) =>
+makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
     SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeSMTTester = makeTester'
 
-makeTester' :: (IOStepSemantics m loc q t tdest act z, TestChoice i act, BoundedConfiguration m) =>
-    IORef z -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeTester' :: (IOAfter m loc q t tdest act ioState, TestChoice i act, BoundedConfiguration m) =>
+    ioState -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester' ioState initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
@@ -120,7 +117,7 @@ makeTester' ioState initSpec initTestController = ActionController {
     handleClose = makeHandleClose
     }
     where
-        ioAfterz = ioAfter ioState
+        ioAfterState = ioAfter ioState
         makeSelect :: (TestChoice i act, BoundedConfiguration m)
             => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
             -> IO (Either (i, (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)) (Verdict, r))
@@ -135,7 +132,7 @@ makeTester' ioState initSpec initTestController = ActionController {
 --        makeUpdate :: (IOStepSemantics m loc q t tdest act z, BoundedConfiguration m, Refusable act) =>
 --            (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
-            spec' <- spec `ioAfterz` act 
+            spec' <- spec `ioAfterState` act 
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do
