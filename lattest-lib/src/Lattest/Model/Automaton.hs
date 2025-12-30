@@ -171,14 +171,14 @@ class TransitionMapping t act where
     TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
     interaction variables that can be expressed in terms of concrete observed values.
 -}
-class (Ord t, Completable act, TransitionMapping t act) => TransitionSemantics t act tdest | t act -> tdest where
+class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => TransitionSemantics loc q t tdest act | t act -> tdest where
     {- |
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    takeTransition :: (BoundedApplicative m) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
-    takeTransition loc alph act trans' = case asTransition loc alph act of
-        Nothing -> LocationMove $ pure loc
+    takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
+    takeTransition q alph act trans' = case asTransition (asLoc q) alph act of
+        Nothing -> LocationMove $ pure (asLoc q)
         Just t -> TransitionMove (t, trans' t)
 
 {- |
@@ -200,14 +200,14 @@ class StateSemantics loc q where
     The transition consists of two parts: one global part outside the configuration monad (e.g. describing the action that applies to that transition),
     described by the transition semantics, and a local part inside the monad, bound to the destination state (e.g. to update symbolic variables for a state).
 -}
-class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepSemantics m loc q t tdest act where
+class (StateSemantics loc q, TransitionSemantics loc q t tdest act, BoundedMonad m) => StepSemantics m loc q t tdest act where
     {- |
         Given the current state, an action and the transition matching that action, and a new location and local transition, produce the new state
         The case of no transition (i.e. no transition applies in the TransitionSemantics) can be used to move within a location.
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
-class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
+class (StateSemantics loc q, TransitionSemantics loc q t tdest act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
     ioMove :: IORef z -> q -> act -> Maybe (t, tdest) -> loc -> IO (m q)
 
 {- |
@@ -232,7 +232,7 @@ instance (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord q, O
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal :: (Monad m, Monad execM, BoundedConfiguration m, StateSemantics loc q, TransitionSemantics t act) =>
+afterInternal :: (Monad m, Monad execM, BoundedConfiguration m, StateSemantics loc q, TransitionSemantics loc q t tdest act) =>
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
     ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
     ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
@@ -244,7 +244,7 @@ afterInternal internalMove fmapmq fmapmloc fmaptdestloc intrpr act' = do
     stateConf' <- toNewStateConfig `fmapmq` stateConf intrpr
     return $ intrpr { stateConf = Monad.join stateConf' }
 
-afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, TransitionSemantics t act, Functor execM) =>
+afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, TransitionSemantics loc q t tdest act, Functor execM) =>
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
     ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
     (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
@@ -296,7 +296,7 @@ transMenu aut = let
     The class of automata with a finite list of transition labels on outgoing transitions for every state.
     This property is useful for e.g. test selection.
 -}
-class TransitionSemantics t act => FiniteMenu t act where
+class TransitionMapping t act => FiniteMenu t act where
     -- menu of actions that are semantically present in the automaton, including underspecified/forbidden transitions
     asActions :: t -> [act]
     locationActions :: AutSyntax m mloc t tdest -> [act]
@@ -318,7 +318,7 @@ instance (Completable act) where
 instance (Ord act) => TransitionMapping act act where
     asTransition _ _ = Just
 
-instance (Ord act) => TransitionSemantics act act ()
+instance (Ord act) => TransitionSemantics q q act () act
 
 instance (Ord act) => FiniteMenu act act where
     asActions t = [t] 
@@ -327,7 +327,7 @@ instance (Ord act) => FiniteMenu act act where
 instance StateSemantics q q where
     asLoc = id
 
-instance (TransitionSemantics t act, BoundedMonad m) => StepSemantics m q q t () act where
+instance (TransitionSemantics q q t () act, BoundedMonad m) => StepSemantics m q q t () act where
     move _ _ _ q = pure q
 
 ----------------
@@ -341,7 +341,7 @@ instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (IOSuspAct i o) where
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspended other
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) () where
+instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IOSuspAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
@@ -361,7 +361,7 @@ instance TransitionMapping (IOAct i o) (IFAct i o) where
     asTransition loc _ (In (InputAttempt(i, False))) = Nothing
     asTransition _ _ other = Just $ fromInputAttempt other
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) () where
+instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IFAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
     takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
@@ -380,7 +380,7 @@ instance TransitionMapping (IOAct i o) (SuspendedIF i o) where
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspendedInputAttempt other
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) () where
+instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
@@ -410,7 +410,7 @@ instance (Completable g) => Completable (GateValue g) where
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
-instance TransitionMapping (SymInteract g) (GateValue g) STStdest where
+instance TransitionMapping (SymInteract g) (GateValue g) where
     asTransition _ alf (GateValue gate values) =
         case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
@@ -421,7 +421,7 @@ instance TransitionMapping (SymInteract g) (GateValue g) STStdest where
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
-instance (Completable g, Ord g) => TransitionSemantics (SymInteract g) (GateValue g) where
+instance (Completable g, Ord g) => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g) where
 
 instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g) where
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
