@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 {-|
     This module contains the definitions and interpretations of automata models.
@@ -159,16 +160,18 @@ class Completable act where
     -}
     implicitDestination :: BoundedConfiguration m => act -> m any
 
-{- |
-    TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
-    interaction variables that can be expressed in terms of concrete observed values.
--}
-class (Ord t, Completable act) => TransitionSemantics t act where
+class TransitionMapping t act where
     {- |
         Map an action to a matching transition. E.g. a concrete value on some channel that matches with the symbolic representation of that channel.
         'Nothing' indicates an action that occurs within a location, without explicit transition.
     -}
     asTransition :: loc -> Set t -> act -> Maybe t
+
+{- |
+    TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
+    interaction variables that can be expressed in terms of concrete observed values.
+-}
+class (Ord t, Completable act, TransitionMapping t act) => TransitionSemantics t act tdest | t act -> tdest where
     {- |
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
@@ -312,8 +315,10 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 instance (Completable act) where
     implicitDestination _ = forbidden
 
-instance (Ord act) => TransitionSemantics act act where
+instance (Ord act) => TransitionMapping act act where
     asTransition _ _ = Just
+
+instance (Ord act) => TransitionSemantics act act ()
 
 instance (Ord act) => FiniteMenu act act where
     asActions t = [t] 
@@ -332,9 +337,11 @@ instance (Completable (IOAct i o)) where
     implicitDestination (Out _) = forbidden
     implicitDestination _ = underspecified
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) where
+instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (IOSuspAct i o) where
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspended other
+
+instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) () where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
@@ -350,9 +357,11 @@ hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m
 -- input-failure --
 -------------------
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) where
+instance TransitionMapping (IOAct i o) (IFAct i o) where
     asTransition loc _ (In (InputAttempt(i, False))) = Nothing
     asTransition _ _ other = Just $ fromInputAttempt other
+
+instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) () where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
     takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
@@ -366,10 +375,12 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 --------------------------------
 -- Ideally this would just be the above two interpret stacked to avoid the boilerplate below, but that is a hassle
 
-instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) where
+instance TransitionMapping (IOAct i o) (SuspendedIF i o) where
     asTransition loc _ (In (InputAttempt(i, False))) = Nothing
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspendedInputAttempt other
+
+instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) () where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
@@ -399,7 +410,7 @@ instance (Completable g) => Completable (GateValue g) where
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
-instance (Completable g, Ord g) => TransitionSemantics (SymInteract g) (GateValue g) where
+instance TransitionMapping (SymInteract g) (GateValue g) STStdest where
     asTransition _ alf (GateValue gate values) =
         case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
@@ -409,6 +420,8 @@ instance (Completable g, Ord g) => TransitionSemantics (SymInteract g) (GateValu
                     else if List.all (\(var,val) -> varType var == constType val) (zip vars values)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
+
+instance (Completable g, Ord g) => TransitionSemantics (SymInteract g) (GateValue g) where
 
 instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g) where
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
@@ -431,6 +444,26 @@ instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc
         evalVal valuation = fromRight . evalConst valuation
         evalBool :: Valuation -> ValExprBool-> Bool
         evalBool valuation = toBool . evalVal valuation
+
+--------------------
+-- STS quiescence --
+--------------------
+{-
+instance (Ord i, Ord o) => TransitionSemantics (IOGateValue i o) (IOSuspAct i o) where
+    asTransition loc _ (Out Quiescence) = Nothing
+    asTransition _ _ other = Just $ fromSuspended other
+    -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
+
+instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
+    asActions t = [asSuspended t]
+    locationActions _ = [Out Quiescence]
+
+hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tdest, loc)) -> Bool
+hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
+-}
+
 
 -------------------------
 -- Auxiliary functions --
