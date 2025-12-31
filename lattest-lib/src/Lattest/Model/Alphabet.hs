@@ -61,8 +61,10 @@ gateValueAsIOAct,
 ioActAsGateValue,
 maybeFromInputInteraction,
 maybeFromOutputInteraction,
-isInputGate, 
+isInputGate,
 isOutputGate,
+isInputInteract,
+isOutputInteract,
 addTypedVal,
 gate,
 IOSuspGateValue,
@@ -323,6 +325,14 @@ isInputGate :: IOGateValue i o -> Bool
 isInputGate (GateValue (In _) _) = False
 isInputGate _ = True
 
+isOutputInteract :: IOSymInteract i o -> Bool
+isOutputInteract (SymInteract (Out _) _) = True
+isOutputInteract _ = False
+
+isInputInteract :: IOSymInteract i o -> Bool
+isInputInteract (SymInteract (In _) _) = False
+isInputInteract _ = True
+
 maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
 maybeFromInputInteraction (SymInteract gate vars) = case maybeFromInput gate of
     Just i -> Just $ SymInteract i vars
@@ -344,4 +354,3 @@ instance TestChoice (GateValue i) (GateValue (IOAct i o)) where
 type IOSuspGateValue i o = IOGateValue i (Suspended o)
 type IFGateValue i o = IOGateValue (InputAttempt i) o
 type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
-

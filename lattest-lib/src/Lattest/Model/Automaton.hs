@@ -64,10 +64,11 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, asDualValExpr)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, SymGuard, addTypedVal, isOutputGate)
+    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract)
 --import Lattest.Model.Symbolic.SolveSTS(solveAnySequential)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
+import Lattest.SMT.SMTData(SmtEnv)
 import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
@@ -186,13 +187,13 @@ class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) =>
         Nothing -> LocationMove $ pure (asLoc q)
         Just t -> TransitionMove (t, trans' t)
 
-class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act | t act -> tdest where
+class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act z | t act -> tdest where
     {- |
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    ioTakeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
-    ioTakeTransition q alph act trans' = return $ case asTransition alph act of
+    ioTakeTransition :: (BoundedApplicative m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
+    ioTakeTransition _ q alph act trans' = return $ case asTransition alph act of
         Nothing -> LocationMove $ pure (asLoc q)
         Just t -> TransitionMove (t, trans' t)
 
@@ -222,7 +223,7 @@ class (StateSemantics loc q, TransitionSemantics loc q t tdest act, BoundedMonad
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
-class (StateSemantics loc q, IOTransitionSemantics loc q t tdest act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
+class (StateSemantics loc q, IOTransitionSemantics loc q t tdest act z, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
     ioMove :: IORef z -> q -> act -> Maybe (t, tdest) -> loc -> IO (m q)
 
 {- |
@@ -485,23 +486,23 @@ newtype STStdest = STSLoc (SymGuard,VarModel)
     asTransition _ (GateValue (Out Quiescence) _) = Nothing
     asTransition _ other = Just $ fromSuspended <$> other-}
 --TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
-instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
-        qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph) 
-        return $ LocationMove $ if qui  then pure loc else forbidden
-    ioTakeTransition _ _ act m = return $ TransitionMove (fromSuspended <$> act, m $ fromSuspended act)
+    ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+        qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph) 
+        return $ LocationMove $ if qui then pure loc else forbidden
+    ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
 {-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
 -}
-hasSymbolicQuiescence :: BoundedApplicative m => Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
-hasSymbolicQuiescence stateVal m = do
-    let syntacticallySpecifiedOutputs = filter (isOutputGate . fst &&& not . isForbidden . snd) (Map.toList m)
-        outputsAndCombinedGuards = second (combineGuards . tdestlocToGuard) <$> syntacticallySpecifiedOutputs
+hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
+hasSymbolicQuiescence smtRef stateVal m = do
+    let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
+        outputsAndCombinedGuards = second (combineGuards . fmap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
     -- solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
-    Maybe.isNothing <$> runSMT $ solveAnySequential outputsAndCombinedGuards
+    Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
     
@@ -515,7 +516,7 @@ substituteInGuard valuation guard = evalConst' valuation guard
 
 -- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
 solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
-solveAnySequential = error "not implemented yet"
+solveAnySequential = error "still to refactor: call solveAnySequential from SMT module without cyclic dependencies"
 -------------------------
 -- Auxiliary functions --
 -------------------------
