@@ -165,7 +165,7 @@ class TransitionMapping t act where
         Map an action to a matching transition. E.g. a concrete value on some channel that matches with the symbolic representation of that channel.
         'Nothing' indicates an action that occurs within a location, without explicit transition.
     -}
-    asTransition :: loc -> Set t -> act -> Maybe t
+    asTransition :: Set t -> act -> Maybe t
 
 {- |
     TransitionSemantics expresses that the interpret of a syntactic transition can be expressed in terms of actions. E.g. symbolic transitions with
@@ -177,7 +177,7 @@ class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) =>
         The function may be partial, following the given alphabet.
     -}
     takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
-    takeTransition q alph act trans' = case asTransition (asLoc q) alph act of
+    takeTransition q alph act trans' = case asTransition alph act of
         Nothing -> LocationMove $ pure (asLoc q)
         Just t -> TransitionMove (t, trans' t)
 
@@ -249,7 +249,7 @@ afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q,
     ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
     (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
-afterInternal' internalMove fmapmloc fmaptdestloc alph transMap act q = Monad.join <$> case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+afterInternal' internalMove fmapmloc fmaptdestloc alph transMap act q = Monad.join <$> case takeTransition q alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> internalMove q act (nothingTTdest transMap) `fmapmloc` mloc
         where
         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
@@ -316,7 +316,7 @@ instance (Completable act) where
     implicitDestination _ = forbidden
 
 instance (Ord act) => TransitionMapping act act where
-    asTransition _ _ = Just
+    asTransition _ = Just
 
 instance (Ord act) => TransitionSemantics q q act () act
 
@@ -338,8 +338,8 @@ instance (Completable (IOAct i o)) where
     implicitDestination _ = underspecified
 
 instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (IOSuspAct i o) where
-    asTransition loc _ (Out Quiescence) = Nothing
-    asTransition _ _ other = Just $ fromSuspended other
+    asTransition _ (Out Quiescence) = Nothing
+    asTransition _ other = Just $ fromSuspended other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IOSuspAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
@@ -358,8 +358,8 @@ hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m
 -------------------
 
 instance TransitionMapping (IOAct i o) (IFAct i o) where
-    asTransition loc _ (In (InputAttempt(i, False))) = Nothing
-    asTransition _ _ other = Just $ fromInputAttempt other
+    asTransition _ (In (InputAttempt(i, False))) = Nothing
+    asTransition _ other = Just $ fromInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IFAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
@@ -376,9 +376,9 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 -- Ideally this would just be the above two interpret stacked to avoid the boilerplate below, but that is a hassle
 
 instance TransitionMapping (IOAct i o) (SuspendedIF i o) where
-    asTransition loc _ (In (InputAttempt(i, False))) = Nothing
-    asTransition loc _ (Out Quiescence) = Nothing
-    asTransition _ _ other = Just $ fromSuspendedInputAttempt other
+    asTransition _ (In (InputAttempt(i, False))) = Nothing
+    asTransition _ (Out Quiescence) = Nothing
+    asTransition _ other = Just $ fromSuspendedInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
@@ -410,8 +410,8 @@ instance (Completable g) => Completable (GateValue g) where
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
-instance TransitionMapping (SymInteract g) (GateValue g) where
-    asTransition _ alf (GateValue gate values) =
+instance (Eq g) => TransitionMapping (SymInteract g) (GateValue g) where
+    asTransition alf (GateValue gate values) =
         case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
             Just i@(SymInteract g vars) ->
@@ -450,8 +450,8 @@ instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc
 --------------------
 {-
 instance (Ord i, Ord o) => TransitionSemantics (IOGateValue i o) (IOSuspAct i o) where
-    asTransition loc _ (Out Quiescence) = Nothing
-    asTransition _ _ other = Just $ fromSuspended other
+    asTransition _ (Out Quiescence) = Nothing
+    asTransition _ other = Just $ fromSuspended other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
