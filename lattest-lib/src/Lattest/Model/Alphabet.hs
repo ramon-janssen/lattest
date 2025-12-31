@@ -61,6 +61,8 @@ gateValueAsIOAct,
 ioActAsGateValue,
 maybeFromInputInteraction,
 maybeFromOutputInteraction,
+isInputGate, 
+isOutputGate,
 addTypedVal,
 gate,
 IOSuspGateValue,
@@ -312,6 +314,14 @@ gateValueAsIOAct (GateValue (Out o) vals) = Out (GateValue o vals)
 ioActAsGateValue :: IOAct (GateValue i) (GateValue o) -> IOGateValue i o
 ioActAsGateValue (In (GateValue i vals)) = GateValue (In i) vals
 ioActAsGateValue (Out (GateValue o vals)) = GateValue (Out o) vals
+
+isOutputGate :: IOGateValue i o -> Bool
+isOutputGate (GateValue (Out _) _) = True
+isOutputGate _ = False
+
+isInputGate :: IOGateValue i o -> Bool
+isInputGate (GateValue (In _) _) = False
+isInputGate _ = True
 
 maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
 maybeFromInputInteraction (SymInteract gate vars) = case maybeFromInput gate of

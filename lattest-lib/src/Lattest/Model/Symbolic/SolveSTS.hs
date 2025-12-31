@@ -4,14 +4,16 @@
 -}
 
 module Lattest.Model.Symbolic.SolveSTS (
-solveRandom
+solveRandomInteraction,
+solveAnySequential,
+combineGuards,
+substituteInGuard
 )
 where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
---import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
 import Lattest.Model.StandardAutomata(STS, STSIntrp)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), ValExpr(..))
@@ -29,11 +31,17 @@ import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
 
-solveRandom :: (Monad m, BooleanConfiguration m, Ord g, RandomGen r) => STSIntrp m loc g -> (SymInteract g -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
-solveRandom intrpr subsetFunction r = do
+{-|
+    For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
+    current STS state. The interaction is picked uniformly randomly among interactions with satisfied gates, if any. This uses the supplied random 
+    generator and returns the new random generator state. The returned gate values for that interaction are not randomized in any way, picking values
+    is left to the SMT solver.
+-}
+solveRandomInteraction :: (Monad m, BooleanConfiguration m, Ord g, RandomGen r) => STSIntrp m loc g -> (SymInteract g -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
+solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
-    fmap (,r') $ solveAny interactionsWithGuards' -- prepend the new random state to the solved result
+    fmap (,r') $ solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
     selectInteractionsAndGuards :: (Monad m, BooleanConfiguration m, Ord g) => STSIntrp m loc g -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
@@ -41,9 +49,13 @@ solveRandom intrpr subsetFunction r = do
         let alph = toList $ alphabet $ syntacticAutomaton intrpr
         in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction &&& interactToGuard intrpr)) $ alph
 
-solveAny :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
-solveAny [] = return Nothing
-solveAny ((interact@(SymInteract _ vars),guard):alph) = do
+{-|
+    For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
+    any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
+-}
+solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+solveAnySequential [] = return Nothing
+solveAnySequential ((interact@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
     case maybeSolved of
         Nothing -> solveAny alph
@@ -83,3 +95,16 @@ stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
         Just mtdestloc -> fmap guardAndLocToGuard mtdestloc
     where
     guardAndLocToGuard (STSLoc (tguard,_), _) = evalConst' valuation tguard
+
+
+{-|
+    Combine the given guards into one.
+-}
+combineGuards :: (BooleanConfiguration m) => m SymGuard -> SymGuard
+combineGuards = asDualValExpr
+
+{-|
+    In the given guard, substitute the given valuation.
+-}
+substituteInGuard :: Valuation -> SymGuard -> SymGuard
+substituteInGuard valuation guard = evalConst' valuation guard

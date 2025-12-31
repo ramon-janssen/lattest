@@ -62,12 +62,16 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, asDualValExpr)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..), SymGuard, addTypedVal)
+    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, SymGuard, addTypedVal, isOutputGate)
+--import Lattest.Model.Symbolic.SolveSTS(solveAnySequential)
+import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
+import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
 import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
+import Control.Arrow(second)
 import Data.Either.Utils (fromRight)
 import qualified Data.Foldable as Foldable
 import Data.Functor.Identity(Identity(Identity), runIdentity)
@@ -75,6 +79,7 @@ import Data.IORef(IORef)
 import qualified Data.List as List
 import Data.Map (Map, (!))
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
@@ -82,7 +87,6 @@ import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), ValExprInt, ValExprBool, ValExprString, eval, constType, varType, evalConst, assignedExpr, Eval, Subst, subst)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
-import Lattest.SMT.SMTData(SMTRef)
 
 ------------
 -- syntax --
@@ -182,6 +186,16 @@ class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) =>
         Nothing -> LocationMove $ pure (asLoc q)
         Just t -> TransitionMove (t, trans' t)
 
+class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act | t act -> tdest where
+    {- |
+        Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
+        The function may be partial, following the given alphabet.
+    -}
+    ioTakeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
+    ioTakeTransition q alph act trans' = return $ case asTransition alph act of
+        Nothing -> LocationMove $ pure (asLoc q)
+        Just t -> TransitionMove (t, trans' t)
+
 {- |
     Data structure needed to express that an automaton may transition from one location to another, but it may also 'transition'
     within a single state, e.g. the passing of time in a timed automaton.
@@ -208,7 +222,7 @@ class (StateSemantics loc q, TransitionSemantics loc q t tdest act, BoundedMonad
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
-class (StateSemantics loc q, TransitionSemantics loc q t tdest act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
+class (StateSemantics loc q, IOTransitionSemantics loc q t tdest act, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
     ioMove :: IORef z -> q -> act -> Maybe (t, tdest) -> loc -> IO (m q)
 
 {- |
@@ -344,7 +358,7 @@ instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (IOSuspAct i o) where
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IOSuspAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then pure loc else forbidden
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
@@ -352,7 +366,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     locationActions _ = [Out Quiescence]
 
 hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tdest, loc)) -> Bool
-hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
+hasQuiescence m = not $ any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
 
 -------------------
 -- input-failure --
@@ -382,9 +396,8 @@ instance TransitionMapping (IOAct i o) (SuspendedIF i o) where
     asTransition _ other = Just $ fromSuspendedInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i o) where
-    -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
-    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then pure loc else forbidden
     takeTransition _ _ act m = TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
@@ -450,22 +463,59 @@ instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc
 -- STS quiescence --
 --------------------
 {-
-instance (Ord i, Ord o) => TransitionSemantics (IOGateValue i o) (IOSuspAct i o) where
-    asTransition _ (Out Quiescence) = Nothing
-    asTransition _ other = Just $ fromSuspended other
+data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
+type IOSymInteract i o = SymInteract (IOAct i o)
+data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
+type IOGateValue i o = GateValue (IOAct i o)
+type IOSuspGateValue i o = IOGateValue i (Suspended o)
+type IFGateValue i o = IOGateValue (InputAttempt i) o
+type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
+TransitionSemantics t act where
+    {- |
+        Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
+        The function may be partial, following the given alphabet.
+    -}
+    takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
+    takeTransition q alph act trans' = case asTransition alph act of
+        Nothing -> LocationMove $ pure (asLoc q)
+        Just t -> TransitionMove (t, trans' t)
+newtype STStdest = STSLoc (SymGuard,VarModel)
+-}
+{-instance (Eq g) => TransitionMapping (SymInteract g) (GateValue g) where
+    asTransition _ (GateValue (Out Quiescence) _) = Nothing
+    asTransition _ other = Just $ fromSuspended <$> other-}
+--TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
-    takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
+    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+        qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph) 
+        return $ LocationMove $ if qui  then pure loc else forbidden
+    ioTakeTransition _ _ act m = return $ TransitionMove (fromSuspended <$> act, m $ fromSuspended act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
+{-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
-
-hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tdest, loc)) -> Bool
-hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
 -}
+hasSymbolicQuiescence :: BoundedApplicative m => Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
+hasSymbolicQuiescence stateVal m = do
+    let syntacticallySpecifiedOutputs = filter (isOutputGate . fst &&& not . isForbidden . snd) (Map.toList m)
+        outputsAndCombinedGuards = second (combineGuards . tdestlocToGuard) <$> syntacticallySpecifiedOutputs
+    -- solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+    Maybe.isNothing <$> runSMT $ solveAnySequential outputsAndCombinedGuards
+    where
+    tdestlocToGuard (STSLoc (guard, _), _) = guard
+    
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+combineGuards :: (BooleanConfiguration m) => m SymGuard -> SymGuard
+combineGuards = asDualValExpr
 
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+substituteInGuard :: Valuation -> SymGuard -> SymGuard
+substituteInGuard valuation guard = evalConst' valuation guard
 
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+solveAnySequential = error "not implemented yet"
 -------------------------
 -- Auxiliary functions --
 -------------------------
