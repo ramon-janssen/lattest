@@ -501,7 +501,7 @@ hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRe
 hasSymbolicQuiescence smtRef stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . fmap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
-    -- solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+    -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient
     Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
