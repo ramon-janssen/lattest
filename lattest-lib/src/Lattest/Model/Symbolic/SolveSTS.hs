@@ -108,3 +108,11 @@ combineGuards = asDualValExpr
 -}
 substituteInGuard :: Valuation -> SymGuard -> SymGuard
 substituteInGuard valuation guard = evalConst' valuation guard
+
+{-|
+    Evaluate the given guard
+-}
+evaluateGuard :: SymGuard -> Boolean
+evaluateGuard guard = case evalConst guard of
+    Left e = error e -- TODO proper exception
+    Right (Cbool b) = b

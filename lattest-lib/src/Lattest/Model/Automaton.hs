@@ -387,7 +387,6 @@ instance TransitionMapping (IOAct i o) (IFAct i o) where
     asTransition _ other = Just $ fromInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IFAct i o) where
-    -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
     takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
 
@@ -464,16 +463,55 @@ instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc
         assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
-        buildGateValuation :: [Variable] -> [Constant] -> Valuation
-        buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
-        evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
-        evalVal valuation = fromRight . evalConst valuation
-        evalBool :: Valuation -> ValExprBool-> Bool
-        evalBool valuation = toBool . evalVal valuation
+buildGateValuation :: [Variable] -> [Constant] -> Valuation
+buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
+evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
+evalVal valuation = fromRight . evalConst valuation
+evalBool :: Valuation -> ValExprBool-> Bool
+evalBool valuation = toBool . evalVal valuation
 
 --------------------
 -- STS quiescence --
 --------------------
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
+    -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
+    -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
+    ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+        qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
+        return $ LocationMove $ if qui then pure loc else forbidden
+    ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
+
+hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
+hasSymbolicQuiescence smtRef stateVal m = do
+    let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
+        outputsAndCombinedGuards = second (combineGuards . fmap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
+    -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
+    Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
+    where
+    tdestlocToGuard (STSLoc (guard, _), _) = guard
+    
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+combineGuards :: (Functor m, BooleanConfiguration m) => m SymGuard -> SymGuard
+combineGuards = asDualValExpr
+
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+substituteInGuard :: Valuation -> SymGuard -> SymGuard
+substituteInGuard valuation guard = evalConst' valuation guard
+
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+solveAnySequential = error "still to refactor: call solveAnySequential from SMT module without cyclic dependencies"
+
+-- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
+evaluateGuard :: SymGuard -> Boolean
+evaluateGuard guard = case evalConst guard of
+    Left e = error e -- TODO proper exception
+    Right (Cbool b) = b
+
+-------------------
+-- input-failure --
+-------------------
+
 {-
 -- TransitionMapping (SymInteract (IOAct i o)) (GateValue (IOAct i (Suspended o)))
 
@@ -499,17 +537,31 @@ newtype STStdest = STSLoc (SymGuard,VarModel)
     asTransition _ (GateValue (Out Quiescence) _) = Nothing
     asTransition _ other = Just $ fromSuspended <$> other-}
 --TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
+instance (Ord i, Ord o) => TransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) where
+    takeTransition (IntrpState loc stateVal) alph gate@(GateValue (In (InputAttempt(i, False))) gateVals) m =
+        case asTransition alph gate of
+            Nothing -> error "TODO implement"
+            Just interact@(SymInteract _ gateVars) -> 
+                let gateVal = buildGateValuation gateVars gateVals
+                    mtdestloc = Map.lookup m interact
+                    guard = combineGuards $ tdestlocToGuard <$> mtdestloc
+                    guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
+                in if guardVal
+                    then LocationMove $ pure loc
+                    else -- TODO finish
+    takeTransition _ _ act m = TransitionMove (fromInputAttempt <$> act, m $ fromInputAttempt <$> act)
+        where
+        tdestlocToGuard (STSLoc (guard, _), _) = guard
+
+{-
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
+    -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
         qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then pure loc else forbidden
     ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
-{-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
-    asActions t = [asSuspended t]
-    locationActions _ = [Out Quiescence]
--}
 hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
 hasSymbolicQuiescence smtRef stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
@@ -518,18 +570,7 @@ hasSymbolicQuiescence smtRef stateVal m = do
     Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
-    
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-combineGuards :: (Functor m, BooleanConfiguration m) => m SymGuard -> SymGuard
-combineGuards = asDualValExpr
-
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-substituteInGuard :: Valuation -> SymGuard -> SymGuard
-substituteInGuard valuation guard = evalConst' valuation guard
-
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
-solveAnySequential = error "still to refactor: call solveAnySequential from SMT module without cyclic dependencies"
+-}
 -------------------------
 -- Auxiliary functions --
 -------------------------
