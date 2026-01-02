@@ -44,7 +44,7 @@ where
 
 import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, IOStepSemantics, AutIntrpr, IOAfter, ioAfter, stateConf, AutomatonException)
-import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
+import Lattest.Model.BoundedMonad(BoundedConfiguration, BooleanConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef, SmtEnv)
 
@@ -104,7 +104,7 @@ makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfi
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester = makeTester' ()
 
-makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
+makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
     SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeSMTTester = makeTester'
 

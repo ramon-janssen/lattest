@@ -66,7 +66,8 @@ isOutputGate,
 isInputInteract,
 isOutputInteract,
 addTypedVal,
-gate,
+interactionGate,
+valueGate,
 IOSuspGateValue,
 IFGateValue,
 SuspendedIFGateValue
@@ -298,8 +299,8 @@ addTypedVal v c = Map.insert v c
 data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
 type IOSymInteract i o = SymInteract (IOAct i o)
 
-gate :: SymInteract g -> g
-gate (SymInteract gate _) = gate
+interactionGate :: SymInteract g -> g
+interactionGate (SymInteract gate _) = gate
 
 instance (Show g) => Show (SymInteract g) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
@@ -308,6 +309,9 @@ type SymGuard = ValExprBool
 
 data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
 type IOGateValue i o = GateValue (IOAct i o)
+
+valueGate :: GateValue g -> g
+valueGate (GateValue gate _) = gate
 
 gateValueAsIOAct :: IOGateValue i o -> IOAct (GateValue i) (GateValue o)
 gateValueAsIOAct (GateValue (In i) vals) = In (GateValue i vals)

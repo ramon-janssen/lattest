@@ -58,7 +58,7 @@ solveAnySequential [] = return Nothing
 solveAnySequential ((interact@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
     case maybeSolved of
-        Nothing -> solveAny alph
+        Nothing -> solveAnySequential alph
         Just solved -> return $ Just $ valuationToGateValue interact solved
 
 solveGuard :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
@@ -100,7 +100,7 @@ stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
 {-|
     Combine the given guards into one.
 -}
-combineGuards :: (BooleanConfiguration m) => m SymGuard -> SymGuard
+combineGuards :: (BooleanConfiguration m, Functor m) => m SymGuard -> SymGuard
 combineGuards = asDualValExpr
 
 {-|

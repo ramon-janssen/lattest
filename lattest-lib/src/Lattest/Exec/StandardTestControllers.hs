@@ -56,7 +56,7 @@ import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), a
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc))
 import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
-import Lattest.Model.Symbolic.SolveSTS(solveRandom)
+import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
 import qualified Lattest.SMT.Config as Config(Config(..))
 import Lattest.SMT.SMT(SMTRef, runSMT)
 import Lattest.Util.Utils(takeRandom, takeJusts)
@@ -150,7 +150,7 @@ randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) randomSelectTest (
 randomSelectTest :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
     => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
 randomSelectTest (g,smtRef) intrpr _ = do
-    (maybeGateValue, g') <- runSMT smtRef $ solveRandom intrpr maybeFromInputInteraction g
+    (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr maybeFromInputInteraction g
     return $ fmap (, (g', smtRef)) maybeGateValue -- append the new state to the solved value, if any
 
 {- |

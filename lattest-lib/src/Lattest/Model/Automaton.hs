@@ -64,7 +64,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, asDualValExpr)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract)
+    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract, interactionGate)
 --import Lattest.Model.Symbolic.SolveSTS(solveAnySequential)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
@@ -192,7 +192,7 @@ class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) =>
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    ioTakeTransition :: (BoundedApplicative m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
+    ioTakeTransition :: (BoundedApplicative m, BooleanConfiguration m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
     ioTakeTransition _ q alph act trans' = return $ case asTransition alph act of
         Nothing -> LocationMove $ pure (asLoc q)
         Just t -> TransitionMove (t, trans' t)
@@ -230,8 +230,10 @@ class (StateSemantics loc q, IOTransitionSemantics loc q t tdest act z, BoundedM
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
 after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-after aut act = runIdentity $ afterInternal moveId fmapId fmapId fmapId aut act
+after aut act = runIdentity $ afterInternal takeTransitionId moveId fmapId fmapId fmapId aut act
     where
+    takeTransitionId :: (BoundedApplicative m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
+    takeTransitionId q alph act trans' = Identity $ takeTransition q alph act trans'
     moveId :: StepSemantics m loc q t tdest act => q -> act -> Maybe (t, tdest) -> loc -> Identity (m q)
     moveId q act mt loc = Identity $ move q act mt loc
     fmapId :: Functor f => (x -> Identity y) -> f x -> Identity (f y)
@@ -243,42 +245,49 @@ class IOAfter m loc q t tdest act ioState where
 instance StepSemantics m loc q t tdest act => IOAfter m loc q t tdest act () where
     ioAfter () aut act = return $ after aut act
 
-instance (IOStepSemantics m loc q t tdest act z, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
-    ioAfter execState = afterInternal (ioMove execState) distributeMonadOverFoldable distributeMonadOverFoldable distributeMonadOverFoldable
+instance (IOStepSemantics m loc q t tdest act z, BooleanConfiguration m, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
+    ioAfter execState = afterInternal (ioTakeTransition execState) (ioMove execState) distributeMonadOverFoldable distributeMonadOverFoldable distributeMonadOverFoldable
+
+--takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
+--ioTakeTransition :: (BoundedApplicative m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal :: (Monad m, Monad execM, BoundedConfiguration m, StateSemantics loc q, TransitionSemantics loc q t tdest act) =>
+afterInternal :: (Monad m, Monad execM, Ord t, BoundedConfiguration m, StateSemantics loc q) =>
+    (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
     ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
     ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
     (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
-afterInternal internalMove fmapmq fmapmloc fmaptdestloc intrpr act' = do
+afterInternal internalTakeTransition internalMove fmapmq fmapmloc fmaptdestloc intrpr act' = do
     let aut = syntacticAutomaton intrpr
-        toNewStateConfig = afterInternal' internalMove fmapmloc fmaptdestloc (alphabet aut) (transRel $ aut) act'
+        toNewStateConfig = afterInternal' internalTakeTransition internalMove fmapmloc fmaptdestloc (alphabet aut) (transRel $ aut) act'
     stateConf' <- toNewStateConfig `fmapmq` stateConf intrpr
     return $ intrpr { stateConf = Monad.join stateConf' }
 
-afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, TransitionSemantics loc q t tdest act, Functor execM) =>
+afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, Monad execM) =>
+    (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
     ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
     (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
-afterInternal' internalMove fmapmloc fmaptdestloc alph transMap act q = Monad.join <$> case takeTransition q alph act (lookupAction $ transMap $ asLoc q) of
-    LocationMove mloc -> internalMove q act (nothingTTdest transMap) `fmapmloc` mloc
+afterInternal' internalTakeTransition internalMove fmapmloc fmaptdestloc alph transMap act q = do
+    t <- internalTakeTransition q alph act (lookupAction $ transMap $ asLoc q)
+    Monad.join <$> case t of
+        LocationMove mloc -> internalMove q act (nothingTTdest transMap) `fmapmloc` mloc
+            where
+            -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
+            nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
+            nothingTTdest _ = Nothing
+        TransitionMove (t, mtdestloc) -> moveAlongTransition q act t `fmaptdestloc` mtdestloc
+            where
+            moveAlongTransition q act t (tdest, loc) = internalMove q act (Just (t, tdest)) loc
         where
-        -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
-        nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
-        nothingTTdest _ = Nothing
-    TransitionMove (t, mtdestloc) -> moveAlongTransition q act t `fmaptdestloc` mtdestloc
-        where
-        moveAlongTransition q act t (tdest, loc) = internalMove q act (Just (t, tdest)) loc
-    where
-    lookupAction :: Ord k => Map k a -> k -> a
-    lookupAction m k = case Map.lookup k m of
-        Just v -> v
-        Nothing -> throw $ ActionOutsideAlphabet callStack
+        lookupAction :: Ord k => Map k a -> k -> a
+        lookupAction m k = case Map.lookup k m of
+            Just v -> v
+            Nothing -> throw $ ActionOutsideAlphabet callStack
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
@@ -425,9 +434,11 @@ instance (Completable g) => Completable (GateValue g) where
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
-instance (Eq g) => TransitionMapping (SymInteract g) (GateValue g) where
-    asTransition alf (GateValue gate values) =
-        case List.find (\(SymInteract g vars) -> g == gate) (Set.toList alf) of
+instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (GateValue g') where
+    asTransition interactions (GateValue g values) = do
+        let ts = Set.map interactionGate interactions
+        ig' <- asTransition ts g
+        case List.find (\(SymInteract ig _) -> ig == ig') (Set.toList interactions) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
             Just i@(SymInteract g vars) ->
                 if List.length values /= List.length vars
@@ -464,6 +475,8 @@ instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc
 -- STS quiescence --
 --------------------
 {-
+-- TransitionMapping (SymInteract (IOAct i o)) (GateValue (IOAct i (Suspended o)))
+
 data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
 type IOSymInteract i o = SymInteract (IOAct i o)
 data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
@@ -489,7 +502,7 @@ newtype STStdest = STSLoc (SymGuard,VarModel)
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
-        qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph) 
+        qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then pure loc else forbidden
     ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
@@ -501,13 +514,13 @@ hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRe
 hasSymbolicQuiescence smtRef stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . fmap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
-    -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient
+    -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
     Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
     
 -- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-combineGuards :: (BooleanConfiguration m) => m SymGuard -> SymGuard
+combineGuards :: (Functor m, BooleanConfiguration m) => m SymGuard -> SymGuard
 combineGuards = asDualValExpr
 
 -- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
