@@ -48,9 +48,11 @@ interpretInputAttemptConcrete,
 interpretQuiescentInputAttemptConcrete,
 STS,
 IOSTS,
-interpretSTS,
 STSIntrp,
-IOSTSIntrp
+IOSTSIntrp,
+interpretSTS,
+SuspInputAttemptSTSIntrp,
+interpretSTSQuiescentInputAttemptConcrete,
 )
 where
 

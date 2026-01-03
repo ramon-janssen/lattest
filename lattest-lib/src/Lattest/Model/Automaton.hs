@@ -453,9 +453,9 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
-instance (Completable g, Ord g) => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g) where
+instance (Completable g, Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
-instance (Ord g, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g) where
+instance (Ord g, Ord loc, BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> addTypedVal x xval m) gateValuation stateValuation
