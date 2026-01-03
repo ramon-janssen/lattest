@@ -43,7 +43,7 @@ InconclusiveReason(..)
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice, Refusable, isAccepted)
+import Lattest.Model.Alphabet(TestChoice)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, IOStepSemantics, AutIntrpr, IOAfter, ioAfter, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, BooleanConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
@@ -137,7 +137,7 @@ makeTester' ioState initSpec initTestController = ActionController {
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do
-                    let verdict = actToVerd conf' act
+                    let verdict = pToVerd conf'
                     next <- updateTestController testController (testControllerState testController) spec' act (stateConf spec)
                     case next of
                         Right r -> return $ Right (verdict, r)
@@ -156,10 +156,6 @@ makeTester' ioState initSpec initTestController = ActionController {
         pToVerd :: (BoundedConfiguration m) => (m x) -> Verdict
         pToVerd p | isForbidden p = Fail
                   | otherwise     = Pass
-        actToVerd :: (BoundedConfiguration m, Refusable act) => (m x) -> act -> Verdict
-        actToVerd p act = case pToVerd p of -- this is effectively just && between two verdicts, one from the observed action and one from the state configuration
-            Fail -> Fail
-            Pass -> if  (isAccepted act) then Pass else Fail
 
 catchAutomatonException :: a -> IO (Either a AutomatonException)
 catchAutomatonException a = (Left <$> evaluate a) `catch` (\e -> return $ Right e)

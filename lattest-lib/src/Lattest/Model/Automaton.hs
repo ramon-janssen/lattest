@@ -317,7 +317,7 @@ transMenu aut = let
     in Set.unions $ stateToMenu <$> initConf aut
 
 {-|
-    The class of automata with a finite list of transition labels on outgoing transitions for every state.
+    The class of automata with a finite list of concrete actions matching to outgoing transitions for every state.
     This property is useful for e.g. test selection.
 -}
 class TransitionMapping t act => FiniteMenu t act where

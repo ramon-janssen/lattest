@@ -59,7 +59,7 @@ import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanCon
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
 import qualified Lattest.SMT.Config as Config(Config(..))
 import Lattest.SMT.SMT(SMTRef, runSMT)
-import Lattest.Util.Utils(takeRandom, takeJusts)
+import Lattest.Util.Utils(takeRandom, takeJusts, flipCoin)
 
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
@@ -140,18 +140,44 @@ randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymIn
 randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt (mkStdGen i)
 
 {- |
-    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
-    given random generator.
+    A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
+    given random generator, with arbitrary data values as picked by the given SMT solver. Will immediately stop if it cannot find any possible data values for any input gate.
 -}
 randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
     => SMTRef -> g -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (GateValue i)
-randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) randomSelectTest (\s _ _ _ -> return $ Just s)
-    
-randomSelectTest :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
-randomSelectTest (g,smtRef) intrpr _ = do
+randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossible (\s _ _ _ -> return $ Just s)
+    where
+    solveRandomIfPossible :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
+        => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
+    solveRandomIfPossible (g,smtRef) intrpr _ = do
+        (maybeGateValue, (g', smtRef)) <- solveRandomInput (g,smtRef) intrpr
+        return $ case maybeGateValue of
+            Nothing -> Nothing
+            Just value -> Just (value, (g', smtRef))
+
+{- |
+    A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
+    given random generator, with arbitrary data values as picked by the given SMT solver. It may instead also omit picking an input gate, and wait 
+    for an output value instead, with the givene probability (clamped to [0,1]). Will always wait for an output if it cannot find any possible data
+    values for any input gate.
+-}
+randomDataOrWaitForOutputTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
+    => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (GateValue i)
+randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRef) (solveRandomOrWait pWait) (\s _ _ _ -> return $ Just s)
+    where
+    solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
+        => Double -> (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
+    solveRandomOrWait pWait (g,smtRef) intrpr _ =
+        let (doWait, g') = flipCoin g pWait
+        in if doWait
+            then return $ Just (Nothing, (g', smtRef))
+            else Just <$> solveRandomInput (g', smtRef) intrpr
+
+solveRandomInput :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
+    => (g,SMTRef) -> IOSTSIntrp m loc i o -> IO (Maybe (GateValue i), (g,SMTRef))
+solveRandomInput (g,smtRef) intrpr = do
     (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr maybeFromInputInteraction g
-    return $ fmap (, (g', smtRef)) maybeGateValue -- append the new state to the solved value, if any
+    return $ (maybeGateValue, (g', smtRef)) -- append the new state to the solved value, if any
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not

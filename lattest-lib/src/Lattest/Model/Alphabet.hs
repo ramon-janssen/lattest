@@ -35,19 +35,16 @@ fromSuspended,
 -- TODO decide on refusal or failure and be consistent
 -- ** Input Failures
 {- |
-    For a 'Refusable' type of observable actions, it is possible to decide whether the action was accepted or refused by the system that exhibited
-    that observed action. Refusal of an input represents the system being unable to process the given input. This concept is described as an 
-    'input failure'. For a theoretical background on input failures, see 
+    'Input failures' model the possibility to accepted or refuse an input by the system under test.
+    Failure of an input represents the system being unable to process the given input. For a theoretical background on input failures, see 
 
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 3 and 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
 -}
-Refusable,
-isAccepted,
 IFAct(..),
 InputAttempt(..),
 asInputAttempt,
 fromInputAttempt,
--- ** Combined Input Refusals and Quiescences
+-- ** Combined Input Failures and Quiescences
 SuspendedIF,
 asSuspendedInputAttempt,
 fromSuspendedInputAttempt,
@@ -80,23 +77,12 @@ import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 {- |
-    The class of observable actions for which it is possible to derive whether the actions are accepted or refused. For types where refusal does not
-    make sense, the default implementation is that all actions are accepted.
--}
-class Refusable act where
-    {- |
-        Is the action accepted or refused?
-    -}
-    isAccepted :: act -> Bool
-    isAccepted _ = True
-
-{- |
     If an input type is an 'TestChoice' to a type of observable actions, this means that
     
     * given such an input, it is possible to derive the corresponding observable action, or sequence of actions, and
     * an observable action may (but also may not) correspond to an input.
 -}
-class Refusable act => TestChoice i act where
+class TestChoice i act where
     {- |
         If an observable action corresponds to an input, then derive that input.
     -}
@@ -114,8 +100,6 @@ data IOAct i o = In i | Out o deriving (Eq, Ord)
 instance (Show i, Show o) => Show (IOAct i o) where
     show (In i) = "?" ++ show i
     show (Out o) = "!" ++ show o
-
-instance {-# OVERLAPS #-} Refusable (IOAct i o)
 
 {- |
     Relates input commands to observable inputs. Note that this instance is not very practical for testing: during testing, a test controller
@@ -224,10 +208,6 @@ instance Show i => Show (InputAttempt i) where
 -}
 type IFAct i o = IOAct (InputAttempt i) o
 
-instance {-# OVERLAPS #-} Refusable (IFAct i o) where
-    isAccepted (In (InputAttempt(_, False))) = False
-    isAccepted _ = True
-
 {- |
     Relates input commands to observable inputs. An input command corresponds to an accepted input action, and both a refused and accepted input
     command correspond to the same input action.
@@ -263,12 +243,11 @@ fromInputAttempt(Out o) = Out o
 type SuspendedIF i o = IOAct (InputAttempt i) (Suspended o)
 
 instance TestChoice (Maybe i) (SuspendedIF i o) where
-    choiceToActs Nothing = [Out Quiescence]
+    choiceToActs Nothing = []
     choiceToActs (Just i) = inToInputAttempt <$> choiceToActs i
         where
         inToInputAttempt(In i) = In (InputAttempt(i, True))
         inToInputAttempt(Out o) = Out o 
-    --actToChoice (Out Quiescence) = Just Nothing
     actToChoice other = actToChoice $ attemptToIn other
         where
         attemptToIn (In (InputAttempt(i, _))) = In i
@@ -347,14 +326,39 @@ maybeFromOutputInteraction (SymInteract gate vars) = case maybeFromOutput gate o
     Just o -> Just $ SymInteract o vars
     Nothing -> Nothing
 
---instance {-# OVERLAPS #-} Refusable (GateValue t)
-instance Refusable (GateValue g)
+type IOSuspGateValue i o = IOGateValue i (Suspended o)
+type IFGateValue i o = IOGateValue (InputAttempt i) o
+type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
 
-instance TestChoice (GateValue i) (GateValue (IOAct i o)) where
+instance TestChoice (GateValue i) (IOGateValue i o) where
     choiceToActs (GateValue i consts) = [GateValue (In i) consts]
     actToChoice (GateValue (In i) consts) = Just $ GateValue i consts
     actToChoice (GateValue (Out _) _) = Nothing
 
-type IOSuspGateValue i o = IOGateValue i (Suspended o)
-type IFGateValue i o = IOGateValue (InputAttempt i) o
-type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
+instance TestChoice (Maybe (GateValue i)) (IOSuspGateValue i o) where
+    choiceToActs (Just i) = fmap asSuspended <$> choiceToActs i
+    choiceToActs Nothing = []
+    actToChoice (GateValue (Out Quiescence) _) = Just Nothing
+    actToChoice (GateValue (Out (OutSusp o)) _) = Nothing
+    actToChoice (GateValue (In i) values) = Just $ Just $ GateValue i values
+
+instance TestChoice (GateValue i) (IFGateValue i o) where
+    choiceToActs i = fmap inToInputAttempt <$> choiceToActs i
+        where
+        inToInputAttempt(In i) = In (InputAttempt(i, True))
+        inToInputAttempt(Out o) = Out o 
+    actToChoice = actToChoice . fmap attemptToIn
+        where
+        attemptToIn (In (InputAttempt(i, _))) = In i
+        attemptToIn (Out o) = Out o
+
+instance TestChoice (Maybe (GateValue i)) (SuspendedIFGateValue i o) where
+    choiceToActs (Just i) = fmap inToInputAttempt <$> choiceToActs i
+        where
+        inToInputAttempt(In i) = In (InputAttempt(i, True))
+        inToInputAttempt(Out o) = Out o 
+    choiceToActs Nothing = []
+    actToChoice = actToChoice . fmap attemptToIn
+        where
+        attemptToIn (In (InputAttempt(i, _))) = In i
+        attemptToIn (Out o) = Out o
