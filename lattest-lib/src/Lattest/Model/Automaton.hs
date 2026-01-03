@@ -64,9 +64,8 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, asDualValExpr)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract, interactionGate)
+    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract, interactionGate)
 --import Lattest.Model.Symbolic.SolveSTS(solveAnySequential)
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
 import Lattest.SMT.SMTData(SmtEnv)
 import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
@@ -86,7 +85,7 @@ import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), ValExprInt, ValExprBool, ValExprString, eval, constType, varType, evalConst, assignedExpr, Eval, Subst, subst)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), ValExprInt, ValExprBool, ValExprString, eval, constType, varType, evalConst, evalConst', assignedExpr, Eval, Subst, subst)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 ------------
@@ -512,73 +511,56 @@ solveAnySequential = error "still to refactor: call solveAnySequential from SMT 
 
 -- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
 evaluateGuard :: SymGuard -> Bool
-evaluateGuard guard = case evalConst guard of
+evaluateGuard guard = case eval guard of
     Left e -> error e -- TODO proper exception
     Right (Cbool b) -> b
 
--------------------
--- input-failure --
--------------------
-
-{-
--- TransitionMapping (SymInteract (IOAct i o)) (GateValue (IOAct i (Suspended o)))
-
-data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
-type IOSymInteract i o = SymInteract (IOAct i o)
-data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
-type IOGateValue i o = GateValue (IOAct i o)
-type IOSuspGateValue i o = IOGateValue i (Suspended o)
-type IFGateValue i o = IOGateValue (InputAttempt i) o
-type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
-TransitionSemantics t act where
-    {- |
-        Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
-        The function may be partial, following the given alphabet.
-    -}
-    takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
-    takeTransition q alph act trans' = case asTransition alph act of
-        Nothing -> LocationMove $ pure (asLoc q)
-        Just t -> TransitionMove (t, trans' t)
-newtype STStdest = STSLoc (SymGuard,VarModel)
--}
-{-instance (Eq g) => TransitionMapping (SymInteract g) (GateValue g) where
-    asTransition _ (GateValue (Out Quiescence) _) = Nothing
-    asTransition _ other = Just $ fromSuspended <$> other-}
---TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
-instance (Ord i, Ord o) => TransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) where
-    takeTransition (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
-        case asTransition alph (GateValue (In (InputAttempt(i, True))) gateVals) of
+-----------------------
+-- STS input-failure --
+-----------------------
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
+    ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+        case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
-                    mtdestloc = Map.lookup m interact
+                    mtdestloc = m interact
                     guard = combineGuards $ tdestlocToGuard <$> mtdestloc
                     guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
-                in LocationMove $ if isSpecified mtdestloc && guardVal
+                in return $ LocationMove $ if isSpecified mtdestloc && guardVal
                     then forbidden
                     else underspecified
-    takeTransition _ _ act m = TransitionMove (fromInputAttempt <$> act, m $ fromInputAttempt <$> act)
         where
         tdestlocToGuard (STSLoc (guard, _), _) = guard
+        coerceIO :: IFGateValue i o -> Set.Set (IOSymInteract i o) -> IFGateValue i o
+        coerceIO = const
+    ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromInputAttempt <$> gateValue) m
 
-{-
-instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
-    -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
+------------------------------------
+-- STS input-failure + quiescence --
+------------------------------------
+-- Ideally this would automatically follow from the above two interpretations stacked to avoid the boilerplate below, but that is a hassle
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) SmtEnv where
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
         qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then pure loc else forbidden
-    ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
+    ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+        case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
+            Nothing -> error "TransitionSemantics IFGateValue: error"
+            Just interact@(SymInteract _ gateVars) ->
+                let gateVal = buildGateValuation gateVars gateVals
+                    mtdestloc = m interact
+                    guard = combineGuards $ tdestlocToGuard <$> mtdestloc
+                    guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
+                in return $ LocationMove $ if isSpecified mtdestloc && guardVal
+                    then forbidden
+                    else underspecified
+        where
+        tdestlocToGuard (STSLoc (guard, _), _) = guard
+        coerceIO :: IFGateValue i o -> Set.Set (IOSymInteract i o) -> IFGateValue i o
+        coerceIO = const
+    ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromSuspendedInputAttempt <$> gateValue) m
 
-hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
-hasSymbolicQuiescence smtRef stateVal m = do
-    let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
-        outputsAndCombinedGuards = second (combineGuards . fmap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
-    -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
-    where
-    tdestlocToGuard (STSLoc (guard, _), _) = guard
--}
 -------------------------
 -- Auxiliary functions --
 -------------------------

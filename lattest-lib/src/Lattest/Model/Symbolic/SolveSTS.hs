@@ -16,7 +16,7 @@ import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonExc
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
 import Lattest.Model.StandardAutomata(STS, STSIntrp)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), ValExpr(..))
+import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), ValExpr(..), eval)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
 import Lattest.SMT.SMT(SMTRef,pop,getSolution,addAssertions,getSolvable,push,Solution,SolvableProblem(..),SMT)
@@ -112,7 +112,7 @@ substituteInGuard valuation guard = evalConst' valuation guard
 {-|
     Evaluate the given guard
 -}
-evaluateGuard :: SymGuard -> Boolean
-evaluateGuard guard = case evalConst guard of
-    Left e = error e -- TODO proper exception
-    Right (Cbool b) = b
+evaluateGuard :: SymGuard -> Bool
+evaluateGuard guard = case eval guard of
+    Left e -> error e -- TODO proper exception
+    Right (Cbool b) -> b
