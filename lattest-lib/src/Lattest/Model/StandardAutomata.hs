@@ -57,7 +57,7 @@ interpretSTSQuiescentInputAttemptConcrete,
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc, Valuation)
 import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, BoundedApplicative, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
@@ -225,12 +225,12 @@ type IOSTS m loc i o = STS m loc (IOAct i o)
 type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
 type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
 
-interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => STS m loc g -> (loc -> IntrpState loc) -> STSIntrp m loc g
-interpretSTS = interpret
+interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => STS m loc g -> Valuation -> STSIntrp m loc g
+interpretSTS sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 
 -- TODO also list an interpretation for quiescence only and input-failure only
 type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o)
 
-interpretSTSQuiescentInputAttemptConcrete  :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => IOSTS m loc i o -> (loc -> IntrpState loc) -> SuspInputAttemptSTSIntrp m loc i o
-interpretSTSQuiescentInputAttemptConcrete = interpret
+interpretSTSQuiescentInputAttemptConcrete  :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o
+interpretSTSQuiescentInputAttemptConcrete sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 

@@ -37,6 +37,7 @@ TestController(..),
 makeTester,
 makeSMTTester,
 runTester,
+runSMTTester,
 Verdict(..),
 InconclusiveReason(..)
 )
@@ -204,6 +205,10 @@ runExperiment controller adapter = do
 runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
+
+runSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
+    SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
+runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester ioState spec testSelection) adapter
 
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
 --runStepper spec controller = runExperiment controller (simulateSpec spec)

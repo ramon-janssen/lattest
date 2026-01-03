@@ -11,10 +11,10 @@ import System.Random(mkStdGen)
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runTester)
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc)
-import Lattest.Model.StandardAutomata(interpretSTS, IOSTSIntrp)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct)
+import Lattest.Exec.Testing(runTester,runSMTTester)
+import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
+import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct)
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -23,11 +23,13 @@ import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..))
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 
-stsExample :: IOSTSIntrp NonDet Integer String String
+pvar = (Variable "p" IntType)
+xvar = (Variable "x" IntType)
+stsExampleInitAssign = Map.singleton xvar (Cint 0)
+
+stsExample :: IOSTS NonDet Integer String String
 stsExample =
-    let pvar = (Variable "p" IntType)
-        xvar = (Variable "x" IntType)
-        pvarexpr = cstrVar pvar
+    let pvarexpr = cstrVar pvar
         xvarexpr = cstrVar xvar
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
@@ -42,10 +44,9 @@ stsExample =
                                 (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
             1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
-        initAssign l = IntrpState l (Map.singleton xvar (Cint 0))
-        sts = automaton initConf (Set.fromList [water,ok,coffee]) switches
-    in interpretSTS sts initAssign
-
+        initAssign = Map.singleton xvar (Cint 0)
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = NonDet [IntrpState loc $ Map.singleton (Variable "x" IntType) (Cint val)]
@@ -61,8 +62,9 @@ intConst i = cstrConst $ Cint i
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
-    assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExample)
-    let intrp2 = after stsExample (GateValue (In "water") [Cint 7])
+
+    assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExampleIntrpr)
+    let intrp2 = after stsExampleIntrpr (GateValue (In "water") [Cint 7])
     assertEqual "after water 7: " (getSTSIntrpState 1 7) (stateConf intrp2)
     let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
     assertEqual "after ok 7: " (getSTSIntrpState 0 7) (stateConf intrp3)
@@ -76,20 +78,20 @@ testSTSHappyFlow = TestCase $ do
 
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
-    let intrp1 = after stsExample (GateValue (Out "water") [Cint 7])
+    let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [Cint 7])
     assertThrowsError "gate not in STS alphabet" (stateConf $ intrp1)
-    let intrp2 = after stsExample (GateValue (In "water") [])
+    let intrp2 = after stsExampleIntrpr (GateValue (In "water") [])
     assertThrowsError "nr of values unequal to nr of parameters" (stateConf $ intrp2)
-    let intrp3 = after stsExample (GateValue (In "water") [Cbool True])
+    let intrp3 = after stsExampleIntrpr (GateValue (In "water") [Cbool True])
     assertThrowsError "type of variable and value do not match" (stateConf $ intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
-    let intrp3 = after stsExample (GateValue (Out "ok") [Cint 0]) -- output not enabled
+    let intrp3 = after stsExampleIntrpr (GateValue (Out "ok") [Cint 0]) -- output not enabled
     assertEqual "after ok: " forbidden (stateConf intrp3)
-    let intrp4 = after stsExample (GateValue (In "water") [Cint 11]) -- value for input does not satisfy guard
+    let intrp4 = after stsExampleIntrpr (GateValue (In "water") [Cint 11]) -- value for input does not satisfy guard
     assertEqual "after water 11: " underspecified (stateConf intrp4)
-    let intrp5 = after stsExample (GateValue (Out "coffee") []) -- value of variable does not satisfy guard
+    let intrp5 = after stsExampleIntrpr (GateValue (Out "coffee") []) -- value of variable does not satisfy guard
     assertEqual "after coffee: " forbidden (stateConf intrp5)
 
 assertThrowsError :: String -> a -> IO ()
@@ -104,7 +106,7 @@ assertThrowsError expectedError someVal = do
 
 testPrintSTS :: Test
 testPrintSTS = TestCase $ do
-    assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExample
+    assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExampleIntrpr
     where
     {-
     current state configuration: [IntrpState 0 (fromList [(x:Int,0)])]
@@ -126,11 +128,18 @@ testPrintSTS = TestCase $ do
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 
+-- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
 tExampleCorrect (L0, x) = Map.fromList $
     [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
 tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L1, x))]
 tExampleCorrect (L2, _) = Map.fromList $ []
-impExampleCorrect = pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) 0
+impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
+impExampleCorrect = do
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+    Adapter.mapActionsFromSut f imp
+    where
+    f :: SuspendedIF (GateValue String) (GateValue String) -> SuspendedIFGateValue String String
+    f = error "TODO implement"
 
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
@@ -144,7 +153,7 @@ testSTSTestSelection = TestCase $ do
 
     let testSelector = randomDataTestSelectorFromSeed smtRef 456 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    imp' <- impExampleCorrect
-    imp <- Adapter.mapActionsFromSut (fmap ioActAsGateValue) imp'
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester (interpretSTSQuiescentInputAttemptConcrete stsExample) testSelector imp
+    imp <- impExampleCorrect
+    let initAssign = Map.singleton (Variable "x" IntType) (Cint 0)
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     return $ error "TODO unfinished"
