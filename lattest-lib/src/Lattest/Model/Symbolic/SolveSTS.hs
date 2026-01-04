@@ -12,9 +12,9 @@ substituteInGuard
 where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
-import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet)
+import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
-import Lattest.Model.StandardAutomata(STS, STSIntrp)
+import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBoolView(VBoolConst), ValExpr(..), eval)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
@@ -37,14 +37,14 @@ import System.Random(RandomGen)
     generator and returns the new random generator state. The returned gate values for that interaction are not randomized in any way, picking values
     is left to the SMT solver.
 -}
-solveRandomInteraction :: (Monad m, BooleanConfiguration m, Ord g, RandomGen r) => STSIntrp m loc g -> (SymInteract g -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
+solveRandomInteraction :: (Monad m, BooleanConfiguration m, Ord g, RandomGen r) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
 solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
     fmap (,r') $ solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
-    selectInteractionsAndGuards :: (Monad m, BooleanConfiguration m, Ord g) => STSIntrp m loc g -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+    selectInteractionsAndGuards :: (Monad m, BooleanConfiguration m, Ord g) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
     selectInteractionsAndGuards intrpr subsetFunction =
         let alph = toList $ alphabet $ syntacticAutomaton intrpr
         in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction &&& interactToGuard intrpr)) $ alph
@@ -83,7 +83,7 @@ valuationToGateValue (SymInteract gate params) valuation =
                 Just value -> value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
-interactToGuard :: (Monad m, BooleanConfiguration m, Ord g) => STSIntrp m loc g -> SymInteract g -> SymGuard
+interactToGuard :: (Monad m, BooleanConfiguration m, Ord g) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymInteract g -> SymGuard
 interactToGuard intrpr interaction = let
         aut = syntacticAutomaton intrpr
     in asDualValExpr $ join $ stateAndInteractToGuards aut interaction <$> stateConf intrpr

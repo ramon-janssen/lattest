@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
@@ -54,7 +55,7 @@ where
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction)
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc))
-import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp)
+import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp, SuspInputAttemptSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
 import qualified Lattest.SMT.Config as Config(Config(..))
@@ -162,11 +163,11 @@ randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossi
     values for any input gate.
 -}
 randomDataOrWaitForOutputTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (GateValue i)
+    => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (Maybe (GateValue i))
 randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRef) (solveRandomOrWait pWait) (\s _ _ _ -> return $ Just s)
     where
     solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-        => Double -> (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
+        => Double -> (g,SMTRef) -> SuspInputAttemptSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
     solveRandomOrWait pWait (g,smtRef) intrpr _ =
         let (doWait, g') = flipCoin g pWait
         in if doWait
@@ -174,11 +175,17 @@ randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRe
             else Just <$> solveRandomInput (g', smtRef) intrpr
 
 solveRandomInput :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g)
-    => (g,SMTRef) -> IOSTSIntrp m loc i o -> IO (Maybe (GateValue i), (g,SMTRef))
+    => (g,SMTRef) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> IO (Maybe (GateValue i), (g,SMTRef))
 solveRandomInput (g,smtRef) intrpr = do
-    (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr maybeFromInputInteraction g
+    (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr maybeFromIFInteraction g
     return $ (maybeGateValue, (g', smtRef)) -- append the new state to the solved value, if any
-
+    where
+        maybeFromIFInteraction :: SymInteract (IOAct i o) -> Maybe (SymInteract i) -- IOSymInteract i o -> Maybe (SymInteract i)
+        maybeFromIFInteraction = error ""
+{-        maybeFromIFInteraction' (SymInteract gate vars) = case maybeFromInput gate of
+            Just i -> Just $ SymInteract i vars
+            Nothing -> Nothing
+-}
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
     select inputs or return any testing results.
