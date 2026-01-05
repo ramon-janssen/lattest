@@ -426,7 +426,7 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
 
 data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
 
-newtype STStdest = STSLoc (SymGuard,VarModel)
+newtype STStdest = STSLoc (SymGuard,VarModel) deriving (Eq, Ord)
 
 stsTLoc :: SymGuard -> VarModel -> STStdest
 stsTLoc g a = STSLoc (g,a)
@@ -488,6 +488,9 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         return $ LocationMove $ if qui then pure loc else forbidden
     ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
+    ioMove = error "?!?"
+
 hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
 hasSymbolicQuiescence smtRef stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
@@ -536,6 +539,9 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         coerceIO = const
     ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromInputAttempt <$> gateValue) m
 
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
+    ioMove = error "?!?"
+
 ------------------------------------
 -- STS input-failure + quiescence --
 ------------------------------------
@@ -560,6 +566,9 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         coerceIO :: IFGateValue i o -> Set.Set (IOSymInteract i o) -> IFGateValue i o
         coerceIO = const
     ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromSuspendedInputAttempt <$> gateValue) m
+
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) SmtEnv where
+    ioMove = error "?!?"
 
 -------------------------
 -- Auxiliary functions --

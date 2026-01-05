@@ -540,7 +540,7 @@ data VarModel = VarModel {
     intVars :: Map.Map Variable ValExprInt,
     boolVars :: Map.Map Variable ValExprBool,
     stringVars :: Map.Map Variable ValExprString
-    }
+    } deriving (Eq, Ord)
 
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment fs = foldr ($) noAssignment fs
