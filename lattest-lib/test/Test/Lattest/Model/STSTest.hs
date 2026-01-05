@@ -135,7 +135,7 @@ tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L1,
 tExampleCorrect (L2, _) = Map.fromList $ []
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impExampleCorrect = do
-    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut f imp
     where
     f :: SuspendedIF (GateValue String) (GateValue String) -> SuspendedIFGateValue String String
@@ -151,7 +151,7 @@ testSTSTestSelection = TestCase $ do
     info <- SMT.runSMT smtRef SMT.openSolver
     --putStrLn $ show info -- TODO check for expected value instead of printing
 
-    let testSelector = randomDataTestSelectorFromSeed smtRef 456 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.75 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     let initAssign = Map.singleton (Variable "x" IntType) (Cint 0)

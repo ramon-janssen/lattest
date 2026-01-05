@@ -362,3 +362,4 @@ instance TestChoice (Maybe (GateValue i)) (SuspendedIFGateValue i o) where
         where
         attemptToIn (In (InputAttempt(i, _))) = In i
         attemptToIn (Out o) = Out o
+
