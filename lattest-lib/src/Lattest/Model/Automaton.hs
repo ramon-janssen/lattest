@@ -65,10 +65,11 @@ import Prelude hiding (lookup)
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, asDualValExpr)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract, interactionGate)
---import Lattest.Model.Symbolic.SolveSTS(solveAnySequential)
+import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
 import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
 import Lattest.SMT.SMTData(SmtEnv)
 import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
+
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
 import Control.Arrow(second)
@@ -499,24 +500,6 @@ hasSymbolicQuiescence smtRef stateVal m = do
     Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
-    
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-combineGuards :: (Functor m, BooleanConfiguration m) => m SymGuard -> SymGuard
-combineGuards = asDualValExpr
-
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-substituteInGuard :: Valuation -> SymGuard -> SymGuard
-substituteInGuard valuation guard = evalConst' valuation guard
-
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
-solveAnySequential = error "still to refactor: call solveAnySequential from SMT module without cyclic dependencies"
-
--- TODO refactor module structure, this should beong somewhere in a SMT/symbolic module
-evaluateGuard :: SymGuard -> Bool
-evaluateGuard guard = case eval guard of
-    Left e -> error e -- TODO proper exception
-    Right (Cbool b) -> b
 
 -----------------------
 -- STS input-failure --

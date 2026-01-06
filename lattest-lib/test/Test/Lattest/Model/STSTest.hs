@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS)
+module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS,testSTSTestSelection)
 where
 
 import Prelude hiding (take)
@@ -14,7 +14,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runTester,runSMTTester)
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue)
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -136,10 +136,7 @@ tExampleCorrect (L2, _) = Map.fromList $ []
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impExampleCorrect = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
-    Adapter.mapActionsFromSut f imp
-    where
-    f :: SuspendedIF (GateValue String) (GateValue String) -> SuspendedIFGateValue String String
-    f = error "TODO implement"
+    Adapter.mapActionsFromSut toIOGateValue imp
 
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do

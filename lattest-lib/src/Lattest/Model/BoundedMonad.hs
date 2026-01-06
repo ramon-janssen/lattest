@@ -150,6 +150,7 @@ instance Foldable NonDet where
     foldr _ q _ = q
 
 instance Show a => Show (NonDet a) where
+    show (NonDet []) = "⊥"
     show (NonDet a) = show a
     show UnderspecNonDet = "⊤"
 

@@ -67,7 +67,8 @@ interactionGate,
 valueGate,
 IOSuspGateValue,
 IFGateValue,
-SuspendedIFGateValue
+SuspendedIFGateValue,
+toIOGateValue
 )
 where
 
@@ -194,11 +195,11 @@ fromSuspended (In i) = In i
 fromSuspended (Out (OutSusp o)) = Out o
 
 -- (i, True) represents a succesful i, (i, False) represents a failed attempt at i
-newtype InputAttempt i = InputAttempt(i, Bool) deriving (Eq, Ord)
+newtype InputAttempt i = InputAttempt (i, Bool) deriving (Eq, Ord)
 
 instance Show i => Show (InputAttempt i) where
-    show (InputAttempt(i, True)) = show i
-    show (InputAttempt(i, False)) = showFailure (show i)
+    show (InputAttempt (i, True)) = show i
+    show (InputAttempt (i, False)) = showFailure (show i)
         where
         showFailure [] = []
         showFailure (c:rest) = c:'\x0305':showFailure rest -- U+0305, combine-symbol for overline
@@ -329,6 +330,11 @@ maybeFromOutputInteraction (SymInteract gate vars) = case maybeFromOutput gate o
 type IOSuspGateValue i o = IOGateValue i (Suspended o)
 type IFGateValue i o = IOGateValue (InputAttempt i) o
 type SuspendedIFGateValue i o = IOGateValue (InputAttempt i) (Suspended o)
+
+toIOGateValue :: SuspendedIF (GateValue i) (GateValue o) -> SuspendedIFGateValue i o
+toIOGateValue (In (InputAttempt (GateValue i constantsi, bool))) = GateValue (In (InputAttempt (i,bool))) constantsi
+toIOGateValue (Out Quiescence) = GateValue (Out Quiescence) []
+toIOGateValue (Out (OutSusp (GateValue o constantso))) = GateValue (Out (OutSusp o)) constantso
 
 instance TestChoice (GateValue i) (IOGateValue i o) where
     choiceToActs (GateValue i consts) = [GateValue (In i) consts]
