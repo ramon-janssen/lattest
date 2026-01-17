@@ -13,7 +13,7 @@ import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),sf,IG(..),OG(..),sg)
 -- TODO prototype imports, (re)move or insert into alphabetical order
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Model.BoundedMonad(Det(..),NonDet(..), isConclusive)
+import Lattest.Model.BoundedMonad(Det(..),NonDet(..), isConclusive, isForbidden)
 import Lattest.Model.Automaton(AutSyntax, AutIntrpr, automaton, transRel, initConf)
 import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), InputAttempt(..))
@@ -82,10 +82,10 @@ testRandomFIncorrectInput = TestCase $ do
     assertEqual "testRandomFIncorrectInput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
     -- the only non-conformance is the output Y from Q2fd
-    assertEqual "expected test failure on ?A̅" (In $ InputAttempt(B, False)) (last observed)
+    assertEqual "expected test failure on ?B" (In $ InputAttempt(B, False)) (last observed)
     -- the only observation leading to Q2fd is Y
     assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ OutSusp X) == prev || (Out $ OutSusp Y) == prev
-    assertEqual "final state should be inconclusive" (Just True) (not . isConclusive <$> maybeMq)
+    assertEqual "final state should be forbidden" (Just True) (isForbidden <$> maybeMq)
     
 
 
