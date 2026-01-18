@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
@@ -195,7 +196,7 @@ foldableAsSet fld = Set.fromList $ Foldable.toList fld
 type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-interpretConcrete :: (BoundedMonad m, Ord t, Show t, Show loc) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
+interpretConcrete :: (BoundedMonad m, Ord t, Show t, Show loc, Completable t) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
 interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
@@ -225,7 +226,7 @@ type IOSTS m loc i o = STS m loc (IOAct i o)
 type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
 type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
 
-interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => STS m loc g -> Valuation -> STSIntrp m loc g
+interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc)), Completable (GateValue g)) => STS m loc g -> Valuation -> STSIntrp m loc g
 interpretSTS sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 
 -- TODO also list an interpretation for quiescence only and input-failure only

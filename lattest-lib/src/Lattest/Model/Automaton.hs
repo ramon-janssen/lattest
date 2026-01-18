@@ -336,14 +336,14 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 -----------------------------------------------------------------------------------------------
 -- special case where the semantic states and actions are directly represented syntactically --
 -----------------------------------------------------------------------------------------------
-
+{-
 instance (Completable act) where
     implicitDestination _ = forbidden
-
+-}
 instance (Ord act) => TransitionMapping act act where
     asTransition _ = Just
 
-instance (Ord act) => TransitionSemantics q q act () act
+instance (Ord act, Completable act) => TransitionSemantics q q act () act
 
 instance (Ord act) => FiniteMenu act act where
     asActions t = [t] 
@@ -435,8 +435,11 @@ stsTLoc g a = STSLoc (g,a)
 instance Show STStdest where
     show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
 
-instance (Completable g) => Completable (GateValue g) where
+instance Completable (IOGateValue i o) where
     implicitDestination (GateValue g _) = implicitDestination g
+
+instance Completable (IOSymInteract i o) where
+    implicitDestination (SymInteract g _ ) = implicitDestination g
 
 instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
@@ -454,9 +457,9 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
-instance (Completable g, Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
+instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
-instance (Ord g, Ord loc, BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
+instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> addTypedVal x xval m) gateValuation stateValuation
@@ -481,6 +484,9 @@ evalBool valuation = toBool . evalVal valuation
 --------------------
 -- STS quiescence --
 --------------------
+instance Completable (IOSuspGateValue i o) where
+    implicitDestination (GateValue g _) = implicitDestination g
+
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
@@ -504,6 +510,9 @@ hasSymbolicQuiescence smtRef stateVal m = do
 -----------------------
 -- STS input-failure --
 -----------------------
+instance Completable (IFGateValue i o) where
+    implicitDestination (GateValue g _) = implicitDestination g
+
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
     ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
@@ -528,6 +537,9 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (Intrp
 ------------------------------------
 -- STS input-failure + quiescence --
 ------------------------------------
+instance Completable (SuspendedIFGateValue i o) where
+    implicitDestination (GateValue g _) = implicitDestination g
+
 -- Ideally this would automatically follow from the above two interpretations stacked to avoid the boilerplate below, but that is a hassle
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) SmtEnv where
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
