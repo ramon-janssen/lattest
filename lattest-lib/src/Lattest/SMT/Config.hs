@@ -96,13 +96,22 @@ defaultConfig = Config
 
 z3default :: SolverId
 z3default = SolverId "z3"
-
+{-
 z3defaultConfig :: SolverConfig
 z3defaultConfig = SolverConfig
   { execName = "z3"
   , smtArgs =
       [ "-smt2"
       , "-in"
+      ]
+  }
+-}
+z3defaultConfig :: SolverConfig
+z3defaultConfig = SolverConfig
+  { execName = "bash"
+  , smtArgs =
+      [ "-c"
+      , "z3 -smt2 -in | tee /tmp/tmp.txt"
       ]
   }
 

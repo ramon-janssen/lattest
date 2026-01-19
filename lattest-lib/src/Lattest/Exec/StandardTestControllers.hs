@@ -198,8 +198,9 @@ randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRe
         in if doWait
             then return $ Just (Nothing, (g', smtRef))
             else Just <$> solveRandomInput (g', smtRef) maybeFromIFInteraction intrpr
-    maybeFromIFInteraction :: SymInteract (IOAct i o) -> Maybe (SymInteract i) -- IOSymInteract i o -> Maybe (SymInteract i)
-    maybeFromIFInteraction = error ""
+    maybeFromIFInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
+    maybeFromIFInteraction (SymInteract (In i) vars) = Just $ SymInteract i vars
+    maybeFromIFInteraction (SymInteract _ _) = Nothing
 
 solveRandomInput :: (Foldable m, Monad m, BooleanConfiguration m, Ord g, Ord g', RandomGen r)
     => (r,SMTRef) -> (SymInteract g -> Maybe (SymInteract i)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> IO (Maybe (GateValue i), (r,SMTRef))

@@ -11,7 +11,7 @@ import System.Random(mkStdGen)
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runTester,runSMTTester)
+import Lattest.Exec.Testing(runTester,runSMTTester, Verdict(Pass))
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue)
@@ -113,7 +113,7 @@ testPrintSTS = TestCase $ do
     initial location configuration: [0]
     locations: 0, 1, 2
     transitions:
-    0 ――?"water" [p:Int]⟶ [([[(([(-1,1),(p:Int,1)]) > 0)\8743(([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]
+    0 ――?"water" [p:Int]⟶ [([[(([(-1,1),(p:Int,1)]) > 0)∧(([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]
     0 ――!"coffee" []⟶ [([[([(-15,1),(x:Int,1)]) > 0]] {},2)]
     0 ――!"ok" [p:Int]⟶ ⊥
     1 ――?"water" [p:Int]⟶ ⊤
@@ -141,16 +141,17 @@ impExampleCorrect = do
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 20
-        cfg = Config.defaultConfig
+        cfg = Config.changeLog Config.defaultConfig True 
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
     info <- SMT.runSMT smtRef SMT.openSolver
     --putStrLn $ show info -- TODO check for expected value instead of printing
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.75 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     let initAssign = Map.singleton (Variable "x" IntType) (Cint 0)
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    return $ error "TODO unfinished"
+    assertEqual "expected ???" [] observed
+    assertEqual "expected pass " Pass verdict
