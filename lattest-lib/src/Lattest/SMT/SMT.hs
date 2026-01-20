@@ -17,7 +17,7 @@ module Lattest.SMT.SMT
 , openSolver
 , close
 --, addDefinitions
---, addDeclarations
+, addDeclarations
 , addAssertions
 , getSolvable
 , getSolution

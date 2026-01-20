@@ -175,17 +175,15 @@ addDefinitions edefs =  do
                      } 
            )
        -- use union to be certain all definitions remain included
-
+-}
 -- --------------------------------------------------------------------------------------------
 -- addDeclarations
 -- --------------------------------------------------------------------------------------------
-addDeclarations :: (Variable v) => [v] -> SMT ()
+addDeclarations :: [Variable] -> SMT ()
 addDeclarations [] = return ()
 addDeclarations vs  =  do
-    mapI <- gets envNames
     putT ( declarationsToSMT mapI vs )
-    return ()
--}
+
 -- ----------------------------------------------------------------------------------------- --
 -- addAssertions
 -- ----------------------------------------------------------------------------------------- --
@@ -193,7 +191,6 @@ addAssertions :: [ValExprBool] -> SMT ()
 addAssertions vexps  =  do
     --mapI <- gets envNames
     putT ( assertionsToSMT vexps )
-    return ()
 
 -- ----------------------------------------------------------------------------------------- --
 -- getSolvable

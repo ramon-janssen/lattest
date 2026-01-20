@@ -11,7 +11,7 @@ import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(eval)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
-import Lattest.SMT.SMT(pop,getSolution,addAssertions,getSolvable,push,SolvableProblem(..),SMT)
+import Lattest.SMT.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import qualified Data.Map as Map
 
@@ -62,6 +62,7 @@ solveGuard vars guard = do
     case solveOutcome of
         Sat -> do
             push
+            addDeclarations vars
             addAssertions [guard]
             solution <- getSolution vars
             pop
