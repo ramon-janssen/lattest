@@ -26,7 +26,7 @@ module Lattest.SMT.TXS2SMT
 --, funcdefsToSMT      
 SMTExpr
 , assertionsToSMT    
---, declarationsToSMT          
+, declarationsToSMT          
 , valexprToSMT       
 )
 
@@ -173,11 +173,10 @@ funcdefsToSMT enames fdefs =
 -- assertions to SMT
 -- ----------------------------------------------------------------------------------------- --
 assertionsToSMT :: [ValExprBool] -> Text
-assertionsToSMT assertions =
-        T.intercalate "\n" (map assertionToSMT assertions)
+assertionsToSMT assertions = T.intercalate "\n" (map assertionToSMT assertions)
     where
-        assertionToSMT :: ValExprBool -> Text
-        assertionToSMT expr = "(assert " <> valexprToSMT expr <> ")"
+    assertionToSMT :: ValExprBool -> Text
+    assertionToSMT expr = "(assert " <> valexprToSMT expr <> ")"
 
 
 integer2smt :: Integer -> Text
@@ -310,3 +309,12 @@ justLookupFunc fd enames = fromMaybe (error $ "FuncId " ++ show fd ++ " not foun
 -- ----------------------------------------------------------------------------------------- --
 --
 -- ----------------------------------------------------------------------------------------- --
+
+declarationsToSMT :: [Variable] -> Text
+declarationsToSMT vs =
+    T.intercalate "\n" (declarationToSMT <$> vs)
+    where
+        declarationToSMT :: Variable -> Text
+        declarationToSMT (Variable varName varType) = "(declare-fun " <> T.pack varName <> "() " <> justLookupType varType <> ")"
+
+

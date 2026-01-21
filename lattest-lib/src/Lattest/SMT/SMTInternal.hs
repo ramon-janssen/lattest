@@ -181,8 +181,7 @@ addDefinitions edefs =  do
 -- --------------------------------------------------------------------------------------------
 addDeclarations :: [Variable] -> SMT ()
 addDeclarations [] = return ()
-addDeclarations vs  =  do
-    putT ( declarationsToSMT mapI vs )
+addDeclarations vs = putT (declarationsToSMT vs)
 
 -- ----------------------------------------------------------------------------------------- --
 -- addAssertions

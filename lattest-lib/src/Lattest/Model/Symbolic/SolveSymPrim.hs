@@ -58,14 +58,15 @@ valuationToGateValue (SymInteract gate params) valuation =
 
 solveGuard :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
 solveGuard vars guard = do
+    push
+    addDeclarations vars
+    addAssertions [guard]
     solveOutcome <- getSolvable
-    case solveOutcome of
+    mSolution <- case solveOutcome of
         Sat -> do
-            push
-            addDeclarations vars
-            addAssertions [guard]
             solution <- getSolution vars
-            pop
             return $ Just solution
         Unsat -> return Nothing
         Unknown -> return Nothing
+    pop
+    return mSolution
