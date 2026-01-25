@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 {-|
     This module contains the definitions and interpretations of automata models.
@@ -216,78 +217,96 @@ class StateSemantics loc q where
     The transition consists of two parts: one global part outside the configuration monad (e.g. describing the action that applies to that transition),
     described by the transition semantics, and a local part inside the monad, bound to the destination state (e.g. to update symbolic variables for a state).
 -}
-class (StateSemantics loc q, TransitionSemantics loc q t tdest act, BoundedMonad m) => StepSemantics m loc q t tdest act where
+class (StateSemantics loc q, BoundedMonad m) => StepSemantics m loc q t tdest act where
     {- |
         Given the current state, an action and the transition matching that action, and a new location and local transition, produce the new state
         The case of no transition (i.e. no transition applies in the TransitionSemantics) can be used to move within a location.
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
-class (StateSemantics loc q, IOTransitionSemantics loc q t tdest act z, BoundedMonad m) => IOStepSemantics m loc q t tdest act z where
-    ioMove :: IORef z -> q -> act -> Maybe (t, tdest) -> loc -> IO (m q)
+type AutomatonSemantics m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act)
+type IOAutomatonSemantics m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act)
 
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-after aut act = runIdentity $ afterInternal takeTransitionId moveId fmapId fmapId fmapId aut act
+after :: (AutomatonSemantics m loc q t tdest act, Ord t) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     where
     takeTransitionId :: (BoundedApplicative m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
     takeTransitionId q alph act trans' = Identity $ takeTransition q alph act trans'
-    moveId :: StepSemantics m loc q t tdest act => q -> act -> Maybe (t, tdest) -> loc -> Identity (m q)
-    moveId q act mt loc = Identity $ move q act mt loc
     fmapId :: Functor f => (x -> Identity y) -> f x -> Identity (f y)
     fmapId f = Identity . fmap (runIdentity . f)
 
 class IOAfter m loc q t tdest act ioState where
     ioAfter :: ioState -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
 
-instance StepSemantics m loc q t tdest act => IOAfter m loc q t tdest act () where
+instance (IOAutomatonSemantics m loc q t tdest act, Ord t) => IOAfter m loc q t tdest act () where
     ioAfter () aut act = return $ after aut act
 
-instance (IOStepSemantics m loc q t tdest act z, BooleanConfiguration m, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
-    ioAfter execState = afterInternal (ioTakeTransition execState) (ioMove execState) distributeMonadOverFoldable distributeMonadOverFoldable distributeMonadOverFoldable
+instance (StepSemantics m loc q t tdest act, BooleanConfiguration m, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
+    ioAfter execState = afterInternal (ioTakeTransition execState) distributeMonadOverFoldable
 
 --takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
 --ioTakeTransition :: (BoundedApplicative m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal :: (Monad m, Monad execM, Ord t, BoundedConfiguration m, StateSemantics loc q) =>
+afterInternal :: (StepSemantics m loc q t tdest act, Monad m, Monad execM, Ord t, BoundedConfiguration m, StateSemantics loc q) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
-    (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
     ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
-    ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
-    (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
-afterInternal internalTakeTransition internalMove fmapmq fmapmloc fmaptdestloc intrpr act' = do
+afterInternal internalTakeTransition fmapmq intrpr act' = do
     let aut = syntacticAutomaton intrpr
-        toNewStateConfig = afterInternal' internalTakeTransition internalMove fmapmloc fmaptdestloc (alphabet aut) (transRel $ aut) act'
+        toNewStateConfig = afterInternal' internalTakeTransition (alphabet aut) (transRel $ aut) act'
     stateConf' <- toNewStateConfig `fmapmq` stateConf intrpr
     return $ intrpr { stateConf = Monad.join stateConf' }
+{-
+after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after intrpr act' = 
+    let aut = syntacticAutomaton intrpr
+        stateConf' = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act'
+    in intrpr { stateConf = stateConf' }
+    -}
 
-afterInternal' :: (Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, Monad execM) =>
+afterInternal' :: (StepSemantics m loc q t tdest act, Monad m, BoundedConfiguration m, Ord t, StateSemantics loc q, Monad execM) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
-    (q -> act -> Maybe (t, tdest) -> loc -> execM (m q)) ->
-    ((loc -> execM (m q)) -> m loc -> execM (m (m q))) ->
-    (((tdest, loc) -> execM (m q)) -> m (tdest, loc) -> execM (m (m q))) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
-afterInternal' internalTakeTransition internalMove fmapmloc fmaptdestloc alph transMap act q = do
+afterInternal' internalTakeTransition alph transMap act q = do
     t <- internalTakeTransition q alph act (lookupAction $ transMap $ asLoc q)
-    Monad.join <$> case t of
-        LocationMove mloc -> internalMove q act (nothingTTdest transMap) `fmapmloc` mloc
+    --Monad.join <$> case t of
+    return $ Monad.join $ case t of
+        LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
             where
             -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
             nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
             nothingTTdest _ = Nothing
-        TransitionMove (t, mtdestloc) -> moveAlongTransition q act t `fmaptdestloc` mtdestloc
+        TransitionMove (t, mtdestloc) -> moveAlongTransition q act t <$> mtdestloc
             where
-            moveAlongTransition q act t (tdest, loc) = internalMove q act (Just (t, tdest)) loc
+            moveAlongTransition :: q -> act -> t -> (tdest, loc) -> m q
+            moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
         where
         lookupAction :: Ord k => Map k a -> k -> a
         lookupAction m k = case Map.lookup k m of
             Just v -> v
             Nothing -> throw $ ActionOutsideAlphabet callStack
+{-
+after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
+after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+    LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
+        where
+         -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
+        nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
+        nothingTTdest _ = Nothing
+    TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
+        where
+        moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+    where
+    lookupAction :: Ord k => Map k a -> k -> a
+    lookupAction m k = case Map.lookup k m of
+        Just v -> v
+        Nothing -> throw $ ActionOutsideAlphabet callStack
+-}
 
 -- | Take a sequence of transitions for the given actions.
 afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
@@ -495,8 +514,8 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         return $ LocationMove $ if qui then pure loc else forbidden
     ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
-    ioMove = error "?!?"
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
+    move = error "?!?"
 
 hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
 hasSymbolicQuiescence smtRef stateVal m = do
@@ -531,8 +550,8 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         coerceIO = const
     ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromInputAttempt <$> gateValue) m
 
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
-    ioMove = error "?!?"
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) where
+    move = error "?!?"
 
 ------------------------------------
 -- STS input-failure + quiescence --
@@ -562,8 +581,8 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         coerceIO = const
     ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromSuspendedInputAttempt <$> gateValue) m
 
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => IOStepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) SmtEnv where
-    ioMove = error "?!?"
+instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) where
+    move = error "?!?"
 
 -------------------------
 -- Auxiliary functions --
