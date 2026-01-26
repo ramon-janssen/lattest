@@ -44,7 +44,7 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, IOStepSemantics, AutIntrpr, IOAfter, ioAfter, stateConf, AutomatonException)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, BooleanConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef, SmtEnv)
@@ -101,11 +101,12 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+makeTester :: (After m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester = makeTester' ()
 
-makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
+--makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
+makeSMTTester :: (IOAfter m loc q t tdest act SMTRef, TestChoice i act, BoundedConfiguration m) =>
     SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeSMTTester = makeTester'
 
@@ -198,11 +199,11 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+runTester :: (After m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 
-runSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
+runSMTTester :: (IOAfter m loc q t tdest act SMTRef, TestChoice i act, BoundedConfiguration m) =>
     SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester ioState spec testSelection) adapter
 

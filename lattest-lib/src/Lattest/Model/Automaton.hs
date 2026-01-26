@@ -37,9 +37,9 @@ implicitDestination,
 TransitionSemantics,
 StateSemantics,
 StepSemantics,
-IOStepSemantics,
 after,
 afters,
+After,
 IOAfter,
 ioAfter,
 -- ** Exceptions
@@ -224,13 +224,12 @@ class (StateSemantics loc q, BoundedMonad m) => StepSemantics m loc q t tdest ac
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
-type AutomatonSemantics m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act)
-type IOAutomatonSemantics m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act)
+type After m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord t)
 
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: (AutomatonSemantics m loc q t tdest act, Ord t) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: After m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     where
     takeTransitionId :: (BoundedApplicative m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
@@ -241,10 +240,10 @@ after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
 class IOAfter m loc q t tdest act ioState where
     ioAfter :: ioState -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
 
-instance (IOAutomatonSemantics m loc q t tdest act, Ord t) => IOAfter m loc q t tdest act () where
+instance After m loc q t tdest act => IOAfter m loc q t tdest act () where
     ioAfter () aut act = return $ after aut act
 
-instance (StepSemantics m loc q t tdest act, BooleanConfiguration m, Foldable m, Ord tdest, Ord q, Ord loc) => IOAfter m loc q t tdest act (IORef z) where
+instance (StepSemantics m loc q t tdest act, IOTransitionSemantics loc q t tdest act z, BooleanConfiguration m, Foldable m, Ord tdest, Ord q, Ord loc, Ord t) => IOAfter m loc q t tdest act (IORef z) where
     ioAfter execState = afterInternal (ioTakeTransition execState) distributeMonadOverFoldable
 
 --takeTransition :: (BoundedApplicative m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
@@ -283,7 +282,7 @@ afterInternal' internalTakeTransition alph transMap act q = do
             nothingTTdest _ = Nothing
         TransitionMove (t, mtdestloc) -> moveAlongTransition q act t <$> mtdestloc
             where
-            moveAlongTransition :: q -> act -> t -> (tdest, loc) -> m q
+            moveAlongTransition :: (StepSemantics m loc q t tdest act) => q -> act -> t -> (tdest, loc) -> m q
             moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
         where
         lookupAction :: Ord k => Map k a -> k -> a
@@ -309,7 +308,7 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
 -}
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: After m loc q t tdest act => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -349,7 +348,7 @@ actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedAppli
 actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (StepSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
+specifiedMenu :: (After m loc q t tdest act, Foldable m) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -493,6 +492,7 @@ instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, Transition
         assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
+    move _ _ Nothing l2 = return (IntrpState l1 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
 evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
@@ -513,9 +513,6 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then pure loc else forbidden
     ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
-
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
-    move = error "?!?"
 
 hasSymbolicQuiescence :: (BoundedApplicative m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
 hasSymbolicQuiescence smtRef stateVal m = do
@@ -550,9 +547,6 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         coerceIO = const
     ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromInputAttempt <$> gateValue) m
 
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) where
-    move = error "?!?"
-
 ------------------------------------
 -- STS input-failure + quiescence --
 ------------------------------------
@@ -580,9 +574,6 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         coerceIO :: IFGateValue i o -> Set.Set (IOSymInteract i o) -> IFGateValue i o
         coerceIO = const
     ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromSuspendedInputAttempt <$> gateValue) m
-
-instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) where
-    move = error "?!?"
 
 -------------------------
 -- Auxiliary functions --

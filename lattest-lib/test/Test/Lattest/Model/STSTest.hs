@@ -131,7 +131,7 @@ data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 -- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
 tExampleCorrect (L0, x) = Map.fromList $
     [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
-tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L1, x))]
+tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L0, x))]
 tExampleCorrect (L2, _) = Map.fromList $ []
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impExampleCorrect = do
@@ -140,7 +140,7 @@ impExampleCorrect = do
 
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
-    let nrSteps = 20
+    let nrSteps = 35
         cfg = Config.changeLog Config.defaultConfig True 
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
@@ -153,5 +153,5 @@ testSTSTestSelection = TestCase $ do
     imp <- impExampleCorrect
     let initAssign = Map.singleton (Variable "x" IntType) (Cint 0)
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    assertEqual "expected ???" [] observed
+    assertEqual "expected ???" [] observed -- [?"water" [1],!"ok" [1],?"water" [1],!"ok" [2],?"water" [1],!"ok" [3],?"water" [1],!"ok" [4],?"water" [1],!"ok" [5],?"water" [1],!"ok" [6],?"water" [1],!"ok" [7],?"water" [1],!"ok" [8],?"water" [1],!"ok" [9],?"water" [1],!"ok" [10]]
     assertEqual "expected pass " Pass verdict

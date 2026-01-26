@@ -57,7 +57,7 @@ where
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction, SuspendedIFGateValue)
-import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc))
+import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), After)
 import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp, SuspInputAttemptSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualValExpr)
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
@@ -102,7 +102,7 @@ selector state sel upd = TestController {
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomTestSelector :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
+randomTestSelector :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
     => IO (TestSelector m loc q t tdest act StdGen i)
 randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
 
@@ -110,7 +110,7 @@ randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomTestSelectorFromSeed :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
+randomTestSelectorFromSeed :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act)
     => Int -> TestSelector m loc q t tdest act StdGen i
 randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
 
@@ -118,7 +118,7 @@ randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomTestSelectorFromGen :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
+randomTestSelectorFromGen :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g)
     => g -> TestSelector m loc q t tdest act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
