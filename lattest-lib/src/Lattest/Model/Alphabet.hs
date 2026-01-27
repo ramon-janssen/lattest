@@ -289,7 +289,7 @@ data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
 type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where
-    show (GateValue gate vals) = show gate ++ " " ++ show vals
+    show (GateValue gate vals) = show gate ++ if null vals then "" else "" ++ show vals
 
 valueGate :: GateValue g -> g
 valueGate (GateValue gate _) = gate

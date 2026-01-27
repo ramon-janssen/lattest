@@ -14,7 +14,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runTester,runSMTTester, Verdict(Pass))
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue)
+import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue, InputAttempt(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -140,18 +140,58 @@ impExampleCorrect = do
 
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
-    let nrSteps = 35
+    let nrSteps = 37
         cfg = Config.changeLog Config.defaultConfig True 
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
     info <- SMT.runSMT smtRef SMT.openSolver
-    --putStrLn $ show info -- TODO check for expected value instead of printing
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     let initAssign = Map.singleton (Variable "x" IntType) (Cint 0)
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    assertEqual "expected ???" [] observed -- [?"water" [1],!"ok" [1],?"water" [1],!"ok" [2],?"water" [1],!"ok" [3],?"water" [1],!"ok" [4],?"water" [1],!"ok" [5],?"water" [1],!"ok" [6],?"water" [1],!"ok" [7],?"water" [1],!"ok" [8],?"water" [1],!"ok" [9],?"water" [1],!"ok" [10]]
+    assertEqual "expected conformal trace" [-- FIXME this test case assumes the SMT solver to return 1, but any solution in (1,10) is correct
+        inp "water" [Cint 1],
+        out "ok" [Cint 1],
+        inp "water" [Cint 1],
+        out "ok" [Cint 2],
+        GateValue δ [],
+        inp "water" [Cint 1],
+        out "ok" [Cint 3],
+        inp "water" [Cint 1],
+        out "ok" [Cint 4],
+        inp "water" [Cint 1],
+        out "ok" [Cint 5],
+        GateValue δ [],
+        inp "water" [Cint 1],
+        out "ok" [Cint 6],
+        inp "water" [Cint 1],
+        out "ok" [Cint 7],
+        inp "water" [Cint 1],
+        out "ok" [Cint 8],
+        inp "water" [Cint 1],
+        out "ok" [Cint 9],
+        inp "water" [Cint 1],
+        out "ok" [Cint 10],
+        inp "water" [Cint 1],
+        out "ok" [Cint 11],
+        inp "water" [Cint 1],
+        out "ok" [Cint 12],
+        inp "water" [Cint 1],
+        out "ok" [Cint 13],
+        inp "water" [Cint 1],
+        out "ok" [Cint 14],
+        inp "water" [Cint 1],
+        out "ok" [Cint 15],
+        inp "water" [Cint 1],
+        out "ok" [Cint 16],
+        out "coffee" [],
+        GateValue δ [],
+        GateValue δ []
+        ] observed
     assertEqual "expected pass " Pass verdict
+    where
+    inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
+    out gate vals = GateValue (Out (OutSusp gate)) vals
