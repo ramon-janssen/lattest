@@ -273,8 +273,6 @@ fromSuspendedInputAttempt(Out (OutSusp o)) = Out o
 addTypedVal :: Variable -> Constant -> Valuation -> Valuation
 addTypedVal v c | not (varType v == constType c) = error $ "expression "  ++ show c ++ " :: " ++ show (constType c) ++ " assigned to variable " ++ varName v ++ " :: " ++ show (varType v)
 addTypedVal v c = Map.insert v c
---addTypedVal (Variable v BoolType) (Cbool w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Bool) w m
---addTypedVal (Variable v IntType) (Cint w) m = Grisette.insertValue (GSymPrim.typedAnySymbol v :: GSymPrim.TypedAnySymbol Integer) w m
 
 data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
 type IOSymInteract i o = SymInteract (IOAct i o)
