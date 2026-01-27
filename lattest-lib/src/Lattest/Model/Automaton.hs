@@ -492,7 +492,7 @@ instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, Transition
         assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
         assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
-    move _ _ Nothing l2 = return (IntrpState l1 stateValuation) -- TODO check if this is correct
+    move (IntrpState _ stateValuation) _ Nothing l2 = return (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
 evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
