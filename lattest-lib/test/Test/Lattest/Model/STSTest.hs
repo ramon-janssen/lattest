@@ -195,3 +195,26 @@ testSTSTestSelection = TestCase $ do
     where
     inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
     out gate vals = GateValue (Out (OutSusp gate)) vals
+
+
+stsFDLExample :: IOSTS FreeLattice Integer String String
+stsFDLExample =
+    let pvarexpr = cstrVar pvar
+        xvarexpr = cstrVar xvar
+        water = SymInteract (In "water") [pvar]
+        ok = SymInteract (Out "ok") [pvar]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = (intConst 1 .<= pvarexpr) .&& (pvarexpr .<= intConst 10)
+        waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
+        okGuard = xvarexpr .== pvarexpr
+        coffeeGuard = xvarexpr .>= (intConst 15)
+        initConf = NonDet [0] :: NonDet Integer
+        switches = \q -> case q of
+            0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
+                                (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
+            1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
+            2 -> Map.empty
+        initAssign = Map.singleton xvar (Cint 0)
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
+
