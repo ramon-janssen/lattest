@@ -55,6 +55,7 @@ hunitTests = TestList [
     testSpecG,
     testSpecGQuiescent,
     testSTSTestSelection,
+    testSTSDisnjunction1,
     testRandomFCorrect,
     testRandomFIncorrectOutput,
     testRandomFIncorrectInput,

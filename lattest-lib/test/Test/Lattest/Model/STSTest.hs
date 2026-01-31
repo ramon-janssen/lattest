@@ -1,7 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS,testSTSTestSelection)
+module Test.Lattest.Model.STSTest (
+    testSTSHappyFlow,
+    testErrorThrowingGates,
+    testSTSUnHappyFlow,
+    testPrintSTS,
+    testSTSTestSelection,
+    testSTSDisnjunction1
+    )
 where
 
 import Prelude hiding (take)
@@ -240,16 +247,37 @@ stsFDL startType endType comp =
 stsFDLInitAssign = Map.singleton xvar (Cint 0)
 stsFDLIntrpr = interpretSTS (stsFDL In Out (/\)) stsFDLInitAssign
 
-tExampleCorrect (L0, x) = Map.fromList $
-    [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
-tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L0, x))]
-tExampleCorrect (L2, _) = Map.fromList $ []
-impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
-impExampleCorrect = do
-    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+t1 startType endType 0 = Map.fromList $ [((GateValue (startType "start") [Cint 10]), 1)]
+t1 startType endType 1 = Map.fromList $ [((GateValue (endType "end") [Cint 4, Cint 6]), 2)]
+t1 startType endType 2 = Map.fromList $ []
+imp1 :: (String -> IOAct String String) -> (String -> IOAct String String) -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
+imp1 startType endType = do
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
-impl1 :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
-impl1 = do
-    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
-    Adapter.mapActionsFromSut toIOGateValue imp
+testLatticeSTS :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> ((String -> IOAct String String) -> (String -> IOAct String String) -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))) -> Test
+testLatticeSTS startType endType comp impIO = TestCase $ do
+    let nrSteps = 3
+        cfg = Config.changeLog Config.defaultConfig True 
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    info <- SMT.runSMT smtRef SMT.openSolver
+
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    imp <- impIO startType endType
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete (stsFDL startType endType comp) stsExampleInitAssign) testSelector imp
+    assertEqual "expected conformal trace" [
+        inp "start" [Cint 1],
+        out "end" [Cint 1],
+        GateValue δ []
+        ] observed
+    assertEqual "expected pass " Pass verdict
+    where
+    inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
+    out gate vals = GateValue (Out (OutSusp gate)) vals
+
+testSTSDisnjunction1 = testLatticeSTS In Out (\/) imp1
+
+
