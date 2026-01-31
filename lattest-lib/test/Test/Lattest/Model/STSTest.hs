@@ -155,7 +155,7 @@ impExampleCorrect = do
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 37
-        cfg = Config.changeLog Config.defaultConfig True 
+        cfg = Config.changeLog Config.defaultConfig False 
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
@@ -231,14 +231,10 @@ stsFDL startType endType comp =
         x = cstrVar xvar
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
-        {-waterGuard = (intConst 1 .<= p) .&& (pvarexpr .<= intConst 10)
-        waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
-        okGuard = xvarexpr .== pvarexpr
-        coffeeGuard = xvarexpr .>= (intConst 15)-}
         initConf = pure 0 :: FreeLattice Integer
         switches = \s -> case s of
             0 -> Map.fromList [
-                    (start, pure (stsTLoc ((intConst 9 .< p) .&& (p .< intConst 10)) (assignment [xvar =: p]), 1))
+                    (start, pure (stsTLoc ((intConst 9 .< p) .&& (p .< intConst 11)) (assignment [xvar =: p]), 1))
                     ]
             1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== intConst 2 .* x .- intConst 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
             2 -> Map.empty
@@ -255,8 +251,8 @@ imp1 startType endType = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
-testLatticeSTS :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> ((String -> IOAct String String) -> (String -> IOAct String String) -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))) -> Test
-testLatticeSTS startType endType comp impIO = TestCase $ do
+testLatticeSTS :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> ((String -> IOAct String String) -> (String -> IOAct String String) -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))) -> Test
+testLatticeSTS startType endType comp p1 p2 q2 impIO = TestCase $ do
     let nrSteps = 3
         cfg = Config.changeLog Config.defaultConfig True 
         smtLog = Config.smtLog cfg
@@ -264,20 +260,20 @@ testLatticeSTS startType endType comp impIO = TestCase $ do
     smtRef <- SMT.createSMTRef smtProc smtLog
     info <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impIO startType endType
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete (stsFDL startType endType comp) stsExampleInitAssign) testSelector imp
+    assertEqual ("expected pass after " ++ show observed) Pass verdict
     assertEqual "expected conformal trace" [
-        inp "start" [Cint 1],
-        out "end" [Cint 1],
+        inp "start" [Cint p1],
+        out "end" [Cint p2, Cint q2],
         GateValue δ []
         ] observed
-    assertEqual "expected pass " Pass verdict
     where
     inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
     out gate vals = GateValue (Out (OutSusp gate)) vals
 
-testSTSDisnjunction1 = testLatticeSTS In Out (\/) imp1
+testSTSDisnjunction1 = testLatticeSTS In Out (\/) 10 6 4 imp1
 
 
