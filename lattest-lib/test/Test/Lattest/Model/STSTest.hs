@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+
 module Test.Lattest.Model.STSTest (testSTSHappyFlow,testErrorThrowingGates,testSTSUnHappyFlow,testPrintSTS,testSTSTestSelection)
 where
 
@@ -201,7 +203,21 @@ testSTSTestSelection = TestCase $ do
     inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
     out gate vals = GateValue (Out (OutSusp gate)) vals
 
-stsFDL :: (String -> IOAct String String) -> (String -> IOAct String String) -> (FreeLattice a -> FreeLattice a -> FreeLattice a) -> IOSTS FreeLattice Integer String String
+{- stsFDL:
+                        end(p,q)    
+                       〚p+q=2x-6〛   
+                     ╱——————>•      
+    x:=0            ╱               
+    ———>•—————————>•    end(p,q)    
+         start(p)   ╲   〚p-q=x〛     
+         〚9<p<11〛    ╲——————>•      
+          x ≔ p                     
+                                    
+  parameterized by
+  * whether start and end gates are input or output
+  * the type of branching from the second state (conjunction or disjunction)
+-}
+stsFDL :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> IOSTS FreeLattice Integer String String
 stsFDL startType endType comp =
     let p = cstrVar pvar
         q = cstrVar qvar
@@ -213,15 +229,27 @@ stsFDL startType endType comp =
         okGuard = xvarexpr .== pvarexpr
         coffeeGuard = xvarexpr .>= (intConst 15)-}
         initConf = pure 0 :: FreeLattice Integer
-        switches = \q -> case q of
+        switches = \s -> case s of
             0 -> Map.fromList [
                     (start, pure (stsTLoc ((intConst 9 .< p) .&& (p .< intConst 10)) (assignment [xvar =: p]), 1))
                     ]
             1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== intConst 2 .* x .- intConst 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
             2 -> Map.empty
             3 -> Map.empty
-        initAssign = Map.singleton xvar (Cint 0)
     in automaton initConf (Set.fromList [start, end]) switches
 stsFDLInitAssign = Map.singleton xvar (Cint 0)
 stsFDLIntrpr = interpretSTS (stsFDL In Out (/\)) stsFDLInitAssign
 
+tExampleCorrect (L0, x) = Map.fromList $
+    [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
+tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L0, x))]
+tExampleCorrect (L2, _) = Map.fromList $ []
+impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
+impExampleCorrect = do
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+    Adapter.mapActionsFromSut toIOGateValue imp
+
+impl1 :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
+impl1 = do
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+    Adapter.mapActionsFromSut toIOGateValue imp
