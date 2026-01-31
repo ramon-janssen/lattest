@@ -18,12 +18,13 @@ import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), Sus
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,assignment,noAssignment,cstrAnd,cstrLE,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr,ValExprInt,(=:))
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,cstrMinus,cstrTimes,assignment,noAssignment,cstrAnd,cstrLE,cstrLT,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr,ValExprInt,(=:))
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..))
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 
 pvar = (Variable "p" IntType)
+qvar = (Variable "q" IntType)
 xvar = (Variable "x" IntType)
 stsExampleInitAssign = Map.singleton xvar (Cint 0)
 
@@ -54,8 +55,12 @@ getSTSIntrpState loc val = NonDet [IntrpState loc $ Map.singleton (Variable "x" 
 (.&&) a b = cstrAnd $ Set.union (Set.singleton a) (Set.singleton b)
 (.<=) = cstrLE
 (.>=) = cstrGE
+(.<) = cstrLT
 (.+) = cstrPlus
+(.-) = cstrMinus
+(.*) = cstrTimes
 (.==) = cstrEqual
+infixr 8 .==
 
 intConst :: Integer -> ValExprInt
 intConst i = cstrConst $ Cint i
@@ -196,25 +201,27 @@ testSTSTestSelection = TestCase $ do
     inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
     out gate vals = GateValue (Out (OutSusp gate)) vals
 
-
-stsFDLExample :: IOSTS FreeLattice Integer String String
-stsFDLExample =
-    let pvarexpr = cstrVar pvar
-        xvarexpr = cstrVar xvar
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
-        coffee = SymInteract (Out "coffee") []
-        waterGuard = (intConst 1 .<= pvarexpr) .&& (pvarexpr .<= intConst 10)
+stsFDL :: (String -> IOAct String String) -> (String -> IOAct String String) -> (FreeLattice a -> FreeLattice a -> FreeLattice a) -> IOSTS FreeLattice Integer String String
+stsFDL startType endType comp =
+    let p = cstrVar pvar
+        q = cstrVar qvar
+        x = cstrVar xvar
+        start = SymInteract (startType "start") [pvar]
+        end = SymInteract (endType "end") [pvar, qvar]
+        {-waterGuard = (intConst 1 .<= p) .&& (pvarexpr .<= intConst 10)
         waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
         okGuard = xvarexpr .== pvarexpr
-        coffeeGuard = xvarexpr .>= (intConst 15)
-        initConf = NonDet [0] :: NonDet Integer
+        coffeeGuard = xvarexpr .>= (intConst 15)-}
+        initConf = pure 0 :: FreeLattice Integer
         switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
-                                (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
-            1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
+            0 -> Map.fromList [
+                    (start, pure (stsTLoc ((intConst 9 .< p) .&& (p .< intConst 10)) (assignment [xvar =: p]), 1))
+                    ]
+            1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== intConst 2 .* x .- intConst 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
             2 -> Map.empty
+            3 -> Map.empty
         initAssign = Map.singleton xvar (Cint 0)
-    in automaton initConf (Set.fromList [water,ok,coffee]) switches
-stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
+    in automaton initConf (Set.fromList [start, end]) switches
+stsFDLInitAssign = Map.singleton xvar (Cint 0)
+stsFDLIntrpr = interpretSTS (stsFDL In Out (/\)) stsFDLInitAssign
 
