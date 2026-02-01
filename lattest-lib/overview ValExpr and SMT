@@ -30,34 +30,17 @@ SolveSTS
 SolveSymPrim
 -solve guards / solve any in list
 
-=== Model/Symbolic/ ===
+=== Model/Symbolic/ValExpr ===
 Boute
 - div/mod
 Constant
 - Constant = String|Bool|Int
 - SortOf
 - [resettable etc.]
-CstrDef
-- [constructor data types]
-CstrId
-- [Identifier for Constructor]
 FreeMonoidX
 - polynomial implementation
-FuncDef
-- [Function defs]
-FuncId
-- [identifier for function]
-Id
-- resettable, identifiable
-Name
-- Name = Text
 FreeProduct
 - product as monoid
-SortDef
-- SortDef (no information)
-SortId
-- SortId
-- mapping from Int/Bool/String to numbers
 Sum
 - Sum as monoid
 ValExprDefs
@@ -73,3 +56,24 @@ ValExprImpls
 - basic functions: sum, prod, const, var, equals, ITE, etc.
 ValExprImplsExtension
 - plus, minus, not, <=, etc.
+
+=== Removed from Model/Symbolic/ValExpr ===
+CstrDef XXX
+- [constructor data types]
+CstrId XXX
+- [Identifier for Constructor]
+FuncDef XXX
+- [Function defs]
+FuncId XXX
+- [identifier for function]
+Id XXX
+- resettable, identifiable
+Name XXX
+- Name = Text
+SortDef XXX
+- SortDef (no information)
+SortId XXX
+- SortId
+- mapping from Int/Bool/String to numbers
+SortOf
+- sortOf :: s -> SortId

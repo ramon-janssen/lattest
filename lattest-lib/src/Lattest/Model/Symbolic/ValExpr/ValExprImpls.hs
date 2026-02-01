@@ -98,10 +98,7 @@ import qualified Data.Text       as T
 
 import qualified Lattest.Model.Symbolic.ValExpr.Boute as Boute
 import           Lattest.Model.Symbolic.ValExpr.Constant
-import           Lattest.Model.Symbolic.ValExpr.CstrId
 import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX        as FMX
-import           Lattest.Model.Symbolic.ValExpr.FuncDef
-import           Lattest.Model.Symbolic.ValExpr.FuncId
 import           Lattest.Model.Symbolic.ValExpr.Product as Product
 --import           Lattest.Model.Symbolic.ValExpr.RegexXSD2Posix
 import           Lattest.Model.Symbolic.ValExpr.Sum as Sum

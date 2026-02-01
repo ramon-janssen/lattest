@@ -50,8 +50,6 @@ import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX     as FMX
 import           GHC.Generics    (Generic)
 import           Prelude         hiding (subtract, sum)
 
-import           Lattest.Model.Symbolic.ValExpr.Id
-
 {--------------------------------------------------------------------
   The data types
 --------------------------------------------------------------------}
@@ -73,8 +71,6 @@ newtype SumTerm a = SumTerm { summand :: a }
 
 instance Show a => Show (SumTerm a) where
     show = show . summand
-
-instance (Resettable a) => Resettable (SumTerm a)
 
 instance Num a => Semigroup (SumTerm a) where
     (SumTerm x) <> (SumTerm y) = SumTerm $ x + y

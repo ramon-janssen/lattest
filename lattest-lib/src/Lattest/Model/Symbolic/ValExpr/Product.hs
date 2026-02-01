@@ -63,7 +63,6 @@ import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX     (FreeMonoidX (..
                                   TermWrapper, (<.>))
 import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX     as FMX
 
-import           Lattest.Model.Symbolic.ValExpr.Id
 {--------------------------------------------------------------------
   The data types
 --------------------------------------------------------------------}
@@ -85,8 +84,6 @@ newtype ProductTerm a = ProductTerm { factor :: a }
 
 instance Show a => Show (ProductTerm a) where
     show = show . factor
-
-instance (Resettable a) => Resettable (ProductTerm a)
 
 instance Applicative ProductTerm where
     pure = ProductTerm

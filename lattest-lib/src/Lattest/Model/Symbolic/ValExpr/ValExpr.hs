@@ -27,8 +27,6 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , ValExprIntView(..)
 , ValExprBoolView(..)
 , ValExprStringView(..)
-, PredefKind(..)
-, Resettable
 , Type(..)
 , varName
 , varType
@@ -47,7 +45,6 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 where
 
 import           Lattest.Model.Symbolic.ValExpr.Constant
-import           Lattest.Model.Symbolic.ValExpr.Id
 import           Lattest.Model.Symbolic.ValExpr.ValExprDefs
 import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 import           Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension

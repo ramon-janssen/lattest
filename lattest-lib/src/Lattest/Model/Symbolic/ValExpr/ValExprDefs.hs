@@ -29,7 +29,6 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , ValExprString
 , Eval
 , eval
-, PredefKind(..)
 , Variable(..)
 , Type(..)
 , varName
@@ -51,14 +50,9 @@ import           GHC.Integer (divInteger)
 
 import           Lattest.Model.Symbolic.ValExpr.Constant (Constant(..), toBool, toText)
 import qualified Lattest.Model.Symbolic.ValExpr.Constant as Const (toInteger)
-import           Lattest.Model.Symbolic.ValExpr.CstrId
 import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
-import           Lattest.Model.Symbolic.ValExpr.FuncId
-import           Lattest.Model.Symbolic.ValExpr.Id
 import           Lattest.Model.Symbolic.ValExpr.Product
 import           Lattest.Model.Symbolic.ValExpr.Sum
-import           Lattest.Model.Symbolic.ValExpr.SortId
-import           Lattest.Model.Symbolic.ValExpr.SortOf
 
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
@@ -348,18 +342,6 @@ instance TypeableExpr ValExprBoolView where
 
 instance TypeableExpr ValExprStringView where
     typeOfExpr _ = StringType
-
--- | only needed for CNECTDEF
-data PredefKind     = AST     -- Algebraic To String
-                    | ASF     -- Algebraic From String
-                    | AXT     -- Algebraic To Xml
-                    | AXF     -- Algebraic From Xml
-                    | SSB     -- Standard Sort Bool
-                    | SSI     -- Standard Sort Int
-                    | SSS     -- Standard Sort String
-     deriving (Eq, Ord, Read, Show, Generic, NFData, Data)
-
-instance Resettable PredefKind
 
 -- ----------------------------------------------------------------------------------------- --
 --

@@ -30,11 +30,6 @@ import           Data.Data
 import           Data.Text       (Text)
 import           GHC.Generics    (Generic)
 
-import           Lattest.Model.Symbolic.ValExpr.CstrId
-import           Lattest.Model.Symbolic.ValExpr.Id
-import           Lattest.Model.Symbolic.ValExpr.SortId
-import           Lattest.Model.Symbolic.ValExpr.SortOf
-
 -- | Union of Boolean, Integer, String, and AlgebraicDataType constant values.
 data Constant = -- | Constructor of Boolean constant.
                 Cbool    { toBool :: Bool }
@@ -60,14 +55,3 @@ instance Show Constant where
   show (Cint i) = show i
   show (Cstring t) = show t
 
--- | Const is Resettable
-instance Resettable Constant
-
--- | Const has a Sort.
-instance SortOf Constant where
-  sortOf (Cbool _b)                         = sortIdBool
-  sortOf (Cint _i)                          = sortIdInt
-  sortOf (Cstring _s)                       = sortIdString
---  sortOf (Cregex _r)                        = sortIdRegex
---  sortOf (Ccstr (CstrId _nm _uid _ca cs) _) = cs
---  sortOf (Cany s)                           = s
