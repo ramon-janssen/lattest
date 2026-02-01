@@ -1,0 +1,75 @@
+=== SMT ===
+Config
+- SMT solver configs
+- CreateProcess
+ParamCore
+- [ImpRel/InputCompletion]
+- some util functions for configs (can go to Config)
+SMT2TXS
+- smtValueToValExpr
+SMTData
+- SmtEnv (handles)
+- SMT / SMTRef / runSMT
+- [EnvDefs]
+SMT
+- re-export
+SMTInternal
+- openSolver / init / close
+- createSMTRef / createSMTEnv
+- push / pop / addAssertions / getSolution / etc.
+SMTString
+- encoding / decoding (escaping) raw strings to SMT string expressions
+SolveDefs
+- Solution (Map v Constant) / SolvableProblem (SAT/UNSAT/unknown)
+TXS2SMT
+- assertionsToSMT / integer2smt / constToSMT / valexprToSMT / etc.
+
+=== Model/Symbolic ===
+SolveSTS
+- solve guards/interactions/state
+SolveSymPrim
+-solve guards / solve any in list
+
+=== Model/Symbolic/ ===
+Boute
+- div/mod
+Constant
+- Constant = String|Bool|Int
+- SortOf
+- [resettable etc.]
+CstrDef
+- [constructor data types]
+CstrId
+- [Identifier for Constructor]
+FreeMonoidX
+- polynomial implementation
+FuncDef
+- [Function defs]
+FuncId
+- [identifier for function]
+Id
+- resettable, identifiable
+Name
+- Name = Text
+FreeProduct
+- product as monoid
+SortDef
+- SortDef (no information)
+SortId
+- SortId
+- mapping from Int/Bool/String to numbers
+Sum
+- Sum as monoid
+ValExprDefs
+- Type = Int|String|Bool (own addition)
+- ValExpr = expression tree
+- show
+- reduce/eval
+- views
+- getConst
+ValExpr
+- re-export
+ValExprImpls
+- basic functions: sum, prod, const, var, equals, ITE, etc.
+ValExprImplsExtension
+- plus, minus, not, <=, etc.
