@@ -19,6 +19,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE GADTs #-}
 module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 ( ValExprIntView(..)
 , ValExprBoolView(..)
@@ -76,6 +77,30 @@ instance Show Variable where
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
+
+data Expr t where
+    IntConst :: Int -> Expr Int
+    IntVar :: Variable -> Expr Int
+    IntIte :: {conditionInt2 :: Expr Bool, trueBranchInt2 :: Expr Int, falseBranchInt2 :: Expr Int} -> Expr Int
+    IntDivide :: {dividend2 :: Expr Int, divisor2 :: Expr Int} -> Expr Int
+    IntModulo :: {dividend2 :: Expr Int, divisor2 :: Expr Int} -> Expr Int
+    IntSum :: FreeSum (Expr Int) -> Expr Int
+    IntProduct :: FreeProduct (Expr Int) -> Expr Int
+    Length :: Expr String -> Expr Int
+    BoolConst :: Constant -> Expr Bool
+    BoolVar :: Variable -> Expr Bool
+    EqualInt :: Expr Int -> Expr Int -> Expr Bool
+    EqualBool :: Expr Bool -> Expr Bool -> Expr Bool
+    EqualString :: Expr String -> Expr String -> Expr Bool
+    BoolIte :: {conditionBool2 :: Expr Bool, trueBranchBool2 :: Expr Bool, falseBranchBool2 :: Expr Bool} -> Expr Bool
+    GezInt :: Expr Int -> Expr Bool
+    Not :: Expr Bool -> Expr Bool
+    And :: Set (Expr Bool) -> Expr Bool
+    StringConst :: Constant -> Expr String
+    StringVar :: Variable -> Expr String
+    StringIte :: {conditionString2 :: ValExprBool, trueBranchString2 :: Expr String, falseBranchString2 :: Expr String} -> Expr String
+    At :: {string2 :: Expr String, position2 :: ValExprInt} -> Expr String
+    Concat :: [Expr String] -> Expr String
 
 -- | ValExprView: the public view of value expression 'ValExpr'
 data ValExprIntView = VIntConst  Constant
