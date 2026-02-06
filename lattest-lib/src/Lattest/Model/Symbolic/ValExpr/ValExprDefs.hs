@@ -23,17 +23,13 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE StandaloneDeriving #-}
 module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 ( ExprView(..)
-, ValExpr(..)       -- for local usage only!
-, ValExprInt
-, ValExprBool
-, ValExprString
-, Eval
+, Expr(..)       -- for local usage only!
 , eval
+, reduce
 , Variable(..)
 , Type(..)
 , varName
 , varType
-, constType
 , isConst
 )
 where
@@ -55,7 +51,7 @@ import           Lattest.Model.Symbolic.ValExpr.Product
 import           Lattest.Model.Symbolic.ValExpr.Sum
 
 
-data Type = IntType | BoolType | StringType deriving (Eq, Ord)
+data Type = IntType | BoolType | StringType deriving (Eq, Ord, Show, Read)
 
 -- TODO ideally the Variable has a parameter t that denotes the type, so that the typechecker can match it to ValExprs with the same type t
 data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
@@ -152,9 +148,9 @@ reduce (IntConst v) = IntConst v
 reduce (IntVar v) = IntVar v
 reduce (IntIte (reduce -> BoolConst b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
 reduce (IntIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = IntIte c e1 e2
-reduce (IntSum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (+) 0 (mapFreeMonoidX getInt es)
+reduce (IntSum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = IntConst $ foldrTerms (+) 0 (mapFreeMonoidX getIntConst es)
 reduce (IntSum (mapFreeMonoidX reduce -> es)) = IntSum es
-reduce (IntProduct (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = vint $ foldrTerms (*) 1 (mapFreeMonoidX getInt es)
+reduce (IntProduct (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = IntConst $ foldrTerms (*) 1 (mapFreeMonoidX getIntConst es)
 reduce (IntProduct (mapFreeMonoidX reduce -> es)) = IntProduct es
 reduce (IntModulo (reduce -> (IntConst x)) (reduce -> (IntConst y))) = IntConst $ x `mod` y
 reduce (IntModulo (reduce -> e1) (reduce -> e2)) = IntModulo e1 e2
@@ -183,7 +179,7 @@ reduce (GezInt (reduce -> (IntConst x))) = BoolConst $ x >= 0
 reduce (GezInt (reduce -> e)) = GezInt e
 reduce (Not (reduce -> (BoolConst b))) = BoolConst $ not b
 reduce (Not (reduce -> e)) = Not e
-reduce (And (Set.map reduce -> es)) | all isConst es = BoolConst $ foldr (&&) True (Set.map getBool es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
+reduce (And (Set.map reduce -> es)) | all isConst es = BoolConst $ foldr (&&) True (Set.map getBoolConst es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
 reduce (And (Set.map reduce -> es)) = And es
 --reduce (view -> Vstrinre { })                                  =
 --reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
@@ -196,9 +192,9 @@ reduce (StringConst con) = StringConst con
 reduce (StringVar v) = StringVar v
 reduce (StringIte (reduce -> BoolConst c) (reduce -> e1) (reduce -> e2)) = if c then e1 else e2
 reduce (StringIte (reduce -> c) (reduce -> e1) (reduce -> e2)) = StringIte c e1 e2
-reduce (At (reduce -> (StringConst s)) (reduce -> (IntConst i))) = StringConst $ drop i s -- TODO are these semantics the same as in SMT2?
+reduce (At (reduce -> (StringConst s)) (reduce -> (IntConst i))) = StringConst $ drop (fromIntegral i) s -- TODO are these semantics the same as in SMT2?
 reduce (At (reduce -> e1) (reduce -> e2)) = At e1 e2
-reduce (Concat (fmap reduce -> es)) | all isConst es = StringConst $ Text.concat $ fmap getText es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
+reduce (Concat (fmap reduce -> es)) | all isConst es = StringConst $ concat $ fmap getStringConst es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
 reduce (Concat (fmap reduce -> e)) = Concat e
 --reduce (view -> Vstrinre { })                                  =
 --reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
@@ -206,32 +202,12 @@ reduce (Concat (fmap reduce -> e)) = Concat e
 --getConst :: ValExprView -> Constant
 getIntConst :: ExprView Integer -> Integer
 getIntConst (IntConst c) = c
+getBoolConst :: ExprView Bool -> Bool
 getBoolConst (BoolConst c) = c
+getStringConst :: ExprView String -> String
 getStringConst (StringConst c) = c
---getInt :: ValExprView -> Integer
-getInt = Const.toInteger . getIntConst
-getBool :: ExprView Bool -> Bool
-getBool = toBool . getBoolConst
---getText :: ValExprView -> Text
-getText = toText . getStringConst
 
--- variations of reduce that work on ValExprs or produce ValExprs. Note that this is only to make the type checker happy.
---reduce :: Expr t -> t
---reduce = reduce . view
---reduce :: Expr t -> Expr t
---reduce = Expr . reduce
---vbool :: Bool -> ExprView
-vbool = BoolConst . Cbool
---vint :: Integer -> ExprView
-vint = IntConst . Cint
---vtext :: Text -> ExprView
-vtext = StringConst . Cstring
-textLength :: Text -> Integer
-textLength = Prelude.toInteger . Text.length
-charAt :: Text -> Integer -> Text
-charAt t i = Text.pack $ if i > Prelude.toInteger (Text.length t) then [Text.index t (fromInteger i)] else "" 
-
-typeOfExpr :: Expr t -> Type
+typeOfExpr :: ExprView t -> Type
 typeOfExpr (IntConst _) = IntType
 typeOfExpr (IntVar _) = IntType
 typeOfExpr (IntIte _ _ _) = IntType
