@@ -69,7 +69,7 @@ asDualValExpr
 )
 where
 
-import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBool, ValExprBoolView(VBoolConst), ValExpr(..))
+import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBool, ValExprBoolView(BoolConst), ValExpr(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(cstrAnd, cstrNot)
 import Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension(cstrOr)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
@@ -291,16 +291,16 @@ class BooleanConfiguration m where -- TODO: possibly this class can be less ad-h
 
 instance BooleanConfiguration Det where
     asValExpr (Det q) = q
-    asValExpr ForbiddenDet = ValExpr $ VBoolConst $ Cbool False
-    asValExpr UnderspecDet = ValExpr $ VBoolConst $ Cbool True
+    asValExpr ForbiddenDet = ValExpr $ BoolConst $ Cbool False
+    asValExpr UnderspecDet = ValExpr $ BoolConst $ Cbool True
 
 instance BooleanConfiguration NonDet where
     asValExpr (NonDet qs) = cstrOr $ Set.fromList qs
-    asValExpr UnderspecNonDet = ValExpr $ VBoolConst $ Cbool True
+    asValExpr UnderspecNonDet = ValExpr $ BoolConst $ Cbool True
 
 instance BooleanConfiguration FreeLattice where
-    asValExpr (FreeLattice Top) = ValExpr $ VBoolConst $ Cbool True
-    asValExpr (FreeLattice Bottom) = ValExpr $ VBoolConst $ Cbool False
+    asValExpr (FreeLattice Top) = ValExpr $ BoolConst $ Cbool True
+    asValExpr (FreeLattice Bottom) = ValExpr $ BoolConst $ Cbool False
     asValExpr (FreeLattice (Levitate a)) = asValExpr' a
         where
         asValExpr' (Var a) = a

@@ -213,14 +213,14 @@ instance SMTExpr ValExprIntView where
     --valexprToSMT (view -> Vaccess cd _n p arg) = "(" <> toFieldName cd p <> " " <> valexprToSMT enames arg <> ")"
 
 
-    valexprToSMT (view -> VIntConst c) = constToSMT c
+    valexprToSMT (view -> IntConst c) = constToSMT c
 
-    valexprToSMT (view -> VIntVar (Variable varName IntType))  =  T.pack varName
-    valexprToSMT (view -> VIntVar v)  =  error $ "valexprToSMT: int expression containing variable " ++ show v
+    valexprToSMT (view -> IntVar (Variable varName IntType))  =  T.pack varName
+    valexprToSMT (view -> IntVar v)  =  error $ "valexprToSMT: int expression containing variable " ++ show v
 
-    valexprToSMT (view -> VIntIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
+    valexprToSMT (view -> IntIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
 
-    valexprToSMT (view -> VIntSum s) =
+    valexprToSMT (view -> IntSum s) =
         let ol = toOccurListT s in
             case ol of
             {  [o] -> arg2smt o
@@ -233,7 +233,7 @@ instance SMTExpr ValExprIntView where
             arg2smt (vexpr, multiplier) |  multiplier /= 0  = "(* " <> integer2smt multiplier <> " " <> valexprToSMT vexpr <> ")"
             arg2smt (_, multiplier)                         = error ("valexprToSMT - arg2smt - illegal multiplier " ++ show multiplier)
 
-    valexprToSMT (view -> VIntProduct p) =
+    valexprToSMT (view -> IntProduct p) =
         let ol = toOccurListT p in
             case ol of
             {  [o] -> arg2smt o
@@ -245,47 +245,47 @@ instance SMTExpr ValExprIntView where
             arg2smt (vexpr, power) |  power > 0 = "(^ " <> valexprToSMT vexpr <> " " <> integer2smt power <> ")"
             arg2smt (_, power)                  = error ("valexprToSMT - arg2smt - illegal power " ++ show power)
 
-    valexprToSMT (view -> VIntDivide t n) = "(div " <> valexprToSMT t <> " "  <> valexprToSMT n <> ")"
-    valexprToSMT (view -> VIntModulo t n) = "(mod " <> valexprToSMT t <> " "  <> valexprToSMT n <> ")"
+    valexprToSMT (view -> IntDivide t n) = "(div " <> valexprToSMT t <> " "  <> valexprToSMT n <> ")"
+    valexprToSMT (view -> IntModulo t n) = "(mod " <> valexprToSMT t <> " "  <> valexprToSMT n <> ")"
     valexprToSMT (view -> VLength expr)  =
         "(str.len " <> valexprToSMT expr <> ")"
 
 instance SMTExpr ValExprBoolView where
-    valexprToSMT (view -> VBoolConst c) = constToSMT c
+    valexprToSMT (view -> BoolConst c) = constToSMT c
 
-    valexprToSMT (view -> VBoolVar (Variable varName BoolType))  =  T.pack varName
-    valexprToSMT (view -> VBoolVar v)  =  error $ "valexprToSMT: bool expression containing variable " ++ show v
+    valexprToSMT (view -> BoolVar (Variable varName BoolType))  =  T.pack varName
+    valexprToSMT (view -> BoolVar v)  =  error $ "valexprToSMT: bool expression containing variable " ++ show v
 
-    valexprToSMT (view -> VBoolIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
+    valexprToSMT (view -> BoolIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
 
-    valexprToSMT (view -> VGezInt v)      = "(<= 0 " <> valexprToSMT v <> ")"
+    valexprToSMT (view -> GezInt v)      = "(<= 0 " <> valexprToSMT v <> ")"
 
-    valexprToSMT (view -> VEqualInt expr1 expr2)  =
+    valexprToSMT (view -> EqualInt expr1 expr2)  =
         "(= " <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
 
-    valexprToSMT (view -> VEqualBool expr1 expr2)  =
+    valexprToSMT (view -> EqualBool expr1 expr2)  =
         "(= " <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
 
-    valexprToSMT (view -> VEqualString expr1 expr2)  =
+    valexprToSMT (view -> EqualString expr1 expr2)  =
         "(= " <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
 
-    valexprToSMT (view -> VNot expr)  =
+    valexprToSMT (view -> Not expr)  =
         "(not " <> valexprToSMT expr <> ")"
 
-    valexprToSMT (view -> VAnd exprs)  =
+    valexprToSMT (view -> And exprs)  =
         "(and " <> T.intercalate " " (map valexprToSMT (Set.toList exprs)) <> ")"
 
 instance SMTExpr ValExprStringView where
-    valexprToSMT (view -> VStringConst c) = constToSMT c
+    valexprToSMT (view -> StringConst c) = constToSMT c
 
-    valexprToSMT (view -> VStringVar (Variable varName StringType))  =  T.pack varName
-    valexprToSMT (view -> VStringVar v)  =  error $ "valexprToSMT: bool expression containing variable " ++ show v
+    valexprToSMT (view -> StringVar (Variable varName StringType))  =  T.pack varName
+    valexprToSMT (view -> StringVar v)  =  error $ "valexprToSMT: bool expression containing variable " ++ show v
 
-    valexprToSMT (view -> VStringIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
+    valexprToSMT (view -> StringIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
 
-    valexprToSMT (view -> VAt s p)  =
+    valexprToSMT (view -> At s p)  =
         "(str.at " <> valexprToSMT s <> " " <> valexprToSMT p <> ")"
-    valexprToSMT (view -> VConcat vexprs)  =
+    valexprToSMT (view -> Concat vexprs)  =
         "(str.++ " <> T.intercalate " " (map valexprToSMT vexprs) <> ")"
 --    valexprToSMT (view -> Vstrinre s r)  =
 --        "(str.in.re " <> valexprToSMT s <> " " <> valexprToSMT r <> ")"
