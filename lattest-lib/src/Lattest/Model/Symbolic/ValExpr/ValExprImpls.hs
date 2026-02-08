@@ -164,25 +164,25 @@ class ConstExpr t where
     cstrConst :: t -> Expr t
 
 instance ConstExpr Integer where
-    cstrConst = IntConst
+    cstrConst = Expr . IntConst
 
 instance ConstExpr Bool where
-    cstrConst = BoolConst
+    cstrConst = Expr . BoolConst
 
 instance ConstExpr String where
-    cstrConst = StringConst
+    cstrConst = Expr . StringConst
 
 -- | Create a variable as a value expression.
 class VarExpr t where
     cstrVar :: Variable -> Expr t
 
-instance VarExpr ExprView Integer where
+instance VarExpr Integer where
     cstrVar = Expr . IntVar
 
-instance VarExpr ExprView Bool where
+instance VarExpr Bool where
     cstrVar = Expr . BoolVar
 
-instance VarExpr ExprView String where
+instance VarExpr String where
     cstrVar = Expr . StringVar
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
@@ -190,9 +190,9 @@ instance VarExpr ExprView String where
 class IteExpr t where
     cstrITE :: Expr Bool -> Expr t -> Expr t -> Expr t
 
-instance IteExpr ExprView Integer where
-    cstrITE (view -> BoolConst (Cbool True))  tb _ = tb
-    cstrITE (view -> BoolConst (Cbool False)) _ fb = fb
+instance IteExpr Integer where
+    cstrITE (view -> BoolConst True)  tb _ = tb
+    cstrITE (view -> BoolConst False) _ fb = fb
     -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
     -- Not implemented to enable conditional evaluation 
     -- if c then a else a <==> a
@@ -203,11 +203,11 @@ instance IteExpr ExprView Integer where
     cstrITE c (view -> BoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
     -- if (not c) then tb else fb <==> if c then fb else tb
     cstrITE (view -> Vnot n) tb fb              = Expr (Vite n fb tb)-}
-    cstrITE cs tb fb                            = Expr (IntIte cs tb fb)
+    cstrITE (view -> cs) (view -> tb) (view -> fb) = Expr $ IntIte cs tb fb
 
-instance IteExpr ExprView Bool where
-    cstrITE (view -> BoolConst (Cbool True))  tb _ = tb
-    cstrITE (view -> BoolConst (Cbool False)) _ fb = fb
+instance IteExpr Bool where
+    cstrITE (view -> BoolConst True)  tb _ = tb
+    cstrITE (view -> BoolConst False) _ fb = fb
     -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
     -- Not implemented to enable conditional evaluation 
     -- if c then a else a <==> a
@@ -218,11 +218,11 @@ instance IteExpr ExprView Bool where
     cstrITE c (view -> BoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
     -- if (not c) then tb else fb <==> if c then fb else tb
     cstrITE (view -> Vnot n) tb fb              = Expr (Vite n fb tb)-}
-    cstrITE cs tb fb                            = Expr (BoolIte cs tb fb)
+    cstrITE (view -> cs) (view -> tb) (view -> fb) = Expr $ BoolIte cs tb fb
 
-instance IteExpr ExprView String where
-    cstrITE (view -> BoolConst (Cbool True))  tb _ = tb
-    cstrITE (view -> BoolConst (Cbool False)) _ fb = fb
+instance IteExpr String where
+    cstrITE (view -> BoolConst True)  tb _ = tb
+    cstrITE (view -> BoolConst False) _ fb = fb
     -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
     -- Not implemented to enable conditional evaluation 
     -- if c then a else a <==> a
@@ -233,20 +233,20 @@ instance IteExpr ExprView String where
     cstrITE c (view -> BoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
     -- if (not c) then tb else fb <==> if c then fb else tb
     cstrITE (view -> Vnot n) tb fb              = Expr (Vite n fb tb)-}
-    cstrITE cs tb fb                            = Expr (StringIte cs tb fb)
+    cstrITE (view -> cs) (view -> tb) (view -> fb) = Expr $ StringIte cs tb fb
 
 -- | Create a variable as a value expression.
 class EqExpr t where
     cstrEqual :: Expr t -> Expr t -> Expr Bool
     
-instance EqExpr ExprView Integer where
-    cstrEqual x y = Expr $ EqualInt x y
+instance EqExpr Integer where
+    cstrEqual (view -> x) (view -> y) = Expr $ EqualInt x y
 
-instance EqExpr ExprView Bool where
-    cstrEqual x y = Expr $ EqualBool x y
+instance EqExpr Bool where
+    cstrEqual (view -> x) (view -> y) = Expr $ EqualBool x y
 
-instance EqExpr ExprView String where
-    cstrEqual x y = Expr $ EqualString x y
+instance EqExpr String where
+    cstrEqual (view -> x) (view -> y) = Expr $ EqualString x y
 
 
 
@@ -295,14 +295,14 @@ cstrNot ve                                  = Expr (Not ve)
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-cstrAnd :: Set.Set Expr Bool -> Expr Bool
+cstrAnd :: Set.Set (Expr Bool) -> Expr Bool
 --cstrAnd = cstrAnd' . flattenAnd
 cstrAnd = Expr . And . flattenAnd
     where
-        flattenAnd :: Set.Set Expr Bool -> Set.Set Expr Bool
+        flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
         
-        fromExpr :: Expr Bool -> Set.Set Expr Bool
+        fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
         fromExpr (view -> And a) = a
         fromExpr x                = Set.singleton x
 {-
@@ -358,13 +358,13 @@ isSum :: Expr Integer -> Bool
 isSum (view -> IntSum{}) = True
 isSum _                = False
 
-getSum :: Expr Integer -> FreeSum Expr Integer
+getSum :: Expr Integer -> FreeSum (ExprView Integer)
 getSum (view -> IntSum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
-cstrSum ::  FreeSum Expr Integer -> Expr Integer
+cstrSum ::  FreeSum (Expr Integer) -> Expr Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the sum of all values
@@ -374,11 +374,11 @@ cstrSum ms =
     cstrSum' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSum ms
-      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm Expr Integer))
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (Expr Integer)))
       sumOfAdds = FMX.mapTerms (getSum . summand) adds
 
 -- Sum doesn't contain elements of type VExprSum
-cstrSum' :: FreeSum Expr Integer -> Expr Integer
+cstrSum' :: FreeSum (Expr Integer) -> Expr Integer
 cstrSum' ms =
     let (vals, nonvals) = FMX.partitionT (isConst . view) ms
         sumVals = summand $ FMX.foldFMX (FMX.mapTerms (SumTerm . getIntVal . summand) vals)
@@ -391,6 +391,9 @@ cstrSum' ms =
             [(term,1)] -> summand term
             _          -> Expr (IntSum retMS)
 
+getIntVal :: ExprView Integer -> Integer
+getIntVal (IntConst i) = i 
+
 -- Product
 
 -- | Is Expr a Product Expression?
@@ -398,14 +401,14 @@ isProduct :: Expr Integer -> Bool
 isProduct (view -> IntProduct{}) = True
 isProduct _                    = False
 
-getProduct :: Expr Integer -> FreeProduct Expr Integer
+getProduct :: Expr Integer -> FreeProduct (ExprView Integer)
 getProduct (view -> IntProduct p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
 -- Preconditions are /not/ checked.
-cstrProduct :: forall v . FreeProduct Expr Integer -> Expr Integer
+cstrProduct :: forall v . FreeProduct (Expr Integer) -> Expr Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the product of all values
@@ -415,11 +418,11 @@ cstrProduct ms =
     cstrProduct' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProduct ms
-      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm Expr Integer))
+      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (Expr Integer)))
       prodOfProds = FMX.mapTerms (getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
-cstrProduct' :: FreeProduct Expr Integer -> Expr Integer
+cstrProduct' :: FreeProduct (Expr Integer) -> Expr Integer
 cstrProduct' ms =
     let (vals, nonvals) = FMX.partitionT (isConst . view) ms
         (zeros, _) = FMX.partitionT isZero vals
@@ -439,7 +442,7 @@ cstrProduct' ms =
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
         isZero :: Expr Integer -> Bool
-        isZero (view -> IntConst (Cint 0)) = True
+        isZero (view -> IntConst 0) = True
         isZero _                            = False
 
 -- Divide
@@ -447,8 +450,8 @@ cstrProduct' ms =
 -- | Apply operator Divide on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrDivide :: Expr Integer -> Expr Integer -> Expr Integer
-cstrDivide _                          (view -> IntConst (Cint n)) | n == 0 = error "Error in model: Division by Zero in Divide"
-cstrDivide (view ->  IntConst (Cint t)) (view -> IntConst (Cint n)) = cstrConst (Cint (t `Boute.div` n) )
+cstrDivide _                     (view -> IntConst n) | n == 0 = error "Error in model: Division by Zero in Divide"
+cstrDivide (view ->  IntConst t) (view -> IntConst n) = cstrConst (t `Boute.div` n)
 cstrDivide vet ven = Expr (IntDivide vet ven)
 
 -- Modulo
@@ -456,41 +459,41 @@ cstrDivide vet ven = Expr (IntDivide vet ven)
 -- | Apply operator Modulo on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrModulo :: Expr Integer -> Expr Integer -> Expr Integer
-cstrModulo _                         (view -> IntConst (Cint n)) | n == 0 = error "Error in model: Division by Zero in Modulo"
-cstrModulo (view -> IntConst (Cint t)) (view -> IntConst (Cint n)) = cstrConst (Cint (t `Boute.mod` n) )
+cstrModulo _                    (view -> IntConst n) | n == 0 = error "Error in model: Division by Zero in Modulo"
+cstrModulo (view -> IntConst t) (view -> IntConst n) = cstrConst (t `Boute.mod` n)
 cstrModulo vet ven = Expr (IntModulo vet ven)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGEZ :: Expr Integer -> Expr Bool
 -- Simplification Values
-cstrGEZ (view -> IntConst (Cint v)) = cstrConst (Cbool (0 <= v))
-cstrGEZ (view -> Length _)       = cstrConst (Cbool True)        -- length of string is always Greater or equal to zero
-cstrGEZ ve                        = Expr (GezInt ve)
+cstrGEZ (view -> IntConst v) = cstrConst (0 <= v)
+cstrGEZ (view -> Length _)   = cstrConst True        -- length of string is always Greater or equal to zero
+cstrGEZ ve                   = Expr (GezInt ve)
 
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrLength :: Expr String -> Expr Integer
-cstrLength (view -> StringConst (Cstring s)) = cstrConst (Cint (Prelude.toInteger (T.length s)))
-cstrLength v                            = Expr (VLength v)
+cstrLength (view -> StringConst s) = cstrConst (Prelude.toInteger (T.length s))
+cstrLength v                       = Expr (VLength v)
 
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrAt :: Expr String -> Expr Integer -> Expr String
-cstrAt (view -> StringConst (Cstring s)) (view -> IntConst (Cint i)) =
+cstrAt (view -> StringConst s) (view -> IntConst i) =
     if i < 0 || i >= Prelude.toInteger (T.length s)
         then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (T.length s) ++ " with illegal index "++ show i) 
-        else cstrConst (Cstring (T.take 1 (T.drop (fromInteger i) s)))
-cstrAt ves vei = Expr (At ves vei)
+        else cstrConst (T.take 1 (T.drop (fromInteger i) s))
+cstrAt ves vei = Expr $ At ves vei
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
 cstrConcat :: [Expr String] -> Expr String
 cstrConcat l =
-    let n = (mergeVals . flatten . filter (cstrConst (Cstring "") /= ) ) l in
+    let n = (mergeVals . flatten . filter (cstrConst "" /= ) ) l in
         case Prelude.length n of
-           0 -> cstrConst (Cstring "")
+           0 -> cstrConst ""
            1 -> head n
            _ -> Expr (Concat n)
 
@@ -503,8 +506,8 @@ cstrConcat l =
 mergeVals :: [Expr String] -> [Expr String]
 mergeVals []            = []
 mergeVals [x]           = [x]
-mergeVals ( (view -> StringConst (Cstring s1)) : (view -> StringConst (Cstring s2)) : xs) =
-                          mergeVals (cstrConst (Cstring (s1 <> s2)): xs)
+mergeVals ( (view -> StringConst s1) : (view -> StringConst s2) : xs) =
+                          mergeVals (cstrConst (s1 <> s2): xs)
 mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
 
 flatten :: [Expr String] -> [Expr String]
@@ -528,9 +531,9 @@ type Valuation = Map.Map Variable Constant
 
 -- TODO ideally we statically match the variable and expr types, see remark at the definition of Variable
 data VarModel = VarModel {
-    intVars :: Map.Map Variable Expr Integer,
-    boolVars :: Map.Map Variable Expr Bool,
-    stringVars :: Map.Map Variable Expr String
+    intVars :: Map.Map Variable (Expr Integer),
+    boolVars :: Map.Map Variable (Expr Bool),
+    stringVars :: Map.Map Variable (Expr String)
     } deriving (Eq, Ord)
 
 assignment :: [VarModel -> VarModel] -> VarModel
@@ -545,7 +548,7 @@ class Assignable t where
 (=:) = assign
 infixr 0 =:
 
-instance Assignable ExprView Integer where
+instance Assignable (ExprView Integer) where
     assign v e m = case varType v of
         IntType -> assignInt v e m
         _ -> error $ "assigned Integer expression to Variable " ++ show v
@@ -558,7 +561,7 @@ instance Assignable ExprView Integer where
 assignInt :: Variable -> Expr Integer -> VarModel -> VarModel
 assignInt v e m = m {intVars = Map.insert v e (intVars m)}
 
-instance Assignable ExprView Bool where
+instance Assignable (ExprView Bool) where
     assign v e m = case varType v of
         BoolType -> assignBool v e m
         _ -> error $ "assigned Bool expression to Variable " ++ show v
@@ -571,7 +574,7 @@ instance Assignable ExprView Bool where
 assignBool :: Variable -> Expr Bool -> VarModel -> VarModel
 assignBool v e m = m {boolVars = Map.insert v e (boolVars m)}
 
-instance Assignable ExprView String where
+instance Assignable (ExprView String) where
     assign v e m = case varType v of
         StringType -> assignString v e m
         _ -> error $ "assigned String expression to Variable " ++ show v
@@ -629,7 +632,7 @@ subst ve x = subst' ve (view x)
 class Subst e where
     subst' :: VarModel -> e -> Expr e
 
-instance Subst ExprView Integer where
+instance Subst (ExprView Integer) where
     --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
     subst' _    (IntConst const')          = cstrConst const'
     subst' ve   (IntVar vid)               = assignedExprWithDefault vid ve
@@ -646,7 +649,7 @@ instance Subst ExprView Integer where
     --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
     --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
 
-instance Subst ExprView Bool where
+instance Subst (ExprView Bool) where
     --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
     subst' _    (BoolConst const')         = cstrConst const'
     subst' ve   (BoolVar vid)              = assignedExprWithDefault vid ve
@@ -664,7 +667,7 @@ instance Subst ExprView Bool where
     --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
     --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
 
-instance Subst ExprView String where
+instance Subst (ExprView String) where
     --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
     subst' _    (StringConst const')          = cstrConst const'
     subst' ve   (StringVar vid)               = assignedExprWithDefault vid ve
@@ -685,7 +688,7 @@ compSubst ve x                 = compSubst' ve (view x)
 class CompSubst e where
     compSubst' :: VarModel ->  e -> Expr e
 
-instance CompSubst ExprView Integer where
+instance CompSubst (ExprView Integer) where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
     -- Preconditions are /not/ checked.
     --compSubst' _  _   (Vconst const')          = cstrConst const'
@@ -705,7 +708,7 @@ instance CompSubst ExprView Integer where
     --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
     --compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
 
-instance CompSubst ExprView Bool where
+instance CompSubst (ExprView Bool) where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
     -- Preconditions are /not/ checked.
     --compSubst' _  _   (Vconst const')          = cstrConst const'
@@ -726,7 +729,7 @@ instance CompSubst ExprView Bool where
     --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
     --compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
 
-instance CompSubst ExprView String where
+instance CompSubst (ExprView String) where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
     -- Preconditions are /not/ checked.
     --compSubst' _  _   (Vconst const')          = cstrConst const'
