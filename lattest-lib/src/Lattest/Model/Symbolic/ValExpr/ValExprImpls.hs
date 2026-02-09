@@ -291,7 +291,7 @@ cstrNot (view -> Vconst (Cbool False))      = cstrConst (Cbool True)
 cstrNot (view -> Vnot ve)                   = ve
 -- not (if cs then tb else fb) == if cs then not (tb) else not (fb)
 cstrNot (view -> Vite cs tb fb)             = Expr (Vite cs (cstrNot tb) (cstrNot fb))-}
-cstrNot ve                                  = Expr (Not ve)
+cstrNot (view -> ve) = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
@@ -304,7 +304,7 @@ cstrAnd = Expr . And . flattenAnd
         
         fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
         fromExpr (view -> And a) = a
-        fromExpr x                = Set.singleton x
+        fromExpr (view -> x) = Set.singleton x
 {-
 -- And doesn't contain elements of type Vand.
 cstrAnd' :: Set.Set Expr Bool -> Expr Bool
@@ -352,14 +352,14 @@ cstrAnd' s =
 -}
 
 -- * Sum
-
+{-
 -- | Is Expr a Sum Expression?
 isSum :: Expr Integer -> Bool
-isSum (view -> IntSum{}) = True
-isSum _                = False
+isSum (view -> IntSum _) = True
+isSum _ = False
 
-getSum :: Expr Integer -> FreeSum (ExprView Integer)
-getSum (view -> IntSum s) = s
+getSum :: ExprView Integer -> FreeSum (ExprView Integer)
+getSum (IntSum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
 -- | Apply operator sum on the provided sum of value expressions.
@@ -370,15 +370,14 @@ cstrSum ::  FreeSum (Expr Integer) -> Expr Integer
 --    at most one value: the value is the sum of all values
 --         special case if the sum is zero, no value is inserted since v == v+0
 --    remove all nested sums, since (a+b) + (c+d) == (a+b+c+d)
-cstrSum ms =
-    cstrSum' $ nonadds <> FMX.flatten sumOfAdds
+cstrSum ms = cstrSum' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSum ms
       sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (Expr Integer)))
       sumOfAdds = FMX.mapTerms (getSum . summand) adds
 
 -- Sum doesn't contain elements of type VExprSum
-cstrSum' :: FreeSum (Expr Integer) -> Expr Integer
+cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
 cstrSum' ms =
     let (vals, nonvals) = FMX.partitionT (isConst . view) ms
         sumVals = summand $ FMX.foldFMX (FMX.mapTerms (SumTerm . getIntVal . summand) vals)
@@ -397,18 +396,18 @@ getIntVal (IntConst i) = i
 -- Product
 
 -- | Is Expr a Product Expression?
-isProduct :: Expr Integer -> Bool
-isProduct (view -> IntProduct{}) = True
-isProduct _                    = False
+isProduct :: ExprView Integer -> Bool
+isProduct (IntProduct _) = True
+isProduct _ = False
 
-getProduct :: Expr Integer -> FreeProduct (ExprView Integer)
-getProduct (view -> IntProduct p) = p
+getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
+getProduct (IntProduct p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
 -- Preconditions are /not/ checked.
-cstrProduct :: forall v . FreeProduct (Expr Integer) -> Expr Integer
+cstrProduct :: FreeProduct (Expr Integer) -> Expr Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the product of all values
@@ -419,7 +418,7 @@ cstrProduct ms =
     where
       (prods, noprods) = FMX.partitionT isProduct ms
       prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (Expr Integer)))
-      prodOfProds = FMX.mapTerms (getProduct . factor) prods
+      prodOfProds = FMX.mapTerms (view . getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
 cstrProduct' :: FreeProduct (Expr Integer) -> Expr Integer
@@ -444,7 +443,7 @@ cstrProduct' ms =
         isZero :: Expr Integer -> Bool
         isZero (view -> IntConst 0) = True
         isZero _                            = False
-
+-}
 -- Divide
 
 -- | Apply operator Divide on the provided value expressions.
@@ -452,7 +451,7 @@ cstrProduct' ms =
 cstrDivide :: Expr Integer -> Expr Integer -> Expr Integer
 cstrDivide _                     (view -> IntConst n) | n == 0 = error "Error in model: Division by Zero in Divide"
 cstrDivide (view ->  IntConst t) (view -> IntConst n) = cstrConst (t `Boute.div` n)
-cstrDivide vet ven = Expr (IntDivide vet ven)
+cstrDivide (view -> vet)         (view -> ven) = Expr (IntDivide vet ven)
 
 -- Modulo
 
@@ -461,7 +460,7 @@ cstrDivide vet ven = Expr (IntDivide vet ven)
 cstrModulo :: Expr Integer -> Expr Integer -> Expr Integer
 cstrModulo _                    (view -> IntConst n) | n == 0 = error "Error in model: Division by Zero in Modulo"
 cstrModulo (view -> IntConst t) (view -> IntConst n) = cstrConst (t `Boute.mod` n)
-cstrModulo vet ven = Expr (IntModulo vet ven)
+cstrModulo (view -> vet)        (view -> ven) = Expr (IntModulo vet ven)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
@@ -469,23 +468,23 @@ cstrGEZ :: Expr Integer -> Expr Bool
 -- Simplification Values
 cstrGEZ (view -> IntConst v) = cstrConst (0 <= v)
 cstrGEZ (view -> Length _)   = cstrConst True        -- length of string is always Greater or equal to zero
-cstrGEZ ve                   = Expr (GezInt ve)
+cstrGEZ (view -> ve)         = Expr (GezInt ve)
 
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrLength :: Expr String -> Expr Integer
-cstrLength (view -> StringConst s) = cstrConst (Prelude.toInteger (T.length s))
-cstrLength v                       = Expr (VLength v)
+cstrLength (view -> StringConst s) = cstrConst (Prelude.toInteger (length s))
+cstrLength (view -> v)             = Expr (Length v)
 
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrAt :: Expr String -> Expr Integer -> Expr String
 cstrAt (view -> StringConst s) (view -> IntConst i) =
-    if i < 0 || i >= Prelude.toInteger (T.length s)
-        then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (T.length s) ++ " with illegal index "++ show i) 
-        else cstrConst (T.take 1 (T.drop (fromInteger i) s))
-cstrAt ves vei = Expr $ At ves vei
+    if i < 0 || i >= Prelude.toInteger (length s)
+        then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (length s) ++ " with illegal index "++ show i) 
+        else cstrConst (take 1 (drop (fromInteger i) s))
+cstrAt (view -> ves) (view -> vei) = Expr $ At ves vei
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
@@ -495,7 +494,7 @@ cstrConcat l =
         case Prelude.length n of
            0 -> cstrConst ""
            1 -> head n
-           _ -> Expr (Concat n)
+           _ -> Expr (Concat $ fmap view n)
 
 -- implementation details:
 -- Properties incorporated
@@ -512,7 +511,7 @@ mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
 
 flatten :: [Expr String] -> [Expr String]
 flatten []                       = []
-flatten ((view -> Concat l):xs) = l ++ flatten xs
+flatten ((view -> Concat l):xs) = fmap Expr l ++ flatten xs
 flatten (x:xs)                   = x : flatten xs
 
 -- | Apply String In Regular Expression operator on the provided value expressions.
@@ -548,7 +547,7 @@ class Assignable t where
 (=:) = assign
 infixr 0 =:
 
-instance Assignable (ExprView Integer) where
+instance Assignable Integer where
     assign v e m = case varType v of
         IntType -> assignInt v e m
         _ -> error $ "assigned Integer expression to Variable " ++ show v
