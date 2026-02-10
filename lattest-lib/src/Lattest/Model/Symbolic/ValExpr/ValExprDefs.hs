@@ -60,13 +60,17 @@ data Type t where
 
 class ExprType t where
     typeOf :: t -> Type t
+    typeOf' :: f t -> Type t
 
 instance ExprType Integer where
     typeOf _ = IntType
+    typeOf' _ = IntType
 instance ExprType Bool where
     typeOf _ = BoolType
+    typeOf' _ = BoolType
 instance ExprType String where
     typeOf _ = StringType
+    typeOf' _ = StringType
 
 deriving instance Eq (Type v)
 deriving instance Ord (Type v)
@@ -85,22 +89,29 @@ data ExprView t where
     Var :: {var :: Variable t} -> ExprView t
     Const :: ExprType t => {constant :: t} -> ExprView t
     Ite :: {conditional :: ExprView Bool, trueBranch :: ExprView t, falseBranch :: ExprView t} -> ExprView t
-    Equal :: Eq t => {eqLeft :: ExprView t, eqRight :: ExprView t} -> ExprView Bool
+    {-
+    No polymorphic Equal possible, because that would make sensible Eq and Ord instances impossible: Equal 1 2 and Equal
+    "a" "b" are both ExprView Bool's, but an == on those expressions would have to compare 1 == "a" and 2 == "b".
+    Var, Const and Ite don't have this problem because the argument types are forced to be equal through the return type.
+    -}
+    EqualInt :: {leftInt :: ExprView Integer, rightInt :: ExprView Integer} -> ExprView Bool
+    EqualString :: {leftString :: ExprView String, rightString :: ExprView String} -> ExprView Bool
+    EqualBool :: {leftBool :: ExprView Bool, rightBool :: ExprView Bool} -> ExprView Bool
     Divide :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Modulo :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Sum :: FreeSum (ExprView Integer) -> ExprView Integer
     Product :: FreeProduct (ExprView Integer) -> ExprView Integer
     Length :: ExprView String -> ExprView Integer
-    GezInt :: ExprView Integer -> ExprView Bool
+    Gez :: ExprView Integer -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     At :: {string2 :: ExprView String, position2 :: ExprView Integer} -> ExprView String
     Concat :: [ExprView String] -> ExprView String
 
-deriving instance Eq v => Eq (ExprView v)
-deriving instance Ord v => Ord (ExprView v)
+deriving instance Eq t => Eq (ExprView t)
+deriving instance Ord t => Ord (ExprView t)
 
-instance Show v => Show (ExprView v) where
+instance Show t => Show (ExprView t) where
     show (Const c) = show c
     show (Product v) = show v
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
@@ -110,7 +121,7 @@ instance Show v => Show (ExprView v) where
     show (Product es) = show es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
     show (Length e) = "length(" ++ show e ++ ")"
 --    show (Equals e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-    show (GezInt e) = "(" ++ show e ++ ") > 0"
+    show (Gez e) = "(" ++ show e ++ ") > 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es
     show (At e1 e2) = "" ++ show e2 ++ "[" ++ show e2 ++ "]"
@@ -120,9 +131,9 @@ instance Show v => Show (ExprView v) where
 -- 1. User can't directly construct Expr (such that invariants will always hold)
 -- 2. User can still pattern match on Expr using 'ExprView'
 -- 3. Overhead at run-time is zero. See https://wiki.haskell.org/Performance/Data_types#Newtypes
-newtype Expr v = Expr {view :: ExprView v} deriving (Eq, Ord)
+newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
 
-instance Show v => Show (Expr v) where
+instance Show t => Show (Expr t) where
     show = show . view
 
 -- | Evaluate the provided value expression.
@@ -166,8 +177,8 @@ reduce (Length (reduce -> e)) = Length e
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
 --reduce (Equals (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 --reduce (Equals (reduce -> e1) (reduce -> e2)) = Equals e1 e2
-reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
-reduce (GezInt (reduce -> e)) = GezInt e
+reduce (Gez (reduce -> (Const x))) = Const $ x >= 0
+reduce (Gez (reduce -> e)) = Gez e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ foldr (&&) True (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
@@ -185,22 +196,6 @@ reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concat $ fmap con
 reduce (Concat (fmap reduce -> e)) = Concat e
 --reduce (view -> Vstrinre { })                                  =
 --reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
-
-typeOfExpr :: ExprView t -> Type t
-typeOfExpr (Const x) = typeOf x
-typeOfExpr (Product _) = IntType
-typeOfExpr (Ite _ _ _) = IntType
-typeOfExpr (Divide _ _) = IntType
-typeOfExpr (Modulo _ _) = IntType
-typeOfExpr (Sum _) = IntType
-typeOfExpr (Product _) = IntType
-typeOfExpr (Length _) = IntType
---typeOfExpr (Equals _ _) = BoolType
-typeOfExpr (GezInt _) = BoolType
-typeOfExpr (Not _) = BoolType
-typeOfExpr (And _) = BoolType
-typeOfExpr (At _ _) = StringType
-typeOfExpr (Concat _) = StringType
 
 -- ----------------------------------------------------------------------------------------- --
 --
