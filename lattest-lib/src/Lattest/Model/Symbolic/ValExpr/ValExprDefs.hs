@@ -31,6 +31,9 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , reduce
 , Variable(..)
 , Type(..)
+, ExprType
+, typeOf
+, typeOf'
 , varName
 , varType
 , isConst
@@ -102,7 +105,7 @@ data ExprView t where
     Sum :: FreeSum (ExprView Integer) -> ExprView Integer
     Product :: FreeProduct (ExprView Integer) -> ExprView Integer
     Length :: ExprView String -> ExprView Integer
-    Gez :: ExprView Integer -> ExprView Bool
+    GezInt :: ExprView Integer -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     At :: {string2 :: ExprView String, position2 :: ExprView Integer} -> ExprView String
@@ -121,7 +124,7 @@ instance Show t => Show (ExprView t) where
     show (Product es) = show es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
     show (Length e) = "length(" ++ show e ++ ")"
 --    show (Equals e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-    show (Gez e) = "(" ++ show e ++ ") > 0"
+    show (GezInt e) = "(" ++ show e ++ ") > 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es
     show (At e1 e2) = "" ++ show e2 ++ "[" ++ show e2 ++ "]"
@@ -177,8 +180,8 @@ reduce (Length (reduce -> e)) = Length e
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
 --reduce (Equals (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 --reduce (Equals (reduce -> e1) (reduce -> e2)) = Equals e1 e2
-reduce (Gez (reduce -> (Const x))) = Const $ x >= 0
-reduce (Gez (reduce -> e)) = Gez e
+reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezInt (reduce -> e)) = GezInt e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ foldr (&&) True (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined

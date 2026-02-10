@@ -156,86 +156,21 @@ cstrAccess c n p e = ValExpr (Vaccess c n p e)
 --isConst (view -> Vconst{}) = True
 --isConst _                  = False
 
--- | Get the integer value of a constant.
+cstrConst :: ExprType t => t -> Expr t
+cstrConst = Const
 
--- TODO These functions can directly typecheck the type of the constant. Maybe remove the Constant layer entirely, and directly supply an Int,...?
--- | Create a constant as a value expression.
-class ConstExpr t where
-    cstrConst :: t -> Expr t
-
-instance ConstExpr Integer where
-    cstrConst = Expr . IntConst
-
-instance ConstExpr Bool where
-    cstrConst = Expr . BoolConst
-
-instance ConstExpr String where
-    cstrConst = Expr . StringConst
-
--- | Create a variable as a value expression.
-class VarExpr t where
-    cstrVar :: Variable -> Expr t
-
-instance VarExpr Integer where
-    cstrVar = Expr . IntVar
-
-instance VarExpr Bool where
-    cstrVar = Expr . BoolVar
-
-instance VarExpr String where
-    cstrVar = Expr . StringVar
+cstrVar :: Variable t -> Expr t
+cstrVar = Var
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
-class IteExpr t where
-    cstrITE :: Expr Bool -> Expr t -> Expr t -> Expr t
-
-instance IteExpr Integer where
-    cstrITE (view -> BoolConst True)  tb _ = tb
-    cstrITE (view -> BoolConst False) _ fb = fb
-    -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
-    -- Not implemented to enable conditional evaluation 
-    -- if c then a else a <==> a
-{-    cstrITE _ tb fb | tb == fb = tb
-    -- Simplification: if c then True else False <==> c
-    cstrITE c (view -> BoolConst (Cbool True)) (view -> Vconst (Cbool False)) = c
-    -- Simplification: if c then False else True <==> not c
-    cstrITE c (view -> BoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
-    -- if (not c) then tb else fb <==> if c then fb else tb
-    cstrITE (view -> Vnot n) tb fb              = Expr (Vite n fb tb)-}
-    cstrITE (view -> cs) (view -> tb) (view -> fb) = Expr $ IntIte cs tb fb
-
-instance IteExpr Bool where
-    cstrITE (view -> BoolConst True)  tb _ = tb
-    cstrITE (view -> BoolConst False) _ fb = fb
-    -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
-    -- Not implemented to enable conditional evaluation 
-    -- if c then a else a <==> a
-{-    cstrITE _ tb fb | tb == fb = tb
-    -- Simplification: if c then True else False <==> c
-    cstrITE c (view -> BoolConst (Cbool True)) (view -> Vconst (Cbool False)) = c
-    -- Simplification: if c then False else True <==> not c
-    cstrITE c (view -> BoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
-    -- if (not c) then tb else fb <==> if c then fb else tb
-    cstrITE (view -> Vnot n) tb fb              = Expr (Vite n fb tb)-}
-    cstrITE (view -> cs) (view -> tb) (view -> fb) = Expr $ BoolIte cs tb fb
-
-instance IteExpr String where
-    cstrITE (view -> BoolConst True)  tb _ = tb
-    cstrITE (view -> BoolConst False) _ fb = fb
-    -- if q then p else False fi <==> q /\ p : Note: p is boolean expression (otherwise different sorts in branches) 
-    -- Not implemented to enable conditional evaluation 
-    -- if c then a else a <==> a
-{-    cstrITE _ tb fb | tb == fb = tb
-    -- Simplification: if c then True else False <==> c
-    cstrITE c (view -> BoolConst (Cbool True)) (view -> Vconst (Cbool False)) = c
-    -- Simplification: if c then False else True <==> not c
-    cstrITE c (view -> BoolConst (Cbool False)) (view -> Vconst (Cbool True)) = cstrNot c
-    -- if (not c) then tb else fb <==> if c then fb else tb
-    cstrITE (view -> Vnot n) tb fb              = Expr (Vite n fb tb)-}
-    cstrITE (view -> cs) (view -> tb) (view -> fb) = Expr $ StringIte cs tb fb
+cstrITE :: Expr Bool -> Expr t -> Expr t -> Expr t
+cstrITE (view -> Const True) t _ = t
+cstrITE (view -> Const False) _ f = f
+cstrITE c t f = Ite c t f
 
 -- | Create a variable as a value expression.
+-- typeclass because every type has its own ExprView-constructor
 class EqExpr t where
     cstrEqual :: Expr t -> Expr t -> Expr Bool
     
@@ -355,11 +290,11 @@ cstrAnd' s =
 {-
 -- | Is Expr a Sum Expression?
 isSum :: Expr Integer -> Bool
-isSum (view -> IntSum _) = True
+isSum (view -> Sum _) = True
 isSum _ = False
 
 getSum :: ExprView Integer -> FreeSum (ExprView Integer)
-getSum (IntSum s) = s
+getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
 -- | Apply operator sum on the provided sum of value expressions.
@@ -388,20 +323,20 @@ cstrSum' ms =
         case FMX.toOccurList retMS of
             []         -> cstrConst (Cint 0)                                -- sum of nothing equal zero
             [(term,1)] -> summand term
-            _          -> Expr (IntSum retMS)
+            _          -> Expr (Sum retMS)
 
 getIntVal :: ExprView Integer -> Integer
-getIntVal (IntConst i) = i 
+getIntVal (Const i) = i 
 
 -- Product
 
 -- | Is Expr a Product Expression?
 isProduct :: ExprView Integer -> Bool
-isProduct (IntProduct _) = True
+isProduct (Product _) = True
 isProduct _ = False
 
 getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
-getProduct (IntProduct p) = p
+getProduct (Product p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
 -- | Apply operator product on the provided product of value expressions.
@@ -434,14 +369,14 @@ cstrProduct' ms =
                         case FMX.toDistinctAscOccurListT nonvals of
                             []          ->  cstrConst (Cint productVals)
                             [(term, 1)] ->  cstrSum (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
-                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (Expr (IntProduct nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
+                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (Expr (Product nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
                             0   ->  cstrConst (Cint 0)      -- 0 * x == 0
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
         isZero :: Expr Integer -> Bool
-        isZero (view -> IntConst 0) = True
+        isZero (view -> Const 0) = True
         isZero _                            = False
 -}
 -- Divide
@@ -449,24 +384,24 @@ cstrProduct' ms =
 -- | Apply operator Divide on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrDivide :: Expr Integer -> Expr Integer -> Expr Integer
-cstrDivide _                     (view -> IntConst n) | n == 0 = error "Error in model: Division by Zero in Divide"
-cstrDivide (view ->  IntConst t) (view -> IntConst n) = cstrConst (t `Boute.div` n)
-cstrDivide (view -> vet)         (view -> ven) = Expr (IntDivide vet ven)
+cstrDivide _                     (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Divide"
+cstrDivide (view ->  Const t) (view -> Const n) = cstrConst (t `Boute.div` n)
+cstrDivide (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
 -- Modulo
 
 -- | Apply operator Modulo on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrModulo :: Expr Integer -> Expr Integer -> Expr Integer
-cstrModulo _                    (view -> IntConst n) | n == 0 = error "Error in model: Division by Zero in Modulo"
-cstrModulo (view -> IntConst t) (view -> IntConst n) = cstrConst (t `Boute.mod` n)
-cstrModulo (view -> vet)        (view -> ven) = Expr (IntModulo vet ven)
+cstrModulo _                    (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Modulo"
+cstrModulo (view -> Const t) (view -> Const n) = cstrConst (t `Boute.mod` n)
+cstrModulo (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGEZ :: Expr Integer -> Expr Bool
 -- Simplification Values
-cstrGEZ (view -> IntConst v) = cstrConst (0 <= v)
+cstrGEZ (view -> Const v) = cstrConst (0 <= v)
 cstrGEZ (view -> Length _)   = cstrConst True        -- length of string is always Greater or equal to zero
 cstrGEZ (view -> ve)         = Expr (GezInt ve)
 
@@ -474,13 +409,13 @@ cstrGEZ (view -> ve)         = Expr (GezInt ve)
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrLength :: Expr String -> Expr Integer
-cstrLength (view -> StringConst s) = cstrConst (Prelude.toInteger (length s))
+cstrLength (view -> Const s) = cstrConst (Prelude.toInteger (length s))
 cstrLength (view -> v)             = Expr (Length v)
 
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrAt :: Expr String -> Expr Integer -> Expr String
-cstrAt (view -> StringConst s) (view -> IntConst i) =
+cstrAt (view -> Const s) (view -> Const i) =
     if i < 0 || i >= Prelude.toInteger (length s)
         then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (length s) ++ " with illegal index "++ show i) 
         else cstrConst (take 1 (drop (fromInteger i) s))
@@ -505,7 +440,7 @@ cstrConcat l =
 mergeVals :: [Expr String] -> [Expr String]
 mergeVals []            = []
 mergeVals [x]           = [x]
-mergeVals ( (view -> StringConst s1) : (view -> StringConst s2) : xs) =
+mergeVals ( (view -> Const s1) : (view -> Const s2) : xs) =
                           mergeVals (cstrConst (s1 <> s2): xs)
 mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
 
@@ -526,21 +461,28 @@ cstrPredef :: PredefKind -> FuncId -> [Expr] -> Expr
 cstrPredef p f a = Expr (Vpredef p f a)
 -}
 
-type Valuation = Map.Map Variable Constant
+type TypedValuation t = Map.Map (Variable t) t
+data Valuation = Valuation {
+    intValuation :: TypedValuation Integer,
+    boolValuation :: TypedValuation Bool,
+    stringValuation :: TypedValuation String
+    }
+    deriving (Eq, Ord)
 
--- TODO ideally we statically match the variable and expr types, see remark at the definition of Variable
+type TypedVarModel t = Map.Map (Variable t) (Expr t)
 data VarModel = VarModel {
-    intVars :: Map.Map Variable (Expr Integer),
-    boolVars :: Map.Map Variable (Expr Bool),
-    stringVars :: Map.Map Variable (Expr String)
-    } deriving (Eq, Ord)
+    intVars :: TypedVarModel Integer,
+    boolVars :: TypedVarModel Bool,
+    stringVars :: TypedVarModel String
+    }
+    deriving (Eq, Ord)
 
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment fs = foldr ($) noAssignment fs
 
 class Assignable t where
-    assign :: Variable -> Expr t -> VarModel -> VarModel
-    assignedExpr :: Variable -> VarModel -> Maybe (Expr t)
+    assign :: Variable t -> Expr t -> VarModel -> VarModel
+    assignedExpr :: Variable t -> VarModel -> Maybe (Expr t)
     assignedExprWithDefault :: Variable -> VarModel -> Expr t
 
 (=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
@@ -633,30 +575,30 @@ class Subst e where
 
 instance Subst (ExprView Integer) where
     --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
-    subst' _    (IntConst const')          = cstrConst const'
-    subst' ve   (IntVar vid)               = assignedExprWithDefault vid ve
+    subst' _    (Const const')          = cstrConst const'
+    subst' ve   (Var vid)               = assignedExprWithDefault vid ve
     --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
     --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
     --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
     --subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
-    subst' ve (IntIte cond vexp1 vexp2)  = cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (IntDivide t n)            = cstrDivide ( (subst' ve . view) t) ( (subst' ve . view) n)
-    subst' ve (IntModulo t n)            = cstrModulo ( (subst' ve . view) t) ( (subst' ve . view) n)
-    subst' ve (IntSum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT s
-    subst' ve (IntProduct p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT p
+    subst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
+    subst' ve (Divide t n)            = cstrDivide ( (subst' ve . view) t) ( (subst' ve . view) n)
+    subst' ve (Modulo t n)            = cstrModulo ( (subst' ve . view) t) ( (subst' ve . view) n)
+    subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT s
+    subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT p
     subst' ve (Length vexp)              = cstrLength ( (subst' ve . view) vexp)
     --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
     --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
 
 instance Subst (ExprView Bool) where
     --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
-    subst' _    (BoolConst const')         = cstrConst const'
-    subst' ve   (BoolVar vid)              = assignedExprWithDefault vid ve
+    subst' _    (Const const')         = cstrConst const'
+    subst' ve   (Var vid)              = assignedExprWithDefault vid ve
     --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
     --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
     --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
     --subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
-    subst' ve (BoolIte cond vexp1 vexp2)= cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
+    subst' ve (Var cond vexp1 vexp2)= cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
     subst' ve (GezInt v)                = cstrGEZ ( (subst' ve . view) v)
     subst' ve (EqualInt vexp1 vexp2)    = cstrEqual ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
     subst' ve (EqualBool vexp1 vexp2)   = cstrEqual ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
@@ -668,13 +610,13 @@ instance Subst (ExprView Bool) where
 
 instance Subst (ExprView String) where
     --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
-    subst' _    (StringConst const')          = cstrConst const'
-    subst' ve   (StringVar vid)               = assignedExprWithDefault vid ve
+    subst' _    (Const const')          = cstrConst const'
+    subst' ve   (Var vid)               = assignedExprWithDefault vid ve
     --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
     --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
     --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
     --subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
-    subst' ve (StringIte cond vexp1 vexp2)  = cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
+    subst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
     subst' ve (At s p)                      = cstrAt ( (subst' ve . view) s) ( (subst' ve . view) p)
     subst' ve (Concat vexps)                = cstrConcat $ map (subst' ve . view) vexps
     --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
@@ -691,18 +633,18 @@ instance CompSubst (ExprView Integer) where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
     -- Preconditions are /not/ checked.
     --compSubst' _  _   (Vconst const')          = cstrConst const'
-    compSubst' ve   (IntVar vid)               = fromMaybe
+    compSubst' ve   (Var vid)               = fromMaybe
                                                         (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
                                                         (assignedExpr vid ve)
     --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
     --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
     --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
     --compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
-    compSubst' ve (IntIte cond vexp1 vexp2)  = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (IntDivide t n)            = cstrDivide ( (compSubst' ve . view) t) ( (compSubst' ve . view) n)
-    compSubst' ve (IntModulo t n)            = cstrModulo ( (compSubst' ve . view) t) ( (compSubst' ve . view) n)
-    compSubst' ve (IntSum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (compSubst' ve . view)) $ FMX.toDistinctAscOccurListT s
-    compSubst' ve (IntProduct p)             = cstrProduct $ FMX.fromOccurListT $ map (first (compSubst' ve . view)) $ FMX.toDistinctAscOccurListT p
+    compSubst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
+    compSubst' ve (Divide t n)            = cstrDivide ( (compSubst' ve . view) t) ( (compSubst' ve . view) n)
+    compSubst' ve (Modulo t n)            = cstrModulo ( (compSubst' ve . view) t) ( (compSubst' ve . view) n)
+    compSubst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (compSubst' ve . view)) $ FMX.toDistinctAscOccurListT s
+    compSubst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (compSubst' ve . view)) $ FMX.toDistinctAscOccurListT p
     compSubst' ve (Length vexp)           = cstrLength ( (compSubst' ve . view) vexp)
     --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
     --compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
@@ -711,14 +653,14 @@ instance CompSubst (ExprView Bool) where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
     -- Preconditions are /not/ checked.
     --compSubst' _  _   (Vconst const')          = cstrConst const'
-    compSubst' ve   (BoolVar vid)               = fromMaybe
+    compSubst' ve   (Var vid)               = fromMaybe
                                                         (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
                                                         (assignedExpr vid ve)
     --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
     --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
     --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
     --compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
-    compSubst' ve (BoolIte cond vexp1 vexp2) = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
+    compSubst' ve (Var cond vexp1 vexp2) = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
     compSubst' ve (GezInt v)                = cstrGEZ ( (compSubst' ve . view) v)
     compSubst' ve (EqualInt vexp1 vexp2)     = cstrEqual ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
     compSubst' ve (EqualBool vexp1 vexp2)    = cstrEqual ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
@@ -732,14 +674,14 @@ instance CompSubst (ExprView String) where
     -- | Substitute variables by value expressions in a value expression (change variable kind).
     -- Preconditions are /not/ checked.
     --compSubst' _  _   (Vconst const')          = cstrConst const'
-    compSubst' ve   (StringVar vid)               = fromMaybe
+    compSubst' ve   (Var vid)               = fromMaybe
                                                         (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
                                                         (assignedExpr vid ve)
     --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
     --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
     --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
     --compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
-    compSubst' ve (StringIte cond vexp1 vexp2)  = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
+    compSubst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
     compSubst' ve (At s p)                      = cstrAt ( (compSubst' ve . view) s) ( (compSubst' ve . view) p)
     compSubst' ve (Concat vexps)                = cstrConcat $ map (compSubst' ve . view) vexps
     --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
