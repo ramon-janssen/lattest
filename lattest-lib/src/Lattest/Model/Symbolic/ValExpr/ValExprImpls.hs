@@ -352,32 +352,32 @@ cstrProduct' ms =
     cstrProduct'' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProduct ms
-      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (Expr Integer)))
-      prodOfProds = FMX.mapTerms (view . getProduct . factor) prods
+      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView Integer)))
+      prodOfProds = FMX.mapTerms (getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
 cstrProduct'' :: FreeProduct (ExprView Integer) -> ExprView Integer
 cstrProduct'' ms =
-    let (vals, nonvals) = FMX.partitionT (isConst . view) ms
+    let (vals, nonvals) = FMX.partitionT isConst ms
         (zeros, _) = FMX.partitionT isZero vals
     in
         case FMX.nrofDistinctTerms zeros of
             0   ->  -- let productVals = Product.foldPower timesVal 1 vals in
-                    let intProducts = FMX.mapTerms (const <$>) vals
+                    let intProducts = FMX.mapTerms (getConst <$>) vals
                         productVals = factor (FMX.foldFMX intProducts)
                     in
                         case FMX.toDistinctAscOccurListT nonvals of
-                            []          ->  cstrConst productVals
+                            []          ->  Const productVals
                             [(term, 1)] ->  cstrSum' (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
-                            _           ->  cstrSum' (FMX.fromOccurList [(SumTerm (Expr (Product nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
+                            _           ->  cstrSum' (FMX.fromOccurList [(SumTerm (Product nonvals), productVals)])  -- productVals can be 1 -> rewrite possible
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
-                            0   ->  cstrConst 0      -- 0 * x == 0
+                            0   ->  Const 0      -- 0 * x == 0
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
-        isZero :: Expr Integer -> Bool
-        isZero (view -> Const 0) = True
-        isZero _                            = False
+        isZero :: ExprView Integer -> Bool
+        isZero (Const 0) = True
+        isZero _         = False
 -- Divide
 
 -- | Apply operator Divide on the provided value expressions.
