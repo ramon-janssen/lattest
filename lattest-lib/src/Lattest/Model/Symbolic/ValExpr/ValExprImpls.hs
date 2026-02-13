@@ -97,7 +97,6 @@ import qualified Data.Text       as T
 --import           Text.Regex.TDFA
 
 import qualified Lattest.Model.Symbolic.ValExpr.Boute as Boute
-import           Lattest.Model.Symbolic.ValExpr.Constant
 import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX        as FMX
 import           Lattest.Model.Symbolic.ValExpr.Product as Product
 --import           Lattest.Model.Symbolic.ValExpr.RegexXSD2Posix
@@ -157,17 +156,17 @@ cstrAccess c n p e = ValExpr (Vaccess c n p e)
 --isConst _                  = False
 
 cstrConst :: ExprType t => t -> Expr t
-cstrConst = Const
+cstrConst = Expr . Const
 
 cstrVar :: Variable t -> Expr t
-cstrVar = Var
+cstrVar = Expr . Var
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrITE :: Expr Bool -> Expr t -> Expr t -> Expr t
 cstrITE (view -> Const True) t _ = t
 cstrITE (view -> Const False) _ f = f
-cstrITE c t f = Ite c t f
+cstrITE (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 
 -- | Create a variable as a value expression.
 -- typeclass because every type has its own ExprView-constructor
@@ -287,10 +286,8 @@ cstrAnd' s =
 -}
 
 -- * Sum
-{-
--- | Is Expr a Sum Expression?
-isSum :: Expr Integer -> Bool
-isSum (view -> Sum _) = True
+isSum :: ExprView Integer -> Bool
+isSum (Sum _) = True
 isSum _ = False
 
 getSum :: ExprView Integer -> FreeSum (ExprView Integer)
@@ -299,34 +296,37 @@ getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
-cstrSum ::  FreeSum (Expr Integer) -> Expr Integer
+cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the sum of all values
 --         special case if the sum is zero, no value is inserted since v == v+0
 --    remove all nested sums, since (a+b) + (c+d) == (a+b+c+d)
-cstrSum ms = cstrSum' $ nonadds <> FMX.flatten sumOfAdds
+cstrSum' ms = cstrSum'' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSum ms
-      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (Expr Integer)))
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView Integer)))
       sumOfAdds = FMX.mapTerms (getSum . summand) adds
 
 -- Sum doesn't contain elements of type VExprSum
-cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
-cstrSum' ms =
-    let (vals, nonvals) = FMX.partitionT (isConst . view) ms
-        sumVals = summand $ FMX.foldFMX (FMX.mapTerms (SumTerm . getIntVal . summand) vals)
+cstrSum'' :: FreeSum (ExprView Integer) -> ExprView Integer
+cstrSum'' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
+        sumVals = summand $ FMX.foldFMX valueSum
         retMS = case sumVals of
                     0 -> nonvals                                      -- 0 + x == x
-                    _ -> Sum.add (cstrConst (Cint sumVals)) nonvals
+                    _ -> Sum.add (Const sumVals) nonvals
     in
         case FMX.toOccurList retMS of
-            []         -> cstrConst (Cint 0)                                -- sum of nothing equal zero
+            []         -> Const 0 -- sum of nothing equal zero
             [(term,1)] -> summand term
-            _          -> Expr (Sum retMS)
+            _          -> Sum retMS
 
-getIntVal :: ExprView Integer -> Integer
-getIntVal (Const i) = i 
+getConst :: ExprView e -> e
+getConst (Const c) = c
+
+
 
 -- Product
 
@@ -342,43 +342,42 @@ getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
 -- Preconditions are /not/ checked.
-cstrProduct :: FreeProduct (Expr Integer) -> Expr Integer
+cstrProduct' :: FreeProduct (ExprView Integer) -> ExprView Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the product of all values
 --         special case if the product is one, no value is inserted since v == v*1
 --    remove all nested products, since (a*b) * (c*d) == (a*b*c*d)
-cstrProduct ms =
-    cstrProduct' $ noprods <> FMX.flatten prodOfProds
+cstrProduct' ms =
+    cstrProduct'' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProduct ms
       prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (Expr Integer)))
       prodOfProds = FMX.mapTerms (view . getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
-cstrProduct' :: FreeProduct (Expr Integer) -> Expr Integer
-cstrProduct' ms =
+cstrProduct'' :: FreeProduct (ExprView Integer) -> ExprView Integer
+cstrProduct'' ms =
     let (vals, nonvals) = FMX.partitionT (isConst . view) ms
         (zeros, _) = FMX.partitionT isZero vals
     in
         case FMX.nrofDistinctTerms zeros of
             0   ->  -- let productVals = Product.foldPower timesVal 1 vals in
-                    let intProducts = FMX.mapTerms (getIntVal <$>) vals
+                    let intProducts = FMX.mapTerms (const <$>) vals
                         productVals = factor (FMX.foldFMX intProducts)
                     in
                         case FMX.toDistinctAscOccurListT nonvals of
-                            []          ->  cstrConst (Cint productVals)
-                            [(term, 1)] ->  cstrSum (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
-                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (Expr (Product nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
+                            []          ->  cstrConst productVals
+                            [(term, 1)] ->  cstrSum' (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
+                            _           ->  cstrSum' (FMX.fromOccurList [(SumTerm (Expr (Product nonvals)), productVals)])  -- productVals can be 1 -> rewrite possible
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
-                            0   ->  cstrConst (Cint 0)      -- 0 * x == 0
+                            0   ->  cstrConst 0      -- 0 * x == 0
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
         isZero :: Expr Integer -> Bool
         isZero (view -> Const 0) = True
         isZero _                            = False
--}
 -- Divide
 
 -- | Apply operator Divide on the provided value expressions.
@@ -480,53 +479,39 @@ data VarModel = VarModel {
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment fs = foldr ($) noAssignment fs
 
+typedValuationToVarModel :: TypedValuation t -> TypedVarModel t
+typedValuationToVarModel vals = Map.map cstrConst vals
+
+valuationToVarModel :: Valuation -> VarModel
+valuationToVarModel vals = VarModel {
+    intVars = typedValuationToVarModel $ intValuation vals,
+    boolVars = typedValuationToVarModel $ boolValuation vals,
+    stringVars = typedValuationToVarModel $ stringValuation vals
+    }
+
 class Assignable t where
     assign :: Variable t -> Expr t -> VarModel -> VarModel
     assignedExpr :: Variable t -> VarModel -> Maybe (Expr t)
-    assignedExprWithDefault :: Variable -> VarModel -> Expr t
+    assignedExprWithDefault :: Variable t -> VarModel -> Expr t
 
-(=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
+(=:) :: Assignable t => Variable t -> Expr t -> VarModel -> VarModel
 (=:) = assign
 infixr 0 =:
 
 instance Assignable Integer where
-    assign v e m = case varType v of
-        IntType -> assignInt v e m
-        _ -> error $ "assigned Integer expression to Variable " ++ show v
-    assignedExpr v (VarModel ints bools strings) = case varType v of
-        IntType -> Map.lookup v ints
-        _ -> error $ "cannot lookup Integer Value for variable " ++ show v
-    assignedExprWithDefault v (VarModel ints bools strings) =  case varType v of
-        IntType -> Map.findWithDefault (cstrVar v) v ints
-        _ -> error $ "cannot lookup Integer Value for variable " ++ show v
-assignInt :: Variable -> Expr Integer -> VarModel -> VarModel
-assignInt v e m = m {intVars = Map.insert v e (intVars m)}
+    assign v e m = m {intVars = Map.insert v e (intVars m)}
+    assignedExpr v (VarModel ints bools strings) = Map.lookup v ints
+    assignedExprWithDefault v (VarModel ints bools strings) = Map.findWithDefault (cstrVar v) v ints
 
-instance Assignable (ExprView Bool) where
-    assign v e m = case varType v of
-        BoolType -> assignBool v e m
-        _ -> error $ "assigned Bool expression to Variable " ++ show v
-    assignedExpr v (VarModel ints bools strings) = case varType v of
-        BoolType -> Map.lookup v bools
-        _ -> error $ "cannot lookup Bool Value for variable " ++ show v
-    assignedExprWithDefault v (VarModel ints bools strings) =  case varType v of
-        BoolType -> Map.findWithDefault (cstrVar v) v bools
-        _ -> error $ "cannot lookup Bool Value for variable " ++ show v
-assignBool :: Variable -> Expr Bool -> VarModel -> VarModel
-assignBool v e m = m {boolVars = Map.insert v e (boolVars m)}
+instance Assignable Bool where
+    assign v e m = m {boolVars = Map.insert v e (boolVars m)}
+    assignedExpr v (VarModel ints bools strings) = Map.lookup v bools
+    assignedExprWithDefault v (VarModel ints bools strings) = Map.findWithDefault (cstrVar v) v bools
 
-instance Assignable (ExprView String) where
-    assign v e m = case varType v of
-        StringType -> assignString v e m
-        _ -> error $ "assigned String expression to Variable " ++ show v
-    assignedExpr v (VarModel ints bools strings) = case varType v of
-        StringType -> Map.lookup v strings
-        _ -> error $ "cannot lookup String Value for variable " ++ show v
-    assignedExprWithDefault v (VarModel ints bools strings) =  case varType v of
-        StringType -> Map.findWithDefault (cstrVar v) v strings
-        _ -> error $ "cannot lookup String Value for variable " ++ show v
-assignString :: Variable -> Expr String -> VarModel -> VarModel
-assignString v e m = m {stringVars = Map.insert v e (stringVars m)}
+instance Assignable String where
+    assign v e m = m {stringVars = Map.insert v e (stringVars m)}
+    assignedExpr v (VarModel ints bools strings) = Map.lookup v strings
+    assignedExprWithDefault v (VarModel ints bools strings) = Map.findWithDefault (cstrVar v) v strings
 
 noAssignment :: VarModel
 noAssignment = VarModel Map.empty Map.empty Map.empty
@@ -538,27 +523,18 @@ instance Show VarModel where
         showList map = showAssign <$> Map.toList map
         showAssign (v,e) = show v ++ ":=" ++ show e
 
-evalConst :: (Subst t) => Valuation -> (Expr t) -> Either String Constant
+evalConst :: Valuation -> Expr t -> Either String t
 evalConst valuation = eval . evalConst' valuation
 
-valuationToVarModel :: Valuation -> VarModel
-valuationToVarModel vals = foldr (uncurry assignConstant) noAssignment $ Map.toList vals
 
-assignConstant :: Variable -> Constant -> VarModel -> VarModel
-assignConstant var@(Variable _ IntType) val@(Cint _) = assignInt var (cstrConst val)
-assignConstant var@(Variable _ BoolType) val@(Cbool _) = assignBool var (cstrConst val)
-assignConstant var@(Variable _ StringType) val@(Cstring _) = assignString var (cstrConst val)
-assignConstant var val = error $ "cannot assign value " ++ show val ++ " to variable " ++ show var
-
-evalConst' :: Subst t => Valuation -> (Expr t) -> (Expr t)
+evalConst' :: Valuation -> Expr t -> Expr t
 evalConst' valuation e = subst (valuationToVarModel valuation) e
 
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
 --
-subst :: Subst e
-      => VarModel      -- ^ Map from variables to value expressions.
+subst :: VarModel      -- ^ Map from variables to value expressions.
 {-      -> Map.Map FuncId (FuncDef w e) -- ^ Map from identifiers to their
                                     -- definitions, this is used to replace
                                     -- function calls by their bodies if all
@@ -570,57 +546,25 @@ subst :: Subst e
 --subst ve _ x   | ve == Map.empty = x
 subst ve x = subst' ve (view x)
 
-class Subst e where
-    subst' :: VarModel -> e -> Expr e
+subst' :: VarModel -> ExprView t -> Expr t
+subst' _  (Const const')          = cstrConst const'
+subst' ve (Var vid)               = assignedExprWithDefault vid ve
+subst' ve (Ite cond vexp1 vexp2)  = cstrITE (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (Divide t n)            = cstrDivide (subst' ve t) (subst' ve n)
+subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
+subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT s
+subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT p
+subst' ve (Length vexp)           = cstrLength (subst' ve vexp)
 
-instance Subst (ExprView Integer) where
-    --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
-    subst' _    (Const const')          = cstrConst const'
-    subst' ve   (Var vid)               = assignedExprWithDefault vid ve
-    --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
-    --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
-    --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
-    --subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
-    subst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (Divide t n)            = cstrDivide ( (subst' ve . view) t) ( (subst' ve . view) n)
-    subst' ve (Modulo t n)            = cstrModulo ( (subst' ve . view) t) ( (subst' ve . view) n)
-    subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT s
-    subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT p
-    subst' ve (Length vexp)              = cstrLength ( (subst' ve . view) vexp)
-    --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
-    --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
+subst' ve (GezInt v)                = cstrGEZ (subst' ve v)
+subst' ve (EqualInt vexp1 vexp2)    = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (EqualBool vexp1 vexp2)   = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (EqualString vexp1 vexp2) = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (And vexps)               = cstrAnd $ Set.map (subst' ve . view) vexps
+subst' ve (Not vexp)                = cstrNot (subst' ve vexp)
 
-instance Subst (ExprView Bool) where
-    --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
-    subst' _    (Const const')         = cstrConst const'
-    subst' ve   (Var vid)              = assignedExprWithDefault vid ve
-    --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
-    --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
-    --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
-    --subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
-    subst' ve (Var cond vexp1 vexp2)= cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (GezInt v)                = cstrGEZ ( (subst' ve . view) v)
-    subst' ve (EqualInt vexp1 vexp2)    = cstrEqual ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (EqualBool vexp1 vexp2)   = cstrEqual ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (EqualString vexp1 vexp2) = cstrEqual ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (And vexps)               = cstrAnd $ Set.map (subst' ve . view) vexps
-    subst' ve (Not vexp)                = cstrNot ( (subst' ve . view) vexp)
-    --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
-    --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
-
-instance Subst (ExprView String) where
-    --subst' :: VarModel -> Map.Map FuncId (FuncDef w e) -> ExprView Bool -> Expr e
-    subst' _    (Const const')          = cstrConst const'
-    subst' ve   (Var vid)               = assignedExprWithDefault vid ve
-    --subst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (subst' ve fis . view) vexps)
-    --subst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (subst' ve fis . view) vexps)
-    --subst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (subst' ve fis . view) vexp)
-    --subst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (subst' ve fis . view) vexp)
-    subst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (subst' ve . view) cond) ( (subst' ve . view) vexp1) ( (subst' ve . view) vexp2)
-    subst' ve (At s p)                      = cstrAt ( (subst' ve . view) s) ( (subst' ve . view) p)
-    subst' ve (Concat vexps)                = cstrConcat $ map (subst' ve . view) vexps
-    --subst' ve fis (Vstrinre s r)           = cstrStrInRe ( (subst' ve fis . view) s) ( (subst' ve fis . view) r)
-    --subst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (subst' ve fis . view) vexps)
+subst' ve (At s p)                      = cstrAt (subst' ve s) (subst' ve p)
+subst' ve (Concat vexps)                = cstrConcat $ map (subst' ve) vexps
 
 compSubst :: CompSubst t => VarModel -> Expr t -> Expr t
 -- compSubst ve _ _ | ve == Map.empty = error "TXS Subst compSubst: variables must be substitute, yet varenv empty\n"
