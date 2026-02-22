@@ -294,6 +294,9 @@ getSum :: ExprView Integer -> FreeSum (ExprView Integer)
 getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
+cstrSum :: FreeSum (Expr Integer) -> Expr Integer
+cstrSum ms = Expr $ cstrSum' $ FMX.mapTerms (SumTerm . view . summand) ms
+
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
 cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
