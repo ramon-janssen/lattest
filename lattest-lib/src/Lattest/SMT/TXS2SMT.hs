@@ -172,10 +172,10 @@ funcdefsToSMT enames fdefs =
 -- ----------------------------------------------------------------------------------------- --
 -- assertions to SMT
 -- ----------------------------------------------------------------------------------------- --
-assertionsToSMT :: [ValExprBool] -> Text
+assertionsToSMT :: [Expr Bool] -> Text
 assertionsToSMT assertions = T.intercalate "\n" (map assertionToSMT assertions)
     where
-    assertionToSMT :: ValExprBool -> Text
+    assertionToSMT :: Expr Bool -> Text
     assertionToSMT expr = "(assert " <> valexprToSMT expr <> ")"
 
 
@@ -202,7 +202,7 @@ class SMTExpr t where
 -- ----------------------------------------------------------------------------------------- --
 -- valexprToSMT: translate a ValExpr to a SMT constraint
 -- ----------------------------------------------------------------------------------------- --
-instance SMTExpr ValExprIntView where
+instance SMTExpr Expr IntegerView where
     --valexprToSMT (view -> Vfunc funcId [])   =         justLookupFunc funcId enames
     --valexprToSMT (view -> Vfunc funcId args') = "(" <> justLookupFunc funcId enames <> " " <> T.intercalate " " (map (valexprToSMT enames) args') <> ")"
 
@@ -227,7 +227,7 @@ instance SMTExpr ValExprIntView where
             ;   _  -> "(+ " <> T.intercalate " " (map arg2smt ol) <> ")"
             }
         where
-            arg2smt :: (ValExprInt, Integer) -> Text
+            arg2smt :: (Expr Integer, Integer) -> Text
             arg2smt (vexpr, 1)                              = valexprToSMT vexpr
             arg2smt (vexpr, -1)                             = "(- " <> valexprToSMT vexpr <> ")"
             arg2smt (vexpr, multiplier) |  multiplier /= 0  = "(* " <> integer2smt multiplier <> " " <> valexprToSMT vexpr <> ")"
@@ -240,7 +240,7 @@ instance SMTExpr ValExprIntView where
             ;   _  -> "(* " <> T.intercalate " " (map arg2smt ol) <> ")"
             }
         where
-            arg2smt :: (ValExprInt, Integer) -> Text
+            arg2smt :: (Expr Integer, Integer) -> Text
             arg2smt (vexpr, 1)                  = valexprToSMT vexpr
             arg2smt (vexpr, power) |  power > 0 = "(^ " <> valexprToSMT vexpr <> " " <> integer2smt power <> ")"
             arg2smt (_, power)                  = error ("valexprToSMT - arg2smt - illegal power " ++ show power)
@@ -250,7 +250,7 @@ instance SMTExpr ValExprIntView where
     valexprToSMT (view -> VLength expr)  =
         "(str.len " <> valexprToSMT expr <> ")"
 
-instance SMTExpr ValExprBoolView where
+instance SMTExpr (Expr BoolView) where
     valexprToSMT (view -> BoolConst c) = constToSMT c
 
     valexprToSMT (view -> BoolVar (Variable varName BoolType))  =  T.pack varName
@@ -275,7 +275,7 @@ instance SMTExpr ValExprBoolView where
     valexprToSMT (view -> And exprs)  =
         "(and " <> T.intercalate " " (map valexprToSMT (Set.toList exprs)) <> ")"
 
-instance SMTExpr ValExprStringView where
+instance SMTExpr Expr StringView where
     valexprToSMT (view -> StringConst c) = constToSMT c
 
     valexprToSMT (view -> StringVar (Variable varName StringType))  =  T.pack varName

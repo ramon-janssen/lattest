@@ -77,9 +77,12 @@ instance ExprType String where
 
 deriving instance Eq (Type v)
 deriving instance Ord (Type v)
-deriving instance Show (Type v)
 
--- TODO ideally the Variable has a parameter t that denotes the type, so that the typechecker can match it to ValExprs with the same type t
+instance Show (Type t) where
+    show IntType = "Int"
+    show BoolType = "Bool"
+    show StringType = "String"
+
 data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
 
 instance Show (Variable t) where

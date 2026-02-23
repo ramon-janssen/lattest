@@ -77,9 +77,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , Valuation
 , evalConst
 , evalConst'
-, Subst
 , subst
-, compSubst         -- changes type
 , assignedExpr
 , assignment
 , noAssignment
@@ -295,7 +293,7 @@ getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
 cstrSum :: FreeSum (Expr Integer) -> Expr Integer
-cstrSum ms = Expr $ cstrSum' $ FMX.mapTerms (SumTerm . view . summand) ms
+cstrSum = Expr . cstrSum' . FMX.mapTerms (SumTerm . view . summand)
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
@@ -341,6 +339,9 @@ isProduct _ = False
 getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
 getProduct (Product p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
+
+cstrProduct :: FreeProduct (Expr Integer) -> Expr Integer
+cstrProduct = Expr . cstrProduct' . FMX.mapTerms (ProductTerm . view . factor)
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
@@ -482,7 +483,7 @@ data VarModel = VarModel {
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment fs = foldr ($) noAssignment fs
 
-typedValuationToVarModel :: TypedValuation t -> TypedVarModel t
+typedValuationToVarModel :: ExprType t => TypedValuation t -> TypedVarModel t
 typedValuationToVarModel vals = Map.map cstrConst vals
 
 valuationToVarModel :: Valuation -> VarModel
@@ -526,114 +527,46 @@ instance Show VarModel where
         showList map = showAssign <$> Map.toList map
         showAssign (v,e) = show v ++ ":=" ++ show e
 
-evalConst :: Valuation -> Expr t -> Either String t
+evalConst :: Assignable t => Valuation -> Expr t -> Either String t
 evalConst valuation = eval . evalConst' valuation
 
 
-evalConst' :: Valuation -> Expr t -> Expr t
+evalConst' :: Assignable t => Valuation -> Expr t -> Expr t
 evalConst' valuation e = subst (valuationToVarModel valuation) e
 
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
 --
-subst :: VarModel      -- ^ Map from variables to value expressions.
+subst :: Assignable t => VarModel      -- ^ Map from variables to value expressions.
 {-      -> Map.Map FuncId (FuncDef w e) -- ^ Map from identifiers to their
                                     -- definitions, this is used to replace
                                     -- function calls by their bodies if all
                                     -- the arguments of the function are
                                     -- constant.-}
-      -> Expr e                -- ^ Value expression where the
+      -> Expr t                -- ^ Value expression where the
                                     -- substitution will take place.
-      -> Expr e
+      -> Expr t
 --subst ve _ x   | ve == Map.empty = x
 subst ve x = subst' ve (view x)
 
-subst' :: VarModel -> ExprView t -> Expr t
+subst' :: Assignable t => VarModel -> ExprView t -> Expr t
 subst' _  (Const const')          = cstrConst const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = cstrITE (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = cstrDivide (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
-subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT s
-subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve . view)) $ FMX.toDistinctAscOccurListT p
+subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
+subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = cstrLength (subst' ve vexp)
 
 subst' ve (GezInt v)                = cstrGEZ (subst' ve v)
 subst' ve (EqualInt vexp1 vexp2)    = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualBool vexp1 vexp2)   = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualString vexp1 vexp2) = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (And vexps)               = cstrAnd $ Set.map (subst' ve . view) vexps
+subst' ve (And vexps)               = cstrAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = cstrNot (subst' ve vexp)
 
 subst' ve (At s p)                      = cstrAt (subst' ve s) (subst' ve p)
 subst' ve (Concat vexps)                = cstrConcat $ map (subst' ve) vexps
 
-compSubst :: CompSubst t => VarModel -> Expr t -> Expr t
--- compSubst ve _ _ | ve == Map.empty = error "TXS Subst compSubst: variables must be substitute, yet varenv empty\n"
-compSubst ve x                 = compSubst' ve (view x)
-
-class CompSubst e where
-    compSubst' :: VarModel ->  e -> Expr e
-
-instance CompSubst (ExprView Integer) where
-    -- | Substitute variables by value expressions in a value expression (change variable kind).
-    -- Preconditions are /not/ checked.
-    --compSubst' _  _   (Vconst const')          = cstrConst const'
-    compSubst' ve   (Var vid)               = fromMaybe
-                                                        (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
-                                                        (assignedExpr vid ve)
-    --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
-    --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
-    --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
-    --compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
-    compSubst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (Divide t n)            = cstrDivide ( (compSubst' ve . view) t) ( (compSubst' ve . view) n)
-    compSubst' ve (Modulo t n)            = cstrModulo ( (compSubst' ve . view) t) ( (compSubst' ve . view) n)
-    compSubst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (compSubst' ve . view)) $ FMX.toDistinctAscOccurListT s
-    compSubst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (compSubst' ve . view)) $ FMX.toDistinctAscOccurListT p
-    compSubst' ve (Length vexp)           = cstrLength ( (compSubst' ve . view) vexp)
-    --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
-    --compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
-
-instance CompSubst (ExprView Bool) where
-    -- | Substitute variables by value expressions in a value expression (change variable kind).
-    -- Preconditions are /not/ checked.
-    --compSubst' _  _   (Vconst const')          = cstrConst const'
-    compSubst' ve   (Var vid)               = fromMaybe
-                                                        (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
-                                                        (assignedExpr vid ve)
-    --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
-    --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
-    --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
-    --compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
-    compSubst' ve (Var cond vexp1 vexp2) = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (GezInt v)                = cstrGEZ ( (compSubst' ve . view) v)
-    compSubst' ve (EqualInt vexp1 vexp2)     = cstrEqual ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (EqualBool vexp1 vexp2)    = cstrEqual ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (EqualString vexp1 vexp2)  = cstrEqual ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (And vexps)                = cstrAnd $ Set.map (compSubst' ve . view) vexps
-    compSubst' ve (Not vexp)                 = cstrNot ( (compSubst' ve . view) vexp)
-    --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
-    --compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
-
-instance CompSubst (ExprView String) where
-    -- | Substitute variables by value expressions in a value expression (change variable kind).
-    -- Preconditions are /not/ checked.
-    --compSubst' _  _   (Vconst const')          = cstrConst const'
-    compSubst' ve   (Var vid)               = fromMaybe
-                                                        (error ("TXS Subst compSubst: incomplete (vid = " ++ show vid ++ "; map = " ++ show ve ++ ")"))
-                                                        (assignedExpr vid ve)
-    --compSubst' ve fis (Vfunc fid vexps)        = cstrFunc fis fid (map (compSubst' ve fis . view) vexps)
-    --compSubst' ve fis (Vcstr cid vexps)        = cstrCstr cid (map (compSubst' ve fis . view) vexps)
-    --compSubst' ve fis (Viscstr cid vexp)       = cstrIsCstr cid ( (compSubst' ve fis . view) vexp)
-    --compSubst' ve fis (Vaccess cid n p vexp)   = cstrAccess cid n p ( (compSubst' ve fis . view) vexp)
-    compSubst' ve (Ite cond vexp1 vexp2)  = cstrITE ( (compSubst' ve . view) cond) ( (compSubst' ve . view) vexp1) ( (compSubst' ve . view) vexp2)
-    compSubst' ve (At s p)                      = cstrAt ( (compSubst' ve . view) s) ( (compSubst' ve . view) p)
-    compSubst' ve (Concat vexps)                = cstrConcat $ map (compSubst' ve . view) vexps
-    --compSubst' ve fis (Vstrinre s r)           = cstrStrInRe ( (compSubst' ve fis . view) s) ( (compSubst' ve fis . view) r)
-    --compSubst' ve fis (Vpredef kd fid vexps)   = cstrPredef kd fid (map (compSubst' ve fis . view) vexps)
-
--- ----------------------------------------------------------------------------------------- --
---
--- ----------------------------------------------------------------------------------------- --

@@ -16,22 +16,13 @@ See LICENSE in the parent Symbolic folder.
 -- Interface file for Value Expressions.
 -----------------------------------------------------------------------------
 module Lattest.Model.Symbolic.ValExpr.ValExpr
-( ValExpr
-, ValExprInt
-, ValExprBool
-, ValExprString
+( Expr
 , view
-, Eval
-, eval
-, Subst
-, ValExprIntView(..)
-, ValExprBoolView(..)
-, ValExprStringView(..)
+, ExprView(..)
 , Type(..)
 , varName
 , varType
 , Constant(..)
-, constType
 , Variable(..)
 , VarModel
 , assign
