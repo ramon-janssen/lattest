@@ -186,7 +186,7 @@ addDeclarations vs = putT (declarationsToSMT vs)
 -- ----------------------------------------------------------------------------------------- --
 -- addAssertions
 -- ----------------------------------------------------------------------------------------- --
-addAssertions :: [ValExprBool] -> SMT ()
+addAssertions :: [Expr Bool] -> SMT ()
 addAssertions vexps  =  do
     --mapI <- gets envNames
     putT ( assertionsToSMT vexps )
@@ -209,16 +209,17 @@ getSolvable = do
 -- getSolution
 -- ----------------------------------------------------------------------------------------- --
 getSolution :: [Variable] -> SMT Valuation
-getSolution []    = return Map.empty
+getSolution []    = return emptyValuation
 getSolution vs    = do
     putT ("(get-value (" <> T.intercalate " " (map (T.pack . varName) vs) <>"))")
     s <- getSMTresponse
     let vnameSMTValueMap = Map.mapKeys T.pack . smtParser . smtLexer $ s
+    -- TODO use ValExprImpls.assignValues or something similar, to skip the now heterogenous intermediate list of constants
 --    edefs <- gets envDefs
     return $ Map.fromList (map (toConst vnameSMTValueMap) vs)
-  where
-    toConst :: Map.Map Text SMTValue -> Variable -> (Variable, Constant)
-    toConst mp v = case Map.lookup (T.pack $ varName v) mp of
+    where
+        toConst :: Map.Map Text SMTValue -> Variable -> (Variable, Constant)
+        toConst mp v = case Map.lookup (T.pack $ varName v) mp of
                             Just smtValue   -> case smtValueToValExpr smtValue (varType v) of
                                                     Left t -> error $ "getSolution - SMT parse error:\n" ++ t
                                                     Right val -> (v,val)
@@ -273,7 +274,7 @@ putT :: Text -> SMT ()
 putT = put . T.unpack
 
 -- | Transform value expression to an SMT string.
-valExprToString :: SMTExpr t => ValExpr t -> SMT Text
+valExprToString :: SMTExpr t => Expr t -> SMT Text
 valExprToString v = do
 --  mapI <- gets envNames
   return $ valexprToSMT v

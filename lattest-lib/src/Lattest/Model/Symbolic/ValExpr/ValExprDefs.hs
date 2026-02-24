@@ -56,14 +56,11 @@ import           Lattest.Model.Symbolic.ValExpr.Product
 import           Lattest.Model.Symbolic.ValExpr.Sum
 
 
-data Type t where
-    IntType :: Type Integer
-    BoolType :: Type Bool
-    StringType :: Type String
+data Type = IntType | BoolType | StringType deriving (Eq, Ord)
 
 class ExprType t where
-    typeOf :: t -> Type t
-    typeOf' :: f t -> Type t
+    typeOf :: t -> Type
+    typeOf' :: f t -> Type
 
 instance ExprType Integer where
     typeOf _ = IntType
@@ -75,24 +72,21 @@ instance ExprType String where
     typeOf _ = StringType
     typeOf' _ = StringType
 
-deriving instance Eq (Type v)
-deriving instance Ord (Type v)
-
-instance Show (Type t) where
+instance Show Type where
     show IntType = "Int"
     show BoolType = "Bool"
     show StringType = "String"
 
-data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
+data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
 
-instance Show (Variable t) where
+instance Show Variable where
     show (Variable name stype) = name ++ ":" ++ show stype
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
 
 data ExprView t where
-    Var :: {var :: Variable t} -> ExprView t
+    Var :: {var :: Variable} -> ExprView t
     Const :: ExprType t => {constant :: t} -> ExprView t
     Ite :: {conditional :: ExprView Bool, trueBranch :: ExprView t, falseBranch :: ExprView t} -> ExprView t
     {-

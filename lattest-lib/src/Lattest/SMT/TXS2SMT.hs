@@ -7,7 +7,8 @@ See LICENSE at root directory of this repository.
 
 -- ----------------------------------------------------------------------------------------- --
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Lattest.SMT.TXS2SMT
 
 -- ----------------------------------------------------------------------------------------- --
@@ -24,10 +25,10 @@ module Lattest.SMT.TXS2SMT
 --, basicDefinitionsSMT
 --, sortdefsToSMT      
 --, funcdefsToSMT      
-SMTExpr
-, assertionsToSMT    
+--SMTExpr
+assertionsToSMT    
 , declarationsToSMT          
-, valexprToSMT       
+, valexprToSMT'       
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -165,7 +166,7 @@ funcdefsToSMT enames fdefs =
                                            <> "(" <> T.intercalate " " (map (\v -> "(" <> vname v <> " " <> justLookupSort (varsort v) enames <> ")") vs) <> ") " 
                                            <> justLookupSort (funcsort funcId) enames
                                            <> ")"
-                                      , valexprToSMT enames expr
+                                      , valexprToSMT' enames expr
                                       )
 -}
 
@@ -185,111 +186,78 @@ integer2smt n = (T.pack . show) n
 -- ----------------------------------------------------------------------------------------- --
 -- constToSMT: translate a constant to a SMT text
 -- ----------------------------------------------------------------------------------------- --
-constToSMT :: Constant -> Text
-constToSMT (Cbool b)        = if b
-                                then "true"
-                                else "false"
-constToSMT (Cint n)         = integer2smt n
-constToSMT (Cstring s)      =  "\"" <> stringToSMT s <> "\""
---constToSMT (Cregex r)       =  xsd2smt r
---constToSMT (Ccstr cd [])    =        justLookupCstr cd
---constToSMT (Ccstr cd args') = "(" <> justLookupCstr cd <> " " <> T.intercalate " " (map (constToSMT enames) args') <> ")"
-constToSMT x                = error ("Illegal input constToSMT - " <> show x)
+class ConstToSMT t where
+    constToSMT :: t -> Text
 
-class SMTExpr t where
-    valexprToSMT :: ValExpr t -> Text
+instance ConstToSMT Bool where
+    constToSMT b = if b then "true" else "false"
+
+instance ConstToSMT Integer where
+    constToSMT n = integer2smt n
+
+instance ConstToSMT String where
+    constToSMT s =  "\"" <> stringToSMT (T.pack s) <> "\""
 
 -- ----------------------------------------------------------------------------------------- --
--- valexprToSMT: translate a ValExpr to a SMT constraint
+-- valexprToSMT': translate a Expr to a SMT constraint
 -- ----------------------------------------------------------------------------------------- --
-instance SMTExpr Expr IntegerView where
-    --valexprToSMT (view -> Vfunc funcId [])   =         justLookupFunc funcId enames
-    --valexprToSMT (view -> Vfunc funcId args') = "(" <> justLookupFunc funcId enames <> " " <> T.intercalate " " (map (valexprToSMT enames) args') <> ")"
+valexprToSMT :: ConstToSMT t => Expr t -> Text
+valexprToSMT = valexprToSMT' . view
 
-    --valexprToSMT (view -> Vcstr cd [])    =        justLookupCstr cd enames
-    --valexprToSMT (view -> Vcstr cd args') = "(" <> justLookupCstr cd enames <> " " <> T.intercalate " " (map (valexprToSMT enames) args') <> ")"
-
-    --valexprToSMT (view -> Viscstr cd arg)      = "(" <> toIsCstrName cd <> " " <> valexprToSMT enames arg <> ")"
-    --valexprToSMT (view -> Vaccess cd _n p arg) = "(" <> toFieldName cd p <> " " <> valexprToSMT enames arg <> ")"
-
-
-    valexprToSMT (view -> IntConst c) = constToSMT c
-
-    valexprToSMT (view -> IntVar (Variable varName IntType))  =  T.pack varName
-    valexprToSMT (view -> IntVar v)  =  error $ "valexprToSMT: int expression containing variable " ++ show v
-
-    valexprToSMT (view -> IntIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
-
-    valexprToSMT (view -> IntSum s) =
-        let ol = toOccurListT s in
-            case ol of
-            {  [o] -> arg2smt o
-            ;   _  -> "(+ " <> T.intercalate " " (map arg2smt ol) <> ")"
-            }
-        where
-            arg2smt :: (Expr Integer, Integer) -> Text
-            arg2smt (vexpr, 1)                              = valexprToSMT vexpr
-            arg2smt (vexpr, -1)                             = "(- " <> valexprToSMT vexpr <> ")"
-            arg2smt (vexpr, multiplier) |  multiplier /= 0  = "(* " <> integer2smt multiplier <> " " <> valexprToSMT vexpr <> ")"
-            arg2smt (_, multiplier)                         = error ("valexprToSMT - arg2smt - illegal multiplier " ++ show multiplier)
-
-    valexprToSMT (view -> IntProduct p) =
-        let ol = toOccurListT p in
-            case ol of
-            {  [o] -> arg2smt o
-            ;   _  -> "(* " <> T.intercalate " " (map arg2smt ol) <> ")"
-            }
-        where
-            arg2smt :: (Expr Integer, Integer) -> Text
-            arg2smt (vexpr, 1)                  = valexprToSMT vexpr
-            arg2smt (vexpr, power) |  power > 0 = "(^ " <> valexprToSMT vexpr <> " " <> integer2smt power <> ")"
-            arg2smt (_, power)                  = error ("valexprToSMT - arg2smt - illegal power " ++ show power)
-
-    valexprToSMT (view -> IntDivide t n) = "(div " <> valexprToSMT t <> " "  <> valexprToSMT n <> ")"
-    valexprToSMT (view -> IntModulo t n) = "(mod " <> valexprToSMT t <> " "  <> valexprToSMT n <> ")"
-    valexprToSMT (view -> VLength expr)  =
-        "(str.len " <> valexprToSMT expr <> ")"
-
-instance SMTExpr (Expr BoolView) where
-    valexprToSMT (view -> BoolConst c) = constToSMT c
-
-    valexprToSMT (view -> BoolVar (Variable varName BoolType))  =  T.pack varName
-    valexprToSMT (view -> BoolVar v)  =  error $ "valexprToSMT: bool expression containing variable " ++ show v
-
-    valexprToSMT (view -> BoolIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
-
-    valexprToSMT (view -> GezInt v)      = "(<= 0 " <> valexprToSMT v <> ")"
-
-    valexprToSMT (view -> EqualInt expr1 expr2)  =
-        "(= " <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
-
-    valexprToSMT (view -> EqualBool expr1 expr2)  =
-        "(= " <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
-
-    valexprToSMT (view -> EqualString expr1 expr2)  =
-        "(= " <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
-
-    valexprToSMT (view -> Not expr)  =
-        "(not " <> valexprToSMT expr <> ")"
-
-    valexprToSMT (view -> And exprs)  =
-        "(and " <> T.intercalate " " (map valexprToSMT (Set.toList exprs)) <> ")"
-
-instance SMTExpr Expr StringView where
-    valexprToSMT (view -> StringConst c) = constToSMT c
-
-    valexprToSMT (view -> StringVar (Variable varName StringType))  =  T.pack varName
-    valexprToSMT (view -> StringVar v)  =  error $ "valexprToSMT: bool expression containing variable " ++ show v
-
-    valexprToSMT (view -> StringIte c expr1 expr2) = "(ite " <> valexprToSMT c <> " "  <> valexprToSMT expr1 <> " " <> valexprToSMT expr2 <> ")"
-
-    valexprToSMT (view -> At s p)  =
-        "(str.at " <> valexprToSMT s <> " " <> valexprToSMT p <> ")"
-    valexprToSMT (view -> Concat vexprs)  =
-        "(str.++ " <> T.intercalate " " (map valexprToSMT vexprs) <> ")"
---    valexprToSMT (view -> Vstrinre s r)  =
---        "(str.in.re " <> valexprToSMT s <> " " <> valexprToSMT r <> ")"
-    valexprToSMT x = error ("Illegal input valexprToSMT - " ++ show x)
+valexprToSMT' :: ConstToSMT t => ExprView t -> Text
+--valexprToSMT' (view -> Vfunc funcId [])   =         justLookupFunc funcId enames
+--valexprToSMT' (view -> Vfunc funcId args') = "(" <> justLookupFunc funcId enames <> " " <> T.intercalate " " (map (valexprToSMT' enames) args') <> ")"
+--valexprToSMT' (view -> Vcstr cd [])    =        justLookupCstr cd enames
+--valexprToSMT' (view -> Vcstr cd args') = "(" <> justLookupCstr cd enames <> " " <> T.intercalate " " (map (valexprToSMT' enames) args') <> ")"
+--valexprToSMT' (view -> Viscstr cd arg)      = "(" <> toIsCstrName cd <> " " <> valexprToSMT' enames arg <> ")"
+--valexprToSMT' (view -> Vaccess cd _n p arg) = "(" <> toFieldName cd p <> " " <> valexprToSMT' enames arg <> ")"
+valexprToSMT' (Const c) = constToSMT c
+valexprToSMT' (Var (Variable varName IntType))  =  T.pack varName
+valexprToSMT' (Ite c expr1 expr2) = "(ite " <> valexprToSMT' c <> " "  <> valexprToSMT' expr1 <> " " <> valexprToSMT' expr2 <> ")"
+valexprToSMT' (Sum s) =
+    let ol = toOccurListT s in
+        case ol of
+        {  [o] -> arg2smt o
+        ;   _  -> "(+ " <> T.intercalate " " (map arg2smt ol) <> ")"
+        }
+    where
+        arg2smt :: (ExprView Integer, Integer) -> Text
+        arg2smt (vexpr, 1)                              = valexprToSMT' vexpr
+        arg2smt (vexpr, -1)                             = "(- " <> valexprToSMT' vexpr <> ")"
+        arg2smt (vexpr, multiplier) |  multiplier /= 0  = "(* " <> integer2smt multiplier <> " " <> valexprToSMT' vexpr <> ")"
+        arg2smt (_, multiplier)                         = error ("valexprToSMT' - arg2smt - illegal multiplier " ++ show multiplier)
+valexprToSMT' (Product p) =
+    let ol = toOccurListT p in
+        case ol of
+        {  [o] -> arg2smt o
+        ;   _  -> "(* " <> T.intercalate " " (map arg2smt ol) <> ")"
+        }
+    where
+        arg2smt :: (ExprView Integer, Integer) -> Text
+        arg2smt (vexpr, 1)                  = valexprToSMT' vexpr
+        arg2smt (vexpr, power) |  power > 0 = "(^ " <> valexprToSMT' vexpr <> " " <> integer2smt power <> ")"
+        arg2smt (_, power)                  = error ("valexprToSMT' - arg2smt - illegal power " ++ show power)
+valexprToSMT' (Divide t n) = "(div " <> valexprToSMT' t <> " "  <> valexprToSMT' n <> ")"
+valexprToSMT' (Modulo t n) = "(mod " <> valexprToSMT' t <> " "  <> valexprToSMT' n <> ")"
+valexprToSMT' (Length expr)  =
+    "(str.len " <> valexprToSMT' expr <> ")"
+valexprToSMT' (GezInt v)      = "(<= 0 " <> valexprToSMT' v <> ")"
+valexprToSMT' (EqualInt expr1 expr2)  =
+    "(= " <> valexprToSMT' expr1 <> " " <> valexprToSMT' expr2 <> ")"
+valexprToSMT' (EqualBool expr1 expr2)  =
+    "(= " <> valexprToSMT' expr1 <> " " <> valexprToSMT' expr2 <> ")"
+valexprToSMT' (EqualString expr1 expr2)  =
+    "(= " <> valexprToSMT' expr1 <> " " <> valexprToSMT' expr2 <> ")"
+valexprToSMT' (Not expr)  =
+    "(not " <> valexprToSMT' expr <> ")"
+valexprToSMT' (And exprs)  =
+    "(and " <> T.intercalate " " (map valexprToSMT' (Set.toList exprs)) <> ")"
+valexprToSMT' (At s p)  =
+    "(str.at " <> valexprToSMT' s <> " " <> valexprToSMT' p <> ")"
+valexprToSMT' (Concat vexprs)  =
+    "(str.++ " <> T.intercalate " " (map valexprToSMT' vexprs) <> ")"
+--    valexprToSMT' (Vstrinre s r)  =
+--        "(str.in.re " <> valexprToSMT' s <> " " <> valexprToSMT' r <> ")"
 
 -- ------------------------------                                                                 
 justLookupType :: Type -> Text

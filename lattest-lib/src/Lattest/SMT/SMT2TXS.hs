@@ -7,6 +7,7 @@ See LICENSE at root directory of this repository.
 
 -- ----------------------------------------------------------------------------------------- --
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Lattest.SMT.SMT2TXS
 
 -- ----------------------------------------------------------------------------------------- --
@@ -16,7 +17,9 @@ module Lattest.SMT.SMT2TXS
 -- ----------------------------------------------------------------------------------------- --
 -- export
 
-( smtValueToValExpr   --  :: SMTValue -> TxsDefs -> SortId -> Walue
+(
+SMTExpr,
+smtValueToValExpr   --  :: SMTValue -> TxsDefs -> SortId -> Walue
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -62,15 +65,22 @@ lookupConstructor cstrMap sid n
 
 -- | convert an SMT expression to a ValExpr given a varName the varName is the
 -- name of a SMT identifier that refers to a SMT variable.
-smtValueToValExpr :: SMTValue -> Type t ->{-Map.Map CstrId CstrDef ->-} Either String t
-smtValueToValExpr (SMTBool b) BoolType = Right b
-smtValueToValExpr (SMTBool _) srt = Left $ typeError "Bool" srt
-smtValueToValExpr (SMTInt i) IntType = Right i
-smtValueToValExpr (SMTInt _) srt = Left $ typeError "Int" srt
-smtValueToValExpr (SMTString s) StringType = Right $ T.unpack s
-smtValueToValExpr (SMTString _) srt = Left $ typeError "String" srt
+class SMTExpr t where
+    smtValueToValExpr :: SMTValue -> Type ->{-Map.Map CstrId CstrDef ->-} Either String t
 
-typeError :: String -> Type t -> String
+instance SMTExpr Bool where
+    smtValueToValExpr (SMTBool b) BoolType = Right b
+    smtValueToValExpr (SMTBool _) srt = Left $ typeError "Bool" srt
+
+instance SMTExpr Integer where
+    smtValueToValExpr (SMTInt i) IntType = Right i
+    smtValueToValExpr (SMTInt _) srt = Left $ typeError "Int" srt
+
+instance SMTExpr String where
+    smtValueToValExpr (SMTString s) StringType = Right $ T.unpack s
+    smtValueToValExpr (SMTString _) srt = Left $ typeError "String" srt
+
+typeError :: String -> Type -> String
 typeError received expected = "smtValueToValExpr: Type mismatch - " ++ received ++ " expected, got " ++ show expected ++ "\n"
 {-
 smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =

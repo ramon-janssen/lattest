@@ -74,7 +74,7 @@ where
 
 import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
 import qualified Data.List as List (intercalate)
-import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, ValExpr(..), ValExprBool, Type(..), constType, varType, assign)
+import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
 
 {- |
@@ -283,7 +283,7 @@ interactionGate (SymInteract gate _) = gate
 instance (Show g) => Show (SymInteract g) where
     show (SymInteract gate vars) = show gate ++ " " ++ show vars
 
-type SymGuard = ValExprBool
+type SymGuard = Expr Bool
 
 data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
 type IOGateValue i o = GateValue (IOAct i o)
