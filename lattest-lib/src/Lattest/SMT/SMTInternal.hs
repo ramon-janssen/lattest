@@ -213,17 +213,20 @@ getSolution []    = return emptyValuation
 getSolution vs    = do
     putT ("(get-value (" <> T.intercalate " " (map (T.pack . varName) vs) <>"))")
     s <- getSMTresponse
-    let vnameSMTValueMap = Map.mapKeys T.pack . smtParser . smtLexer $ s
-    -- TODO use ValExprImpls.assignValues or something similar, to skip the now heterogenous intermediate list of constants
+    let vnameSMTValueMap = smtParser . smtLexer $ s
 --    edefs <- gets envDefs
-    return $ Map.fromList (map (toConst vnameSMTValueMap) vs)
+    return $ assignValues $ insertIntoValuation vnameSMTValueMap <$> vs
     where
-        toConst :: Map.Map Text SMTValue -> Variable -> (Variable, Constant)
-        toConst mp v = case Map.lookup (T.pack $ varName v) mp of
-                            Just smtValue   -> case smtValueToValExpr smtValue (varType v) of
-                                                    Left t -> error $ "getSolution - SMT parse error:\n" ++ t
-                                                    Right val -> (v,val)
-                            Nothing         -> error "getSolution - SMT hasn't returned the value of requested variable."
+        insertIntoValuation :: Map.Map String SMTValue -> Variable -> Valuation -> Valuation
+        insertIntoValuation m v@(Variable name _) = case Map.lookup name m of
+            Nothing -> error $ "SMT solution contained no valuation for variable " ++ name
+            Just smtValue -> insertIntoValuation' smtValue v
+        insertIntoValuation' smtValue v@(Variable name IntType) = assignValue v (smtValueToValExpr' smtValue IntType name :: Integer)
+        insertIntoValuation' smtValue v@(Variable name BoolType) = assignValue v (smtValueToValExpr' smtValue BoolType name :: Bool)
+        insertIntoValuation' smtValue v@(Variable name StringType) = assignValue v (smtValueToValExpr' smtValue StringType name :: String)
+        smtValueToValExpr' smtValue t name = case smtValueToValExpr smtValue t of
+            Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
+            Right val -> val
 
 -- ------------------------------------------
 -- get SMT info

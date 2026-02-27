@@ -28,7 +28,7 @@ module Lattest.SMT.TXS2SMT
 --SMTExpr
 assertionsToSMT    
 , declarationsToSMT          
-, valexprToSMT'       
+, valexprToSMT
 )
 
 -- ----------------------------------------------------------------------------------------- --

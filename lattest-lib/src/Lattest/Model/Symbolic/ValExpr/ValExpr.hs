@@ -26,6 +26,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , Variable(..)
 , VarModel
 , assign
+, assignValues
 , evalConst
 , Valuation
 , assignedExpr
