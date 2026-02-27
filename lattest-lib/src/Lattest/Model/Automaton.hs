@@ -55,7 +55,8 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
@@ -102,8 +103,8 @@ automaton mqi alphFld trans = Automaton mqi alph trans'
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
-automaton' :: (BoundedApplicative m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
-automaton' = automaton . pure
+automaton' :: (BoundedMonad m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
+automaton' = automaton . BM.ordReturn
 
 {- |
     The transition relation as a function. Note that this function is partial, and only defined for transition labels in the alphabet of the
@@ -138,8 +139,8 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (StepSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
-interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
+interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
+interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
 class Completable act where
@@ -164,9 +165,9 @@ class (Ord t, Completable act) => TransitionSemantics t act where
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    takeTransition :: (BoundedApplicative m) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
+    takeTransition :: (BoundedMonad m) => loc -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
     takeTransition loc alph act trans' = case asTransition loc alph act of
-        Nothing -> LocationMove $ pure loc
+        Nothing -> LocationMove $ BM.ordReturn loc
         Just t -> TransitionMove (t, trans' t)
 
 {- |
@@ -198,20 +199,20 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: StepSemantics m loc q t tdest act => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after intrpr act' = 
     let aut = syntacticAutomaton intrpr
-        stateConf' = stateConf intrpr >>= after' (alphabet aut) (transRel $ aut) act'
+        stateConf' = BM.ordBind (stateConf intrpr) (after' (alphabet aut) (transRel $ aut) act')
     in intrpr { stateConf = stateConf' }
 
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
-after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
-    LocationMove mloc -> move q act (nothingTTdest transMap) <$> mloc
+after' :: (StepSemantics m loc q t tdest act, Ord (m q), Ord q) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
+after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
+    LocationMove mloc -> move q act (nothingTTdest transMap) BM.<#> mloc
         where
          -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
         nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
         nothingTTdest _ = Nothing
-    TransitionMove (t, mloc) -> moveAlongTransition q act t <$> mloc
+    TransitionMove (t, mloc) -> moveAlongTransition q act t BM.<#> mloc
         where
         moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
     where
@@ -221,7 +222,7 @@ after' alph transMap act q = Monad.join $ case takeTransition (asLoc q) alph act
         Nothing -> throw $ ActionOutsideAlphabet callStack
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -243,10 +244,10 @@ instance Exception AutomatonException
 -- utility function to obtain the menu of outgoing transitions --
 ------------------------------------------------------------------
 -- note: this only shows the transitions that are syntactically present in the automaton, so e.g. not quiescence, including underspecified/forbidden transitions
-transMenu :: (Foldable m, Functor m, Ord t) => AutSyntax m mloc t tdest -> Set t
+transMenu :: (Foldable m, BM.OrdFunctor m, Ord t) => AutSyntax m mloc t tdest -> Set t
 transMenu aut = let
     stateToMenu = Set.fromList . Map.keys . transRel aut
-    in Set.unions $ stateToMenu <$> initConf aut
+    in Set.unions $ stateToMenu BM.<#> initConf aut
 
 {-|
     The class of automata with a finite list of transition labels on outgoing transitions for every state.
@@ -257,11 +258,11 @@ class TransitionSemantics t act => FiniteMenu t act where
     asActions :: t -> [act]
     locationActions :: AutSyntax m mloc t tdest -> [act]
 
-actionMenu :: (Foldable m, Functor m, Ord t) => FiniteMenu t act => BoundedApplicative m => AutSyntax m mloc t tdest -> [act]
-actionMenu aut = (locationActions aut ++) $ concat $ fmap asActions $ Set.toList $ transMenu aut
+actionMenu :: (Foldable m, Ord t, Ord act, FiniteMenu t act, BoundedMonad m) => AutSyntax m mloc t tdest -> [act]
+actionMenu aut = (locationActions aut ++) $ concat $ BM.ordMap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (StepSemantics m loc q t tdest act, Foldable m, Ord t) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
+specifiedMenu :: (StepSemantics m loc q t tdest act, Foldable m, Ord t, BM.OrdMonad m, BM.OrdFunctor m, Ord act, Ord q, Ord (m q)) => FiniteMenu t act => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -282,7 +283,7 @@ instance StateSemantics q q where
     asLoc = id
 
 instance (TransitionSemantics t act, BoundedMonad m) => StepSemantics m q q t () act where
-    move _ _ _ q = pure q
+    move _ _ _ q = BM.ordReturn q
 
 ----------------
 -- quiescence --
@@ -295,14 +296,14 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IOSuspAct i o) where
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspended other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else BM.ordReturn loc
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
 
-hasQuiescence :: BoundedApplicative m => Map (IOAct i o) (m (tdest, loc)) -> Bool
+hasQuiescence :: BoundedMonad m => Map (IOAct i o) (m (tdest, loc)) -> Bool
 hasQuiescence m = any (isOutput . fst &&& not . isForbidden . snd) (Map.toList m)
 
 -------------------
@@ -313,7 +314,7 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (IFAct i o) where
     asTransition loc _ (In (InputAttempt(i, False))) = Nothing
     asTransition _ _ other = Just $ fromInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
+    takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ BM.ordReturn loc
     takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
@@ -330,8 +331,8 @@ instance (Ord i, Ord o) => TransitionSemantics (IOAct i o) (SuspendedIF i o) whe
     asTransition loc _ (Out Quiescence) = Nothing
     asTransition _ _ other = Just $ fromSuspendedInputAttempt other
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ pure loc
-    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else pure loc
+    takeTransition loc _ (In (InputAttempt(i, False))) m = LocationMove $ BM.ordReturn loc
+    takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else BM.ordReturn loc
     takeTransition _ _ act m = TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
@@ -385,7 +386,7 @@ instance (Ord i, Ord o, Ord loc, BoundedMonad m) => StepSemantics m loc (IntrpSt
             else let varMap2 = Map.mapWithKey (\v@(Variable x t) xval -> case assignedExpr v assign of
                                                     Nothing -> xval
                                                     Just assignExpr -> evaluate assignExpr valuation) varMap
-                 in return $ IntrpState l2 varMap2
+                 in BM.ordReturn $ IntrpState l2 varMap2
 
 -------------------------
 -- Auxiliary functions --

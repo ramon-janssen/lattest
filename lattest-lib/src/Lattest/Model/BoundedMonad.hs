@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 {- |
     A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
@@ -31,6 +32,13 @@
 -}
 
 module Lattest.Model.BoundedMonad (
+(<#>),
+OrdMonad,
+OrdFunctor,
+ordReturn,
+ordBind,
+ordMap,
+ordJoin,
 -- * State configurations
 -- ** Deterministic
 Det(..),
@@ -57,7 +65,6 @@ isIndefinite,
 isConclusive,
 -- ** Utility types
 BoundedMonad,
-BoundedApplicative,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
@@ -72,8 +79,35 @@ import qualified Algebra.Lattice as L ((/\), (\/))
 import qualified Data.Set as Set
 import Control.Monad(ap)
 
+class OrdFunctor f where
+    ordMap :: (Ord b) => (a -> b) -> f a -> f b
+
+instance {-# OVERLAPPABLE #-} Functor f => OrdFunctor f where
+    ordMap = fmap
+
+(<#>) :: (OrdFunctor f, Ord b) => (a -> b) -> f a -> f b
+(<#>) = ordMap
+
+instance OrdMonad Set.Set where
+    ordBind s f = Set.unions $ Set.map f s
+    ordReturn s = Set.singleton s
+
+class (OrdFunctor m) => OrdMonad m where
+    ordReturn :: a -> m a
+    ordBind :: (Ord b) => m a -> (a -> m b) -> m b
+
+instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
+    ordBind = (>>=)
+    ordReturn = return
+
+ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
+ordJoin mma = ordBind mma id
+
+instance OrdFunctor Set.Set where
+    ordMap = Set.map
+
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
-data Det q = Det q | ForbiddenDet | UnderspecDet
+data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
 
 instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
@@ -112,56 +146,54 @@ instance Show a => Show (Det a) where
 
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
-data NonDet q = NonDet [q] | UnderspecNonDet
+data NonDet q = NonDet (Set.Set q) | UnderspecNonDet
 
 instance BoundedConfiguration NonDet where
-    isForbidden (NonDet []) = True
+    isForbidden (NonDet s) = if Set.null s then True else False
     isForbidden _ = False
     isUnderspecified UnderspecNonDet = True
     isUnderspecified _ = False
-    forbidden = NonDet []
+    forbidden = NonDet Set.empty
     underspecified = UnderspecNonDet
 
-instance Functor NonDet where
-    fmap f (NonDet ss) = NonDet $ fmap f ss
-    fmap _ UnderspecNonDet = UnderspecNonDet
+instance OrdFunctor NonDet where
+    ordMap f (NonDet ss) = NonDet $ ordMap f ss
+    ordMap _ UnderspecNonDet = UnderspecNonDet
     
-instance Applicative NonDet where
-    pure s = NonDet [s]
-    NonDet fs <*> NonDet ss = NonDet (fs <*> ss)
-    UnderspecNonDet <*> _ = UnderspecNonDet
-    _ <*> UnderspecNonDet = UnderspecNonDet
-    
-instance Monad NonDet where
-    NonDet ss >>= f = foldr (\/) (NonDet []) $ fmap f ss  
-    UnderspecNonDet >>= _ = UnderspecNonDet
+instance OrdMonad NonDet where
+    ordBind (NonDet ss) f = foldr (\/) (NonDet Set.empty) $ Set.map f ss
+    ordBind UnderspecNonDet _ = UnderspecNonDet
+    ordReturn s = NonDet $ Set.singleton s
 
 instance Foldable NonDet where
     foldr f q (NonDet qs) = foldr f q qs
     foldr _ q _ = q
 
 instance Show a => Show (NonDet a) where
-    show (NonDet a) = show a
+    show (NonDet a) = show $ Set.toList a
     show UnderspecNonDet = "⊤"
 
 instance Ord a => Eq (NonDet a) where
     UnderspecNonDet == UnderspecNonDet = True
-    (NonDet q1) == (NonDet q2) = Set.fromList q1 == Set.fromList q2
+    (NonDet q1) == (NonDet q2) = q1 == q2
     _ == _ = False
 
 instance Ord a => Ord (NonDet a) where
     _ <= UnderspecNonDet = True
     UnderspecNonDet <= _ = False
-    (NonDet q1) <= (NonDet q2) = Set.fromList q1 <= Set.fromList q2
+    (NonDet q1) <= (NonDet q2) = q1 <= q2
 
-instance JoinSemiLattice (NonDet a) where
-    (\/) (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
+instance (Ord a) => JoinSemiLattice (NonDet a) where
+    (\/) (NonDet q1) (NonDet q2) = NonDet (Set.union q1 q2)
     (\/) _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
 -}
 newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
+
+deriving instance Ord a => Ord (FreeLattice a)
+deriving instance Ord a => Ord (Free a)
 
 -- | A single state embedded in a free distributive lattice.
 atom :: a -> FreeLattice a
@@ -259,13 +291,10 @@ isSpecified :: (BoundedConfiguration m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
 -- | Abbreviation for types which are both bounded configurations and Monads.
-type BoundedMonad m = (BoundedConfiguration m, Monad m)
-
--- | Abbreviation for types which are both bounded configurations and Applicatives.
-type BoundedApplicative m = (BoundedConfiguration m, Applicative m)
+type BoundedMonad m = (BoundedConfiguration m, OrdMonad m)
 
 -- | Abbreviation for types which are both bounded configurations and Functors.
-type BoundedFunctor m = (BoundedConfiguration m, Functor m)
+type BoundedFunctor m = (BoundedConfiguration m, OrdFunctor m)
 
 -- | Because the lattices-library doesn't support this
 class JoinSemiLattice a where
