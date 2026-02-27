@@ -102,8 +102,8 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
-nonDetConcTransFromRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
-nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> pure $ vacuousLoc l)
+nonDetConcTransFromRel :: (Completable t, Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> BM.ordReturn $ vacuousLoc l)
 
 {- |
     Create a non-deterministic symbolic transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
@@ -118,8 +118,8 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     configuration. The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted
     as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromMRel :: (Completable t, Ord loc, Ord t, Applicative m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
-nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> fmap vacuousLoc ndl)
+nonDetConcTransFromMRel :: (Completable t, Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> BM.ordMap vacuousLoc ndl)
 
 {- |
     Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as lists of locations,
