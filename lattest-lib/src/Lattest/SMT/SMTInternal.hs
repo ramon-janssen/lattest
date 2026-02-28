@@ -221,10 +221,10 @@ getSolution vs    = do
         insertIntoValuation m v@(Variable name _) = case Map.lookup name m of
             Nothing -> error $ "SMT solution contained no valuation for variable " ++ name
             Just smtValue -> insertIntoValuation' smtValue v
-        insertIntoValuation' smtValue v@(Variable name IntType) = assignValue v (smtValueToValExpr' smtValue IntType name :: Integer)
-        insertIntoValuation' smtValue v@(Variable name BoolType) = assignValue v (smtValueToValExpr' smtValue BoolType name :: Bool)
-        insertIntoValuation' smtValue v@(Variable name StringType) = assignValue v (smtValueToValExpr' smtValue StringType name :: String)
-        smtValueToValExpr' smtValue t name = case smtValueToValExpr smtValue t of
+        insertIntoValuation' smtValue v@(Variable name IntType) = assignValue v (smtValueToValExpr' smtValue name :: Integer)
+        insertIntoValuation' smtValue v@(Variable name BoolType) = assignValue v (smtValueToValExpr' smtValue name :: Bool)
+        insertIntoValuation' smtValue v@(Variable name StringType) = assignValue v (smtValueToValExpr' smtValue name :: String)
+        smtValueToValExpr' smtValue name = case smtValueToValExpr smtValue of
             Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
             Right val -> val
 
@@ -277,7 +277,7 @@ putT :: Text -> SMT ()
 putT = put . T.unpack
 
 -- | Transform value expression to an SMT string.
-valExprToString :: SMTExpr t => Expr t -> SMT Text
+valExprToString :: (ConstToSMT t, SMTExpr t) => Expr t -> SMT Text
 valExprToString v = do
 --  mapI <- gets envNames
   return $ valexprToSMT v

@@ -66,22 +66,22 @@ lookupConstructor cstrMap sid n
 -- | convert an SMT expression to a ValExpr given a varName the varName is the
 -- name of a SMT identifier that refers to a SMT variable.
 class SMTExpr t where
-    smtValueToValExpr :: SMTValue -> Type ->{-Map.Map CstrId CstrDef ->-} Either String t
+    smtValueToValExpr :: SMTValue -> Either String t
 
 instance SMTExpr Bool where
-    smtValueToValExpr (SMTBool b) BoolType = Right b
-    smtValueToValExpr (SMTBool _) srt = Left $ typeError "Bool" srt
+    smtValueToValExpr (SMTBool b) = Right b
+    smtValueToValExpr v = Left $ typeError "Bool" v
 
 instance SMTExpr Integer where
-    smtValueToValExpr (SMTInt i) IntType = Right i
-    smtValueToValExpr (SMTInt _) srt = Left $ typeError "Int" srt
+    smtValueToValExpr (SMTInt i) = Right i
+    smtValueToValExpr v = Left $ typeError "Int" v
 
 instance SMTExpr String where
-    smtValueToValExpr (SMTString s) StringType = Right $ T.unpack s
-    smtValueToValExpr (SMTString _) srt = Left $ typeError "String" srt
+    smtValueToValExpr (SMTString s) = Right $ T.unpack s
+    smtValueToValExpr v = Left $ typeError "String" v
 
-typeError :: String -> Type -> String
-typeError received expected = "smtValueToValExpr: Type mismatch - " ++ received ++ " expected, got " ++ show expected ++ "\n"
+typeError :: String -> SMTValue -> String
+typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
 {-
 smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =
     let nameSort = SortId.name srt in

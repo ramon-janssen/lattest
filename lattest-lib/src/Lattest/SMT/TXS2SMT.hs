@@ -26,8 +26,9 @@ module Lattest.SMT.TXS2SMT
 --, sortdefsToSMT      
 --, funcdefsToSMT      
 --SMTExpr
-assertionsToSMT    
-, declarationsToSMT          
+assertionsToSMT
+, declarationsToSMT
+, ConstToSMT
 , valexprToSMT
 )
 
@@ -212,7 +213,7 @@ valexprToSMT' :: ConstToSMT t => ExprView t -> Text
 --valexprToSMT' (view -> Viscstr cd arg)      = "(" <> toIsCstrName cd <> " " <> valexprToSMT' enames arg <> ")"
 --valexprToSMT' (view -> Vaccess cd _n p arg) = "(" <> toFieldName cd p <> " " <> valexprToSMT' enames arg <> ")"
 valexprToSMT' (Const c) = constToSMT c
-valexprToSMT' (Var (Variable varName IntType))  =  T.pack varName
+valexprToSMT' (Var (Variable varName _))  =  T.pack varName
 valexprToSMT' (Ite c expr1 expr2) = "(ite " <> valexprToSMT' c <> " "  <> valexprToSMT' expr1 <> " " <> valexprToSMT' expr2 <> ")"
 valexprToSMT' (Sum s) =
     let ol = toOccurListT s in
