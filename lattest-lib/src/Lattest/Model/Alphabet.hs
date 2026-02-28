@@ -74,8 +74,7 @@ where
 
 import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
 import qualified Data.List as List (intercalate)
-import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign)
-import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
+import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign, Constant(..), constType)
 
 {- |
     If an input type is an 'TestChoice' to a type of observable actions, this means that
@@ -272,7 +271,7 @@ fromSuspendedInputAttempt(Out (OutSusp o)) = Out o
 -- STS data types
 addTypedVal :: Variable -> Constant -> Valuation -> Valuation
 addTypedVal v c | not (varType v == constType c) = error $ "expression "  ++ show c ++ " :: " ++ show (constType c) ++ " assigned to variable " ++ varName v ++ " :: " ++ show (varType v)
-addTypedVal v c = Map.insert v c
+addTypedVal v c = Map.insert v c -- TODO move insertIntoValuation from SMTInternal to ValExprImpls and reuse that here
 
 data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
 type IOSymInteract i o = SymInteract (IOAct i o)

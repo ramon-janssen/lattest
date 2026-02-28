@@ -70,7 +70,7 @@ asDualValExpr
 where
 
 import qualified Lattest.Model.Symbolic.ValExpr.ValExpr as E
-import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Constant(Cbool))
 
 import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
