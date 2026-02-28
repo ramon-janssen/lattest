@@ -53,7 +53,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , isNonNegative
   -- ** String Operators to create Value Expressions
   -- *** Length operator
-, len
+, sLength
   -- *** At operator
 , (.@)
   -- *** Concat operator
@@ -429,9 +429,9 @@ isNonNegative (view -> ve)         = Expr (GezInt ve)
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
-len :: Expr String -> Expr Integer
-len (view -> Const s) = cons (Prelude.toInteger (length s))
-len (view -> v)             = Expr (Length v)
+sLength :: Expr String -> Expr Integer
+sLength (view -> Const s) = cons (Prelude.toInteger (length s))
+sLength (view -> v)             = Expr (Length v)
 
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -598,7 +598,7 @@ subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
-subst' ve (Length vexp)           = len (subst' ve vexp)
+subst' ve (Length vexp)           = sLength (subst' ve vexp)
 
 subst' ve (GezInt v)                = isNonNegative (subst' ve v)
 subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
