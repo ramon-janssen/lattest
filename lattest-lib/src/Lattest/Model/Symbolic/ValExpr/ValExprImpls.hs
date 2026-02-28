@@ -55,7 +55,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Length operator
 , len
   -- *** At operator
-, cstrAt
+, (.@)
   -- *** Concat operator
 , cstrConcat
   -- ** Regular Expression Operators to create Value Expressions
@@ -435,12 +435,12 @@ len (view -> v)             = Expr (Length v)
 
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrAt :: Expr String -> Expr Integer -> Expr String
-cstrAt (view -> Const s) (view -> Const i) =
+(.@) :: Expr String -> Expr Integer -> Expr String
+(.@) (view -> Const s) (view -> Const i) =
     if i < 0 || i >= Prelude.toInteger (length s)
         then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (length s) ++ " with illegal index "++ show i) 
         else cons (take 1 (drop (fromInteger i) s))
-cstrAt (view -> ves) (view -> vei) = Expr $ At ves vei
+(.@) (view -> ves) (view -> vei) = Expr $ At ves vei
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
@@ -607,6 +607,6 @@ subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = (.&&) $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = neg (subst' ve vexp)
 
-subst' ve (At s p)                      = cstrAt (subst' ve s) (subst' ve p)
+subst' ve (At s p)                      = (.@) (subst' ve s) (subst' ve p)
 subst' ve (Concat vexps)                = cstrConcat $ map (subst' ve) vexps
 
