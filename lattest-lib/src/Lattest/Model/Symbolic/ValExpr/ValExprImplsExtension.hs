@@ -58,20 +58,20 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 -- Preconditions are /not/ checked.
 (.||) :: Set.Set (Expr Bool) -> Expr Bool
 -- a \/ b == not (not a /\ not b)
-(.||) = neg . (.&&) . Set.map neg
+(.||) = sNot . (.&&) . Set.map sNot
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 sXor :: Expr Bool -> Expr Bool -> Expr Bool
-sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
-                                   , (.&&) (Set.fromList [neg a, b])
+sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, sNot b])
+                                   , (.&&) (Set.fromList [sNot a, b])
                                    ])
 
 -- | Apply operator Implies (=>) on the provided value expressions.
 -- Preconditions are /not/ checked.
 (.=>) :: Expr Bool -> Expr Bool -> Expr Bool
 -- a => b == not a \/ b == not (a /\ not b)
-(.=>) a b = (neg . (.&&)) (Set.insert a (Set.singleton (neg b)))
+(.=>) a b = (sNot . (.&&)) (Set.insert a (Set.singleton (sNot b)))
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
@@ -102,13 +102,13 @@ cstrAbs a = ifThenElse (isNonNegative a) a (cstrUnaryMinus a)
 -- Preconditions are /not/ checked.
 cstrLT :: Expr Integer -> Expr Integer -> Expr Bool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
-cstrLT ve1 ve2 = neg (isNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
+cstrLT ve1 ve2 = sNot (isNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGT :: Expr Integer -> Expr Integer -> Expr Bool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
-cstrGT ve1 ve2 = neg (isNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
+cstrGT ve1 ve2 = sNot (isNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
