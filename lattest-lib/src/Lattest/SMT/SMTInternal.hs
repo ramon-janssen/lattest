@@ -221,10 +221,10 @@ getSolution vs    = do
         insertIntoValuation m v@(Variable name _) = case Map.lookup name m of
             Nothing -> error $ "SMT solution contained no valuation for variable " ++ name
             Just smtValue -> insertIntoValuation' smtValue v
-        insertIntoValuation' smtValue v@(Variable name IntType) = assignValue v (smtValueToValExpr' smtValue name :: Integer)
-        insertIntoValuation' smtValue v@(Variable name BoolType) = assignValue v (smtValueToValExpr' smtValue name :: Bool)
-        insertIntoValuation' smtValue v@(Variable name StringType) = assignValue v (smtValueToValExpr' smtValue name :: String)
-        smtValueToValExpr' smtValue name = case smtValueToValExpr smtValue of
+        insertIntoValuation' smtValue v@(Variable name IntType) = assignValue v (smtValueToValExpr' smtValue name IntType :: Integer)
+        insertIntoValuation' smtValue v@(Variable name BoolType) = assignValue v (smtValueToValExpr' smtValue name BoolType :: Bool)
+        insertIntoValuation' smtValue v@(Variable name StringType) = assignValue v (smtValueToValExpr' smtValue name StringType :: String)
+        smtValueToValExpr' smtValue name t = case smtValueToValExpr smtValue of
             Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
             Right val -> val
 
