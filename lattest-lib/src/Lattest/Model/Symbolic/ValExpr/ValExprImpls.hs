@@ -37,7 +37,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 --, cstrFunc
   -- ** Boolean Operators to create Value Expressions
   -- *** Not
-, cstrNot
+, neg
   -- *** And
 , cstrAnd
   -- ** Integer Operators to create Value Expressions
@@ -213,8 +213,8 @@ instance EqExpr String where
 (.==) e (view -> Vconst (Cbool True))           = e
 
 -- Simplification False == e <==> not e (twice)
-(.==) (view -> Vconst (Cbool False)) e              = cstrNot e
-(.==) e (view -> Vconst (Cbool False))              = cstrNot e
+(.==) (view -> Vconst (Cbool False)) e              = neg e
+(.==) e (view -> Vconst (Cbool False))              = neg e
 -- Not x == x <==> false (twice)
 (.==) e (view -> Vnot n) | e == n                   = cons (Cbool False)
 (.==) (view -> Vnot n) e | e == n                   = cons (Cbool False)
@@ -223,10 +223,10 @@ instance EqExpr String where
 -- Not a == b <==> a == Not b -- same representation (twice)
 (.==) x@(view -> Vnot n) e                = if n <= e
                                                         then Expr (Vequal x e)
-                                                        else Expr (Vequal (cstrNot e) n)
+                                                        else Expr (Vequal (neg e) n)
 (.==) e x@(view -> Vnot n)                = if n <= e
                                                         then Expr (Vequal x e)
-                                                        else Expr (Vequal (cstrNot e) n)
+                                                        else Expr (Vequal (neg e) n)
 -- a == b <==> b == a -- same representation
 (.==) ve1 ve2                                   = if ve1 <= ve2
                                                         then Expr (Vequal ve1 ve2)
@@ -235,13 +235,13 @@ instance EqExpr String where
 
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrNot :: Expr Bool -> Expr Bool
-{-cstrNot (view -> Vconst (Cbool True))       = cons (Cbool False)
-cstrNot (view -> Vconst (Cbool False))      = cons (Cbool True)
-cstrNot (view -> Vnot ve)                   = ve
+neg :: Expr Bool -> Expr Bool
+{-neg (view -> Vconst (Cbool True))       = cons (Cbool False)
+neg (view -> Vconst (Cbool False))      = cons (Cbool True)
+neg (view -> Vnot ve)                   = ve
 -- not (if cs then tb else fb) == if cs then not (tb) else not (fb)
-cstrNot (view -> Vite cs tb fb)             = Expr (Vite cs (cstrNot tb) (cstrNot fb))-}
-cstrNot (view -> ve) = Expr $ Not ve
+neg (view -> Vite cs tb fb)             = Expr (Vite cs (neg tb) (neg fb))-}
+neg (view -> ve) = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
@@ -605,7 +605,7 @@ subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = cstrAnd $ Set.map (subst' ve) vexps
-subst' ve (Not vexp)                = cstrNot (subst' ve vexp)
+subst' ve (Not vexp)                = neg (subst' ve vexp)
 
 subst' ve (At s p)                      = cstrAt (subst' ve s) (subst' ve p)
 subst' ve (Concat vexps)                = cstrConcat $ map (subst' ve) vexps

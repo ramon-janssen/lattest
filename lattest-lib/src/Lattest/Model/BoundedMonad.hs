@@ -70,7 +70,7 @@ asDualValExpr
 where
 
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBool, ValExprBoolView(BoolConst), ValExpr(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls(cstrAnd, cstrNot)
+import Lattest.Model.Symbolic.ValExpr.ValExprImpls(cstrAnd, neg)
 import Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension(cstrOr)
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
 
@@ -308,4 +308,4 @@ instance BooleanConfiguration FreeLattice where
         asValExpr' (x :/\: y) = cstrAnd $ Set.fromList [asValExpr' x, asValExpr' y]
 
 asDualValExpr :: (Functor m, BooleanConfiguration m) => m ValExprBool -> ValExprBool
-asDualValExpr m = cstrNot $ asValExpr $ cstrNot <$> m
+asDualValExpr m = neg $ asValExpr $ neg <$> m
