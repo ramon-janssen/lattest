@@ -60,20 +60,20 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 -- Preconditions are /not/ checked.
 cstrOr :: Set.Set (Expr Bool) -> Expr Bool
 -- a \/ b == not (not a /\ not b)
-cstrOr = neg . cstrAnd . Set.map neg
+cstrOr = neg . (.&&) . Set.map neg
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 cstrXor :: Expr Bool -> Expr Bool -> Expr Bool
-cstrXor a b = cstrOr (Set.fromList [ cstrAnd (Set.fromList [a, neg b])
-                                   , cstrAnd (Set.fromList [neg a, b])
+cstrXor a b = cstrOr (Set.fromList [ (.&&) (Set.fromList [a, neg b])
+                                   , (.&&) (Set.fromList [neg a, b])
                                    ])
 
 -- | Apply operator Implies (=>) on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrImplies :: Expr Bool -> Expr Bool -> Expr Bool
 -- a => b == not a \/ b == not (a /\ not b)
-cstrImplies a b = (neg . cstrAnd) (Set.insert a (Set.singleton (neg b)))
+cstrImplies a b = (neg . (.&&)) (Set.insert a (Set.singleton (neg b)))
 
 -- | Apply unary operator Plus on the provided value expression.
 -- Preconditions are /not/ checked.
