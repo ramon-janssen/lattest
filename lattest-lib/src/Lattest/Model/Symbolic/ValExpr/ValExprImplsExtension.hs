@@ -19,7 +19,7 @@ See LICENSE in the parent Symbolic folder.
 module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 ( -- * Derived Boolean operators
   -- ** Or (\/)
-  cstrOr
+  (.||)
   -- ** Exclusive or (\|/)
 , cstrXor
   -- ** Implies (=>)
@@ -58,14 +58,14 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 
 -- | Apply operator Or (\\\/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-cstrOr :: Set.Set (Expr Bool) -> Expr Bool
+(.||) :: Set.Set (Expr Bool) -> Expr Bool
 -- a \/ b == not (not a /\ not b)
-cstrOr = neg . (.&&) . Set.map neg
+(.||) = neg . (.&&) . Set.map neg
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 cstrXor :: Expr Bool -> Expr Bool -> Expr Bool
-cstrXor a b = cstrOr (Set.fromList [ (.&&) (Set.fromList [a, neg b])
+cstrXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
                                    , (.&&) (Set.fromList [neg a, b])
                                    ])
 
