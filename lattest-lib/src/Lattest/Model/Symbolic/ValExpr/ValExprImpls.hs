@@ -46,7 +46,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Product
 , (.*)
   -- *** Divide
-, cstrDivide
+, (./)
   -- *** Modulo
 , cstrModulo
   -- *** Comparisons GEZ
@@ -404,10 +404,10 @@ cstrPrd' ms =
 
 -- | Apply operator Divide on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrDivide :: Expr Integer -> Expr Integer -> Expr Integer
-cstrDivide _                     (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Divide"
-cstrDivide (view ->  Const t) (view -> Const n) = cons (t `Boute.div` n)
-cstrDivide (view -> vet)         (view -> ven) = Expr (Divide vet ven)
+(./) :: Expr Integer -> Expr Integer -> Expr Integer
+(./) _                     (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Divide"
+(./) (view ->  Const t) (view -> Const n) = cons (t `Boute.div` n)
+(./) (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
 -- Modulo
 
@@ -594,7 +594,7 @@ subst' :: Assignable t => VarModel -> ExprView t -> Expr t
 subst' _  (Const const')          = cons const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (Divide t n)            = cstrDivide (subst' ve t) (subst' ve n)
+subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = (.+) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = (.*) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
