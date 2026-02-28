@@ -50,7 +50,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Modulo
 , (.%)
   -- *** Comparisons GEZ
-, isNonNegative
+, sIsNonNegative
   -- ** String Operators to create Value Expressions
   -- *** Length operator
 , sLength
@@ -420,11 +420,11 @@ cstrPrd' ms =
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
-isNonNegative :: Expr Integer -> Expr Bool
+sIsNonNegative :: Expr Integer -> Expr Bool
 -- Simplification Values
-isNonNegative (view -> Const v) = sConst (0 <= v)
-isNonNegative (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
-isNonNegative (view -> ve)         = Expr (GezInt ve)
+sIsNonNegative (view -> Const v) = sConst (0 <= v)
+sIsNonNegative (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
+sIsNonNegative (view -> ve)         = Expr (GezInt ve)
 
 
 -- | Apply operator Length on the provided value expression.
@@ -600,7 +600,7 @@ subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subs
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = sLength (subst' ve vexp)
 
-subst' ve (GezInt v)                = isNonNegative (subst' ve v)
+subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
 subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)

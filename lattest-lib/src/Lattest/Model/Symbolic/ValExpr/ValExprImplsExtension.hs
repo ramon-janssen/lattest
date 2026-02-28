@@ -96,28 +96,28 @@ cstrTimes a b = sProduct (fromListT [a,b])
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrAbs :: Expr Integer -> Expr Integer
-cstrAbs a = sIfThenElse (isNonNegative a) a (cstrUnaryMinus a)
+cstrAbs a = sIfThenElse (sIsNonNegative a) a (cstrUnaryMinus a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrLT :: Expr Integer -> Expr Integer -> Expr Bool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
-cstrLT ve1 ve2 = sNot (isNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
+cstrLT ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGT :: Expr Integer -> Expr Integer -> Expr Bool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
-cstrGT ve1 ve2 = sNot (isNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
+cstrGT ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrLE :: Expr Integer -> Expr Integer -> Expr Bool
 -- a <= b <==> 0 <= b - a
-cstrLE ve1 ve2 = isNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
+cstrLE ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
 
 -- | Apply operator GE (>=) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGE :: Expr Integer -> Expr Integer -> Expr Bool
 -- a >= b <==> a - b >= 0
-cstrGE ve1 ve2 = isNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)]))
+cstrGE ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)]))
