@@ -44,7 +44,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Sum
 , (.+)
   -- *** Product
-, cstrProduct
+, (.*)
   -- *** Divide
 , cstrDivide
   -- *** Modulo
@@ -358,28 +358,28 @@ getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
 getProduct (Product p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
-cstrProduct :: FreeProduct (Expr Integer) -> Expr Integer
-cstrProduct = Expr . cstrProduct' . FMX.mapTerms (ProductTerm . view . factor)
+(.*) :: FreeProduct (Expr Integer) -> Expr Integer
+(.*) = Expr . cstrPrd . FMX.mapTerms (ProductTerm . view . factor)
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
 -- Preconditions are /not/ checked.
-cstrProduct' :: FreeProduct (ExprView Integer) -> ExprView Integer
+cstrPrd :: FreeProduct (ExprView Integer) -> ExprView Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the product of all values
 --         special case if the product is one, no value is inserted since v == v*1
 --    remove all nested products, since (a*b) * (c*d) == (a*b*c*d)
-cstrProduct' ms =
-    cstrProduct'' $ noprods <> FMX.flatten prodOfProds
+cstrPrd ms =
+    cstrPrd' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProduct ms
       prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView Integer)))
       prodOfProds = FMX.mapTerms (getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
-cstrProduct'' :: FreeProduct (ExprView Integer) -> ExprView Integer
-cstrProduct'' ms =
+cstrPrd' :: FreeProduct (ExprView Integer) -> ExprView Integer
+cstrPrd' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         (zeros, _) = FMX.partitionT isZero vals
     in
@@ -597,7 +597,7 @@ subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1
 subst' ve (Divide t n)            = cstrDivide (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = (.+) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
-subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
+subst' ve (Product p)             = (.*) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = cstrLength (subst' ve vexp)
 
 subst' ve (GezInt v)                = cstrGEZ (subst' ve v)
