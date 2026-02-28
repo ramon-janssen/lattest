@@ -32,7 +32,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Equal
 , (.==)
   -- *** If Then Else
-, cstrITE
+, ifThenElse
   -- *** Function Call
 --, cstrFunc
   -- ** Boolean Operators to create Value Expressions
@@ -179,10 +179,10 @@ var' = Expr . Var
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrITE :: Expr Bool -> Expr t -> Expr t -> Expr t
-cstrITE (view -> Const True) t _ = t
-cstrITE (view -> Const False) _ f = f
-cstrITE (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
+ifThenElse :: Expr Bool -> Expr t -> Expr t -> Expr t
+ifThenElse (view -> Const True) t _ = t
+ifThenElse (view -> Const False) _ f = f
+ifThenElse (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 
 -- | Create a variable as a value expression.
 -- typeclass because every type has its own ExprView-constructor
@@ -593,7 +593,7 @@ subst ve x = subst' ve (view x)
 subst' :: Assignable t => VarModel -> ExprView t -> Expr t
 subst' _  (Const const')          = cons const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
-subst' ve (Ite cond vexp1 vexp2)  = cstrITE (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = cstrDivide (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s

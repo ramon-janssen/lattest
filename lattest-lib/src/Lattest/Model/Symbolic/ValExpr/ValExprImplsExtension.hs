@@ -103,7 +103,7 @@ cstrTimes a b = cstrProduct (fromListT [a,b])
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrAbs :: Expr Integer -> Expr Integer
-cstrAbs a = cstrITE (cstrGEZ a) a (cstrUnaryMinus a)
+cstrAbs a = ifThenElse (cstrGEZ a) a (cstrUnaryMinus a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
