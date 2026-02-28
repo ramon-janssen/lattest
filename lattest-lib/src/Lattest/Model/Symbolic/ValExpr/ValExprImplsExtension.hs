@@ -37,7 +37,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 , sAbs
   -- * Derived Integer comparisons
   -- ** Less than (<)
-, cstrLT
+, (.<)
   -- ** Less Equal (<=)
 , cstrLE
   -- ** Greater Equal (>=)
@@ -100,9 +100,9 @@ sAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrLT :: Expr Integer -> Expr Integer -> Expr Bool
+(.<) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
-cstrLT ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
+(.<) ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
