@@ -34,7 +34,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Times = Product of two terms
 , (.*)
   -- ** Absolute value
-, cstrAbs
+, sAbs
   -- * Derived Integer comparisons
   -- ** Less than (<)
 , cstrLT
@@ -95,8 +95,8 @@ sNeg v = sSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrAbs :: Expr Integer -> Expr Integer
-cstrAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
+sAbs :: Expr Integer -> Expr Integer
+sAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
