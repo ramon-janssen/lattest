@@ -26,6 +26,8 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
   sConst
+, sTrue
+, sFalse
   -- ** VarRef
 , sVar
   -- ** General Operators to create Value Expressions
@@ -158,6 +160,12 @@ cstrAccess c n p e = ValExpr (Vaccess c n p e)
 
 sConst :: ExprType t => t -> Expr t
 sConst = Expr . Const
+
+sTrue :: Expr Bool
+sTrue = sConst True
+
+sFalse :: Expr Bool
+sFalse = sConst False
 
 class VarExpr t where
     sVar :: Variable -> Expr t
