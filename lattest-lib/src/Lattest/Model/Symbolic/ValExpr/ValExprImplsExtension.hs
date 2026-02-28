@@ -39,7 +39,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Less than (<)
 , (.<)
   -- ** Less Equal (<=)
-, cstrLE
+, (.<=)
   -- ** Greater Equal (>=)
 , cstrGE
   -- ** Greater Than (>)
@@ -112,9 +112,9 @@ cstrGT ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrLE :: Expr Integer -> Expr Integer -> Expr Bool
+(.<=) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a <= b <==> 0 <= b - a
-cstrLE ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
+(.<=) ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
 
 -- | Apply operator GE (>=) on the provided value expression.
 -- Preconditions are /not/ checked.
