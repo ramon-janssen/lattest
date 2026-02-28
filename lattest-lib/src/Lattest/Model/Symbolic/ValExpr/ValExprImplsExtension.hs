@@ -21,7 +21,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Or (\/)
   (.||)
   -- ** Exclusive or (\|/)
-, cstrXor
+, sXor
   -- ** Implies (=>)
 , cstrImplies
   -- * Derived Integer operators:
@@ -64,8 +64,8 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-cstrXor :: Expr Bool -> Expr Bool -> Expr Bool
-cstrXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
+sXor :: Expr Bool -> Expr Bool -> Expr Bool
+sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
                                    , (.&&) (Set.fromList [neg a, b])
                                    ])
 
