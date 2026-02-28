@@ -48,7 +48,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Divide
 , (./)
   -- *** Modulo
-, cstrModulo
+, (.%)
   -- *** Comparisons GEZ
 , cstrGEZ
   -- ** String Operators to create Value Expressions
@@ -413,10 +413,10 @@ cstrPrd' ms =
 
 -- | Apply operator Modulo on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrModulo :: Expr Integer -> Expr Integer -> Expr Integer
-cstrModulo _                    (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Modulo"
-cstrModulo (view -> Const t) (view -> Const n) = cons (t `Boute.mod` n)
-cstrModulo (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
+(.%) :: Expr Integer -> Expr Integer -> Expr Integer
+(.%) _                    (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Modulo"
+(.%) (view -> Const t) (view -> Const n) = cons (t `Boute.mod` n)
+(.%) (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
@@ -595,7 +595,7 @@ subst' _  (Const const')          = cons const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
-subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
+subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = (.+) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = (.*) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = cstrLength (subst' ve vexp)
