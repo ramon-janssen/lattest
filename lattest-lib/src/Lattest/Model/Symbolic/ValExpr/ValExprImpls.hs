@@ -30,7 +30,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , var
   -- ** General Operators to create Value Expressions
   -- *** Equal
-, cstrEqual
+, (.==)
   -- *** If Then Else
 , cstrITE
   -- *** Function Call
@@ -187,48 +187,48 @@ cstrITE (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 -- | Create a variable as a value expression.
 -- typeclass because every type has its own ExprView-constructor
 class EqExpr t where
-    cstrEqual :: Expr t -> Expr t -> Expr Bool
+    (.==) :: Expr t -> Expr t -> Expr Bool
     
 instance EqExpr Integer where
-    cstrEqual (view -> x) (view -> y) = Expr $ EqualInt x y
+    (.==) (view -> x) (view -> y) = Expr $ EqualInt x y
 
 instance EqExpr Bool where
-    cstrEqual (view -> x) (view -> y) = Expr $ EqualBool x y
+    (.==) (view -> x) (view -> y) = Expr $ EqualBool x y
 
 instance EqExpr String where
-    cstrEqual (view -> x) (view -> y) = Expr $ EqualString x y
+    (.==) (view -> x) (view -> y) = Expr $ EqualString x y
 
 
 
 {-
 -- | Apply operator Equal on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrEqual :: Expr -> Expr -> Expr
+(.==) :: Expr -> Expr -> Expr
 -- Simplification a == a <==> True
-cstrEqual ve1 ve2 | ve1 == ve2                      = cons (Cbool True)
+(.==) ve1 ve2 | ve1 == ve2                      = cons (Cbool True)
 -- Simplification Different Values <==> False : use Same Values are already detected in previous step
-cstrEqual (view -> Vconst _) (view -> Vconst _)     = cons (Cbool False)
+(.==) (view -> Vconst _) (view -> Vconst _)     = cons (Cbool False)
 -- Simplification True == e <==> e (twice)
-cstrEqual (view -> Vconst (Cbool True)) e           = e
-cstrEqual e (view -> Vconst (Cbool True))           = e
+(.==) (view -> Vconst (Cbool True)) e           = e
+(.==) e (view -> Vconst (Cbool True))           = e
 
 -- Simplification False == e <==> not e (twice)
-cstrEqual (view -> Vconst (Cbool False)) e              = cstrNot e
-cstrEqual e (view -> Vconst (Cbool False))              = cstrNot e
+(.==) (view -> Vconst (Cbool False)) e              = cstrNot e
+(.==) e (view -> Vconst (Cbool False))              = cstrNot e
 -- Not x == x <==> false (twice)
-cstrEqual e (view -> Vnot n) | e == n                   = cons (Cbool False)
-cstrEqual (view -> Vnot n) e | e == n                   = cons (Cbool False)
+(.==) e (view -> Vnot n) | e == n                   = cons (Cbool False)
+(.==) (view -> Vnot n) e | e == n                   = cons (Cbool False)
 -- Not x == Not y <==> x == y   -- same representation
-cstrEqual (view -> Vnot n1) (view -> Vnot n2)     = cstrEqual n1 n2
+(.==) (view -> Vnot n1) (view -> Vnot n2)     = (.==) n1 n2
 -- Not a == b <==> a == Not b -- same representation (twice)
-cstrEqual x@(view -> Vnot n) e                = if n <= e
+(.==) x@(view -> Vnot n) e                = if n <= e
                                                         then Expr (Vequal x e)
                                                         else Expr (Vequal (cstrNot e) n)
-cstrEqual e x@(view -> Vnot n)                = if n <= e
+(.==) e x@(view -> Vnot n)                = if n <= e
                                                         then Expr (Vequal x e)
                                                         else Expr (Vequal (cstrNot e) n)
 -- a == b <==> b == a -- same representation
-cstrEqual ve1 ve2                                   = if ve1 <= ve2
+(.==) ve1 ve2                                   = if ve1 <= ve2
                                                         then Expr (Vequal ve1 ve2)
                                                         else Expr (Vequal ve2 ve1)
 -}
@@ -601,9 +601,9 @@ subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (firs
 subst' ve (Length vexp)           = cstrLength (subst' ve vexp)
 
 subst' ve (GezInt v)                = cstrGEZ (subst' ve v)
-subst' ve (EqualInt vexp1 vexp2)    = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualBool vexp1 vexp2)   = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualString vexp1 vexp2) = cstrEqual (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = cstrAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = cstrNot (subst' ve vexp)
 
