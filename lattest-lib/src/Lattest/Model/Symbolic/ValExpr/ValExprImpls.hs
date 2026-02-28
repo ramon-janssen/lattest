@@ -27,7 +27,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- ** Constant value
   cstrConst
   -- ** VarRef
-, cstrVar
+, var
   -- ** General Operators to create Value Expressions
   -- *** Equal
 , cstrEqual
@@ -160,22 +160,22 @@ cstrConst :: ExprType t => t -> Expr t
 cstrConst = Expr . Const
 
 class VarExpr t where
-    cstrVar :: Variable -> Expr t
+    var :: Variable -> Expr t
 
 instance VarExpr Integer where
-    cstrVar v@(Variable _ IntType) = cstrVar' v
-    cstrVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Integer, received " ++ show t
+    var v@(Variable _ IntType) = var' v
+    var (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Integer, received " ++ show t
 
 instance VarExpr Bool where
-    cstrVar v@(Variable _ BoolType) = cstrVar' v
-    cstrVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Bool, received " ++ show t
+    var v@(Variable _ BoolType) = var' v
+    var (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Bool, received " ++ show t
 
 instance VarExpr String where
-    cstrVar v@(Variable _ StringType) = cstrVar' v
-    cstrVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
+    var v@(Variable _ StringType) = var' v
+    var (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
 
-cstrVar' :: Variable -> Expr t
-cstrVar' = Expr . Var
+var' :: Variable -> Expr t
+var' = Expr . Var
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -534,7 +534,7 @@ instance Assignable Integer where
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
     assignedExpr v@(Variable _ IntType) (VarModel ints bools strings) = Map.lookup v ints
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
-    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints bools strings) = Map.findWithDefault (cstrVar v) v ints
+    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints bools strings) = Map.findWithDefault (var v) v ints
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
 
 instance Assignable Bool where
@@ -544,7 +544,7 @@ instance Assignable Bool where
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
     assignedExpr v@(Variable _ BoolType) (VarModel ints bools strings) = Map.lookup v bools
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
-    assignedExprWithDefault v@(Variable _ BoolType) (VarModel ints bools strings) = Map.findWithDefault (cstrVar v) v bools
+    assignedExprWithDefault v@(Variable _ BoolType) (VarModel ints bools strings) = Map.findWithDefault (var v) v bools
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
 
 instance Assignable String where
@@ -554,7 +554,7 @@ instance Assignable String where
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
     assignedExpr v@(Variable _ StringType) (VarModel ints bools strings) = Map.lookup v strings
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
-    assignedExprWithDefault v@(Variable _ StringType) (VarModel ints bools strings) = Map.findWithDefault (cstrVar v) v strings
+    assignedExprWithDefault v@(Variable _ StringType) (VarModel ints bools strings) = Map.findWithDefault (var v) v strings
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
 
 noAssignment :: VarModel
