@@ -57,7 +57,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** At operator
 , (.@)
   -- *** Concat operator
-, concats
+, sConcat
   -- ** Regular Expression Operators to create Value Expressions
   -- *** String in Regular Expression operator
 --, cstrStrInRe
@@ -444,8 +444,8 @@ sLength (view -> v)             = Expr (Length v)
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
-concats :: [Expr String] -> Expr String
-concats l =
+sConcat :: [Expr String] -> Expr String
+sConcat l =
     let n = (mergeVals . flatten . filter (cons "" /= ) ) l in
         case Prelude.length n of
            0 -> cons ""
@@ -456,7 +456,7 @@ concats l =
 -- Properties incorporated
 --    "" ++ x == x          - remove empty strings
 --    "a" ++ "b" == "ab"    - concat consecutive string values
---   remove all nested Concats, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
+--   remove all nested sConcat, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
 mergeVals :: [Expr String] -> [Expr String]
 mergeVals []            = []
@@ -608,5 +608,5 @@ subst' ve (And vexps)               = (.&&) $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = neg (subst' ve vexp)
 
 subst' ve (At s p)                      = (.@) (subst' ve s) (subst' ve p)
-subst' ve (Concat vexps)                = concats $ map (subst' ve) vexps
+subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
 
