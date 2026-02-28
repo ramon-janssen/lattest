@@ -25,7 +25,7 @@ See LICENSE in the parent Symbolic folder.
 module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
-  cons
+  sConst
   -- ** VarRef
 , var
   -- ** General Operators to create Value Expressions
@@ -156,8 +156,8 @@ cstrAccess c n p e = ValExpr (Vaccess c n p e)
 --isConst (view -> Vconst{}) = True
 --isConst _                  = False
 
-cons :: ExprType t => t -> Expr t
-cons = Expr . Const
+sConst :: ExprType t => t -> Expr t
+sConst = Expr . Const
 
 class VarExpr t where
     var :: Variable -> Expr t
@@ -205,9 +205,9 @@ instance EqExpr String where
 -- Preconditions are /not/ checked.
 (.==) :: Expr -> Expr -> Expr
 -- Simplification a == a <==> True
-(.==) ve1 ve2 | ve1 == ve2                      = cons (Cbool True)
+(.==) ve1 ve2 | ve1 == ve2                      = sConst (Cbool True)
 -- Simplification Different Values <==> False : use Same Values are already detected in previous step
-(.==) (view -> Vconst _) (view -> Vconst _)     = cons (Cbool False)
+(.==) (view -> Vconst _) (view -> Vconst _)     = sConst (Cbool False)
 -- Simplification True == e <==> e (twice)
 (.==) (view -> Vconst (Cbool True)) e           = e
 (.==) e (view -> Vconst (Cbool True))           = e
@@ -216,8 +216,8 @@ instance EqExpr String where
 (.==) (view -> Vconst (Cbool False)) e              = sNot e
 (.==) e (view -> Vconst (Cbool False))              = sNot e
 -- Not x == x <==> false (twice)
-(.==) e (view -> Vnot n) | e == n                   = cons (Cbool False)
-(.==) (view -> Vnot n) e | e == n                   = cons (Cbool False)
+(.==) e (view -> Vnot n) | e == n                   = sConst (Cbool False)
+(.==) (view -> Vnot n) e | e == n                   = sConst (Cbool False)
 -- Not x == Not y <==> x == y   -- same representation
 (.==) (view -> Vnot n1) (view -> Vnot n2)     = (.==) n1 n2
 -- Not a == b <==> a == Not b -- same representation (twice)
@@ -236,8 +236,8 @@ instance EqExpr String where
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
 sNot :: Expr Bool -> Expr Bool
-{-sNot (view -> Vconst (Cbool True))       = cons (Cbool False)
-sNot (view -> Vconst (Cbool False))      = cons (Cbool True)
+{-sNot (view -> Vconst (Cbool True))       = sConst (Cbool False)
+sNot (view -> Vconst (Cbool False))      = sConst (Cbool True)
 sNot (view -> Vnot ve)                   = ve
 -- not (if cs then tb else fb) == if cs then not (tb) else not (fb)
 sNot (view -> Vite cs tb fb)             = Expr (Vite cs (sNot tb) (sNot fb))-}
@@ -259,19 +259,19 @@ sNot (view -> ve) = Expr $ Not ve
 -- And doesn't contain elements of type Vand.
 (.&&)' :: Set.Set Expr Bool -> Expr Bool
 (.&&)' s =
-    if Set.member (cons (Cbool False)) s
-        then cons (Cbool False)
-        else let s' = Set.delete (cons (Cbool True)) s in
+    if Set.member (sConst (Cbool False)) s
+        then sConst (Cbool False)
+        else let s' = Set.delete (sConst (Cbool True)) s in
                 case Set.size s' of
-                    0   -> cons (Cbool True)
+                    0   -> sConst (Cbool True)
                     1   -> head (Set.toList s')
                     _   ->  -- not(x) and x == False
                             let nots = filterNot (Set.toList s') in
                                 if any (contains s') nots
-                                    then cons (Cbool False)
+                                    then sConst (Cbool False)
 --                                    else let ts = isCstrTuples (Set.toList s') in
 --                                            if sameExpr ts
---                                                then cons (Cbool False)
+--                                                then sConst (Cbool False)
                                                 else Expr (Vand s')
     where
         filterNot :: [Expr] -> [Expr]
@@ -406,7 +406,7 @@ cstrPrd' ms =
 -- Preconditions are /not/ checked.
 (./) :: Expr Integer -> Expr Integer -> Expr Integer
 (./) _                     (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Divide"
-(./) (view ->  Const t) (view -> Const n) = cons (t `Boute.div` n)
+(./) (view ->  Const t) (view -> Const n) = sConst (t `Boute.div` n)
 (./) (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
 -- Modulo
@@ -415,22 +415,22 @@ cstrPrd' ms =
 -- Preconditions are /not/ checked.
 (.%) :: Expr Integer -> Expr Integer -> Expr Integer
 (.%) _                    (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Modulo"
-(.%) (view -> Const t) (view -> Const n) = cons (t `Boute.mod` n)
+(.%) (view -> Const t) (view -> Const n) = sConst (t `Boute.mod` n)
 (.%) (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
 isNonNegative :: Expr Integer -> Expr Bool
 -- Simplification Values
-isNonNegative (view -> Const v) = cons (0 <= v)
-isNonNegative (view -> Length _)   = cons True        -- length of string is always Greater or equal to zero
+isNonNegative (view -> Const v) = sConst (0 <= v)
+isNonNegative (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
 isNonNegative (view -> ve)         = Expr (GezInt ve)
 
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
 sLength :: Expr String -> Expr Integer
-sLength (view -> Const s) = cons (Prelude.toInteger (length s))
+sLength (view -> Const s) = sConst (Prelude.toInteger (length s))
 sLength (view -> v)             = Expr (Length v)
 
 -- | Apply operator At on the provided value expressions.
@@ -439,16 +439,16 @@ sLength (view -> v)             = Expr (Length v)
 (.@) (view -> Const s) (view -> Const i) =
     if i < 0 || i >= Prelude.toInteger (length s)
         then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (length s) ++ " with illegal index "++ show i) 
-        else cons (take 1 (drop (fromInteger i) s))
+        else sConst (take 1 (drop (fromInteger i) s))
 (.@) (view -> ves) (view -> vei) = Expr $ At ves vei
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
 sConcat :: [Expr String] -> Expr String
 sConcat l =
-    let n = (mergeVals . flatten . filter (cons "" /= ) ) l in
+    let n = (mergeVals . flatten . filter (sConst "" /= ) ) l in
         case Prelude.length n of
-           0 -> cons ""
+           0 -> sConst ""
            1 -> head n
            _ -> Expr (Concat $ fmap view n)
 
@@ -462,7 +462,7 @@ mergeVals :: [Expr String] -> [Expr String]
 mergeVals []            = []
 mergeVals [x]           = [x]
 mergeVals ( (view -> Const s1) : (view -> Const s2) : xs) =
-                          mergeVals (cons (s1 <> s2): xs)
+                          mergeVals (sConst (s1 <> s2): xs)
 mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
 
 flatten :: [Expr String] -> [Expr String]
@@ -473,7 +473,7 @@ flatten (x:xs)                   = x : flatten xs
 -- | Apply String In Regular Expression operator on the provided value expressions.
 -- Preconditions are /not/ checked.
 --cstrStrInRe :: Expr -> Expr -> Expr
---cstrStrInRe (view -> Vconst (Cstring s)) (view -> Vconst (Cregex r)) = cons (Cbool (T.unpack s =~ T.unpack (xsd2posix r) ) )
+--cstrStrInRe (view -> Vconst (Cstring s)) (view -> Vconst (Cregex r)) = sConst (Cbool (T.unpack s =~ T.unpack (xsd2posix r) ) )
 --cstrStrInRe s r                                                      = Expr (Vstrinre s r)
 
 {-
@@ -508,7 +508,7 @@ assignment :: [VarModel -> VarModel] -> VarModel
 assignment fs = foldr ($) noAssignment fs
 
 typedValuationToVarModel :: ExprType t => TypedValuation t -> TypedVarModel t
-typedValuationToVarModel vals = Map.map cons vals
+typedValuationToVarModel vals = Map.map sConst vals
 
 valuationToVarModel :: Valuation -> VarModel
 valuationToVarModel vals = VarModel {
@@ -591,7 +591,7 @@ subst :: Assignable t => VarModel      -- ^ Map from variables to value expressi
 subst ve x = subst' ve (view x)
 
 subst' :: Assignable t => VarModel -> ExprView t -> Expr t
-subst' _  (Const const')          = cons const'
+subst' _  (Const const')          = sConst const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
