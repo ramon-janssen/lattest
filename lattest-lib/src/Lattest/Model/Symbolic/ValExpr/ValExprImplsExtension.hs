@@ -32,7 +32,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Minus
 , (.-)
   -- ** Times = Product of two terms
-, cstrTimes
+, (.*)
   -- ** Absolute value
 , cstrAbs
   -- * Derived Integer comparisons
@@ -90,8 +90,8 @@ sNeg v = sSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Times on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrTimes :: Expr Integer -> Expr Integer -> Expr Integer
-cstrTimes a b = sProduct (fromListT [a,b])
+(.*) :: Expr Integer -> Expr Integer -> Expr Integer
+(.*) a b = sProduct (fromListT [a,b])
 
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
