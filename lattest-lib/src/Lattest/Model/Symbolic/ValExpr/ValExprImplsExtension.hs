@@ -28,7 +28,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Unary Minus = negate single argument
 , sNeg
   -- ** Plus = Sum of two terms
-, cstrPlus
+, (.+)
   -- ** Minus
 , cstrMinus
   -- ** Times = Product of two terms
@@ -80,8 +80,8 @@ sNeg v = sSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Add on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrPlus :: Expr Integer -> Expr Integer -> Expr Integer
-cstrPlus a b = sSum (fromListT [a,b])
+(.+) :: Expr Integer -> Expr Integer -> Expr Integer
+(.+) a b = sSum (fromListT [a,b])
 
 -- | Apply operator Minus on the provided value expressions.
 -- Preconditions are /not/ checked.
