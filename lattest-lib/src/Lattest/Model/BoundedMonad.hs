@@ -69,9 +69,7 @@ asDualValExpr
 )
 where
 
-import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ValExprBool, ValExprBoolView(BoolConst), ValExpr(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls((.&&), neg)
-import Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension((.||))
+import qualified Lattest.Model.Symbolic.ValExpr.ValExpr as E
 import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
 
 import Algebra.Lattice.Free (Free(..), lowerFree)
@@ -286,26 +284,26 @@ class JoinSemiLattice a where
 --    join = (L.\/)
 
 class BooleanConfiguration m where -- TODO: possibly this class can be less ad-hoc, e.g. via some lattice-theoretic concept
-    asValExpr :: m ValExprBool -> ValExprBool
+    asValExpr :: m (E.Expr Bool) -> E.Expr Bool
     --asValExprInverted :: m ValExprBool -> ValExprBool
 
 instance BooleanConfiguration Det where
     asValExpr (Det q) = q
-    asValExpr ForbiddenDet = ValExpr $ BoolConst $ Cbool False
-    asValExpr UnderspecDet = ValExpr $ BoolConst $ Cbool True
+    asValExpr ForbiddenDet = E.sFalse
+    asValExpr UnderspecDet = E.sTrue
 
 instance BooleanConfiguration NonDet where
-    asValExpr (NonDet qs) = (.||) $ Set.fromList qs
-    asValExpr UnderspecNonDet = ValExpr $ BoolConst $ Cbool True
+    asValExpr (NonDet qs) = (E.sOr) $ Set.fromList qs
+    asValExpr UnderspecNonDet = E.sTrue
 
 instance BooleanConfiguration FreeLattice where
-    asValExpr (FreeLattice Top) = ValExpr $ BoolConst $ Cbool True
-    asValExpr (FreeLattice Bottom) = ValExpr $ BoolConst $ Cbool False
+    asValExpr (FreeLattice Top) = E.sTrue
+    asValExpr (FreeLattice Bottom) = E.sFalse
     asValExpr (FreeLattice (Levitate a)) = asValExpr' a
         where
         asValExpr' (Var a) = a
-        asValExpr' (x :\/: y) = (.||) $ Set.fromList [asValExpr' x, asValExpr' y]
-        asValExpr' (x :/\: y) = (.&&) $ Set.fromList [asValExpr' x, asValExpr' y]
+        asValExpr' (x :\/: y) = asValExpr' x E..|| asValExpr' y
+        asValExpr' (x :/\: y) = asValExpr' x E..&& asValExpr' y
 
-asDualValExpr :: (Functor m, BooleanConfiguration m) => m ValExprBool -> ValExprBool
-asDualValExpr m = neg $ asValExpr $ neg <$> m
+asDualValExpr :: (Functor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
+asDualValExpr m = E.sNot $ asValExpr $ E.sNot <$> m
