@@ -19,7 +19,9 @@ See LICENSE in the parent Symbolic folder.
 module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 ( -- * Derived Boolean operators
   -- ** Or (\/)
-  (.||)
+  sOr
+, (.&&)
+, (.||)
   -- ** Exclusive or (\|/)
 , sXor
   -- ** Implies (=>)
@@ -56,14 +58,20 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 
 -- | Apply operator Or (\\\/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-(.||) :: Set.Set (Expr Bool) -> Expr Bool
+sOr :: Set.Set (Expr Bool) -> Expr Bool
 -- a \/ b == not (not a /\ not b)
-(.||) = sNot . sAnd . Set.map sNot
+sOr = sNot . sAnd . Set.map sNot
+
+(.&&) :: Expr Bool -> Expr Bool -> Expr Bool
+(.&&) a b = sAnd $ Set.fromList [a,b]
+
+(.||) :: Expr Bool -> Expr Bool -> Expr Bool
+(.||) a b = sOr $ Set.fromList [a,b]
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 sXor :: Expr Bool -> Expr Bool -> Expr Bool
-sXor a b = (.||) (Set.fromList [ sAnd (Set.fromList [a, sNot b])
+sXor a b = sOr (Set.fromList [ sAnd (Set.fromList [a, sNot b])
                                    , sAnd (Set.fromList [sNot a, b])
                                    ])
 
