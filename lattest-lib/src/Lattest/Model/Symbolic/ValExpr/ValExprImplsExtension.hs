@@ -26,7 +26,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 , (.=>)
   -- * Derived Integer operators:
   -- ** Unary Minus = negate single argument
-, cstrUnaryMinus
+, sNeg
   -- ** Plus = Sum of two terms
 , cstrPlus
   -- ** Minus
@@ -75,8 +75,8 @@ sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, sNot b])
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrUnaryMinus :: Expr Integer -> Expr Integer
-cstrUnaryMinus v = sSum (fromOccurListT [(v,-1)])
+sNeg :: Expr Integer -> Expr Integer
+sNeg v = sSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Add on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -96,7 +96,7 @@ cstrTimes a b = sProduct (fromListT [a,b])
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrAbs :: Expr Integer -> Expr Integer
-cstrAbs a = sIfThenElse (sIsNonNegative a) a (cstrUnaryMinus a)
+cstrAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
