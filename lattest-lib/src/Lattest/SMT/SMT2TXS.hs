@@ -32,7 +32,6 @@ import qualified Data.Map          as Map
 import qualified Data.String.Utils as Utils
 import qualified Data.Text         as T
 
-import qualified Lattest.Model.Symbolic.ValExpr.Constant as C
 --import           CstrDef
 --import           CstrId
 import           Lattest.SMT.SMTHappy
@@ -66,7 +65,7 @@ lookupConstructor cstrMap sid n
 -- | convert an SMT expression to a ValExpr given a varName the varName is the
 -- name of a SMT identifier that refers to a SMT variable.
 class SMTExpr t where
-    smtValueToValExpr :: C.Constant -> Either String t
+    smtValueToValExpr :: Constant -> Either String t
 
 instance SMTExpr Bool where
     smtValueToValExpr (Cbool b) = Right b
@@ -80,7 +79,7 @@ instance SMTExpr String where
     smtValueToValExpr (Cstring s) = Right s
     smtValueToValExpr v = Left $ typeError "String" v
 
-typeError :: String -> C.Constant -> String
+typeError :: String -> Constant -> String
 typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
 {-
 smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =

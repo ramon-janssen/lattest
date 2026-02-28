@@ -31,6 +31,8 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , reduce
 , Variable(..)
 , Type(..)
+, Constant(..)
+, constType
 , ExprType
 , typeOf
 , typeOf'
@@ -49,8 +51,6 @@ import qualified Data.Text as Text(length, pack, index, concat)
 import           GHC.Generics     (Generic)
 import           GHC.Integer (divInteger)
 
-import           Lattest.Model.Symbolic.ValExpr.Constant (Constant(..), toBool, toText)
-import qualified Lattest.Model.Symbolic.ValExpr.Constant as Const (toInteger)
 import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
 import           Lattest.Model.Symbolic.ValExpr.Product
 import           Lattest.Model.Symbolic.ValExpr.Sum
@@ -81,6 +81,36 @@ data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
 
 instance Show Variable where
     show (Variable name stype) = name ++ ":" ++ show stype
+
+data Constant = -- | Constructor of Boolean constant.
+                Cbool    { toBool :: Bool }
+                -- | Constructor of Integer constant.
+              | Cint     { toInteger :: Integer }
+                -- | Constructor of String constant.
+              | Cstring  { toString :: String }
+                -- | Constructor of constructor constant (value of ADT).
+              | Ccstr    { cstrName :: String, args :: [Constant] }
+{-
+                -- | Constructor of Regular Expression constant.
+              | Cregex   { -- | Regular Expression in XSD format
+                           toXSDRegex :: Text } 
+                                            -- PvdL: performance gain: translate only once,
+                                            --       storing SMT string as well
+                -- | Constructor of ANY constant.
+              | Cany     { sort :: SortId }
+-}
+  deriving (Eq, Ord, Read)
+
+constType :: Constant -> Type
+constType (Cbool _) = BoolType
+constType (Cint _) = IntType
+constType (Cstring _) = StringType
+
+instance Show Constant where
+  show (Cbool b) = show b
+  show (Cint i) = show i
+  show (Cstring t) = show t
+
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression

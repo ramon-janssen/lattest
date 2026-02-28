@@ -44,7 +44,6 @@ import qualified Data.List     as List
 import           Data.Text     (Text)
 import qualified Data.Text     as T
 
-import           Lattest.Model.Symbolic.ValExpr.Constant
 --import           CstrDef
 --import           CstrId
 import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
