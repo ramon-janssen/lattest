@@ -25,8 +25,6 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Implies (=>)
 , (.=>)
   -- * Derived Integer operators:
-  -- ** Unary Plus
-, cstrUnaryPlus
   -- ** Unary Minus = negate single argument
 , cstrUnaryMinus
   -- ** Plus = Sum of two terms
@@ -74,11 +72,6 @@ sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
 (.=>) :: Expr Bool -> Expr Bool -> Expr Bool
 -- a => b == not a \/ b == not (a /\ not b)
 (.=>) a b = (neg . (.&&)) (Set.insert a (Set.singleton (neg b)))
-
--- | Apply unary operator Plus on the provided value expression.
--- Preconditions are /not/ checked.
-cstrUnaryPlus :: Expr Integer -> Expr Integer
-cstrUnaryPlus = id
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
