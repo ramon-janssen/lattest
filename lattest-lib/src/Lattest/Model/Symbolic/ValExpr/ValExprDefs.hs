@@ -86,7 +86,7 @@ instance Show Variable where
 -- value expression
 
 data ExprView t where
-    Var :: {var :: Variable} -> ExprView t
+    Var :: {variable :: Variable} -> ExprView t
     Const :: ExprType t => {constant :: t} -> ExprView t
     Ite :: {conditional :: ExprView Bool, trueBranch :: ExprView t, falseBranch :: ExprView t} -> ExprView t
     {-
