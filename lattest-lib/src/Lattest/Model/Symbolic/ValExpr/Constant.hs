@@ -27,7 +27,6 @@ where
 
 import           Control.DeepSeq
 import           Data.Data
-import           Data.Text       (Text)
 import           GHC.Generics    (Generic)
 
 -- | Union of Boolean, Integer, String, and AlgebraicDataType constant values.
@@ -36,15 +35,15 @@ data Constant = -- | Constructor of Boolean constant.
                 -- | Constructor of Integer constant.
               | Cint     { toInteger :: Integer }
                 -- | Constructor of String constant.
-              | Cstring  { toText :: Text }
-                -- | Constructor of Regular Expression constant.
+              | Cstring  { toText :: String }
+                -- | Constructor of constructor constant (value of ADT).
+              | Ccstr    { cstrName :: String, args :: [Constant] }
 {-
+                -- | Constructor of Regular Expression constant.
               | Cregex   { -- | Regular Expression in XSD format
                            toXSDRegex :: Text } 
                                             -- PvdL: performance gain: translate only once,
                                             --       storing SMT string as well
-                -- | Constructor of constructor constant (value of ADT).
-              | Ccstr    { cstrId :: CstrId, args :: [Constant] }
                 -- | Constructor of ANY constant.
               | Cany     { sort :: SortId }
 -}

@@ -217,7 +217,7 @@ getSolution vs    = do
 --    edefs <- gets envDefs
     return $ assignValues $ insertIntoValuation vnameSMTValueMap <$> vs
     where
-        insertIntoValuation :: Map.Map String SMTValue -> Variable -> Valuation -> Valuation
+        insertIntoValuation :: Map.Map String Constant -> Variable -> Valuation -> Valuation
         insertIntoValuation m v@(Variable name _) = case Map.lookup name m of
             Nothing -> error $ "SMT solution contained no valuation for variable " ++ name
             Just smtValue -> insertIntoValuation' smtValue v

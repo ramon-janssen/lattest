@@ -22,17 +22,16 @@ See LICENSE at root directory of this repository.
 -----------------------------------------------------------------------------
 module Lattest.SMT.SMTHappy
 ( smtParser
-, SMTValue(..)
 )
 where
 import Lattest.SMT.SMTAlex (Token(..), smtLexer)
+import qualified Lattest.Model.Symbolic.ValExpr.Constant as C
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Lattest.SMT.SMTString as SMTString    -- Parse SMT string according to smtlib 2.5 standard
-                                        
+
 import qualified Data.Map    as Map
 import Data.String.Utils
-
 import Text.Regex.TDFA
 }
     
@@ -45,7 +44,7 @@ import Text.Regex.TDFA
 
 %attributetype          { MyAttributes a }
 %attribute parseVal     { a }
-%attribute bind         { Map.Map String SMTValue }
+%attribute bind         { Map.Map String C.Constant }
 
 -- ----------------------------------------------------------------------------------------- --
 -- tokens
@@ -69,14 +68,14 @@ import Text.Regex.TDFA
 -- https://www.haskell.org/happy/doc/html/sec-sequences.html 
 -- The only reason we used left recursion is that Happy is more efficient at parsing left-recursive rules; 
 
-ValueResponse  -- :: { Map.Map String SMTValue }
+ValueResponse  -- :: { Map.Map String C.Constant }
             : "(" ValuationPairs ")"
                 {
                     $2.bind = Map.empty
                 ;   $$ = $2
                 }
 
-ValuationPairs -- :: { Map.Map String SMTValue }
+ValuationPairs -- :: { Map.Map String C.Constant }
             :  ValuationPair
                 {  
                     $1.bind = $$.bind
@@ -89,14 +88,14 @@ ValuationPairs -- :: { Map.Map String SMTValue }
                 ;   $$ = Map.insert (fst $2) (snd $2) $1
                 }
             
-ValuationPair -- :: { (String, SMTValue) }
+ValuationPair -- :: { (String, C.Constant) }
             : "("  name RuleValue ")"
                 {
                     $3.bind = Map.empty
                 ;   $$ = ($2, $3)
                 }
             
-RuleValues  -- :: { [SMTValue] }
+RuleValues  -- :: { [C.Constant] }
             : RuleValue
                 {   
                     $1.bind = $$.bind
@@ -109,7 +108,7 @@ RuleValues  -- :: { [SMTValue] }
                 ;   $$ = $1 ++ [ $2 ]
                 }
 
-RuleValue  -- :: { SMTValue }
+RuleValue  -- :: { C.Constant }
               : RuleExpression
                 {  
                     $1.bind = $$.bind
@@ -122,7 +121,7 @@ RuleValue  -- :: { SMTValue }
                 ;   $$ = $6
                 }
             
-VarBindings  -- :: { [( var, SMTValue)] }
+VarBindings  -- :: { [( var, C.Constant)] }
              : VarBinding
                 {
                     $1.bind = $$.bind
@@ -135,19 +134,19 @@ VarBindings  -- :: { [( var, SMTValue)] }
                 ;   $$ = $1 ++ [$2]
                 }
 
-VarBinding   -- :: { ( name, SMTValue) }
+VarBinding   -- :: { ( name, C.Constant) }
              : "(" name RuleExpression ")"
                 {   
                     $3.bind = $$.bind
                 ;   $$ = ($2, $3)
                 }
                 
-RuleExpression -- :: { SMTValue }
+RuleExpression -- :: { C.Constant }
                 : "(" "-" RuleExpression ")"
                   { 
                      $3.bind = $$.bind
                   ;  $$ = case $3 of
-                            { SMTInt i -> SMTInt (-1*i)
+                            { C.Cint i -> C.Cint (-1*i)
                             ; _        -> error "SMT unexpected format"
                             }
                   }
@@ -155,7 +154,7 @@ RuleExpression -- :: { SMTValue }
                   {  
                      $$ = case Map.lookup $1 $$.bind of 
                              { Nothing  -> if ($1 =~ cstrRegex) then
-                                               SMTConstructor (T.pack $1) []
+                                               C.Ccstr ($1) []
                                            else
                                                error ("SMT var " ++ $1 ++ " not declared")
                              ; Just val -> val
@@ -163,21 +162,21 @@ RuleExpression -- :: { SMTValue }
                   }
                 | bool
                   {
-                    $$ = SMTBool $1 
+                    $$ = C.Cbool $1 
                   }
                 | integer
                   {
-                    $$ = SMTInt $1
+                    $$ = C.Cint $1
                   }
                 | string
                   {
-                    $$ = SMTString $ SMTString.stringFromSMT (T.pack (init (tail $1)))
+                    $$ = C.Cstring $ T.unpack $ SMTString.stringFromSMT (T.pack (init (tail $1)))
                   }
                 | "(" name RuleValues ")"
                   {
                     $3.bind = $$.bind
                   ; $$ = if ($2 =~ cstrRegex) then
-                            SMTConstructor (T.pack $2) $3
+                            C.Ccstr ($2) $3
                          else
                             error ("SMT: " ++ $2 ++ " is not a constructor name.")
                   }
@@ -192,15 +191,8 @@ parseError _ = error "Parse Error"
 
 noerror = ()
 
--- | Data structure for SMTValues.
-data  SMTValue       = SMTConstructor Text [SMTValue]
-                     | SMTBool Bool
-                     | SMTInt Integer
-                     | SMTString Text
-     deriving (Eq,Ord,Read,Show)
-
 -- | Smt Parser.
-smtParser :: [Token] -> Map.Map String SMTValue
+smtParser :: [Token] -> Map.Map String C.Constant
 smtParser = happySmt
 
 cstrRegex :: String
