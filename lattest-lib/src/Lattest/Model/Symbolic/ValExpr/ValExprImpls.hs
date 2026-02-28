@@ -41,7 +41,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Not
 , sNot
   -- *** And
-, (.&&)
+, sAnd
   -- ** Integer Operators to create Value Expressions
   -- *** Sum
 , sSum
@@ -253,9 +253,9 @@ sNot (view -> ve) = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-(.&&) :: Set.Set (Expr Bool) -> Expr Bool
---(.&&) = (.&&)' . flattenAnd
-(.&&) = Expr . And . flattenAnd
+sAnd :: Set.Set (Expr Bool) -> Expr Bool
+--sAnd = sAnd' . flattenAnd
+sAnd = Expr . And . flattenAnd
     where
         flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
@@ -265,8 +265,8 @@ sNot (view -> ve) = Expr $ Not ve
         fromExpr (view -> x) = Set.singleton x
 {-
 -- And doesn't contain elements of type Vand.
-(.&&)' :: Set.Set Expr Bool -> Expr Bool
-(.&&)' s =
+sAnd' :: Set.Set Expr Bool -> Expr Bool
+sAnd' s =
     if Set.member (sConst (Cbool False)) s
         then sConst (Cbool False)
         else let s' = Set.delete (sConst (Cbool True)) s in
@@ -612,7 +612,7 @@ subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
 subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (And vexps)               = (.&&) $ Set.map (subst' ve) vexps
+subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
 subst' ve (At s p)                      = (.@) (subst' ve s) (subst' ve p)

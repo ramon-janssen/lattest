@@ -58,20 +58,20 @@ import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
 -- Preconditions are /not/ checked.
 (.||) :: Set.Set (Expr Bool) -> Expr Bool
 -- a \/ b == not (not a /\ not b)
-(.||) = sNot . (.&&) . Set.map sNot
+(.||) = sNot . sAnd . Set.map sNot
 
 -- | Apply operator Xor (\\\|/) on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 sXor :: Expr Bool -> Expr Bool -> Expr Bool
-sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, sNot b])
-                                   , (.&&) (Set.fromList [sNot a, b])
+sXor a b = (.||) (Set.fromList [ sAnd (Set.fromList [a, sNot b])
+                                   , sAnd (Set.fromList [sNot a, b])
                                    ])
 
 -- | Apply operator Implies (=>) on the provided value expressions.
 -- Preconditions are /not/ checked.
 (.=>) :: Expr Bool -> Expr Bool -> Expr Bool
 -- a => b == not a \/ b == not (a /\ not b)
-(.=>) a b = (sNot . (.&&)) (Set.insert a (Set.singleton (sNot b)))
+(.=>) a b = (sNot . sAnd) (Set.insert a (Set.singleton (sNot b)))
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
