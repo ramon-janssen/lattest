@@ -41,9 +41,9 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Less Equal (<=)
 , (.<=)
   -- ** Greater Equal (>=)
-, cstrGE
+, (.>=)
   -- ** Greater Than (>)
-, cstrGT
+, (.>)
 )
 where
 
@@ -106,9 +106,9 @@ sAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrGT :: Expr Integer -> Expr Integer -> Expr Bool
+(.>) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
-cstrGT ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
+(.>) ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
@@ -118,6 +118,6 @@ cstrGT ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
 
 -- | Apply operator GE (>=) on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrGE :: Expr Integer -> Expr Integer -> Expr Bool
+(.>=) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a >= b <==> a - b >= 0
-cstrGE ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)]))
+(.>=) ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)]))
