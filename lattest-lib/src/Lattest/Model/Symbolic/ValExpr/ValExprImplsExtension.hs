@@ -23,7 +23,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
   -- ** Exclusive or (\|/)
 , sXor
   -- ** Implies (=>)
-, cstrImplies
+, (.=>)
   -- * Derived Integer operators:
   -- ** Unary Plus
 , cstrUnaryPlus
@@ -71,9 +71,9 @@ sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
 
 -- | Apply operator Implies (=>) on the provided value expressions.
 -- Preconditions are /not/ checked.
-cstrImplies :: Expr Bool -> Expr Bool -> Expr Bool
+(.=>) :: Expr Bool -> Expr Bool -> Expr Bool
 -- a => b == not a \/ b == not (a /\ not b)
-cstrImplies a b = (neg . (.&&)) (Set.insert a (Set.singleton (neg b)))
+(.=>) a b = (neg . (.&&)) (Set.insert a (Set.singleton (neg b)))
 
 -- | Apply unary operator Plus on the provided value expression.
 -- Preconditions are /not/ checked.
