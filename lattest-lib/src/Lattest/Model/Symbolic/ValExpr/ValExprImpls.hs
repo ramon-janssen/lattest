@@ -42,7 +42,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , (.&&)
   -- ** Integer Operators to create Value Expressions
   -- *** Sum
-, (.+)
+, sSum
   -- *** Product
 , (.*)
   -- *** Divide
@@ -310,8 +310,8 @@ getSum :: ExprView Integer -> FreeSum (ExprView Integer)
 getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
-(.+) :: FreeSum (Expr Integer) -> Expr Integer
-(.+) = Expr . cstrSum . FMX.mapTerms (SumTerm . view . summand)
+sSum :: FreeSum (Expr Integer) -> Expr Integer
+sSum = Expr . cstrSum . FMX.mapTerms (SumTerm . view . summand)
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
@@ -596,7 +596,7 @@ subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
-subst' ve (Sum s)                 = (.+) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
+subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = (.*) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = len (subst' ve vexp)
 

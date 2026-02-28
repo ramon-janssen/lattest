@@ -76,17 +76,17 @@ sXor a b = (.||) (Set.fromList [ (.&&) (Set.fromList [a, neg b])
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrUnaryMinus :: Expr Integer -> Expr Integer
-cstrUnaryMinus v = (.+) (fromOccurListT [(v,-1)])
+cstrUnaryMinus v = sSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Add on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrPlus :: Expr Integer -> Expr Integer -> Expr Integer
-cstrPlus a b = (.+) (fromListT [a,b])
+cstrPlus a b = sSum (fromListT [a,b])
 
 -- | Apply operator Minus on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrMinus :: Expr Integer -> Expr Integer -> Expr Integer
-cstrMinus a b = (.+) (fromOccurListT [(a,1),(b,-1)])
+cstrMinus a b = sSum (fromOccurListT [(a,1),(b,-1)])
 
 -- | Apply operator Times on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -102,22 +102,22 @@ cstrAbs a = ifThenElse (isNonNegative a) a (cstrUnaryMinus a)
 -- Preconditions are /not/ checked.
 cstrLT :: Expr Integer -> Expr Integer -> Expr Bool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
-cstrLT ve1 ve2 = neg (isNonNegative ((.+) (fromOccurListT [(ve1,1),(ve2,-1)])))
+cstrLT ve1 ve2 = neg (isNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGT :: Expr Integer -> Expr Integer -> Expr Bool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
-cstrGT ve1 ve2 = neg (isNonNegative ((.+) (fromOccurListT [(ve1,-1),(ve2,1)])))
+cstrGT ve1 ve2 = neg (isNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrLE :: Expr Integer -> Expr Integer -> Expr Bool
 -- a <= b <==> 0 <= b - a
-cstrLE ve1 ve2 = isNonNegative ((.+) (fromOccurListT [(ve1,-1),(ve2,1)]))
+cstrLE ve1 ve2 = isNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
 
 -- | Apply operator GE (>=) on the provided value expression.
 -- Preconditions are /not/ checked.
 cstrGE :: Expr Integer -> Expr Integer -> Expr Bool
 -- a >= b <==> a - b >= 0
-cstrGE ve1 ve2 = isNonNegative ((.+) (fromOccurListT [(ve1,1),(ve2,-1)]))
+cstrGE ve1 ve2 = isNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)]))
