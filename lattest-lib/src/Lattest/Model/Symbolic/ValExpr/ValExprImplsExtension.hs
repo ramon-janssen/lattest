@@ -91,7 +91,7 @@ cstrMinus a b = sSum (fromOccurListT [(a,1),(b,-1)])
 -- | Apply operator Times on the provided value expressions.
 -- Preconditions are /not/ checked.
 cstrTimes :: Expr Integer -> Expr Integer -> Expr Integer
-cstrTimes a b = (.*) (fromListT [a,b])
+cstrTimes a b = sProduct (fromListT [a,b])
 
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.

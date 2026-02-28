@@ -44,7 +44,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
   -- *** Sum
 , sSum
   -- *** Product
-, (.*)
+, sProduct
   -- *** Divide
 , (./)
   -- *** Modulo
@@ -358,8 +358,8 @@ getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
 getProduct (Product p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
-(.*) :: FreeProduct (Expr Integer) -> Expr Integer
-(.*) = Expr . cstrPrd . FMX.mapTerms (ProductTerm . view . factor)
+sProduct :: FreeProduct (Expr Integer) -> Expr Integer
+sProduct = Expr . cstrPrd . FMX.mapTerms (ProductTerm . view . factor)
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
@@ -597,7 +597,7 @@ subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
-subst' ve (Product p)             = (.*) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
+subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = len (subst' ve vexp)
 
 subst' ve (GezInt v)                = isNonNegative (subst' ve v)
