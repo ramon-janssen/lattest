@@ -213,20 +213,14 @@ getSolution []    = return emptyValuation
 getSolution vs    = do
     putT ("(get-value (" <> T.intercalate " " (map (T.pack . varName) vs) <>"))")
     s <- getSMTresponse
-    let vnameSMTValueMap = smtParser . smtLexer $ s
+    let vnameConstMap = smtParser . smtLexer $ s
+        varsToMaybeConstants = [(v, Map.lookup (varName v) vnameConstMap) | v <- vs]
 --    edefs <- gets envDefs
-    return $ assignValues $ insertIntoValuation vnameSMTValueMap <$> vs
+    return $ assignValues $ insertMaybeIntoValuation <$> varsToMaybeConstants
     where
-        insertIntoValuation :: Map.Map String Constant -> Variable -> Valuation -> Valuation
-        insertIntoValuation m v@(Variable name _) = case Map.lookup name m of
-            Nothing -> error $ "SMT solution contained no valuation for variable " ++ name
-            Just smtValue -> insertIntoValuation' smtValue v
-        insertIntoValuation' smtValue v@(Variable name IntType) = assignValue v (smtValueToValExpr' smtValue name IntType :: Integer)
-        insertIntoValuation' smtValue v@(Variable name BoolType) = assignValue v (smtValueToValExpr' smtValue name BoolType :: Bool)
-        insertIntoValuation' smtValue v@(Variable name StringType) = assignValue v (smtValueToValExpr' smtValue name StringType :: String)
-        smtValueToValExpr' smtValue name t = case smtValueToValExpr smtValue of
-            Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
-            Right val -> val
+        insertMaybeIntoValuation :: (Variable, Maybe Constant) -> Valuation -> Valuation
+        insertMaybeIntoValuation (Variable name _, Nothing) = error $ "SMT solution contained no valuation for variable " ++ name
+        insertMaybeIntoValuation (v, Just c) = insertIntoValuation v c
 
 -- ------------------------------------------
 -- get SMT info
@@ -277,7 +271,7 @@ putT :: Text -> SMT ()
 putT = put . T.unpack
 
 -- | Transform value expression to an SMT string.
-valExprToString :: (ConstToSMT t, SMTExpr t) => Expr t -> SMT Text
+valExprToString :: (ConstType t, ConstToSMT t) => Expr t -> SMT Text
 valExprToString v = do
 --  mapI <- gets envNames
   return $ valexprToSMT v

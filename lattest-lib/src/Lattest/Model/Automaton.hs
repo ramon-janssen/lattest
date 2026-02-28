@@ -65,7 +65,7 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedApplicative, BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, asDualValExpr)
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, addTypedVal, isOutputGate, isOutputInteract, interactionGate)
+    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputGate, isOutputInteract, interactionGate)
 import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
 import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
 import Lattest.SMT.SMTData(SmtEnv)
@@ -480,7 +480,7 @@ instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => Transiti
 instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
-            -- valuation = Map.foldrWithKey (\x xval m -> addTypedVal x xval m) gateValuation stateValuation
+            -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
             valuation = stateValuation `Map.union` gateValuation
         in if not $ evalBool valuation guard
             then implicitDestination gv
@@ -494,7 +494,7 @@ instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, Transition
         assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
     move (IntrpState _ stateValuation) _ Nothing l2 = return (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
-buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> addTypedVal gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
+buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
 evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
 evalVal valuation = fromRight . evalConst valuation
 evalBool :: Valuation -> ValExprBool-> Bool

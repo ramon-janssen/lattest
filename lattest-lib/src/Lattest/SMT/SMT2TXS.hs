@@ -18,8 +18,8 @@ module Lattest.SMT.SMT2TXS
 -- export
 
 (
-SMTExpr,
-smtValueToValExpr   --  :: SMTValue -> TxsDefs -> SortId -> Walue
+--SMTExpr,
+--smtValueToValExpr   --  :: SMTValue -> TxsDefs -> SortId -> Walue
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -62,25 +62,6 @@ lookupConstructor cstrMap sid n
 -}
 
 
--- | convert an SMT expression to a ValExpr given a varName the varName is the
--- name of a SMT identifier that refers to a SMT variable.
-class SMTExpr t where
-    smtValueToValExpr :: Constant -> Either String t
-
-instance SMTExpr Bool where
-    smtValueToValExpr (Cbool b) = Right b
-    smtValueToValExpr v = Left $ typeError "Bool" v
-
-instance SMTExpr Integer where
-    smtValueToValExpr (Cint i) = Right i
-    smtValueToValExpr v = Left $ typeError "Int" v
-
-instance SMTExpr String where
-    smtValueToValExpr (Cstring s) = Right s
-    smtValueToValExpr v = Left $ typeError "String" v
-
-typeError :: String -> Constant -> String
-typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
 {-
 smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =
     let nameSort = SortId.name srt in

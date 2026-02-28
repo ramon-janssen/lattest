@@ -33,6 +33,8 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , Type(..)
 , Constant(..)
 , constType
+, ConstType
+, fromConst
 , ExprType
 , typeOf
 , typeOf'
@@ -110,6 +112,25 @@ instance Show Constant where
   show (Cbool b) = show b
   show (Cint i) = show i
   show (Cstring t) = show t
+
+-- | convert a Constant to an typed value
+class ConstType t where
+    fromConst :: Constant -> Either String t
+
+instance ConstType Bool where
+    fromConst (Cbool b) = Right b
+    fromConst v = Left $ typeError "Bool" v
+
+instance ConstType Integer where
+    fromConst (Cint i) = Right i
+    fromConst v = Left $ typeError "Int" v
+
+instance ConstType String where
+    fromConst (Cstring s) = Right s
+    fromConst v = Left $ typeError "String" v
+
+typeError :: String -> Constant -> String
+typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
 
 
 -- ----------------------------------------------------------------------------------------- --

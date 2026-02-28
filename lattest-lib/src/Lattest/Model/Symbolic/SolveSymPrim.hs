@@ -7,10 +7,9 @@ solveAnySequential
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..))
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..), Constant(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(eval)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
-import Lattest.Model.Symbolic.ValExpr.Constant(Constant(Cbool))
 import Lattest.SMT.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import qualified Data.Map as Map
