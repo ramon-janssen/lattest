@@ -42,7 +42,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , (.&&)
   -- ** Integer Operators to create Value Expressions
   -- *** Sum
-, cstrSum
+, (.+)
   -- *** Product
 , cstrProduct
   -- *** Divide
@@ -310,26 +310,26 @@ getSum :: ExprView Integer -> FreeSum (ExprView Integer)
 getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
-cstrSum :: FreeSum (Expr Integer) -> Expr Integer
-cstrSum = Expr . cstrSum' . FMX.mapTerms (SumTerm . view . summand)
+(.+) :: FreeSum (Expr Integer) -> Expr Integer
+(.+) = Expr . cstrSum . FMX.mapTerms (SumTerm . view . summand)
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
-cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
+cstrSum :: FreeSum (ExprView Integer) -> ExprView Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the sum of all values
 --         special case if the sum is zero, no value is inserted since v == v+0
 --    remove all nested sums, since (a+b) + (c+d) == (a+b+c+d)
-cstrSum' ms = cstrSum'' $ nonadds <> FMX.flatten sumOfAdds
+cstrSum ms = cstrSum' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSum ms
       sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView Integer)))
       sumOfAdds = FMX.mapTerms (getSum . summand) adds
 
 -- Sum doesn't contain elements of type VExprSum
-cstrSum'' :: FreeSum (ExprView Integer) -> ExprView Integer
-cstrSum'' ms =
+cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
+cstrSum' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
         sumVals = summand $ FMX.foldFMX valueSum
@@ -390,8 +390,8 @@ cstrProduct'' ms =
                     in
                         case FMX.toDistinctAscOccurListT nonvals of
                             []          ->  Const productVals
-                            [(term, 1)] ->  cstrSum' (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
-                            _           ->  cstrSum' (FMX.fromOccurList [(SumTerm (Product nonvals), productVals)])  -- productVals can be 1 -> rewrite possible
+                            [(term, 1)] ->  cstrSum (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
+                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (Product nonvals), productVals)])  -- productVals can be 1 -> rewrite possible
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
                             0   ->  Const 0      -- 0 * x == 0
@@ -596,7 +596,7 @@ subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = ifThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = cstrDivide (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = cstrModulo (subst' ve t) (subst' ve n)
-subst' ve (Sum s)                 = cstrSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
+subst' ve (Sum s)                 = (.+) $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = cstrProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = cstrLength (subst' ve vexp)
 
