@@ -87,8 +87,7 @@ import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),ValExpr(..), ValExprInt, ValExprBool, ValExprString, eval, constType, varType, evalConst, evalConst', assignedExpr, Eval, Subst, subst)
-import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..), toBool, toInteger, toText)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, evalConst, evalConst', assignedExpr, subst, Constant(..), toBool, toInteger, toString, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation)
 
 ------------
 -- syntax --
@@ -481,23 +480,24 @@ instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, Transition
     move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
-            valuation = stateValuation `Map.union` gateValuation
+            valuation = fromConstantsMap $ toConstantsMap stateValuation `Map.union` toConstantsMap gateValuation
         in if not $ evalBool valuation guard
             then implicitDestination gv
-            else let stateValuation2 = Map.mapWithKey (\var val -> assignNewValue var val valuation assign) stateValuation
-                 in return $ IntrpState l2 stateValuation2
+            else let stateValuation2 = Map.mapWithKey (\var val -> assignNewValue var val valuation assign) $ toConstantsMap stateValuation
+                 in return $ IntrpState l2 $ fromConstantsMap stateValuation2
         where
         assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
         -- the following case distinctino could be removed if constants were also typed
-        assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
-        assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
-        assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe ValExprInt)
+        assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr Integer))
+        assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr Bool))
+        assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr String))
     move (IntrpState _ stateValuation) _ Nothing l2 = return (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
-buildGateValuation gateVars gateVals= List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
-evalVal :: (Subst t, Eval t) => Valuation -> ValExpr t -> Constant
+--buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
+buildGateValuation gateVars gateVals = assignValues $ (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) <$> (zip gateVars gateVals)
+evalVal :: Valuation -> Expr t -> Constant
 evalVal valuation = fromRight . evalConst valuation
-evalBool :: Valuation -> ValExprBool-> Bool
+evalBool :: Valuation -> Expr Bool -> Bool
 evalBool valuation = toBool . evalVal valuation
 
 --------------------

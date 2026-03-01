@@ -77,6 +77,8 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , VarModel
 , assign
 , Valuation
+, toConstantsMap
+, fromConstantsMap
 , emptyValuation
 , assignValues
 , assignValue
@@ -497,7 +499,15 @@ data Valuation = Valuation {
     boolValuation :: TypedValuation Bool,
     stringValuation :: TypedValuation String
     }
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Show)
+
+toConstantsMap :: Valuation -> Map.Map Variable Constant
+toConstantsMap valuation = Map.map Cint (intValuation valuation)
+                            `Map.union` Map.map Cbool (boolValuation valuation)
+                            `Map.union` Map.map Cstring (stringValuation valuation)
+
+fromConstantsMap :: Map.Map Variable Constant -> Valuation
+fromConstantsMap = assignValues . fmap (uncurry insertIntoValuation) . Map.toList
 
 assignValues :: [Valuation -> Valuation] -> Valuation
 assignValues fs = foldr ($) emptyValuation fs

@@ -7,6 +7,7 @@ solveAnySequential
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
+import qualified Lattest.Model.Symbolic.ValExpr.ValExpr as E
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..), Constant(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(eval)
 import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
@@ -32,7 +33,7 @@ substituteInGuard valuation guard = evalConst' valuation guard
 evaluateGuard :: SymGuard -> Bool
 evaluateGuard guard = case eval guard of
     Left e -> error e -- TODO proper exception
-    Right (Cbool b) -> b
+    Right b -> b
 
 {-|
     For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
@@ -45,10 +46,11 @@ solveAnySequential ((interact@(SymInteract _ vars),guard):alph) = do
     case maybeSolved of
         Nothing -> solveAnySequential alph
         Just solved -> return $ Just $ valuationToGateValue interact solved
-
+--data SymInteract g = SymInteract g [Variable]
+--data GateValue g = GateValue g [Constant]
 valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
 valuationToGateValue (SymInteract gate params) valuation =
-    GateValue gate $ fmap (getValueForVar valuation) params
+    GateValue gate $ fmap (getValueForVar $ E.toConstantsMap valuation) params
     where
         getValueForVar valuation var =
             case Map.lookup var valuation of
