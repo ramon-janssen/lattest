@@ -249,7 +249,33 @@ instance Show a => Show (FreeLattice a) where
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
 instance JoinSemiLattice (FreeLattice a) where
-    (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
+    (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
+
+
+data FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord)
+
+isCnfBot :: FreeLatticeCNF a -> Bool
+isCnfBot (FreeLatticeCNF x) = Set.size x == 1 && all Set.null x
+
+isCnfTop :: FreeLatticeCNF a -> Bool
+isCnfTop (FreeLatticeCNF x) = Set.null x
+
+instance BoundedConfiguration FreeLatticeCNF where
+    isForbidden x = if isCnfBot x then True else False
+    isUnderspecified x = if isCnfTop x then True else False
+    underspecified = FreeLatticeCNF $ Set.empty
+
+instance OrdMonad FreeLatticeCNF where
+    ordBind (FreeLatticeCNF x) f = FreeLatticeCNF $ cnfJoin $ Set.map (Set.map f1) x
+        where
+            f1 y = let FreeLatticeCNF z = f y in z
+    ordReturn x = FreeLatticeCNF  $ Set.singleton $ Set.singleton x
+
+cnfJoin :: (Ord a) => Set.Set (Set.Set (Set.Set (Set.Set a))) -> Set.Set (Set.Set a)
+cnfJoin = undefined
+
+instance OrdFunctor FreeLatticeCNF where
+    ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
