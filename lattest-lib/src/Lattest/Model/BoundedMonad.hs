@@ -272,7 +272,10 @@ instance OrdMonad FreeLatticeCNF where
     ordReturn x = FreeLatticeCNF  $ Set.singleton $ Set.singleton x
 
 cnfJoin :: (Ord a) => Set.Set (Set.Set (Set.Set (Set.Set a))) -> Set.Set (Set.Set a)
-cnfJoin = undefined
+cnfJoin = Set.map Set.unions . Set.unions . Set.map nAryCartesianProduct
+
+nAryCartesianProduct :: (Ord a) => Set.Set (Set.Set a) -> Set.Set (Set.Set a)
+nAryCartesianProduct j = Set.map Set.fromList $ Set.fromList $ sequence $ Set.toList $ Set.map Set.toList j
 
 instance OrdFunctor FreeLatticeCNF where
     ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
