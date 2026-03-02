@@ -27,52 +27,37 @@ import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), Sus
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Variable(..),Type(..),cstrPlus,cstrMinus,cstrTimes,assignment,noAssignment,cstrAnd,cstrLE,cstrLT,cstrGE,cstrVar,cstrEqual,cstrConst,ValExpr,ValExprInt,(=:))
-import Lattest.Model.Symbolic.ValExpr.Constant(Constant(..))
+import Lattest.Model.Symbolic.ValExpr.ValExpr
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 
 pvar = (Variable "p" IntType)
 qvar = (Variable "q" IntType)
 xvar = (Variable "x" IntType)
-stsExampleInitAssign = Map.singleton xvar (Cint 0)
+stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
-    let pvarexpr = cstrVar pvar
-        xvarexpr = cstrVar xvar
+    let pvarexpr = sVar pvar
+        xvarexpr = sVar xvar
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
-        waterGuard = (intConst 1 .<= pvarexpr) .&& (pvarexpr .<= intConst 10)
+        waterGuard = (sConst 1 .<= pvarexpr) .&& (pvarexpr .<= sConst 10)
         waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
         okGuard = xvarexpr .== pvarexpr
-        coffeeGuard = xvarexpr .>= (intConst 15)
+        coffeeGuard = xvarexpr .>= (sConst 15)
         initConf = NonDet [0] :: NonDet Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
                                 (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
             1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
-        initAssign = Map.singleton xvar (Cint 0)
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
-getSTSIntrpState loc val = NonDet [IntrpState loc $ Map.singleton (Variable "x" IntType) (Cint val)]
-
-(.&&) a b = cstrAnd $ Set.union (Set.singleton a) (Set.singleton b)
-(.<=) = cstrLE
-(.>=) = cstrGE
-(.<) = cstrLT
-(.+) = cstrPlus
-(.-) = cstrMinus
-(.*) = cstrTimes
-(.==) = cstrEqual
-infixr 8 .==
-
-intConst :: Integer -> ValExprInt
-intConst i = cstrConst $ Cint i
+getSTSIntrpState loc val = NonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
@@ -226,21 +211,21 @@ testSTSTestSelection = TestCase $ do
 -}
 stsFDL :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> IOSTS FreeLattice Integer String String
 stsFDL startType endType comp =
-    let p = cstrVar pvar
-        q = cstrVar qvar
-        x = cstrVar xvar
+    let p = sVar pvar
+        q = sVar qvar
+        x = sVar xvar
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         initConf = pure 0 :: FreeLattice Integer
         switches = \s -> case s of
             0 -> Map.fromList [
-                    (start, pure (stsTLoc ((intConst 9 .< p) .&& (p .< intConst 11)) (assignment [xvar =: p]), 1))
+                    (start, pure (stsTLoc ((sConst 9 .< p) .&& (p .< sConst 11)) (assignment [xvar =: p]), 1))
                     ]
-            1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== intConst 2 .* x .- intConst 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
+            1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== sConst 2 .* x .- sConst 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
             2 -> Map.empty
             3 -> Map.empty
     in automaton initConf (Set.fromList [start, end]) switches
-stsFDLInitAssign = Map.singleton xvar (Cint 0)
+stsFDLInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 stsFDLIntrpr = interpretSTS (stsFDL In Out (/\)) stsFDLInitAssign
 
 t1 startType endType 0 = Map.fromList $ [((GateValue (startType "start") [Cint 10]), 1)]

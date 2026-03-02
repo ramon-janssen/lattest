@@ -75,6 +75,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 --, cstrPredef
 -- * Substitution of var by value
 , VarModel
+, Assignable
 , assign
 , Valuation
 , toConstantsMap
@@ -209,7 +210,7 @@ instance EqExpr Bool where
 instance EqExpr String where
     (.==) (view -> x) (view -> y) = Expr $ EqualString x y
 
-
+infix 4 .==
 
 {-
 -- | Apply operator Equal on the provided value expressions.
@@ -420,6 +421,8 @@ cstrPrd' ms =
 (./) (view ->  Const t) (view -> Const n) = sConst (t `Boute.div` n)
 (./) (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
+infixl 7 ./
+
 -- Modulo
 
 -- | Apply operator Modulo on the provided value expressions.
@@ -428,6 +431,8 @@ cstrPrd' ms =
 (.%) _                    (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Modulo"
 (.%) (view -> Const t) (view -> Const n) = sConst (t `Boute.mod` n)
 (.%) (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
+
+infixl 7 .%
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
 -- Preconditions are /not/ checked.
@@ -452,6 +457,8 @@ sLength (view -> v)             = Expr (Length v)
         then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (length s) ++ " with illegal index "++ show i) 
         else sConst (take 1 (drop (fromInteger i) s))
 (.@) (view -> ves) (view -> vei) = Expr $ At ves vei
+
+infixl 5 .@
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.

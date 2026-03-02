@@ -35,6 +35,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , constType
 , ConstType
 , fromConst
+, toConst
 , ExprType
 , typeOf
 , typeOf'
@@ -116,18 +117,22 @@ instance Show Constant where
 -- | convert a Constant to an typed value
 class ConstType t where
     fromConst :: Constant -> Either String t
+    toConst :: t -> Constant
 
 instance ConstType Bool where
     fromConst (Cbool b) = Right b
     fromConst v = Left $ typeError "Bool" v
+    toConst = Cbool
 
 instance ConstType Integer where
     fromConst (Cint i) = Right i
     fromConst v = Left $ typeError "Int" v
+    toConst = Cint
 
 instance ConstType String where
     fromConst (Cstring s) = Right s
     fromConst v = Left $ typeError "String" v
+    toConst = Cstring
 
 typeError :: String -> Constant -> String
 typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
@@ -163,6 +168,7 @@ deriving instance Eq t => Eq (ExprView t)
 deriving instance Ord t => Ord (ExprView t)
 
 instance Show t => Show (ExprView t) where
+    show (Var v) = show v
     show (Const c) = show c
     show (Product v) = show v
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
@@ -171,7 +177,9 @@ instance Show t => Show (ExprView t) where
     show (Sum es) = show es -- List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es -- FreeSum ValExpr
     show (Product es) = show es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
     show (Length e) = "length(" ++ show e ++ ")"
---    show (Equals e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
+    show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
+    show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
+    show (EqualString e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (GezInt e) = "(" ++ show e ++ ") > 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es
@@ -205,6 +213,7 @@ reduce :: ExprView v -> ExprView v
 --reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
 --reduce (view -> Viscstr { })                                   =
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
+reduce (Var v) = error "reduce on var undefined"
 reduce (Const v) = Const v
 reduce (Product v) = Product v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
@@ -226,8 +235,12 @@ reduce (Length (reduce -> e)) = Length e
 --reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
 --reduce (view -> Viscstr { })                                   =
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
---reduce (Equals (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
---reduce (Equals (reduce -> e1) (reduce -> e2)) = Equals e1 e2
+reduce (EqualInt (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (EqualInt (reduce -> e1) (reduce -> e2)) = EqualInt e1 e2
+reduce (EqualBool (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (EqualBool (reduce -> e1) (reduce -> e2)) = EqualBool e1 e2
+reduce (EqualString (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (EqualString (reduce -> e1) (reduce -> e2)) = EqualString e1 e2
 reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
 reduce (GezInt (reduce -> e)) = GezInt e
 reduce (Not (reduce -> (Const b))) = Const $ not b
