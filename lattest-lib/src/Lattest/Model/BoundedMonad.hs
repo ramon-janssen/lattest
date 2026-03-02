@@ -117,7 +117,6 @@ instance OrdFunctor Set.Set where
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
 
-data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq, Generic)
 instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
     isForbidden _ = False
@@ -156,7 +155,6 @@ instance Show a => Show (Det a) where
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDet q = NonDet (Set.Set q) | UnderspecNonDet
-data NonDet q = NonDet [q] | UnderspecNonDet deriving Generic
 
 instance BoundedConfiguration NonDet where
     isForbidden (NonDet s) = if Set.null s then True else False
