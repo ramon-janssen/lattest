@@ -643,4 +643,3 @@ subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
 subst' ve (At s p)                      = (.@) (subst' ve s) (subst' ve p)
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
-

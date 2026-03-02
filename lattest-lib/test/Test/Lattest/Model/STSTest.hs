@@ -43,10 +43,10 @@ stsExample =
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
-        waterGuard = (sConst 1 .<= pvarexpr) .&& (pvarexpr .<= sConst 10)
+        waterGuard = (1 .<= pvarexpr .&& pvarexpr .<= 10)
         waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
         okGuard = xvarexpr .== pvarexpr
-        coffeeGuard = xvarexpr .>= (sConst 15)
+        coffeeGuard = xvarexpr .>= 15
         initConf = NonDet [0] :: NonDet Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
@@ -219,9 +219,9 @@ stsFDL startType endType comp =
         initConf = pure 0 :: FreeLattice Integer
         switches = \s -> case s of
             0 -> Map.fromList [
-                    (start, pure (stsTLoc ((sConst 9 .< p) .&& (p .< sConst 11)) (assignment [xvar =: p]), 1))
+                    (start, pure (stsTLoc (9 .< p .&& p .< 11) (assignment [xvar =: p]), 1))
                     ]
-            1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== sConst 2 .* x .- sConst 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
+            1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== 2 .* x .- 6) noAssignment, 2) `comp` pure (stsTLoc (p .- q .== x) noAssignment, 3))]
             2 -> Map.empty
             3 -> Map.empty
     in automaton initConf (Set.fromList [start, end]) switches

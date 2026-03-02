@@ -16,6 +16,9 @@ See LICENSE in the parent Symbolic folder.
 -- This module Lattest.Model.Symbolic.ValExpr.defines extension of functions on and constructors of value expressions.
 --
 -----------------------------------------------------------------------------
+
+{-# LANGUAGE FlexibleInstances #-}
+
 module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 ( -- * Derived Boolean operators
   -- ** Or (\/)
@@ -86,6 +89,15 @@ sXor a b = sOr (Set.fromList [ sAnd (Set.fromList [a, sNot b])
 (.=>) a b = (sNot . sAnd) (Set.insert a (Set.singleton (sNot b)))
 
 infixr 1 .=>
+
+instance Num (Expr Integer) where
+    fromInteger = sConst
+    (-) = (.-)
+    (+) = (.+)
+    (*) = (.*)
+    negate = sNeg
+    abs = sAbs
+    signum x = sIfThenElse (x .< 0) (-1) (sIfThenElse (x .> 0) 1 0)
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
