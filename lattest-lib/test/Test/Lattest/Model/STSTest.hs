@@ -38,15 +38,15 @@ stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
-    let pvarexpr = sVar pvar
-        xvarexpr = sVar xvar
+    let p = sVar pvar
+        x = sVar xvar
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
-        waterGuard = (1 .<= pvarexpr .&& pvarexpr .<= 10)
-        waterAssign = assignment [xvar =: xvarexpr .+ pvarexpr]
-        okGuard = xvarexpr .== pvarexpr
-        coffeeGuard = xvarexpr .>= 15
+        waterGuard = 1 .<= p .&& p .<= 10
+        waterAssign = assignment [xvar =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= 15
         initConf = NonDet [0] :: NonDet Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
