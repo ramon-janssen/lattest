@@ -58,6 +58,7 @@ hunitTests = TestList [
     testSpecFdet,
     testSpecG,
     testSpecGQuiescent,
+    testExponentialNonDeterminism,
     testRandomFCorrect,
     testRandomFIncorrectOutput,
     testRandomFIncorrectInput,

@@ -97,7 +97,7 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
@@ -117,7 +117,7 @@ makeTester initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act) =>
+        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act, Ord q, Ord (m q)) =>
             (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
             let spec' = spec `after` act
@@ -216,7 +216,7 @@ runExperimentWithMem controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m) =>
+runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 

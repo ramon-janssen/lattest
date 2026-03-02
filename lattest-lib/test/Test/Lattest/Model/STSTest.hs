@@ -13,6 +13,7 @@ import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDe
 import qualified Data.Map as Map (Map,empty, fromList,singleton)
 import Grisette(identifier,(.<=),(.==),(.>),SymBool,SymInteger,Symbol,con,ssym,(.&&))
 import qualified Control.Exception as Exception
+import qualified Data.Set as Set
 
 stsSyntax =
     let pvar = (Variable "p" IntType)
@@ -26,11 +27,11 @@ stsSyntax =
         waterAssign = assignment [(xvar,IntExpr $ xsym + psym)]
         okGuard = xsym .== psym
         coffeeGuard = xsym .> 15
-        initConf = NonDet [0] :: NonDet Integer
+        initConf = NonDet $ Set.singleton 0 :: NonDet Integer
         switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet [(stsTLoc waterGuard waterAssign, 1)]),
-                                (coffee,NonDet [(stsTLoc coffeeGuard noAssignment, 2)])]
-            1 -> Map.fromList [(ok,NonDet [(stsTLoc okGuard noAssignment, 0)])]
+            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 
@@ -41,7 +42,7 @@ stsExample =
 
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
-getSTSIntrpState loc val = NonDet [IntrpState loc $ Map.singleton (Variable "x" IntType) (IntVal val)]
+getSTSIntrpState loc val = NonDet $ Set.singleton $ IntrpState loc $ Map.singleton (Variable "x" IntType) (IntVal val)
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
