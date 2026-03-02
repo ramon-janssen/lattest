@@ -202,10 +202,7 @@ newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, 
 
 deriving instance Ord a => Ord (FreeLattice a)
 deriving instance Ord a => Ord (Free a)
-newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Ord, Functor, Foldable, Lattice, Generic)
-instance Ord a => Ord (Free a)
-instance NFData a => NFData (FreeLattice a)
-instance NFData a => NFData (Free a)
+
 
 -- | A single state embedded in a free distributive lattice.
 atom :: a -> FreeLattice a
