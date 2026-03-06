@@ -60,7 +60,7 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified, BoundedApplicative, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
@@ -131,7 +131,7 @@ instance SyntaxDestStates Det loc tdest where
 
 instance SyntaxDestStates NonDet loc tdest where
     getStates destConf = case destConf of
-        NonDet tds -> fmap snd tds
+        NonDet tds -> map snd (Set.toList tds)
         UnderspecNonDet -> []
         _ -> error "could not extract location from nondeterministic transition destination"
 
@@ -159,9 +159,6 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (StepSemantics m loc q t tdest act) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
-interpret aut initState = AutInterpretation { stateConf = initState <$> initConf aut, syntacticAutomaton = aut }
-
 toConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
 toConfiguration aut conf = aut {stateConf = conf}
 interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
@@ -470,7 +467,7 @@ data AutSyntax m loc t tdest = Automaton {
     transRel :: loc -> Map t (m (tdest, loc))
     }
 -}
-determinize :: (BoundedMonad m, Ord t) => AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
+determinize :: (BoundedMonad m, Functor m, Monad m, Ord t) => AutSyntax m loc t () -> AutSyntax BM.Det (m loc) t () -- TODO think about whether the () could also be polymorphic: does determinization make sense for e.g. STSes?
 determinize aut = Automaton {
     initConf = BM.determinize $ initConf aut,
     alphabet = alphabet aut, 

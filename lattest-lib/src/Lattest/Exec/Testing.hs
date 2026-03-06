@@ -221,7 +221,7 @@ runTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfig
 runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
 
 runTesterWithMem
-  :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m)
+  :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q))
   => AutIntrpr m loc q t tdest act
   -> TestController m loc q t tdest act state i r
   -> Adapter act i
