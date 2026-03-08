@@ -272,10 +272,19 @@ instance OrdMonad FreeLatticeCNF where
     ordReturn x = FreeLatticeCNF  $ Set.singleton $ Set.singleton x
 
 cnfJoin :: (Ord a) => Set.Set (Set.Set (Set.Set (Set.Set a))) -> Set.Set (Set.Set a)
-cnfJoin = Set.map Set.unions . Set.unions . Set.map nAryCartesianProduct
+cnfJoin = reduceAll . Set.map Set.unions . Set.unions . Set.map nAryCartesianProduct
+    where
+    -- two possible optimizations: 1) don't compare every element to itself, and 2) use the ordering on sets to avoid half of the comparisons
+    reduceAll sets = Set.filter (not . isProperSubsetOfAny sets) sets
 
 nAryCartesianProduct :: (Ord a) => Set.Set (Set.Set a) -> Set.Set (Set.Set a)
 nAryCartesianProduct j = Set.map Set.fromList $ Set.fromList $ sequence $ Set.toList $ Set.map Set.toList j
+
+isProperSubsetOfAny :: Ord a => Set.Set (Set.Set a) -> Set.Set a -> Bool
+isProperSubsetOfAny sets a = any (isProperSubsetOf a) (Set.toList sets)
+    where
+    isProperSubsetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
+    isProperSubsetOf set potentialSuperset = (set `Set.isSubsetOf` potentialSuperset) && not (potentialSuperset `Set.isSubsetOf` set)
 
 instance OrdFunctor FreeLatticeCNF where
     ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
