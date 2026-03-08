@@ -208,15 +208,15 @@ top :: FreeLattice a
 top = FreeLattice Top
 
 {-
--- Disjunction on free distributive lattices.
+-- Conjunction and disjunction on free distributive lattices.
 -- note: this is already imlpemented by the JoinSemiLattice instance
 (\/) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (\/) = (L.\/)
--}
 
 -- | Conjunction on free distributive lattices.
 (/\) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (/\) = (L./\)
+-}
 
 {-|
     An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
@@ -251,8 +251,14 @@ instance Show a => Show (FreeLattice a) where
 instance JoinSemiLattice (FreeLattice a) where
     (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
 
+instance MeetSemiLattice (FreeLattice a) where
+    (/\) = (L./\) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
 
-data FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord)
+{-|
+    Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
+-}
+
+newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord)
 
 isCnfBot :: FreeLatticeCNF a -> Bool
 isCnfBot (FreeLatticeCNF x) = not (Set.null x) && all Set.null x
@@ -261,8 +267,9 @@ isCnfTop :: FreeLatticeCNF a -> Bool
 isCnfTop (FreeLatticeCNF x) = Set.null x
 
 instance BoundedConfiguration FreeLatticeCNF where
-    isForbidden x = if isCnfBot x then True else False
-    isUnderspecified x = if isCnfTop x then True else False
+    isForbidden = isCnfBot
+    isUnderspecified = isCnfTop
+    forbidden = FreeLatticeCNF $ Set.singleton Set.empty
     underspecified = FreeLatticeCNF $ Set.empty
 
 instance OrdMonad FreeLatticeCNF where
@@ -288,6 +295,16 @@ isProperSubsetOfAny sets a = any (isProperSubsetOf a) (Set.toList sets)
 
 instance OrdFunctor FreeLatticeCNF where
     ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
+
+instance Ord a => JoinSemiLattice (FreeLatticeCNF a) where
+    (FreeLatticeCNF x) \/ (FreeLatticeCNF y) = FreeLatticeCNF $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]        
+
+instance Ord a => MeetSemiLattice (FreeLatticeCNF a) where
+    (FreeLatticeCNF x) /\ (FreeLatticeCNF y) =
+        let x' = Set.filter (not . isProperSubsetOfAny y)
+            y' = Set.filter (not . isProperSubsetOfAny x)
+        in FreeLatticeCNF (x `Set.union` y)
+
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
@@ -334,11 +351,16 @@ type BoundedMonad m = (BoundedConfiguration m, OrdMonad m)
 -- | Abbreviation for types which are both bounded configurations and Functors.
 type BoundedFunctor m = (BoundedConfiguration m, OrdFunctor m)
 
--- | Because the lattices-library doesn't support this
+-- | Semi-lattices with a binary join ('or') operation
 class JoinSemiLattice a where
     (\/) :: a -> a -> a
 
 --this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
 --instance Lattice a => JoinSemiLattice a where
 --    join = (L.\/)
+
+-- | Semi-lattices with a binary meet ('and') operation
+class MeetSemiLattice a where
+    (/\) :: a -> a -> a
+
 
