@@ -255,7 +255,7 @@ instance JoinSemiLattice (FreeLattice a) where
 data FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord)
 
 isCnfBot :: FreeLatticeCNF a -> Bool
-isCnfBot (FreeLatticeCNF x) = Set.size x == 1 && all Set.null x
+isCnfBot (FreeLatticeCNF x) = not (Set.null x) && all Set.null x
 
 isCnfTop :: FreeLatticeCNF a -> Bool
 isCnfTop (FreeLatticeCNF x) = Set.null x
