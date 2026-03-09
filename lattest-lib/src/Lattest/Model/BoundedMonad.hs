@@ -72,7 +72,7 @@ BoundedFunctor,
 JoinSemiLattice,
 MeetSemiLattice,
 (\/),
-(/\)
+(/\),
 -- ** Determinisation
 determinize,
 undeterminize
