@@ -14,7 +14,8 @@ import Data.List (isSuffixOf, sort)
 import System.Directory (listDirectory)
 import Control.Monad (zipWithM)
 import Debug.Trace (trace, traceShow)
-import Lattest.Model.StandardAutomata((\/), (/\), atom, FreeLattice)
+import Lattest.Model.StandardAutomata((\/), (/\), atom, FreeLattice, ConcreteAutIntrpr, interpretConcrete, detConcTransFromRel, ioAlphabet, automaton)
+import Lattest.Model.BoundedMonad as BM
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Control.DeepSeq(NFData)
@@ -50,7 +51,7 @@ readAutFile path mSuffix = do
                 initStateWSuffix = initialState ++ suffix
             in return (inputAlphabet, outputAlphabet, initStateWSuffix, Just renamedParsed, property)
 
-readAutFileToAutomata :: FilePath -> Maybe String -> IO ([String], [String], String, [(String, IOAct String String, String)], (String, Lattest.Model.StandardAutomata.Automaton StateName String String))
+readAutFileToAutomata :: FilePath -> Maybe String -> IO ([String], [String], String, [(String, IOAct String String, String)], (String, ConcreteAutIntrpr BM.Det String (IOAct String String)))
 readAutFileToAutomata path mSuffix = do
     (iAlphabet, oAlphabet, initState, maybeTransitions, property) <- readAutFile path mSuffix
     case maybeTransitions of
@@ -58,14 +59,14 @@ readAutFileToAutomata path mSuffix = do
       Just transitions -> 
         let Just detConcTransitions = detConcTransFromRel transitions
             alphabet = ioAlphabet iAlphabet oAlphabet
-            initialConfiguration = pure initialState
+            initialConfiguration = pure initState
             detSpec = automaton initialConfiguration alphabet detConcTransitions
             model = interpretConcrete detSpec
         in return (iAlphabet, oAlphabet, initState, transitions, (property, model))
 
 readMultipleAutFiles
   :: FilePath
-  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)], M.Map String (String, Lattest.Model.StandardAutomata.Automaton StateName String String))
+  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
 readMultipleAutFiles dir = do
     entries <- listDirectory dir
     let files = [ dir </> f | f <- entries, takeExtension f == ".aut" ]
@@ -73,12 +74,13 @@ readMultipleAutFiles dir = do
     parsedResults <- zipWithM (\fp s -> readAutFileToAutomata fp (Just s)) files suffixes
 
     case parsedResults of
-      [] -> return ([], [], StateName "", [])
+      [] -> return ([], [], StateName "", [], M.fromList[])
       _  -> do
-        let transitionsRaw  = [ ts | (_, _, _, ts, _) <- parsedResults ]
+        let transitionsRaw :: [[(String, IOAct String String, String)]]
+            transitionsRaw = [ ts | (_, _, _, ts, _) <- parsedResults ]
             inputAlphabets  = [ inp | (inp, _, _, _, _) <- parsedResults ]
             outputAlphabets = [ out | (_, out, _, _, _) <- parsedResults ]
-            initialsRaw     = [ ini | (_, _, _, ini, _) <- parsedResults ]
+            initialsRaw     = [ ini | (_, _, ini, _, _) <- parsedResults ]
             modelsByProp    = [ mp | (_, _, _, _, mp) <- parsedResults ]
 
             modelsByPropMap = M.fromList modelsByProp
@@ -91,7 +93,7 @@ readMultipleAutFiles dir = do
                     , t
                     , atom (StateName s2)
                     )
-                | (s1,t,s2) <- transitionsRaw
+                | (s1,t,s2) <- concat transitionsRaw
                 ]
 
             atoms = [ atom (StateName s) | s <- initialsRaw ]
