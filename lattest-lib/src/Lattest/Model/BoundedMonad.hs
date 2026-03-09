@@ -264,7 +264,7 @@ instance MeetSemiLattice (FreeLattice a) where
 newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show)
 
 isCnfBot :: FreeLatticeCNF a -> Bool
-isCnfBot (FreeLatticeCNF x) = not (Set.null x) && all Set.null x
+isCnfBot (FreeLatticeCNF x) = any Set.null x
 
 isCnfTop :: FreeLatticeCNF a -> Bool
 isCnfTop (FreeLatticeCNF x) = Set.null x
@@ -284,30 +284,29 @@ instance OrdMonad FreeLatticeCNF where
 cnfJoin :: (Ord a) => Set.Set (Set.Set (Set.Set (Set.Set a))) -> Set.Set (Set.Set a)
 cnfJoin = reduceAll . Set.map Set.unions . Set.unions . Set.map nAryCartesianProduct
     where
-    -- two possible optimizations: 1) don't compare every element to itself, and 2) use the ordering on sets to avoid half of the comparisons
-    reduceAll sets = Set.filter (not . isProperSubsetOfAny sets) sets
+    -- some possible optimizations: 1) don't compare every element to and 2) use the ordering on sets to avoid half of the comparisons, 3) ensure that this ordering is such that absorbing/neutral elements are compared first and avoid more work in that case
+    reduceAll sets = Set.filter (not . isProperSupersetOfAny sets) sets
 
 nAryCartesianProduct :: (Ord a) => Set.Set (Set.Set a) -> Set.Set (Set.Set a)
 nAryCartesianProduct j = Set.map Set.fromList $ Set.fromList $ sequence $ Set.toList $ Set.map Set.toList j
 
-isProperSubsetOfAny :: Ord a => Set.Set (Set.Set a) -> Set.Set a -> Bool
-isProperSubsetOfAny sets a = any (isProperSubsetOf a) (Set.toList sets)
+isProperSupersetOfAny :: Ord a => Set.Set (Set.Set a) -> Set.Set a -> Bool
+isProperSupersetOfAny sets a = any (isProperSupersetOf a) (Set.toList sets)
     where
-    isProperSubsetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
-    isProperSubsetOf set potentialSuperset = (set `Set.isSubsetOf` potentialSuperset) && not (potentialSuperset `Set.isSubsetOf` set)
+    isProperSupersetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
+    isProperSupersetOf set potentialSubset = (potentialSubset `Set.isSubsetOf` set) && not (set `Set.isSubsetOf` potentialSubset)
 
 instance OrdFunctor FreeLatticeCNF where
     ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
 
 instance Ord a => JoinSemiLattice (FreeLatticeCNF a) where
-    (FreeLatticeCNF x) \/ (FreeLatticeCNF y) = FreeLatticeCNF $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]        
+    (FreeLatticeCNF x) \/ (FreeLatticeCNF y) = FreeLatticeCNF $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]
 
 instance Ord a => MeetSemiLattice (FreeLatticeCNF a) where
     (FreeLatticeCNF x) /\ (FreeLatticeCNF y) =
-        let x' = Set.filter (not . isProperSubsetOfAny y)
-            y' = Set.filter (not . isProperSubsetOfAny x)
-        in FreeLatticeCNF (x `Set.union` y)
-
+        let x' = Set.filter (not . isProperSupersetOfAny y) x
+            y' = Set.filter (not . isProperSupersetOfAny x) y
+        in FreeLatticeCNF (x' `Set.union` y')
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
