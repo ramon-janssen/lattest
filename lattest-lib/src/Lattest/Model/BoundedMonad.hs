@@ -49,7 +49,8 @@ FreeLattice,
 atom,
 top,
 bot,
-(/\),
+-- ** Distributive lattice in CNF
+FreeLatticeCNF(FreeLatticeCNF),
 -- * Specifiednesss
 Specifiedness(..),
 BoundedConfiguration,
@@ -68,7 +69,9 @@ BoundedMonad,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
-(\/)
+MeetSemiLattice,
+(\/),
+(/\)
 )
 where
 
@@ -258,7 +261,7 @@ instance MeetSemiLattice (FreeLattice a) where
     Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
 -}
 
-newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord)
+newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show)
 
 isCnfBot :: FreeLatticeCNF a -> Bool
 isCnfBot (FreeLatticeCNF x) = not (Set.null x) && all Set.null x
