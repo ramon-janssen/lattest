@@ -47,6 +47,7 @@ observingOnly,
 traceObserver,
 stateObserver,
 inconclusiveStateObserver,
+transitionObserver,
 -- * Test Side Effects
 TestSideEffect,
 withSideEffect,
@@ -392,6 +393,21 @@ inconclusiveStateObserver = observer Nothing makeSelection return
     makeSelection _ aut _ mq =
         let mq' = stateConf aut
         in return $ Just $ if isConclusive mq' then mq else mq'
+        
+{- |
+    A 'TestObserver' that records (initial-state, action, final-state)
+-}
+transitionObserver
+  :: TestObserver m loc q t tdest act
+       [(m q, act, m q)]
+       [(m q, act, m q)]
+transitionObserver =
+  observer [] upd (pure . reverse)
+  where
+    upd tris aut act _ = do
+        let ini = stateConf aut
+        let fin = stateConf aut
+        return $ (ini, act, fin) : tris
 
 {- |
     'TestSideEffect's perform side effects during testing, but have no impact on the testing itself, nor on the result.
