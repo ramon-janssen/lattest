@@ -4,6 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE BangPatterns #-}
 {-|
     This module contains the definitions and interpretations of automata models.
 -}
@@ -150,7 +151,8 @@ instance SyntaxDestStates NonDet loc tdest where
 -}
 data AutIntrpr m loc q t tdest act = AutInterpretation {
     stateConf :: m q,
-    syntacticAutomaton :: AutSyntax m loc t tdest
+    syntacticAutomaton :: AutSyntax m loc t tdest,
+    afterCache :: Map.Map (m q, act) (m q)
     }
 
 {- |
@@ -162,7 +164,7 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
 toConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
 toConfiguration aut conf = aut {stateConf = conf}
 interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
-interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
+interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut, afterCache = Map.empty }
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
 class Completable act where
@@ -221,11 +223,27 @@ class (StateSemantics loc q, TransitionSemantics t act, BoundedMonad m) => StepS
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
-after intrpr act' = 
-    let aut = syntacticAutomaton intrpr
-        stateConf' = BM.ordBind (stateConf intrpr) (after' (alphabet aut) (transRel $ aut) act')
-    in intrpr { stateConf = stateConf' }
+-- after :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+-- after intrpr act' = 
+--     let aut = syntacticAutomaton intrpr
+--         stateConf' = BM.ordBind (stateConf intrpr) (after' (alphabet aut) (transRel $ aut) act')
+--     in intrpr { stateConf = stateConf' }
+
+after :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q), Ord act)
+      => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after intrpr act' =
+    case Map.lookup key (afterCache intrpr) of
+        Just cached ->
+            intrpr { stateConf = cached }
+        Nothing ->
+            let !alph      = alphabet aut
+                !transMap  = transRel aut
+                !newState  = BM.ordBind (stateConf intrpr) (after' alph transMap act')
+                !newCache  = Map.insert key newState (afterCache intrpr)
+            in intrpr { stateConf = newState, afterCache = newCache }
+  where
+    aut = syntacticAutomaton intrpr
+    key = (stateConf intrpr, act')
 
 after' :: (StepSemantics m loc q t tdest act, Ord (m q), Ord q) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
 after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
@@ -244,7 +262,7 @@ after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act
         Nothing -> throw $ ActionOutsideAlphabet callStack
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q), Ord act) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
