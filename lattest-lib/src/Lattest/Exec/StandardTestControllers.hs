@@ -75,7 +75,7 @@ import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import Control.Monad (forM)
 import qualified Data.Map as Map (keys, insertWith, findWithDefault, Map, (!))
-import qualified Data.Set as Set (Set, size, empty, elemAt, fromList, union, singleton, notMember)
+import qualified Data.Set as Set (Set, size, empty, elemAt, fromList, union, singleton, notMember, difference, toList)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
 {- |
