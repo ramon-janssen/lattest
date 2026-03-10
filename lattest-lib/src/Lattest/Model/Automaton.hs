@@ -104,9 +104,9 @@ automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m l
 automaton mqi alphFld trans = Automaton mqi alph trans'
     where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
-    alph = Set.fromList $ Foldable.toList alphFld
-    trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
-    setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
+        !alph        = Set.fromList $ Foldable.toList alphFld
+        !implicitMap = Map.fromSet implicitDestination alph
+        trans' q     = Map.restrictKeys (trans q) alph `Map.union` implicitMap
 
 -- | Construct an automaton from an initial state and a transition mapping
 automaton' :: (BoundedMonad m, Completable t, Ord t) => loc -> Set t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
