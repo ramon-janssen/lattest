@@ -200,12 +200,9 @@ nCompleteSingleState model seed nrSteps delta targetState observer = do
 -- runNCompleteTestSuite :: (Monad (TestController Det q q (IOAct l l) () (IOSuspAct l l) () (Maybe l))) => IO (Adapter act l) -> ConcreteSuspAutIntrpr Det q l l -> Int -> o -> [(q,Int)] -> IO (q, Verdict, Maybe (Det q))
 runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds = do
         results <- forM targetStatesAndSeeds $ \(targetState,seed) -> do
-            putStrLn "connecting..."
             adap <- adapter
             imp <- withQuiescenceMillis 200 adap
             let model = interpretQuiescentConcrete spec
-            putStrLn "starting test..."
-            putStrLn $ "accessing state: " ++ (show targetState)
             selector <- testSelector model seed targetState
             (verdict,(observed, maybeMq)) <- runTester model selector imp
             close adap
@@ -443,9 +440,9 @@ printState = testSideEffect () (\_ _ _ mq -> putStrLn $ show mq)
     TBC
 -}
 data RandomMemState q i g = RandomMemState
-  { usedInputs :: Map.Map (q, [i]) (Set.Set i)
-  , randGen    :: g
-  , inputHist  :: [i]
+  { usedInputs :: !(Map.Map (q, [i]) (Set.Set i))
+  , randGen    :: !g
+  , inputHist  :: ![i]
   } deriving (Show)
 
 randomTestSelectorWithMemoryFromState
@@ -471,19 +468,13 @@ randomTestSelectorWithMemoryFromState g0 initMem =
     selectStep (RandomMemState used g inputHist) aut _ = do
         let allActs   = takeJusts $ actToChoice <$> specifiedMenu aut
             stateKey  = (stateConf aut, inputHist)
-            tried     = Map.findWithDefault Set.empty stateKey used
-            remaining = filter (`Set.notMember` tried) allActs
-        
-        putStrLn "Current state:"
-        print stateKey
-        putStrLn "All possible inputs:"
-        print allActs
-        putStrLn "Inputs left to try:"
-        print remaining
+            allActsSet = Set.fromList allActs
+            tried      = Map.findWithDefault Set.empty stateKey used
+            remaining  = Set.toList $ Set.difference allActsSet tried
         
         case (remaining, allActs) of
             ([], []) -> do
-                putStrLn "Warning: no available actions in this state!"
+                -- no available actions in this state
                 return Nothing
             ([], _) -> do
                 let (actChoice, g') = takeRandom g allActs
