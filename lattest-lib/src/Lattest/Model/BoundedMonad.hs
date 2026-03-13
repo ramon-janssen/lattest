@@ -32,12 +32,15 @@
 -}
 
 module Lattest.Model.BoundedMonad (
-(<#>),
-OrdMonad,
+-- * Functors and Monads with Ordering
+-- ** Functors with ordering
 OrdFunctor,
-ordReturn,
-ordBind,
 ordMap,
+(<#>),
+-- ** Monads with ordering
+OrdMonad,
+ordBind,
+ordReturn,
 ordJoin,
 -- * State configurations
 -- ** Deterministic
@@ -82,32 +85,55 @@ import qualified Algebra.Lattice as L ((/\), (\/))
 import qualified Data.Set as Set
 import Control.Monad(ap)
 
+{-|
+    Functors with an additional 'Ord' constraint. The primary use case for the 'OrdFunctor' is to treat data structures like 'Set' as a functor, where the 'Ord'-constraint is used for performance reasons.
+    Implementations of 'ordMap' should adhere to the same laws as for 'fmap' for a @'Functor' F@:
+
+    [Identity]    @'ordMap' 'id' == 'id'@
+    [Composition] @'ordMap' (f . g) == 'ordMap' f . 'ordMap' g@
+
+    The composition law is only required if the extensionality property of type class 'Eq' holds for the domain of @f@. Effectively, this states
+    that 'Eq' should behave like proper equality for @f@, or conversely, if @x '==' y@ and @f x '/=' f y@, then compositionality is not expected to hold.
+-}
 class OrdFunctor f where
+    -- | Map a function over a functorial type, just like 'fmap', but with an additional 'Ord' constraint.
     ordMap :: (Ord b) => (a -> b) -> f a -> f b
 
-instance {-# OVERLAPPABLE #-} Functor f => OrdFunctor f where
-    ordMap = fmap
-
+-- | An infix synonym for 'ordMap', similar to '<$>'.
 (<#>) :: (OrdFunctor f, Ord b) => (a -> b) -> f a -> f b
 (<#>) = ordMap
 
-instance OrdMonad Set.Set where
-    ordBind s f = Set.unions $ Set.map f s
-    ordReturn s = Set.singleton s
+-- | Any 'Functor' is also an 'OrdFunctor', ignoring the 'Ord' constraint..
+instance {-# OVERLAPPABLE #-} Functor f => OrdFunctor f where
+    ordMap = fmap
 
+{-|
+    Monads with an additional 'Ord' constraint. Analogously to how an 'OrdFunctor' specializes a regular 'Functor', 'OrdMonad' uses the 'Ord'-constraint is used for performance reasons.
+    Any instance should adhere to the 'Monad' laws, assuming the extensionality property for equality 'Eq'. See 'OrdFunctor' for details.
+-}
 class (OrdFunctor m) => OrdMonad m where
+    -- | Bind operation, using an 'Ord' constraint, similar to the standard monadic bind operation '>>='.
     ordReturn :: a -> m a
+    -- | Return operation, similar to the standard monadic 'return'. No 'Ord' constraint is present here, as comparing values is not needed for injecting a single value into a monadic type.
     ordBind :: (Ord b) => m a -> (a -> m b) -> m b
 
+-- | Any 'Monad' is also an 'OrdMonad', ignoring the 'Ord' constraint.
 instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
     ordBind = (>>=)
     ordReturn = return
 
+-- | Standard monadic 'join', but with an additional 'Ord' constraint.
 ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
 ordJoin mma = ordBind mma id
 
+-- | 'Set' is the the prototypical 'OrdFunctor' instance. It maps a function over the set elements, deduplicating the results.
 instance OrdFunctor Set.Set where
     ordMap = Set.map
+
+-- | 'Set' is the the prototypical 'OrdMonad' instance, where @s \`'ordBind'\` f@ is the set \( \{ x \in s' \mid s' \in f[s] \} \).
+instance OrdMonad Set.Set where
+    ordBind s f = Set.unions $ Set.map f s
+    ordReturn s = Set.singleton s
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
@@ -192,6 +218,8 @@ instance (Ord a) => JoinSemiLattice (NonDet a) where
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
+
+    __Warning__: this implementation is functionally correct, but not very efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', since no reductions are performed.
 -}
 newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
 
@@ -259,19 +287,13 @@ instance MeetSemiLattice (FreeLattice a) where
 
 {-|
     Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
+    This makes it potentially more efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', but also potentially slightly /less/ efficient for small lattices.
 -}
-
 newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show)
 
-isCnfBot :: FreeLatticeCNF a -> Bool
-isCnfBot (FreeLatticeCNF x) = any Set.null x
-
-isCnfTop :: FreeLatticeCNF a -> Bool
-isCnfTop (FreeLatticeCNF x) = Set.null x
-
 instance BoundedConfiguration FreeLatticeCNF where
-    isForbidden = isCnfBot
-    isUnderspecified = isCnfTop
+    isForbidden (FreeLatticeCNF x) = any Set.null x
+    isUnderspecified (FreeLatticeCNF x) = Set.null x
     forbidden = FreeLatticeCNF $ Set.singleton Set.empty
     underspecified = FreeLatticeCNF $ Set.empty
 
