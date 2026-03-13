@@ -53,7 +53,7 @@ STSIntrp
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc,transRel,SyntaxDestStates,getStates,syntacticAutomaton)
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc,transRel,syntacticAutomaton)
 import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
@@ -186,12 +186,12 @@ concTransFromFunc fTrans alph loc = Map.fromSet (fTransConc) (foldableAsSet alph
 foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld
 
-accessSequences :: (Ord loc, SyntaxDestStates m loc tdest) => AutIntrpr m loc loc t tdest act -> loc -> Map loc [t]
+accessSequences :: (Ord loc, Foldable m) => AutIntrpr m loc loc t tdest act -> loc -> Map loc [t]
 accessSequences aut initLoc =
     let initialMap = Map.singleton initLoc []
     in fst $ accessSequences' (syntacticAutomaton aut) initialMap $ Set.singleton initLoc
 
-accessSequences' :: (Ord loc, SyntaxDestStates m loc tdest) => AutSyntax m loc t tdest -> Map loc [t] -> Set.Set loc -> (Map loc [t], Set.Set loc)
+accessSequences' :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> Map loc [t] -> Set.Set loc -> (Map loc [t], Set.Set loc)
 accessSequences' aut accMap boundary = case takeArbitrary boundary of
     Nothing -> (accMap, Set.empty)
     Just (q, boundaryRem) ->
@@ -199,6 +199,8 @@ accessSequences' aut accMap boundary = case takeArbitrary boundary of
             labelqs = concat $ fmap (\(l,qs) -> zip (replicate (length qs) l) qs) $ Map.toList $ Map.map getStates ts
             (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) labelqs
         in accessSequences' aut accMap' (boundaryRem `Set.union` new)
+        where
+        getStates = fmap snd . Foldable.toList
 
 insertLabelAndDestLocInAccMap :: (Ord loc) => loc -> t -> loc -> Map loc [t] -> Set.Set loc -> (Map loc [t], Set.Set loc)
 insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap of

@@ -56,7 +56,7 @@ import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, AutSyntax,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import qualified Lattest.Model.BoundedMonad as BM

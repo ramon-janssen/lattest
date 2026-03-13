@@ -19,9 +19,6 @@ transRel,
 -- ** Constructing Syntactical Automata
 automaton,
 automaton',
--- ** Syntactical Automata lookup
-SyntaxDestStates,
-getStates,
 -- * Semantical Automaton Model
 -- ** Definition
 AutIntrpr,
@@ -118,21 +115,6 @@ trans :: Ord t => AutSyntax m loc t tdest -> loc -> t -> m (tdest, loc)
 trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
-
-class SyntaxDestStates m loc tdest where getStates :: m (tdest, loc) -> [loc]--toTuples :: Map t (m (tdest, loc)) -> [(t,loc)]
-
-instance SyntaxDestStates Det loc tdest where
-    getStates destConf = case destConf of
-        Det (tdest,qdest) -> [qdest]
-        ForbiddenDet -> []
-        UnderspecDet -> []
-        _ -> error "could not extract location from deterministic transition destination"
-
-instance SyntaxDestStates NonDet loc tdest where
-    getStates destConf = case destConf of
-        NonDet tds -> snd <$> Set.toList tds
-        UnderspecNonDet -> []
-        _ -> error "could not extract location from nondeterministic transition destination"
 
 ---------------
 -- interpret --
