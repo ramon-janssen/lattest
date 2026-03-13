@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
@@ -25,6 +26,7 @@ TestSelector,
 randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
+andThen,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
@@ -47,19 +49,25 @@ printActions,
 printState
 )
 where
-
-import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf)
+import Lattest.Adapter.Adapter(close)
+import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
+import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
+import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
+import Lattest.Exec.ADG.SplitGraph(Evidence(..))
+import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, AutSyntax,syntacticAutomaton)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
-import Data.Foldable(toList)
-import qualified Data.Map as Map (keys)
-import qualified Data.Set as Set (size, elemAt, fromList, union)
+import Data.Foldable(toList, forM_)
+import Control.Monad (forM)
+import qualified Data.Map as Map (keys, (!))
+import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set, singleton)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
 {- |
@@ -71,7 +79,7 @@ type TestSelector m loc q t tdest act s i = TestController m loc q t tdest act s
     Create a 'TestSelector'. Requires one function to select an input, also updating the state, and one function to update the state when observing
     an action.
 -}
-selector :: TestChoice i act => 
+selector :: TestChoice i act =>
     state ->
     (state -> AutIntrpr m loc q t tdest act -> m q -> IO (Maybe (i, state))) ->
     (state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe state)) ->
@@ -114,6 +122,50 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
+
+{- |
+    Creates a TestController that first selects inputs according to the first provided TestController, and when that first TestController is finished, selects inputs according to the second provided TestController
+
+    Note: the result from the first tester is currently dropped.
+-}
+andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
+andThen tester1 tester2 =
+    TestController {
+        testControllerState = (Left $ testControllerState tester1),
+        selectTest = andThenSelect,
+        updateTestController = andThenUpdate,
+        handleTestClose = \state -> case state of
+            (Left s) -> handleTestClose tester2 (testControllerState tester2)
+            (Right s) -> handleTestClose tester2 s
+    }
+    where
+        andThenSelect testState specState mq = case testState of
+            (Left s) -> do
+                res <- selectTest tester1 s specState mq
+                case res of
+                    Left (i1,s1) -> return $ Left (i1, Left s1)
+                    Right _ -> do -- TODO: propagate results from first TestController to resulting TestController
+                        res2 <- selectTest tester2 (testControllerState tester2) specState mq
+                        return $ case res2 of
+                            Left (i2,s2) -> Left (i2, Right s2)
+                            Right r2 -> Right r2
+            (Right s) -> do
+                res2 <- selectTest tester2 s specState mq
+                return $ case res2 of
+                    Left (i2,s2) -> Left (i2, Right s2)
+                    Right r2 -> Right r2
+        andThenUpdate testState specState ioact mq = case testState of
+            Left s -> do
+                res1 <- updateTestController tester1 s specState ioact mq
+                return $ case res1 of
+                    Left s1 ->  Left $ Left s1
+                    Right r1 -> Left $ Right $ testControllerState tester2
+            Right s -> do
+                res2 <- updateTestController tester2 s specState ioact mq
+                return $ case res2 of
+                    Left s2 ->  Left $ Right s2
+                    Right r2 -> Right r2
+
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
@@ -254,7 +306,7 @@ stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) r
 inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return
     where
-    makeSelection _ aut _ mq = 
+    makeSelection _ aut _ mq =
         let mq' = stateConf aut
         in return $ Just $ if isConclusive mq' then mq else mq'
 

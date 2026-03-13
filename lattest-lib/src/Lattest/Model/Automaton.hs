@@ -26,6 +26,7 @@ stateConf,
 syntacticAutomaton,
 -- ** Constructing Syntactical Automata
 interpret,
+inConfiguration,
 -- ** Type Classes for Semantics
 Completable,
 implicitDestination,
@@ -55,7 +56,7 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
@@ -141,6 +142,10 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
 -}
 interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
 interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
+
+-- | The given model, in the given configuration.
+inConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
+inConfiguration aut conf = aut {stateConf = conf}
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
 class Completable act where
@@ -417,6 +422,8 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 acc' = acc `Set.union` new
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
+
+
 
 prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)

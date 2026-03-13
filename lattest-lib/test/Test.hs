@@ -2,6 +2,7 @@
 
 import Test.Lattest.Adapter.StandardAdapters
 import Test.Lattest.Exec.StandardTestControllers
+import Test.Lattest.Exec.NComplete
 import Test.Lattest.Exec.Testing
 import Test.Lattest.Model.BoundedMonad
 import Test.Lattest.Model.StandardAutomata
@@ -38,6 +39,8 @@ runQuickCheckTests = do
 
 hunitTests :: Test
 hunitTests = TestList [
+    testAccSeq,
+    testADG,
     testConsumeBufferedWith,
     testConsumeBufferedWith_short,
     testJSONSocketAdapterByte,

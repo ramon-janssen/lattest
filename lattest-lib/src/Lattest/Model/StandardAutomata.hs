@@ -46,15 +46,18 @@ interpretQuiescentConcrete,
 ConcreteSuspInputAttemptAutIntrpr,
 interpretInputAttemptConcrete,
 interpretQuiescentInputAttemptConcrete,
+accessSequences,
 interpretSTS,
 STSIntrp
 )
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc)
-import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice,(<#>))
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc,transRel,syntacticAutomaton)
+import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
 import qualified Lattest.Model.BoundedMonad as BM
+import Lattest.Util.Utils(takeArbitrary)
+
 import Data.Foldable (toList)
 import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
@@ -182,6 +185,34 @@ concTransFromFunc fTrans alph loc = Map.fromSet (fTransConc) (foldableAsSet alph
 
 foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld
+
+accessSequences :: (Ord loc, Foldable m) => AutIntrpr m loc loc t tdest act -> loc -> Map loc [t]
+accessSequences aut initLoc =
+    let initialMap = Map.singleton initLoc []
+    in fst $ accessSequences' (syntacticAutomaton aut) initialMap $ Set.singleton initLoc
+
+accessSequences' :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> Map loc [t] -> Set.Set loc -> (Map loc [t], Set.Set loc)
+accessSequences' aut accMap boundary = case takeArbitrary boundary of
+    Nothing -> (accMap, Set.empty)
+    Just (q, boundaryRem) ->
+        let ts = transRel aut q
+            labelqs = concat $ fmap (\(l,qs) -> zip (replicate (length qs) l) qs) $ Map.toList $ Map.map getStates ts
+            (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) labelqs
+        in accessSequences' aut accMap' (boundaryRem `Set.union` new)
+        where
+        getStates = fmap snd . Foldable.toList
+
+insertLabelAndDestLocInAccMap :: (Ord loc) => loc -> t -> loc -> Map loc [t] -> Set.Set loc -> (Map loc [t], Set.Set loc)
+insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap of
+    Nothing -> error "could not lookup known location for access sequence"
+    Just accSeq -> case addStateAndAccSeq accMap dq (accSeq ++ [label]) of
+        (newMap,Nothing) -> (newMap, new)
+        (newMap, Just q) -> (newMap, Set.insert q new)
+
+addStateAndAccSeq :: (Ord loc) => Map loc [t] -> loc -> [t] -> (Map loc [t], Maybe loc)
+addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
+        Nothing -> (Map.insert q accSeq accMap, Just q)
+        Just oldAccSeq -> (accMap, Nothing)
 
 ---------------------------------
 -- instantiations of interpret --
