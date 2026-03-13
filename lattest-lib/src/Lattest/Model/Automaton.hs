@@ -29,7 +29,7 @@ stateConf,
 syntacticAutomaton,
 -- ** Constructing Syntactical Automata
 interpret,
-toConfiguration,
+inConfiguration,
 -- ** Type Classes for Semantics
 Completable,
 implicitDestination,
@@ -161,8 +161,9 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
 interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
 interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
 
-toConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
-toConfiguration aut conf = aut {stateConf = conf}
+-- | The given model, in the given configuration.
+inConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
+inConfiguration aut conf = aut {stateConf = conf}
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
 class Completable act where

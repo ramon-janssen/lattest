@@ -202,7 +202,7 @@ adgAutFromAutomaton aut delta = let
     where
         insertTransition :: (Ord a, Ord b) => a -> (Map b a) -> (IOSuspAct b b) -> StandardAutomata.ConcreteSuspAutIntrpr Det a b b -> b -> (Map b a)
         insertTransition sid m ioact aut delta =
-            case Automaton.stateConf (Automaton.toConfiguration aut (Det sid) `Automaton.after` ioact) of
+            case Automaton.stateConf (Automaton.inConfiguration aut (Det sid) `Automaton.after` ioact) of
                 Det q -> Map.insert (getLabel delta ioact) q m
                 _ -> m
         getLabel :: Ord b => b -> IOSuspAct b b -> b
