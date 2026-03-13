@@ -29,19 +29,10 @@
     state configurations, see
     
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
+
 -}
 
 module Lattest.Model.BoundedMonad (
--- * Functors and Monads with Ordering
--- ** Functors with ordering
-OrdFunctor,
-ordMap,
-(<#>),
--- ** Monads with ordering
-OrdMonad,
-ordBind,
-ordReturn,
-ordJoin,
 -- * State configurations
 -- ** Deterministic
 Det(..),
@@ -74,7 +65,9 @@ BoundedFunctor,
 JoinSemiLattice,
 MeetSemiLattice,
 (\/),
-(/\)
+(/\),
+-- ** 'Data.OrdMonad' re-export, for convenience.
+module OM
 )
 where
 
@@ -83,57 +76,9 @@ import Algebra.Lattice.Levitated(Levitated(..))
 import Algebra.Lattice(Lattice)
 import qualified Algebra.Lattice as L ((/\), (\/))
 import qualified Data.Set as Set
+import Data.OrdMonad as OM
 import Control.Monad(ap)
 
-{-|
-    Functors with an additional 'Ord' constraint. The primary use case for the 'OrdFunctor' is to treat data structures like 'Set' as a functor, where the 'Ord'-constraint is used for performance reasons.
-    Implementations of 'ordMap' should adhere to the same laws as for 'fmap' for a @'Functor' F@:
-
-    [Identity]    @'ordMap' 'id' == 'id'@
-    [Composition] @'ordMap' (f . g) == 'ordMap' f . 'ordMap' g@
-
-    The composition law is only required if the extensionality property of type class 'Eq' holds for the domain of @f@. Effectively, this states
-    that 'Eq' should behave like proper equality for @f@, or conversely, if @x '==' y@ and @f x '/=' f y@, then compositionality is not expected to hold.
--}
-class OrdFunctor f where
-    -- | Map a function over a functorial type, just like 'fmap', but with an additional 'Ord' constraint.
-    ordMap :: (Ord b) => (a -> b) -> f a -> f b
-
--- | An infix synonym for 'ordMap', similar to '<$>'.
-(<#>) :: (OrdFunctor f, Ord b) => (a -> b) -> f a -> f b
-(<#>) = ordMap
-
--- | Any 'Functor' is also an 'OrdFunctor', ignoring the 'Ord' constraint..
-instance {-# OVERLAPPABLE #-} Functor f => OrdFunctor f where
-    ordMap = fmap
-
-{-|
-    Monads with an additional 'Ord' constraint. Analogously to how an 'OrdFunctor' specializes a regular 'Functor', 'OrdMonad' uses the 'Ord'-constraint is used for performance reasons.
-    Any instance should adhere to the 'Monad' laws, assuming the extensionality property for equality 'Eq'. See 'OrdFunctor' for details.
--}
-class (OrdFunctor m) => OrdMonad m where
-    -- | Bind operation, using an 'Ord' constraint, similar to the standard monadic bind operation '>>='.
-    ordReturn :: a -> m a
-    -- | Return operation, similar to the standard monadic 'return'. No 'Ord' constraint is present here, as comparing values is not needed for injecting a single value into a monadic type.
-    ordBind :: (Ord b) => m a -> (a -> m b) -> m b
-
--- | Any 'Monad' is also an 'OrdMonad', ignoring the 'Ord' constraint.
-instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
-    ordBind = (>>=)
-    ordReturn = return
-
--- | Standard monadic 'join', but with an additional 'Ord' constraint.
-ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
-ordJoin mma = ordBind mma id
-
--- | 'Set' is the the prototypical 'OrdFunctor' instance. It maps a function over the set elements, deduplicating the results.
-instance OrdFunctor Set.Set where
-    ordMap = Set.map
-
--- | 'Set' is the the prototypical 'OrdMonad' instance, where @s \`'ordBind'\` f@ is the set \( \{ x \in s' \mid s' \in f[s] \} \).
-instance OrdMonad Set.Set where
-    ordBind s f = Set.unions $ Set.map f s
-    ordReturn s = Set.singleton s
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
@@ -185,11 +130,11 @@ instance BoundedConfiguration NonDet where
     forbidden = NonDet Set.empty
     underspecified = UnderspecNonDet
 
-instance OrdFunctor NonDet where
-    ordMap f (NonDet ss) = NonDet $ ordMap f ss
+instance OM.OrdFunctor NonDet where
+    ordMap f (NonDet ss) = NonDet $ OM.ordMap f ss
     ordMap _ UnderspecNonDet = UnderspecNonDet
     
-instance OrdMonad NonDet where
+instance OM.OrdMonad NonDet where
     ordBind (NonDet ss) f = foldr (\/) (NonDet Set.empty) $ Set.map f ss
     ordBind UnderspecNonDet _ = UnderspecNonDet
     ordReturn s = NonDet $ Set.singleton s
@@ -297,7 +242,7 @@ instance BoundedConfiguration FreeLatticeCNF where
     forbidden = FreeLatticeCNF $ Set.singleton Set.empty
     underspecified = FreeLatticeCNF $ Set.empty
 
-instance OrdMonad FreeLatticeCNF where
+instance OM.OrdMonad FreeLatticeCNF where
     ordBind (FreeLatticeCNF x) f = FreeLatticeCNF $ cnfJoin $ Set.map (Set.map f1) x
         where
             f1 y = let FreeLatticeCNF z = f y in z
@@ -318,7 +263,7 @@ isProperSupersetOfAny sets a = any (isProperSupersetOf a) (Set.toList sets)
     isProperSupersetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
     isProperSupersetOf set potentialSubset = (potentialSubset `Set.isSubsetOf` set) && not (set `Set.isSubsetOf` potentialSubset)
 
-instance OrdFunctor FreeLatticeCNF where
+instance OM.OrdFunctor FreeLatticeCNF where
     ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
 
 instance Ord a => JoinSemiLattice (FreeLatticeCNF a) where
@@ -370,10 +315,10 @@ isSpecified :: (BoundedConfiguration m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
 -- | Abbreviation for types which are both bounded configurations and Monads.
-type BoundedMonad m = (BoundedConfiguration m, OrdMonad m)
+type BoundedMonad m = (BoundedConfiguration m, OM.OrdMonad m)
 
 -- | Abbreviation for types which are both bounded configurations and Functors.
-type BoundedFunctor m = (BoundedConfiguration m, OrdFunctor m)
+type BoundedFunctor m = (BoundedConfiguration m, OM.OrdFunctor m)
 
 -- | Semi-lattices with a binary join ('or') operation
 class JoinSemiLattice a where
