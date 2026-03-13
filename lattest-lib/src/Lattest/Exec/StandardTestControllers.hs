@@ -142,8 +142,8 @@ andThen tester1 tester2 =
         andThenSelect testState specState mq = case testState of
             (Left s) -> do
                 res <- selectTest tester1 s specState mq
-                return $ case res of
-                    Left (i1,s1) -> Left (i1, Left s1)
+                case res of
+                    Left (i1,s1) -> return $ Left (i1, Left s1)
                     Right _ -> do -- TODO: propagate results from first TestController to resulting TestController
                         res2 <- selectTest tester2 (testControllerState tester2) specState mq
                         return $ case res2 of
