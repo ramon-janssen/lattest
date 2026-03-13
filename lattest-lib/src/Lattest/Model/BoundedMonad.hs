@@ -75,6 +75,7 @@ import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
 import Algebra.Lattice(Lattice)
 import qualified Algebra.Lattice as L ((/\), (\/))
+import qualified Data.List as List
 import qualified Data.Set as Set
 import Data.OrdMonad as OM
 import Control.Monad(ap)
@@ -222,7 +223,7 @@ instance MeetSemiLattice (FreeLattice a) where
     Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
     This makes it potentially more efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', but also potentially slightly /less/ efficient for small lattices.
 -}
-newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show, Foldable)
+newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
 
 -- | A single state embedded in a free distributive lattice.
 atom :: a -> FreeLatticeCNF a
@@ -274,6 +275,19 @@ instance Ord a => MeetSemiLattice (FreeLatticeCNF a) where
         let x' = Set.filter (not . isProperSupersetOfAny y) x
             y' = Set.filter (not . isProperSupersetOfAny x) y
         in FreeLatticeCNF (x' `Set.union` y')
+
+instance Show a => Show (FreeLatticeCNF a) where
+    show l
+        | isForbidden l = "⊥"
+        | isUnderspecified l = "⊤"
+    show (FreeLatticeCNF x) = case Set.toList x of
+            [conjunct] -> List.intercalate " ∨ " $ show <$> Set.toList conjunct
+            conjuncts -> List.intercalate " ∧ " $ showDisjunct <$> conjuncts
+        where
+        showDisjunct :: Show a => Set.Set a -> String
+        showDisjunct y = case Set.toList y of
+            [e] -> show e
+            disjuncts -> "(" ++ List.intercalate " ∨ " (show <$> disjuncts) ++ ")" 
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that

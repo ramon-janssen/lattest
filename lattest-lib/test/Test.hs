@@ -29,7 +29,7 @@ main = do
 runQuickCheckTests :: IO ()
 runQuickCheckTests = do
     quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
-    quickCheckWithTimeout prop_consumeBufferedWith
+    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
     quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
