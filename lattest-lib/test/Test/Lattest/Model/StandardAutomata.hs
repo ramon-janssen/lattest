@@ -9,7 +9,8 @@ sg,
 testSpecF,
 testPrintSpecF,
 testSpecG,
-testSpecGQuiescent
+testSpecGQuiescent,
+testExponentialNonDeterminism
 )
 where
 
@@ -19,8 +20,9 @@ import Test.HUnit
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..))
 import qualified Data.Map as Map (toList, insert, fromList)
+import qualified Data.Set as Set
 
 data IF = A | B deriving (Show, Eq, Ord)
 data OF = X | Y deriving (Show, Eq, Ord)
@@ -57,7 +59,7 @@ testPrintSpecF = TestCase $ do
     initial location configuration: Q0f
     locations: Q0f, Q1f, Q2f
     transitions:
-    Q0f ――?A⟶ (((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f)))
+    Q0f ――?A⟶ ((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f))
     Q0f ――?B⟶ ⊤
     Q0f ――!X⟶ ((),Q0f)
     Q0f ――!Y⟶ ((),Q0f)
@@ -73,7 +75,7 @@ testPrintSpecF = TestCase $ do
     assertEqual "print of sf does not match" printF $ prettyPrint sf
     where
     printF =
-        "initial location configuration: Q0f\nlocations: Q0f, Q1f, Q2f\ntransitions:\nQ0f \8213\8213?A\10230 (((),Q0f) \8743 (((),Q1f) \8744 ((),Q2f)))\nQ0f \8213\8213?B\10230 \8868\nQ0f \8213\8213!X\10230 ((),Q0f)\nQ0f \8213\8213!Y\10230 ((),Q0f)\nQ1f \8213\8213?A\10230 \8868\nQ1f \8213\8213?B\10230 \8868\nQ1f \8213\8213!X\10230 \8868\nQ1f \8213\8213!Y\10230 \8869\nQ2f \8213\8213?A\10230 \8868\nQ2f \8213\8213?B\10230 ((),Q0f)\nQ2f \8213\8213!X\10230 \8869\nQ2f \8213\8213!Y\10230 ((),Q2f)"
+        "initial location configuration: Q0f\nlocations: Q0f, Q1f, Q2f\ntransitions:\nQ0f \8213\8213?A\10230 ((),Q0f) \8743 (((),Q1f) \8744 ((),Q2f))\nQ0f \8213\8213?B\10230 \8868\nQ0f \8213\8213!X\10230 ((),Q0f)\nQ0f \8213\8213!Y\10230 ((),Q0f)\nQ1f \8213\8213?A\10230 \8868\nQ1f \8213\8213?B\10230 \8868\nQ1f \8213\8213!X\10230 \8868\nQ1f \8213\8213!Y\10230 \8869\nQ2f \8213\8213?A\10230 \8868\nQ2f \8213\8213?B\10230 ((),Q0f)\nQ2f \8213\8213!X\10230 \8869\nQ2f \8213\8213!Y\10230 ((),Q2f)"
 
 
 data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
@@ -135,4 +137,19 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
+
+sDoubleState = NonDet $ Set.fromList [0,1]
+tDoubleRecursion = nonDetConcTransFromMRel 
+    [(0, "act", sDoubleState)
+    ,(1, "act", sDoubleState)
+    ]
+sDoubleRecursion = automaton sDoubleState ["act"] tDoubleRecursion
+
+testExponentialNonDeterminism :: Test
+testExponentialNonDeterminism = TestCase $ do
+    -- take 1000 steps, each 'duplicating' the state configuration. With deduplication, the state configuration should still have size 2
+    let doubleRecursion = interpretConcrete sDoubleRecursion
+        NonDet conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
+        nrStatesAfterBlowup = length $ conf 
+    assertEqual ("only 2 states in automaton but found " ++ show nrStatesAfterBlowup ++ " in state configuration") 2 nrStatesAfterBlowup
 
