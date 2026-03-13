@@ -171,18 +171,6 @@ newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, 
 deriving instance Ord a => Ord (FreeLattice a)
 deriving instance Ord a => Ord (Free a)
 
--- | A single state embedded in a free distributive lattice.
-atom :: a -> FreeLattice a
-atom = FreeLattice . Levitate . Var
-
--- | The free distributive lattice element ⊥, or false.
-bot :: FreeLattice a
-bot = FreeLattice Bottom
-
--- | The free distributive lattice element ⊤, or true.
-top :: FreeLattice a
-top = FreeLattice Top
-
 {-
 -- Conjunction and disjunction on free distributive lattices.
 -- note: this is already imlpemented by the JoinSemiLattice instance
@@ -207,7 +195,7 @@ instance BoundedConfiguration FreeLattice where
     underspecified = FreeLattice Top
 
 instance Applicative FreeLattice where
-    pure = atom
+    pure = FreeLattice . Levitate . Var
     (<*>) = ap
 
 instance Monad FreeLattice where
@@ -234,7 +222,19 @@ instance MeetSemiLattice (FreeLattice a) where
     Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
     This makes it potentially more efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', but also potentially slightly /less/ efficient for small lattices.
 -}
-newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show)
+newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show, Foldable)
+
+-- | A single state embedded in a free distributive lattice.
+atom :: a -> FreeLatticeCNF a
+atom = ordReturn
+
+-- | The free distributive lattice element ⊥, or false.
+bot :: FreeLatticeCNF a
+bot = forbidden
+
+-- | The free distributive lattice element ⊤, or true.
+top :: FreeLatticeCNF a
+top = underspecified
 
 instance BoundedConfiguration FreeLatticeCNF where
     isForbidden (FreeLatticeCNF x) = any Set.null x
