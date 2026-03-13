@@ -9,6 +9,7 @@ import Lattest.Model.StandardAutomata
 import Lattest.Model.Automaton(reachable)
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Exec.StandardTestControllers
+import qualified Lattest.Exec.StandardTestControllers.CompleteTestSuite as CTS
 import Control.DeepSeq(NFData)
 import GHC.Generics (Generic)
 import Control.Monad (forM_)
@@ -46,7 +47,7 @@ runNCompleteTestSuiteExample :: IO ()
 runNCompleteTestSuiteExample = do
     let targetStates = Set.toList (reachable spec)
     let seeds = [seed + n | n <- [1..(length targetStates)]]
-    results <- runNCompleteTestSuite adapter spec nrSteps delta (zip targetStates seeds)
+    results <- CTS.runNCompleteTestSuite adapter spec nrSteps delta (zip targetStates seeds)
     
     forM_ results $ \(state, verdict, (observed, maybeMq)) -> do
         putStrLn $ "state: " ++ show state
