@@ -123,8 +123,10 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
 
-{- | Creates a TestController that first selects inputs according to the first provided TestController, and when that first TestController is finished, selects inputs according to the second provided TestController
-TODO: propegate results from first TestController to resulting TestController
+{- |
+    Creates a TestController that first selects inputs according to the first provided TestController, and when that first TestController is finished, selects inputs according to the second provided TestController
+
+    Note: the result from the first tester is currently dropped.
 -}
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
 andThen tester1 tester2 =
@@ -140,12 +142,13 @@ andThen tester1 tester2 =
         andThenSelect testState specState mq = case testState of
             (Left s) -> do
                 res <- selectTest tester1 s specState mq
-                res2 <- selectTest tester2 (testControllerState tester2) specState mq
                 return $ case res of
                     Left (i1,s1) -> Left (i1, Left s1)
-                    Right r1 -> case res2 of
-                        Left (i2,s2) -> Left (i2, Right s2)
-                        Right r2 -> Right r2
+                    Right _ -> do -- TODO: propagate results from first TestController to resulting TestController
+                        res2 <- selectTest tester2 (testControllerState tester2) specState mq
+                        return $ case res2 of
+                            Left (i2,s2) -> Left (i2, Right s2)
+                            Right r2 -> Right r2
             (Right s) -> do
                 res2 <- selectTest tester2 s specState mq
                 return $ case res2 of
