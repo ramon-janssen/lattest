@@ -31,6 +31,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , reduce
 , Variable(..)
 , Type(..)
+, allTypes
 , Constant(..)
 , constType
 , ConstType
@@ -60,6 +61,9 @@ import           Lattest.Model.Symbolic.ValExpr.Sum
 
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
+
+allTypes :: [Type]
+allTypes = [IntType, BoolType, StringType]
 
 class ExprType t where
     typeOf :: t -> Type

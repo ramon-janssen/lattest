@@ -106,6 +106,9 @@ module Lattest.Model.Symbolic.ValExpr.FreeMonoidX
   , toDistinctAscOccurListT
   , fromOccurListT
   , fromDistinctAscPowerListT
+  -- ** Lists of direct items
+  , GHC.Exts.toList
+  , GHC.Exts.fromList
   )
 where
 
