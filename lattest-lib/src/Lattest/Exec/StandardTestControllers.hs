@@ -26,10 +26,6 @@ TestSelector,
 randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
-accessSeqSelector,
-adgTestSelector,
-nCompleteSingleState,
-runNCompleteTestSuite,
 andThen,
 randomTestSelectorWithMemoryFromState,
 RandomMemState(..),
@@ -59,17 +55,16 @@ where
 import Lattest.Adapter.Adapter(close)
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
-import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
+import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, SyntaxDestStates,AutSyntax,syntacticAutomaton)
+import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, AutSyntax,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration,Det(..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeRandom, takeJusts)
 
-import Control.DeepSeq(NFData)
 import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
@@ -131,6 +126,11 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
 
+{- |
+    Creates a TestController that first selects inputs according to the first provided TestController, and when that first TestController is finished, selects inputs according to the second provided TestController
+
+    Note: the result from the first tester is currently dropped.
+-}
 --Result Bool is True when access sequence has been followed and false when the SUT deviated
 -- accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> q -> TestController Det q q (IOAct i o) () (IOAct i o) [IOAct i o] (Maybe (IOAct i o)) Bool
 accessSeqSelector :: (Ord q, Eq i, Eq o, Show i, Show o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
@@ -224,18 +224,18 @@ andThen tester1 tester2 =
         andThenSelect testState specState mq = case testState of
             (Left s) -> do
                 res <- selectTest tester1 s specState mq
-                res2 <- selectTest tester2 (testControllerState tester2) specState mq
-                return $ case res of
-                    Left (i1,s1) -> Left (i1, Left s1)
-                    Right r1 -> case res2 of
-                        Left (i2,s2) -> Left (i2, Right s2)
-                        Right r2 -> Right r2
+                case res of
+                    Left (i1,s1) -> return $ Left (i1, Left s1)
+                    Right _ -> do -- TODO: propagate results from first TestController to resulting TestController
+                        res2 <- selectTest tester2 (testControllerState tester2) specState mq
+                        return $ case res2 of
+                            Left (i2,s2) -> Left (i2, Right s2)
+                            Right r2 -> Right r2
             (Right s) -> do
                 res2 <- selectTest tester2 s specState mq
                 return $ case res2 of
                     Left (i2,s2) -> Left (i2, Right s2)
                     Right r2 -> Right r2
-
         andThenUpdate testState specState ioact mq = case testState of
             Left s -> do
                 res1 <- updateTestController tester1 s specState ioact mq
@@ -247,6 +247,7 @@ andThen tester1 tester2 =
                 return $ case res2 of
                     Left s2 ->  Left $ Right s2
                     Right r2 -> Right r2
+
 
 {- |
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not

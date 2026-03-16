@@ -20,9 +20,6 @@ transRel,
 -- ** Constructing Syntactical Automata
 automaton,
 automaton',
--- ** Syntactical Automata lookup
-SyntaxDestStates,
-getStates,
 -- * Semantical Automaton Model
 -- ** Definition
 AutIntrpr,
@@ -30,7 +27,7 @@ stateConf,
 syntacticAutomaton,
 -- ** Constructing Syntactical Automata
 interpret,
-toConfiguration,
+inConfiguration,
 -- ** Type Classes for Semantics
 Completable,
 implicitDestination,
@@ -62,10 +59,10 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
@@ -120,21 +117,6 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
 
-class SyntaxDestStates m loc tdest where getStates :: m (tdest, loc) -> [loc]--toTuples :: Map t (m (tdest, loc)) -> [(t,loc)]
-
-instance SyntaxDestStates Det loc tdest where
-    getStates destConf = case destConf of
-        Det (tdest,qdest) -> [qdest]
-        ForbiddenDet -> []
-        UnderspecDet -> []
-        _ -> error "could not extract location from deterministic transition destination"
-
-instance SyntaxDestStates NonDet loc tdest where
-    getStates destConf = case destConf of
-        NonDet tds -> map snd (Set.toList tds)
-        UnderspecNonDet -> []
-        _ -> error "could not extract location from nondeterministic transition destination"
-
 ---------------
 -- interpret --
 ---------------
@@ -160,10 +142,12 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-toConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
-toConfiguration aut conf = aut {stateConf = conf}
 interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
-interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut, afterCache = Map.empty }
+interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
+
+-- | The given model, in the given configuration.
+inConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
+inConfiguration aut conf = aut {stateConf = conf}
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
 class Completable act where

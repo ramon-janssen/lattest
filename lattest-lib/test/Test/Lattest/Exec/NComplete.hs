@@ -5,7 +5,7 @@ import Test.HUnit
 import qualified Data.Map as Map (Map,lookup)
 
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
-import Lattest.Exec.ADG.DistGraphConstruction(computeAdaptiveDistGraphPure)
+import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Model.BoundedMonad(Det(..))
@@ -30,7 +30,7 @@ testADG = TestCase $ do
     let adgaut = case adgAutFromAutomaton model "delta" of
             Just a -> a
             Nothing ->  error "could not transform Lattest auomaton into ADG automaton"
-        adg = computeAdaptiveDistGraphPure adgaut False True True
+        adg = computeAdaptiveDistGraph adgaut False True True
     assertEqual "ADG of ADG-journal automaton: " adg
         $ Plus [Prefix "x" $ Plus [Prefix "x" Nil,
                                  Prefix "y" $ Prefix "a" $ Plus [Prefix "x" Nil, Prefix "y" Nil]],

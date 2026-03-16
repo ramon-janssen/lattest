@@ -11,10 +11,7 @@ import qualified Data.Set as Set
 import Data.Map as Map (Map, (!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
-import qualified Data.Serialize as Serialize
-import qualified GHC.Generics as Generics
 import qualified Data.List as List
-import qualified Control.DeepSeq as DeepSeq
 import qualified Data.Foldable as Foldable
 import qualified Lattest.Model.Automaton as Automaton
 import qualified Lattest.Model.StandardAutomata as StandardAutomata
@@ -24,9 +21,6 @@ import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct(..),Suspen
 import Debug.Trace as Trace
 
 data Aut a b = Aut {initial :: (State a b), states :: Set (State a b), idStateMap :: (Map a (State a b)), inputs ::  (Set b), outputs :: (Set b)}
-    deriving (Generics.Generic, DeepSeq.NFData)
-
-instance (Serialize.Serialize a, Serialize.Serialize b, Ord a, Ord b) => Serialize.Serialize (Aut a b)
 
 instance (Show a, Show b) => Show (Aut a b) where
     show (Aut initial states map inps outs) = "Initial: " ++ (show initial) ++ "\n" ++
@@ -36,12 +30,10 @@ instance (Show a, Show b) => Show (Aut a b) where
                                         --"IdStateMap: " ++ (show $ (Map.mapKeys Util.stateToName . Map.map (Util.stateToName . sid)) map)
 
 data State a b = State {sid :: a, inp :: Set b, out :: Set b, trans :: Map b a}
-    deriving (Ord, Generics.Generic, DeepSeq.NFData)
+    deriving (Ord)
 
 instance (Show a) => (Show (State a b)) where
     show s = show $ sid s
-
-instance (Serialize.Serialize a, Serialize.Serialize b, Ord a, Ord b) => Serialize.Serialize (State a b)
 
 instance (Eq a) => Eq (State a b) where
     (==) s1 s2 = (sid s1) == (sid s2)
@@ -210,7 +202,7 @@ adgAutFromAutomaton aut delta = let
     where
         insertTransition :: (Ord a, Ord b) => a -> (Map b a) -> (IOSuspAct b b) -> StandardAutomata.ConcreteSuspAutIntrpr Det a b b -> b -> (Map b a)
         insertTransition sid m ioact aut delta =
-            case Automaton.stateConf (Automaton.toConfiguration aut (Det sid) `Automaton.after` ioact) of
+            case Automaton.stateConf (Automaton.inConfiguration aut (Det sid) `Automaton.after` ioact) of
                 Det q -> Map.insert (getLabel delta ioact) q m
                 _ -> m
         getLabel :: Ord b => b -> IOSuspAct b b -> b

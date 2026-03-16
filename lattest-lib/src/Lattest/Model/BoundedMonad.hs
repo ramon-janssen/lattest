@@ -1,10 +1,8 @@
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 
@@ -30,16 +28,10 @@
     state configurations, see
     
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
+
 -}
 
 module Lattest.Model.BoundedMonad (
-(<#>),
-OrdMonad,
-OrdFunctor,
-ordReturn,
-ordBind,
-ordMap,
-ordJoin,
 -- * State configurations
 -- ** Deterministic
 Det(..),
@@ -73,6 +65,8 @@ JoinSemiLattice,
 MeetSemiLattice,
 (\/),
 (/\),
+-- ** 'Data.OrdMonad' re-export, for convenience.
+module OM,
 -- ** Determinisation
 determinize,
 undeterminize
@@ -83,39 +77,15 @@ import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
 import Algebra.Lattice(Lattice)
 import qualified Algebra.Lattice as L ((/\), (\/))
+import qualified Data.List as List
 import qualified Data.Set as Set
+import Data.OrdMonad as OM
 import Control.Monad(ap)
 import GHC.Generics (Generic)
 import Control.DeepSeq(NFData)
 
 
 
-class OrdFunctor f where
-    ordMap :: (Ord b) => (a -> b) -> f a -> f b
-
-instance {-# OVERLAPPABLE #-} Functor f => OrdFunctor f where
-    ordMap = fmap
-
-(<#>) :: (OrdFunctor f, Ord b) => (a -> b) -> f a -> f b
-(<#>) = ordMap
-
-instance OrdMonad Set.Set where
-    ordBind s f = Set.unions $ Set.map f s
-    ordReturn s = Set.singleton s
-
-class (OrdFunctor m) => OrdMonad m where
-    ordReturn :: a -> m a
-    ordBind :: (Ord b) => m a -> (a -> m b) -> m b
-
-instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
-    ordBind = (>>=)
-    ordReturn = return
-
-ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
-ordJoin mma = ordBind mma id
-
-instance OrdFunctor Set.Set where
-    ordMap = Set.map
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
 data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
@@ -167,11 +137,11 @@ instance BoundedConfiguration NonDet where
     forbidden = NonDet Set.empty
     underspecified = UnderspecNonDet
 
-instance OrdFunctor NonDet where
-    ordMap f (NonDet ss) = NonDet $ ordMap f ss
+instance OM.OrdFunctor NonDet where
+    ordMap f (NonDet ss) = NonDet $ OM.ordMap f ss
     ordMap _ UnderspecNonDet = UnderspecNonDet
     
-instance OrdMonad NonDet where
+instance OM.OrdMonad NonDet where
     ordBind (NonDet ss) f = foldr (\/) (NonDet Set.empty) $ Set.map f ss
     ordBind UnderspecNonDet _ = UnderspecNonDet
     ordReturn s = NonDet $ Set.singleton s
@@ -200,6 +170,8 @@ instance (Ord a) => JoinSemiLattice (NonDet a) where
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
+
+    __Warning__: this implementation is functionally correct, but not very efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', since no reductions are performed.
 -}
 newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
 
@@ -243,7 +215,7 @@ instance BoundedConfiguration FreeLattice where
     underspecified = FreeLattice Top
 
 instance Applicative FreeLattice where
-    pure = atom
+    pure = FreeLattice . Levitate . Var
     (<*>) = ap
 
 instance Monad FreeLattice where
@@ -268,23 +240,29 @@ instance MeetSemiLattice (FreeLattice a) where
 
 {-|
     Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
+    This makes it potentially more efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', but also potentially slightly /less/ efficient for small lattices.
 -}
+newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
 
-newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Show)
+-- | A single state embedded in a free distributive lattice.
+atom :: a -> FreeLatticeCNF a
+atom = ordReturn
 
-isCnfBot :: FreeLatticeCNF a -> Bool
-isCnfBot (FreeLatticeCNF x) = any Set.null x
+-- | The free distributive lattice element ⊥, or false.
+bot :: FreeLatticeCNF a
+bot = forbidden
 
-isCnfTop :: FreeLatticeCNF a -> Bool
-isCnfTop (FreeLatticeCNF x) = Set.null x
+-- | The free distributive lattice element ⊤, or true.
+top :: FreeLatticeCNF a
+top = underspecified
 
 instance BoundedConfiguration FreeLatticeCNF where
-    isForbidden = isCnfBot
-    isUnderspecified = isCnfTop
+    isForbidden (FreeLatticeCNF x) = any Set.null x
+    isUnderspecified (FreeLatticeCNF x) = Set.null x
     forbidden = FreeLatticeCNF $ Set.singleton Set.empty
     underspecified = FreeLatticeCNF $ Set.empty
 
-instance OrdMonad FreeLatticeCNF where
+instance OM.OrdMonad FreeLatticeCNF where
     ordBind (FreeLatticeCNF x) f = FreeLatticeCNF $ cnfJoin $ Set.map (Set.map f1) x
         where
             f1 y = let FreeLatticeCNF z = f y in z
@@ -305,7 +283,7 @@ isProperSupersetOfAny sets a = any (isProperSupersetOf a) (Set.toList sets)
     isProperSupersetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
     isProperSupersetOf set potentialSubset = (potentialSubset `Set.isSubsetOf` set) && not (set `Set.isSubsetOf` potentialSubset)
 
-instance OrdFunctor FreeLatticeCNF where
+instance OM.OrdFunctor FreeLatticeCNF where
     ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
 
 instance Ord a => JoinSemiLattice (FreeLatticeCNF a) where
@@ -316,6 +294,19 @@ instance Ord a => MeetSemiLattice (FreeLatticeCNF a) where
         let x' = Set.filter (not . isProperSupersetOfAny y) x
             y' = Set.filter (not . isProperSupersetOfAny x) y
         in FreeLatticeCNF (x' `Set.union` y')
+
+instance Show a => Show (FreeLatticeCNF a) where
+    show l
+        | isForbidden l = "⊥"
+        | isUnderspecified l = "⊤"
+    show (FreeLatticeCNF x) = case Set.toList x of
+            [conjunct] -> List.intercalate " ∨ " $ show <$> Set.toList conjunct
+            conjuncts -> List.intercalate " ∧ " $ showDisjunct <$> conjuncts
+        where
+        showDisjunct :: Show a => Set.Set a -> String
+        showDisjunct y = case Set.toList y of
+            [e] -> show e
+            disjuncts -> "(" ++ List.intercalate " ∨ " (show <$> disjuncts) ++ ")" 
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
@@ -357,10 +348,10 @@ isSpecified :: (BoundedConfiguration m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
 -- | Abbreviation for types which are both bounded configurations and Monads.
-type BoundedMonad m = (BoundedConfiguration m, OrdMonad m)
+type BoundedMonad m = (BoundedConfiguration m, OM.OrdMonad m)
 
 -- | Abbreviation for types which are both bounded configurations and Functors.
-type BoundedFunctor m = (BoundedConfiguration m, OrdFunctor m)
+type BoundedFunctor m = (BoundedConfiguration m, OM.OrdFunctor m)
 
 -- | Semi-lattices with a binary join ('or') operation
 class JoinSemiLattice a where

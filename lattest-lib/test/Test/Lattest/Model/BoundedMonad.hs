@@ -80,12 +80,12 @@ prop_latticeIsCNF l =
     where
     cnfToLattice :: BM.FreeLatticeCNF a -> BM.FreeLattice a
     cnfToLattice (BM.FreeLatticeCNF l) = cnfToLattice' l
-    -- foldr :: (Set a -> L -> L) -> L -> Set (Set a) -> L
-    cnfToLattice' = Set.foldr mergeConjunct BM.top
+    cnfToLattice' = Set.foldr mergeConjunct BM.underspecified
+    mergeConjunct :: Set.Set a -> BM.FreeLattice a -> BM.FreeLattice a
     mergeConjunct conjunct l = conjunctToLattice conjunct BM./\ l
-    -- foldr :: (a -> L -> L) -> L -> Set a -> L 
-    conjunctToLattice = Set.foldr mergeDisjunct BM.bot
-    mergeDisjunct a l = BM.atom a BM.\/ l
+    conjunctToLattice = Set.foldr mergeDisjunct BM.forbidden
+    mergeDisjunct :: a -> BM.FreeLattice a -> BM.FreeLattice a
+    mergeDisjunct a l = return a BM.\/ l
 
 
 

@@ -1,0 +1,1137 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Exec.StandardTestControllers.CompleteTestSuite</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-2"></span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#accessSeqSelector"><span class="hs-identifier">accessSeqSelector</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-3"></span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#adgTestSelector"><span class="hs-identifier">adgTestSelector</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-4"></span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#nCompleteSingleState"><span class="hs-identifier">nCompleteSingleState</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-5"></span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#runNCompleteTestSuite"><span class="hs-identifier">runNCompleteTestSuite</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-6"></span><span class="hs-special">)</span><span>
+</span><span id="line-7"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Adapter.Adapter.html"><span class="hs-identifier">Lattest.Adapter.Adapter</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier">Adapter</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier">close</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Adapter.StandardAdapters.html"><span class="hs-identifier">Lattest.Adapter.StandardAdapters</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.StandardAdapters.html#withQuiescenceMillis"><span class="hs-identifier">withQuiescenceMillis</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Exec.ADG.Aut.html"><span class="hs-identifier">Lattest.Exec.ADG.Aut</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.ADG.Aut.html#adgAutFromAutomaton"><span class="hs-identifier">adgAutFromAutomaton</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Exec.ADG.DistGraph.html"><span class="hs-identifier">Lattest.Exec.ADG.DistGraph</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.ADG.DistGraph.html#computeAdaptiveDistGraph"><span class="hs-identifier">computeAdaptiveDistGraph</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html"><span class="hs-identifier">Lattest.Exec.ADG.SplitGraph</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Evidence"><span class="hs-identifier">Evidence</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html"><span class="hs-identifier">Lattest.Exec.StandardTestControllers</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#andThen"><span class="hs-identifier">andThen</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#randomTestSelectorFromSeed"><span class="hs-identifier">randomTestSelectorFromSeed</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#untilCondition"><span class="hs-identifier">untilCondition</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#stopAfterSteps"><span class="hs-identifier">stopAfterSteps</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#observingOnly"><span class="hs-identifier">observingOnly</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#printActions"><span class="hs-identifier">printActions</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#traceObserver"><span class="hs-identifier">traceObserver</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#andObserving"><span class="hs-identifier">andObserving</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.StandardTestControllers.html#stateObserver"><span class="hs-identifier">stateObserver</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html"><span class="hs-identifier">Lattest.Exec.Testing</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier">TestController</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#runTester"><span class="hs-identifier">runTester</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier">Verdict</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html"><span class="hs-identifier">Lattest.Model.Alphabet</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier">IOAct</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier">IOSuspAct</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#Suspended"><span class="hs-identifier">Suspended</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#asSuspended"><span class="hs-identifier">asSuspended</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html"><span class="hs-identifier">Lattest.Model.Automaton</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutIntrpr"><span class="hs-identifier">AutIntrpr</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSyntax"><span class="hs-identifier">AutSyntax</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html"><span class="hs-identifier">Lattest.Model.BoundedMonad</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier">Det</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.StandardAutomata.html"><span class="hs-identifier">Lattest.Model.StandardAutomata</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.StandardAutomata.html#ConcreteSuspAutIntrpr"><span class="hs-identifier">ConcreteSuspAutIntrpr</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StandardAutomata.html#accessSequences"><span class="hs-identifier">accessSequences</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.StandardAutomata.html#interpretQuiescentConcrete"><span class="hs-identifier">interpretQuiescentConcrete</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">forM</span></span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(!)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Set</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">empty</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Set</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Random</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">StdGen</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="annot"><span class="hs-comment">{- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
+ Result Bool is True when access sequence has been followed and false when the SUT deviated
+-}</span></span><span>
+</span><span id="line-28"></span><span id="local-6989586621679320786"><span id="local-6989586621679320787"><span id="local-6989586621679320788"><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#accessSeqSelector"><span class="hs-identifier hs-type">accessSeqSelector</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320786"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679320788"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679320788"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.StandardAutomata.html#ConcreteSuspAutIntrpr"><span class="hs-identifier hs-type">ConcreteSuspAutIntrpr</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320786"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320788"><span class="hs-identifier hs-type">o</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679320786"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320786"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320786"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320788"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320788"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320788"><span class="hs-identifier hs-type">o</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679320787"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span></span></span></span><span>
+</span><span id="line-29"></span><span id="accessSeqSelector"><span class="annot"><span class="annottext">accessSeqSelector :: forall q i o.
+(Ord q, Eq i, Eq o, Show i, Show o) =&gt;
+ConcreteSuspAutIntrpr Det q i o
+-&gt; q
+-&gt; TestController
+     Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#accessSeqSelector"><span class="hs-identifier hs-var hs-var">accessSeqSelector</span></a></span></span><span> </span><span id="local-6989586621679321058"><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q i o
+</span><a href="#local-6989586621679321058"><span class="hs-identifier hs-var">aut</span></a></span></span><span> </span><span id="local-6989586621679321059"><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321059"><span class="hs-identifier hs-var">targetState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-30"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679321062"><span class="annot"><span class="annottext">initState :: q
+</span><a href="#local-6989586621679321062"><span class="hs-identifier hs-var hs-var">initState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q i o -&gt; Det q
+forall {k} (m :: * -&gt; *) loc q t tdest (act :: k).
+AutIntrpr m loc q t tdest act -&gt; m q
+</span><a href="Lattest.Model.Automaton.html#stateConf"><span class="hs-identifier hs-var">stateConf</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q i o
+</span><a href="#local-6989586621679321058"><span class="hs-identifier hs-var">aut</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-31"></span><span>            </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span id="local-6989586621679321065"><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321065"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321065"><span class="hs-identifier hs-var">q</span></a></span><span>
+</span><span id="line-32"></span><span>            </span><span class="annot"><span class="annottext">Det q
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; q
+forall a. HasCallStack =&gt; [Char] -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;Access sequence: model must be in a specified initial state&quot;</span></span><span>
+</span><span id="line-33"></span><span>        </span><span id="local-6989586621679321071"><span class="annot"><span class="annottext">accSeqs :: Map q [IOAct i o]
+</span><a href="#local-6989586621679321071"><span class="hs-identifier hs-var hs-var">accSeqs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q i o -&gt; q -&gt; Map q [IOAct i o]
+forall {k} loc (m :: * -&gt; *) t tdest (act :: k).
+(Ord loc, Foldable m) =&gt;
+AutIntrpr m loc loc t tdest act -&gt; loc -&gt; Map loc [t]
+</span><a href="Lattest.Model.StandardAutomata.html#accessSequences"><span class="hs-identifier hs-var">accessSequences</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q i o
+</span><a href="#local-6989586621679321058"><span class="hs-identifier hs-var">aut</span></a></span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321062"><span class="hs-identifier hs-var">initState</span></a></span><span>
+</span><span id="line-34"></span><span>    </span><span class="hs-keyword">in</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-35"></span><span>        </span><span class="annot"><span class="annottext">testControllerState :: [IOAct i o]
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map q [IOAct i o] -&gt; q -&gt; [IOAct i o]
+forall k a. Ord k =&gt; Map k a -&gt; k -&gt; a
+</span><span class="hs-operator hs-var">(Map.!)</span></span><span> </span><span class="annot"><span class="annottext">Map q [IOAct i o]
+</span><a href="#local-6989586621679321071"><span class="hs-identifier hs-var">accSeqs</span></a></span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321059"><span class="hs-identifier hs-var">targetState</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-36"></span><span>        </span><span class="annot"><span class="annottext">selectTest :: TestChoice (Maybe i) (IOSuspAct i o) =&gt;
+[IOAct i o]
+-&gt; ConcreteSuspAutIntrpr Det q i o
+-&gt; Det q
+-&gt; IO (Either (Maybe i, [IOAct i o]) Bool)
+</span><a href="Lattest.Exec.Testing.html#selectTest"><span class="hs-identifier hs-var">selectTest</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[IOAct i o]
+-&gt; ConcreteSuspAutIntrpr Det q i o
+-&gt; Det q
+-&gt; IO (Either (Maybe i, [IOAct i o]) Bool)
+TestChoice (Maybe i) (IOSuspAct i o) =&gt;
+[IOAct i o]
+-&gt; ConcreteSuspAutIntrpr Det q i o
+-&gt; Det q
+-&gt; IO (Either (Maybe i, [IOAct i o]) Bool)
+forall {m :: * -&gt; *} {a} {o} {p} {p}.
+Monad m =&gt;
+[IOAct a o] -&gt; p -&gt; p -&gt; m (Either (Maybe a, [IOAct a o]) Bool)
+</span><a href="#local-6989586621679321075"><span class="hs-identifier hs-var">accSeqSelectTest</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>        </span><span class="annot"><span class="annottext">updateTestController :: [IOAct i o]
+-&gt; ConcreteSuspAutIntrpr Det q i o
+-&gt; IOSuspAct i o
+-&gt; Det q
+-&gt; IO (Either [IOAct i o] Bool)
+</span><a href="Lattest.Exec.Testing.html#updateTestController"><span class="hs-identifier hs-var">updateTestController</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[IOAct i o]
+-&gt; ConcreteSuspAutIntrpr Det q i o
+-&gt; IOSuspAct i o
+-&gt; Det q
+-&gt; IO (Either [IOAct i o] Bool)
+forall {m :: * -&gt; *} {i} {o} {p} {p}.
+(Monad m, Eq i, Eq o) =&gt;
+[IOAct i o]
+-&gt; p -&gt; IOSuspAct i o -&gt; p -&gt; m (Either [IOAct i o] Bool)
+</span><a href="#local-6989586621679321079"><span class="hs-identifier hs-var">accSeqUpdateTest</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-38"></span><span>        </span><span class="annot"><span class="annottext">handleTestClose :: [IOAct i o] -&gt; IO Bool
+</span><a href="Lattest.Exec.Testing.html#handleTestClose"><span class="hs-identifier hs-var">handleTestClose</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679321081"><span class="annot"><span class="annottext">[IOAct i o]
+</span><a href="#local-6989586621679321081"><span class="hs-identifier hs-var">testState</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; IO Bool
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; IO Bool) -&gt; Bool -&gt; IO Bool
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[IOAct i o]
+</span><a href="#local-6989586621679321081"><span class="hs-identifier hs-var">testState</span></a></span><span> </span><span class="hs-keyword">of</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">;</span><span> </span><span class="annot"><span class="annottext">[IOAct i o]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-39"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-40"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-41"></span><span>    </span><span id="local-6989586621679321075"><span class="annot"><span class="annottext">accSeqSelectTest :: [IOAct a o] -&gt; p -&gt; p -&gt; m (Either (Maybe a, [IOAct a o]) Bool)
+</span><a href="#local-6989586621679321075"><span class="hs-identifier hs-var hs-var">accSeqSelectTest</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span id="local-6989586621679321091"><span class="annot"><span class="annottext">p
+</span><a href="#local-6989586621679321091"><span class="hs-identifier hs-var">specIntrpState</span></a></span></span><span> </span><span class="annot"><span class="annottext">p
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Either (Maybe a, [IOAct a o]) Bool
+-&gt; m (Either (Maybe a, [IOAct a o]) Bool)
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either (Maybe a, [IOAct a o]) Bool
+ -&gt; m (Either (Maybe a, [IOAct a o]) Bool))
+-&gt; Either (Maybe a, [IOAct a o]) Bool
+-&gt; m (Either (Maybe a, [IOAct a o]) Bool)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Either (Maybe a, [IOAct a o]) Bool
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-42"></span><span>    </span><span class="annot"><a href="#local-6989586621679321075"><span class="hs-identifier hs-var">accSeqSelectTest</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679321092"><span class="annot"><span class="annottext">IOAct a o
+</span><a href="#local-6989586621679321092"><span class="hs-identifier hs-var">l</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679321093"><span class="annot"><span class="annottext">[IOAct a o]
+</span><a href="#local-6989586621679321093"><span class="hs-identifier hs-var">ls</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679321094"><span class="annot"><span class="annottext">p
+</span><a href="#local-6989586621679321094"><span class="hs-identifier hs-var">specIntrpState</span></a></span></span><span> </span><span class="annot"><span class="annottext">p
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Either (Maybe a, [IOAct a o]) Bool
+-&gt; m (Either (Maybe a, [IOAct a o]) Bool)
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either (Maybe a, [IOAct a o]) Bool
+ -&gt; m (Either (Maybe a, [IOAct a o]) Bool))
+-&gt; Either (Maybe a, [IOAct a o]) Bool
+-&gt; m (Either (Maybe a, [IOAct a o]) Bool)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">IOAct a o
+</span><a href="#local-6989586621679321092"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-43"></span><span>        </span><span class="annot"><a href="Lattest.Model.Alphabet.html#In"><span class="hs-identifier hs-type">In</span></a></span><span> </span><span id="local-6989586621679321096"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679321096"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Maybe a, [IOAct a o]) -&gt; Either (Maybe a, [IOAct a o]) Bool
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679321096"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IOAct a o
+</span><a href="#local-6989586621679321092"><span class="hs-identifier hs-var">l</span></a></span><span class="annot"><span class="annottext">IOAct a o -&gt; [IOAct a o] -&gt; [IOAct a o]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[IOAct a o]
+</span><a href="#local-6989586621679321093"><span class="hs-identifier hs-var">ls</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span>        </span><span class="annot"><span class="annottext">IOAct a o
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Maybe a, [IOAct a o]) -&gt; Either (Maybe a, [IOAct a o]) Bool
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IOAct a o
+</span><a href="#local-6989586621679321092"><span class="hs-identifier hs-var">l</span></a></span><span class="annot"><span class="annottext">IOAct a o -&gt; [IOAct a o] -&gt; [IOAct a o]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[IOAct a o]
+</span><a href="#local-6989586621679321093"><span class="hs-identifier hs-var">ls</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>    </span><span id="local-6989586621679321079"><span class="annot"><span class="annottext">accSeqUpdateTest :: [IOAct i o]
+-&gt; p -&gt; IOSuspAct i o -&gt; p -&gt; m (Either [IOAct i o] Bool)
+</span><a href="#local-6989586621679321079"><span class="hs-identifier hs-var hs-var">accSeqUpdateTest</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span id="local-6989586621679321112"><span class="annot"><span class="annottext">p
+</span><a href="#local-6989586621679321112"><span class="hs-identifier hs-var">specIntrpState</span></a></span></span><span> </span><span id="local-6989586621679321113"><span class="annot"><span class="annottext">IOSuspAct i o
+</span><a href="#local-6989586621679321113"><span class="hs-keyword hs-var">label</span></a></span></span><span> </span><span class="annot"><span class="annottext">p
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Either [IOAct i o] Bool -&gt; m (Either [IOAct i o] Bool)
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either [IOAct i o] Bool -&gt; m (Either [IOAct i o] Bool))
+-&gt; Either [IOAct i o] Bool -&gt; m (Either [IOAct i o] Bool)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Either [IOAct i o] Bool
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><a href="#local-6989586621679321079"><span class="hs-identifier hs-var">accSeqUpdateTest</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679321114"><span class="annot"><span class="annottext">IOAct i o
+</span><a href="#local-6989586621679321114"><span class="hs-identifier hs-var">l</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679321115"><span class="annot"><span class="annottext">[IOAct i o]
+</span><a href="#local-6989586621679321115"><span class="hs-identifier hs-var">ls</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679321116"><span class="annot"><span class="annottext">p
+</span><a href="#local-6989586621679321116"><span class="hs-identifier hs-var">specIntrpState</span></a></span></span><span> </span><span id="local-6989586621679321117"><span class="annot"><span class="annottext">IOSuspAct i o
+</span><a href="#local-6989586621679321117"><span class="hs-keyword hs-var">label</span></a></span></span><span> </span><span class="annot"><span class="annottext">p
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Either [IOAct i o] Bool -&gt; m (Either [IOAct i o] Bool)
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either [IOAct i o] Bool -&gt; m (Either [IOAct i o] Bool))
+-&gt; Either [IOAct i o] Bool -&gt; m (Either [IOAct i o] Bool)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">if</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IOAct i o -&gt; IOSuspAct i o
+forall i o. IOAct i o -&gt; IOSuspAct i o
+</span><a href="Lattest.Model.Alphabet.html#asSuspended"><span class="hs-identifier hs-var">asSuspended</span></a></span><span> </span><span class="annot"><span class="annottext">IOAct i o
+</span><a href="#local-6989586621679321114"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">IOSuspAct i o -&gt; IOSuspAct i o -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">IOSuspAct i o
+</span><a href="#local-6989586621679321117"><span class="hs-keyword hs-var">label</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[IOAct i o] -&gt; Either [IOAct i o] Bool
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">[IOAct i o]
+</span><a href="#local-6989586621679321115"><span class="hs-identifier hs-var">ls</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Either [IOAct i o] Bool
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="annot"><span class="hs-comment">{- | A TestController that selects inputs according to the adaptive distinguishing sequence of the given automaton
+-}</span></span><span>
+</span><span id="line-50"></span><span id="local-6989586621679320846"><span id="local-6989586621679320847"><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#adgTestSelector"><span class="hs-identifier hs-type">adgTestSelector</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320846"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.StandardAutomata.html#ConcreteSuspAutIntrpr"><span class="hs-identifier hs-type">ConcreteSuspAutIntrpr</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320846"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320846"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320846"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Evidence"><span class="hs-identifier hs-type">Evidence</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679320847"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Set.Set</span></span><span> </span><span class="annot"><a href="#local-6989586621679320846"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-51"></span><span id="adgTestSelector"><span class="annot"><span class="annottext">adgTestSelector :: forall q l.
+(Ord q, Ord l, Eq l, Show l) =&gt;
+ConcreteSuspAutIntrpr Det q l l
+-&gt; l
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Evidence l)
+     (Maybe l)
+     (Set q)
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#adgTestSelector"><span class="hs-identifier hs-var hs-var">adgTestSelector</span></a></span></span><span> </span><span id="local-6989586621679321125"><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321125"><span class="hs-identifier hs-var">aut</span></a></span></span><span> </span><span id="local-6989586621679321126"><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321126"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-52"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679321133"><span class="annot"><span class="annottext">adgaut :: Aut q l
+</span><a href="#local-6989586621679321133"><span class="hs-identifier hs-var hs-var">adgaut</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l -&gt; l -&gt; Maybe (Aut q l)
+forall a b.
+(Ord a, Ord b) =&gt;
+ConcreteSuspAutIntrpr Det a b b -&gt; b -&gt; Maybe (Aut a b)
+</span><a href="Lattest.Exec.ADG.Aut.html#adgAutFromAutomaton"><span class="hs-identifier hs-var">adgAutFromAutomaton</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321125"><span class="hs-identifier hs-var">aut</span></a></span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321126"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-53"></span><span>                    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679321134"><span class="annot"><span class="annottext">Aut q l
+</span><a href="#local-6989586621679321134"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Aut q l
+</span><a href="#local-6989586621679321134"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-54"></span><span>                    </span><span class="annot"><span class="annottext">Maybe (Aut q l)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><span class="annottext">[Char] -&gt; Aut q l
+forall a. HasCallStack =&gt; [Char] -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;could not transform Lattest auomaton into ADG automaton&quot;</span></span><span>
+</span><span id="line-55"></span><span>        </span><span id="local-6989586621679321139"><span class="annot"><span class="annottext">adg :: Evidence l
+</span><a href="#local-6989586621679321139"><span class="hs-identifier hs-var hs-var">adg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Aut q l -&gt; Bool -&gt; Bool -&gt; Bool -&gt; Evidence l
+forall a b.
+(Ord a, Ord b) =&gt;
+Aut a b -&gt; Bool -&gt; Bool -&gt; Bool -&gt; Evidence b
+</span><a href="Lattest.Exec.ADG.DistGraph.html#computeAdaptiveDistGraph"><span class="hs-identifier hs-var">computeAdaptiveDistGraph</span></a></span><span> </span><span class="annot"><span class="annottext">Aut q l
+</span><a href="#local-6989586621679321133"><span class="hs-identifier hs-var">adgaut</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-keyword">in</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-57"></span><span>        </span><span class="annot"><span class="annottext">testControllerState :: Evidence l
+</span><a href="Lattest.Exec.Testing.html#testControllerState"><span class="hs-identifier hs-var">testControllerState</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321139"><span class="hs-identifier hs-var">adg</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-58"></span><span>        </span><span class="annot"><span class="annottext">selectTest :: TestChoice (Maybe l) (IOAct l (Suspended l)) =&gt;
+Evidence l
+-&gt; ConcreteSuspAutIntrpr Det q l l
+-&gt; Det q
+-&gt; IO (Either (Maybe l, Evidence l) (Set q))
+</span><a href="Lattest.Exec.Testing.html#selectTest"><span class="hs-identifier hs-var">selectTest</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TestChoice (Maybe l) (IOAct l (Suspended l)) =&gt;
+Evidence l
+-&gt; ConcreteSuspAutIntrpr Det q l l
+-&gt; Det q
+-&gt; IO (Either (Maybe l, Evidence l) (Set q))
+Evidence l
+-&gt; ConcreteSuspAutIntrpr Det q l l
+-&gt; Det q
+-&gt; IO (Either (Maybe l, Evidence l) (Set q))
+forall {m :: * -&gt; *} {a} {p} {p} {a}.
+Monad m =&gt;
+Evidence a -&gt; p -&gt; p -&gt; m (Either (Maybe a, Evidence a) (Set a))
+</span><a href="#local-6989586621679321140"><span class="hs-identifier hs-var">adgSelectTest</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-59"></span><span>        </span><span class="annot"><span class="annottext">updateTestController :: Evidence l
+-&gt; ConcreteSuspAutIntrpr Det q l l
+-&gt; IOAct l (Suspended l)
+-&gt; Det q
+-&gt; IO (Either (Evidence l) (Set q))
+</span><a href="Lattest.Exec.Testing.html#updateTestController"><span class="hs-identifier hs-var">updateTestController</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Evidence l
+-&gt; ConcreteSuspAutIntrpr Det q l l
+-&gt; IOAct l (Suspended l)
+-&gt; Det q
+-&gt; IO (Either (Evidence l) (Set q))
+forall {m :: * -&gt; *} {p} {p} {a}.
+Monad m =&gt;
+Evidence l
+-&gt; p
+-&gt; IOAct l (Suspended l)
+-&gt; p
+-&gt; m (Either (Evidence l) (Set a))
+</span><a href="#local-6989586621679321143"><span class="hs-identifier hs-var">adgUpdateTest</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-60"></span><span>        </span><span class="annot"><span class="annottext">handleTestClose :: Evidence l -&gt; IO (Set q)
+</span><a href="Lattest.Exec.Testing.html#handleTestClose"><span class="hs-identifier hs-var">handleTestClose</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679321144"><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321144"><span class="hs-identifier hs-var">testState</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Set q -&gt; IO (Set q)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Set q
+forall a. Set a
+</span><span class="hs-identifier hs-var">Set.empty</span></span><span>
+</span><span id="line-61"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-62"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-63"></span><span>    </span><span id="local-6989586621679321140"><span class="annot"><span class="annottext">adgSelectTest :: Evidence a -&gt; p -&gt; p -&gt; m (Either (Maybe a, Evidence a) (Set a))
+</span><a href="#local-6989586621679321140"><span class="hs-identifier hs-var hs-var">adgSelectTest</span></a></span></span><span> </span><span id="local-6989586621679321151"><span class="annot"><span class="annottext">Evidence a
+</span><a href="#local-6989586621679321151"><span class="hs-identifier hs-var">testState</span></a></span></span><span> </span><span id="local-6989586621679321152"><span class="annot"><span class="annottext">p
+</span><a href="#local-6989586621679321152"><span class="hs-identifier hs-var">specIntrpState</span></a></span></span><span> </span><span class="annot"><span class="annottext">p
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-64"></span><span>        </span><span class="annot"><span class="annottext">Either (Maybe a, Evidence a) (Set a)
+-&gt; m (Either (Maybe a, Evidence a) (Set a))
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either (Maybe a, Evidence a) (Set a)
+ -&gt; m (Either (Maybe a, Evidence a) (Set a)))
+-&gt; Either (Maybe a, Evidence a) (Set a)
+-&gt; m (Either (Maybe a, Evidence a) (Set a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Evidence a
+</span><a href="#local-6989586621679321151"><span class="hs-identifier hs-var">testState</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-65"></span><span>            </span><span class="annot"><span class="annottext">Evidence a
+</span><a href="Lattest.Exec.ADG.SplitGraph.html#Nil"><span class="hs-identifier hs-var">Nil</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Set a -&gt; Either (Maybe a, Evidence a) (Set a)
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">Set a
+forall a. Set a
+</span><span class="hs-identifier hs-var">Set.empty</span></span><span>
+</span><span id="line-66"></span><span>            </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Prefix"><span class="hs-identifier hs-type">Prefix</span></a></span><span> </span><span id="local-6989586621679321155"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679321155"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679321156"><span class="annot"><span class="annottext">Evidence a
+</span><a href="#local-6989586621679321156"><span class="hs-identifier hs-var">next</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Maybe a, Evidence a) -&gt; Either (Maybe a, Evidence a) (Set a)
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679321155"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Evidence a
+</span><a href="#local-6989586621679321151"><span class="hs-identifier hs-var">testState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>            </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Plus"><span class="hs-identifier hs-type">Plus</span></a></span><span> </span><span class="annot"><span class="annottext">[Evidence a]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Maybe a, Evidence a) -&gt; Either (Maybe a, Evidence a) (Set a)
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Evidence a
+</span><a href="#local-6989586621679321151"><span class="hs-identifier hs-var">testState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span>    </span><span id="local-6989586621679321143"><span class="annot"><span class="annottext">adgUpdateTest :: Evidence l
+-&gt; p
+-&gt; IOAct l (Suspended l)
+-&gt; p
+-&gt; m (Either (Evidence l) (Set a))
+</span><a href="#local-6989586621679321143"><span class="hs-identifier hs-var hs-var">adgUpdateTest</span></a></span></span><span> </span><span id="local-6989586621679321171"><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321171"><span class="hs-identifier hs-var">testState</span></a></span></span><span> </span><span id="local-6989586621679321172"><span class="annot"><span class="annottext">p
+</span><a href="#local-6989586621679321172"><span class="hs-identifier hs-var">specIntrpState</span></a></span></span><span> </span><span id="local-6989586621679321173"><span class="annot"><span class="annottext">IOAct l (Suspended l)
+</span><a href="#local-6989586621679321173"><span class="hs-identifier hs-var">ioact</span></a></span></span><span> </span><span class="annot"><span class="annottext">p
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-70"></span><span>       </span><span class="annot"><span class="annottext">Either (Evidence l) (Set a) -&gt; m (Either (Evidence l) (Set a))
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either (Evidence l) (Set a) -&gt; m (Either (Evidence l) (Set a)))
+-&gt; Either (Evidence l) (Set a) -&gt; m (Either (Evidence l) (Set a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321171"><span class="hs-identifier hs-var">testState</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-71"></span><span>            </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="Lattest.Exec.ADG.SplitGraph.html#Nil"><span class="hs-identifier hs-var">Nil</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Set a -&gt; Either (Evidence l) (Set a)
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">Set a
+forall a. Set a
+</span><span class="hs-identifier hs-var">Set.empty</span></span><span>
+</span><span id="line-72"></span><span>            </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Prefix"><span class="hs-identifier hs-type">Prefix</span></a></span><span> </span><span id="local-6989586621679321174"><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321174"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679321175"><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321175"><span class="hs-identifier hs-var">next</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">IOAct l (Suspended l)
+</span><a href="#local-6989586621679321173"><span class="hs-identifier hs-var">ioact</span></a></span><span> </span><span class="annot"><span class="annottext">IOAct l (Suspended l) -&gt; IOAct l (Suspended l) -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">l -&gt; IOAct l (Suspended l)
+forall i o. i -&gt; IOAct i o
+</span><a href="Lattest.Model.Alphabet.html#In"><span class="hs-identifier hs-var">In</span></a></span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321174"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Evidence l -&gt; Either (Evidence l) (Set a)
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321175"><span class="hs-identifier hs-var">next</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Either (Evidence l) (Set a)
+forall a. HasCallStack =&gt; [Char] -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;Error: expected to have selected an input but seeing some ioact&quot;</span></span><span>
+</span><span id="line-73"></span><span>            </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Plus"><span class="hs-identifier hs-type">Plus</span></a></span><span> </span><span id="local-6989586621679321176"><span class="annot"><span class="annottext">[Evidence l]
+</span><a href="#local-6989586621679321176"><span class="hs-identifier hs-var">ls</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-74"></span><span>                </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679321181"><span class="annot"><span class="annottext">nextList :: [Evidence l]
+</span><a href="#local-6989586621679321181"><span class="hs-identifier hs-var hs-var">nextList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[[Evidence l]] -&gt; [Evidence l]
+forall (t :: * -&gt; *) a. Foldable t =&gt; t [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">concat</span></span><span> </span><span class="annot"><span class="annottext">([[Evidence l]] -&gt; [Evidence l]) -&gt; [[Evidence l]] -&gt; [Evidence l]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Evidence l -&gt; [Evidence l]) -&gt; [Evidence l] -&gt; [[Evidence l]]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Evidence l -&gt; [Evidence l]
+</span><a href="#local-6989586621679321183"><span class="hs-identifier hs-var">getNextState</span></a></span><span> </span><span class="annot"><span class="annottext">[Evidence l]
+</span><a href="#local-6989586621679321176"><span class="hs-identifier hs-var">ls</span></a></span><span>
+</span><span id="line-75"></span><span>                </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Evidence l]
+</span><a href="#local-6989586621679321181"><span class="hs-identifier hs-var">nextList</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-76"></span><span>                    </span><span class="hs-special">[</span><span id="local-6989586621679321184"><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321184"><span class="hs-identifier hs-var">next</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Evidence l -&gt; Either (Evidence l) (Set a)
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321184"><span class="hs-identifier hs-var">next</span></a></span><span>
+</span><span id="line-77"></span><span>                    </span><span class="annot"><span class="annottext">[Evidence l]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Either (Evidence l) (Set a)
+forall a. HasCallStack =&gt; [Char] -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;ADG error: expected to have observed one output or quiescence&quot;</span></span><span>
+</span><span id="line-78"></span><span>                </span><span class="hs-keyword">where</span><span>
+</span><span id="line-79"></span><span>                </span><span id="local-6989586621679321183"><span class="annot"><span class="annottext">getNextState :: Evidence l -&gt; [Evidence l]
+</span><a href="#local-6989586621679321183"><span class="hs-identifier hs-var hs-var">getNextState</span></a></span></span><span> </span><span id="local-6989586621679321192"><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321192"><span class="hs-identifier hs-var">ev</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321192"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-80"></span><span>                    </span><span class="annot"><span class="annottext">Evidence l
+</span><a href="Lattest.Exec.ADG.SplitGraph.html#Nil"><span class="hs-identifier hs-var">Nil</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-81"></span><span>                    </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Prefix"><span class="hs-identifier hs-type">Prefix</span></a></span><span> </span><span id="local-6989586621679321193"><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321193"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679321194"><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321194"><span class="hs-identifier hs-var">next</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321193"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">l -&gt; l -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321126"><span class="hs-identifier hs-var">delta</span></a></span><span>
+</span><span id="line-82"></span><span>                                        </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">IOAct l (Suspended l)
+</span><a href="#local-6989586621679321173"><span class="hs-identifier hs-var">ioact</span></a></span><span> </span><span class="annot"><span class="annottext">IOAct l (Suspended l) -&gt; IOAct l (Suspended l) -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Suspended l -&gt; IOAct l (Suspended l)
+forall i o. o -&gt; IOAct i o
+</span><a href="Lattest.Model.Alphabet.html#Out"><span class="hs-identifier hs-var">Out</span></a></span><span> </span><span class="annot"><span class="annottext">Suspended l
+forall o. Suspended o
+</span><a href="Lattest.Model.Alphabet.html#Quiescence"><span class="hs-identifier hs-var">Quiescence</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321194"><span class="hs-identifier hs-var">next</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-keyword">else</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-83"></span><span>                                     </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">IOAct l (Suspended l)
+</span><a href="#local-6989586621679321173"><span class="hs-identifier hs-var">ioact</span></a></span><span> </span><span class="annot"><span class="annottext">IOAct l (Suspended l) -&gt; IOAct l (Suspended l) -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Suspended l -&gt; IOAct l (Suspended l)
+forall i o. o -&gt; IOAct i o
+</span><a href="Lattest.Model.Alphabet.html#Out"><span class="hs-identifier hs-var">Out</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l -&gt; Suspended l
+forall o. o -&gt; Suspended o
+</span><a href="Lattest.Model.Alphabet.html#OutSusp"><span class="hs-identifier hs-var">OutSusp</span></a></span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321193"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">then</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Evidence l
+</span><a href="#local-6989586621679321194"><span class="hs-identifier hs-var">next</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-keyword">else</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-84"></span><span>                    </span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Plus"><span class="hs-identifier hs-type">Plus</span></a></span><span> </span><span id="local-6989586621679321198"><span class="annot"><span class="annottext">[Evidence l]
+</span><a href="#local-6989586621679321198"><span class="hs-identifier hs-var">ls</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[[Evidence l]] -&gt; [Evidence l]
+forall (t :: * -&gt; *) a. Foldable t =&gt; t [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">concat</span></span><span> </span><span class="annot"><span class="annottext">([[Evidence l]] -&gt; [Evidence l]) -&gt; [[Evidence l]] -&gt; [Evidence l]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Evidence l -&gt; [Evidence l]) -&gt; [Evidence l] -&gt; [[Evidence l]]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Evidence l -&gt; [Evidence l]
+</span><a href="#local-6989586621679321183"><span class="hs-identifier hs-var">getNextState</span></a></span><span> </span><span class="annot"><span class="annottext">[Evidence l]
+</span><a href="#local-6989586621679321198"><span class="hs-identifier hs-var">ls</span></a></span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="annot"><span class="hs-comment">{- | A TestController that yields tests that tries to take an access sequence to the targetState and then executes the adaptive distinguishing sequence
+-}</span></span><span>
+</span><span id="line-88"></span><span id="local-6989586621679320875"><span id="local-6989586621679320876"><span id="local-6989586621679320877"><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#nCompleteSingleState"><span class="hs-identifier hs-type">nCompleteSingleState</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.StandardAutomata.html#ConcreteSuspAutIntrpr"><span class="hs-identifier hs-type">ConcreteSuspAutIntrpr</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span>
+</span><span id="line-89"></span><span>                                                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679320877"><span class="hs-identifier hs-type">i20</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>                                                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.Testing.html#TestController"><span class="hs-identifier hs-type">TestController</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StdGen</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Exec.ADG.SplitGraph.html#Evidence"><span class="hs-identifier hs-type">Evidence</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320876"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320875"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-91"></span><span id="nCompleteSingleState"><span class="annot"><span class="annottext">nCompleteSingleState :: forall q l i20.
+(Ord q, Ord l, Show l) =&gt;
+ConcreteSuspAutIntrpr Det q l l
+-&gt; Int
+-&gt; Int
+-&gt; l
+-&gt; q
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (((), [IOSuspAct l l]), Maybe (Det q))
+     i20
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#nCompleteSingleState"><span class="hs-identifier hs-var hs-var">nCompleteSingleState</span></a></span></span><span> </span><span id="local-6989586621679321240"><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321240"><span class="hs-identifier hs-var">model</span></a></span></span><span> </span><span id="local-6989586621679321241"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321241"><span class="hs-identifier hs-var">seed</span></a></span></span><span> </span><span id="local-6989586621679321242"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321242"><span class="hs-identifier hs-var">nrSteps</span></a></span></span><span> </span><span id="local-6989586621679321243"><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321243"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span id="local-6989586621679321244"><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321244"><span class="hs-identifier hs-var">targetState</span></a></span></span><span> </span><span id="local-6989586621679321245"><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (((), [IOSuspAct l l]), Maybe (Det q))
+  i20
+  ([IOSuspAct l l], Maybe (Det q))
+</span><a href="#local-6989586621679321245"><span class="hs-identifier hs-var">observer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-92"></span><span>    </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+   (((), [IOSuspAct l l]), Maybe (Det q)))
+  (Maybe l)
+  ([IOSuspAct l l], Maybe (Det q))
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(TestController
+   Det
+   q
+   q
+   (IOAct l l)
+   ()
+   (IOSuspAct l l)
+   (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+    (((), [IOSuspAct l l]), Maybe (Det q)))
+   (Maybe l)
+   ([IOSuspAct l l], Maybe (Det q))
+ -&gt; IO
+      (TestController
+         Det
+         q
+         q
+         (IOAct l l)
+         ()
+         (IOSuspAct l l)
+         (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+          (((), [IOSuspAct l l]), Maybe (Det q)))
+         (Maybe l)
+         ([IOSuspAct l l], Maybe (Det q))))
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+      (((), [IOSuspAct l l]), Maybe (Det q)))
+     (Maybe l)
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+-&gt; q
+-&gt; TestController
+     Det q q (IOAct l l) () (IOSuspAct l l) [IOAct l l] (Maybe l) Bool
+forall q i o.
+(Ord q, Eq i, Eq o, Show i, Show o) =&gt;
+ConcreteSuspAutIntrpr Det q i o
+-&gt; q
+-&gt; TestController
+     Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#accessSeqSelector"><span class="hs-identifier hs-var">accessSeqSelector</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321240"><span class="hs-identifier hs-var">model</span></a></span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321244"><span class="hs-identifier hs-var">targetState</span></a></span><span>
+</span><span id="line-93"></span><span>        </span><span class="annot"><span class="annottext">TestController
+  Det q q (IOAct l l) () (IOSuspAct l l) [IOAct l l] (Maybe l) Bool
+-&gt; TestController
+     Det q q (IOAct l l) () (IOSuspAct l l) StdGen (Maybe l) ()
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Either [IOAct l l] StdGen)
+     (Maybe l)
+     ()
+forall i act (m :: * -&gt; *) loc q t tdest state1 r1 state2 r2.
+TestChoice i act =&gt;
+TestController m loc q t tdest act state1 i r1
+-&gt; TestController m loc q t tdest act state2 i r2
+-&gt; TestController m loc q t tdest act (Either state1 state2) i r2
+</span><a href="Lattest.Exec.StandardTestControllers.html#andThen"><span class="hs-operator hs-var">`andThen`</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; TestController
+     Det q q (IOAct l l) () (IOSuspAct l l) StdGen (Maybe l) ()
+forall (m :: * -&gt; *) loc q t tdest act i.
+(StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m,
+ TestChoice i act, Ord act, Ord q, Ord i, Ord (m q)) =&gt;
+Int -&gt; TestSelector m loc q t tdest act StdGen i
+</span><a href="Lattest.Exec.StandardTestControllers.html#randomTestSelectorFromSeed"><span class="hs-identifier hs-var">randomTestSelectorFromSeed</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321241"><span class="hs-identifier hs-var">seed</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Either [IOAct l l] StdGen)
+  (Maybe l)
+  ()
+-&gt; TestController Det q q (IOAct l l) () (IOSuspAct l l) Int () ()
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Either [IOAct l l] StdGen, Int)
+     (Maybe l)
+     ()
+forall (m :: * -&gt; *) loc q t tdest act state1 i1 r1 state2 i2 r2.
+TestController m loc q t tdest act state1 i1 r1
+-&gt; TestController m loc q t tdest act state2 i2 r2
+-&gt; TestController m loc q t tdest act (state1, state2) i1 r1
+</span><a href="Lattest.Exec.StandardTestControllers.html#untilCondition"><span class="hs-operator hs-var">`untilCondition`</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; TestController Det q q (IOAct l l) () (IOSuspAct l l) Int () ()
+forall (m :: * -&gt; *) loc q t tdest act.
+Int -&gt; StopCondition m loc q t tdest act Int
+</span><a href="Lattest.Exec.StandardTestControllers.html#stopAfterSteps"><span class="hs-identifier hs-var">stopAfterSteps</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321242"><span class="hs-identifier hs-var">nrSteps</span></a></span><span>
+</span><span id="line-94"></span><span>            </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Either [IOAct l l] StdGen, Int)
+  (Maybe l)
+  ()
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Evidence l)
+     (Maybe l)
+     (Set q)
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Either (Either [IOAct l l] StdGen, Int) (Evidence l))
+     (Maybe l)
+     (Set q)
+forall i act (m :: * -&gt; *) loc q t tdest state1 r1 state2 r2.
+TestChoice i act =&gt;
+TestController m loc q t tdest act state1 i r1
+-&gt; TestController m loc q t tdest act state2 i r2
+-&gt; TestController m loc q t tdest act (Either state1 state2) i r2
+</span><a href="Lattest.Exec.StandardTestControllers.html#andThen"><span class="hs-operator hs-var">`andThen`</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+-&gt; l
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Evidence l)
+     (Maybe l)
+     (Set q)
+forall q l.
+(Ord q, Ord l, Eq l, Show l) =&gt;
+ConcreteSuspAutIntrpr Det q l l
+-&gt; l
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Evidence l)
+     (Maybe l)
+     (Set q)
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#adgTestSelector"><span class="hs-identifier hs-var">adgTestSelector</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321240"><span class="hs-identifier hs-var">model</span></a></span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321243"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Either (Either [IOAct l l] StdGen, Int) (Evidence l))
+  (Maybe l)
+  (Set q)
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (((), [IOSuspAct l l]), Maybe (Det q))
+     i20
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+      (((), [IOSuspAct l l]), Maybe (Det q)))
+     (Maybe l)
+     ([IOSuspAct l l], Maybe (Det q))
+forall (m :: * -&gt; *) loc q t tdest act state1 i1 r1 state2 i2 r2.
+TestController m loc q t tdest act state1 i1 r1
+-&gt; TestController m loc q t tdest act state2 i2 r2
+-&gt; TestController m loc q t tdest act (state1, state2) i1 r2
+</span><a href="Lattest.Exec.StandardTestControllers.html#observingOnly"><span class="hs-operator hs-var">`observingOnly`</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (((), [IOSuspAct l l]), Maybe (Det q))
+  i20
+  ([IOSuspAct l l], Maybe (Det q))
+</span><a href="#local-6989586621679321245"><span class="hs-identifier hs-var">observer</span></a></span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="annot"><span class="hs-comment">{- | Runs tests from nCompleteSingleState for each given targetState and seed
+-}</span></span><span>
+</span><span id="line-98"></span><span id="local-6989586621679320955"><span id="local-6989586621679320956"><span class="annot"><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#runNCompleteTestSuite"><span class="hs-identifier hs-type">runNCompleteTestSuite</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320955"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679320955"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Adapter.Adapter.html#Adapter"><span class="hs-identifier hs-type">Adapter</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html#AutSyntax"><span class="hs-identifier hs-type">AutSyntax</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320955"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOAct"><span class="hs-identifier hs-type">IOAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679320955"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679320955"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Exec.Testing.html#Verdict"><span class="hs-identifier hs-type">Verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Alphabet.html#IOSuspAct"><span class="hs-identifier hs-type">IOSuspAct</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320956"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#Det"><span class="hs-identifier hs-type">Det</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679320955"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-99"></span><span id="runNCompleteTestSuite"><span class="annot"><span class="annottext">runNCompleteTestSuite :: forall q l.
+(Ord q, Ord l, Show q, Show l) =&gt;
+IO (Adapter (IOAct l l) l)
+-&gt; AutSyntax Det q (IOAct l l) ()
+-&gt; Int
+-&gt; l
+-&gt; [(q, Int)]
+-&gt; IO [(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#runNCompleteTestSuite"><span class="hs-identifier hs-var hs-var">runNCompleteTestSuite</span></a></span></span><span> </span><span id="local-6989586621679321278"><span class="annot"><span class="annottext">IO (Adapter (IOAct l l) l)
+</span><a href="#local-6989586621679321278"><span class="hs-identifier hs-var">adapter</span></a></span></span><span> </span><span id="local-6989586621679321279"><span class="annot"><span class="annottext">AutSyntax Det q (IOAct l l) ()
+</span><a href="#local-6989586621679321279"><span class="hs-identifier hs-var">spec</span></a></span></span><span> </span><span id="local-6989586621679321280"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321280"><span class="hs-identifier hs-var">nrSteps</span></a></span></span><span> </span><span id="local-6989586621679321281"><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321281"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span id="local-6989586621679321282"><span class="annot"><span class="annottext">[(q, Int)]
+</span><a href="#local-6989586621679321282"><span class="hs-identifier hs-var">targetStatesAndSeeds</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-100"></span><span>        </span><span id="local-6989586621679321283"><span class="annot"><span class="annottext">[(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+</span><a href="#local-6989586621679321283"><span class="hs-identifier hs-var">results</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[(q, Int)]
+-&gt; ((q, Int) -&gt; IO (q, Verdict, ([IOSuspAct l l], Maybe (Det q))))
+-&gt; IO [(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+t a -&gt; (a -&gt; m b) -&gt; m (t b)
+</span><span class="hs-identifier hs-var">forM</span></span><span> </span><span class="annot"><span class="annottext">[(q, Int)]
+</span><a href="#local-6989586621679321282"><span class="hs-identifier hs-var">targetStatesAndSeeds</span></a></span><span> </span><span class="annot"><span class="annottext">(((q, Int) -&gt; IO (q, Verdict, ([IOSuspAct l l], Maybe (Det q))))
+ -&gt; IO [(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))])
+-&gt; ((q, Int) -&gt; IO (q, Verdict, ([IOSuspAct l l], Maybe (Det q))))
+-&gt; IO [(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679321284"><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321284"><span class="hs-identifier hs-var">targetState</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679321285"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321285"><span class="hs-identifier hs-var">seed</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-101"></span><span>            </span><span class="annot"><span class="annottext">[Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">putStrLn</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;connecting...&quot;</span></span><span>
+</span><span id="line-102"></span><span>            </span><span id="local-6989586621679321287"><span class="annot"><span class="annottext">Adapter (IOAct l l) l
+</span><a href="#local-6989586621679321287"><span class="hs-identifier hs-var">adap</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Adapter (IOAct l l) l)
+</span><a href="#local-6989586621679321278"><span class="hs-identifier hs-var">adapter</span></a></span><span>
+</span><span id="line-103"></span><span>            </span><span id="local-6989586621679321288"><span class="annot"><span class="annottext">Adapter (IOSuspAct l l) (Maybe l)
+</span><a href="#local-6989586621679321288"><span class="hs-identifier hs-var">imp</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; Adapter (IOAct l l) l -&gt; IO (Adapter (IOSuspAct l l) (Maybe l))
+forall i o.
+Int
+-&gt; Adapter (IOAct i o) i -&gt; IO (Adapter (IOSuspAct i o) (Maybe i))
+</span><a href="Lattest.Adapter.StandardAdapters.html#withQuiescenceMillis"><span class="hs-identifier hs-var">withQuiescenceMillis</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">200</span></span><span> </span><span class="annot"><span class="annottext">Adapter (IOAct l l) l
+</span><a href="#local-6989586621679321287"><span class="hs-identifier hs-var">adap</span></a></span><span>
+</span><span id="line-104"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679321301"><span class="annot"><span class="annottext">model :: ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321301"><span class="hs-identifier hs-var hs-var">model</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AutSyntax Det q (IOAct l l) () -&gt; ConcreteSuspAutIntrpr Det q l l
+forall (m :: * -&gt; *) i o loc.
+(BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc,
+ Ord loc) =&gt;
+AutSyntax m loc (IOAct i o) () -&gt; ConcreteSuspAutIntrpr m loc i o
+</span><a href="Lattest.Model.StandardAutomata.html#interpretQuiescentConcrete"><span class="hs-identifier hs-var">interpretQuiescentConcrete</span></a></span><span> </span><span class="annot"><span class="annottext">AutSyntax Det q (IOAct l l) ()
+</span><a href="#local-6989586621679321279"><span class="hs-identifier hs-var">spec</span></a></span><span>
+</span><span id="line-105"></span><span>            </span><span class="annot"><span class="annottext">[Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">putStrLn</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;starting test...&quot;</span></span><span>
+</span><span id="line-106"></span><span>            </span><span class="annot"><span class="annottext">[Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">putStrLn</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; IO ()) -&gt; [Char] -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;accessing state: &quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">q -&gt; [Char]
+forall a. Show a =&gt; a -&gt; [Char]
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321284"><span class="hs-identifier hs-var">targetState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>            </span><span id="local-6989586621679321303"><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+   (((), [IOSuspAct l l]), Maybe (Det q)))
+  (Maybe l)
+  ([IOSuspAct l l], Maybe (Det q))
+</span><a href="#local-6989586621679321303"><span class="hs-identifier hs-var">selector</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+-&gt; Int
+-&gt; q
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+forall {q}.
+Ord q =&gt;
+ConcreteSuspAutIntrpr Det q l l
+-&gt; Int
+-&gt; q
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+</span><a href="#local-6989586621679321304"><span class="hs-identifier hs-var">testSelector</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321301"><span class="hs-identifier hs-var">model</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321285"><span class="hs-identifier hs-var">seed</span></a></span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321284"><span class="hs-identifier hs-var">targetState</span></a></span><span>
+</span><span id="line-108"></span><span>            </span><span class="hs-special">(</span><span id="local-6989586621679321305"><span class="annot"><span class="annottext">Verdict
+</span><a href="#local-6989586621679321305"><span class="hs-identifier hs-var">verdict</span></a></span></span><span class="hs-special">,</span><span class="hs-special">(</span><span id="local-6989586621679321306"><span class="annot"><span class="annottext">[IOSuspAct l l]
+</span><a href="#local-6989586621679321306"><span class="hs-identifier hs-var">observed</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679321307"><span class="annot"><span class="annottext">Maybe (Det q)
+</span><a href="#local-6989586621679321307"><span class="hs-identifier hs-var">maybeMq</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+      (((), [IOSuspAct l l]), Maybe (Det q)))
+     (Maybe l)
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; Adapter (IOSuspAct l l) (Maybe l)
+-&gt; IO (Verdict, ([IOSuspAct l l], Maybe (Det q)))
+forall (m :: * -&gt; *) loc q t tdest act i state r.
+(StepSemantics m loc q t tdest act, TestChoice i act,
+ BoundedConfiguration m, Ord q, Ord (m q)) =&gt;
+AutIntrpr m loc q t tdest act
+-&gt; TestController m loc q t tdest act state i r
+-&gt; Adapter act i
+-&gt; IO (Verdict, r)
+</span><a href="Lattest.Exec.Testing.html#runTester"><span class="hs-identifier hs-var">runTester</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321301"><span class="hs-identifier hs-var">model</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+   (((), [IOSuspAct l l]), Maybe (Det q)))
+  (Maybe l)
+  ([IOSuspAct l l], Maybe (Det q))
+</span><a href="#local-6989586621679321303"><span class="hs-identifier hs-var">selector</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter (IOSuspAct l l) (Maybe l)
+</span><a href="#local-6989586621679321288"><span class="hs-identifier hs-var">imp</span></a></span><span>
+</span><span id="line-109"></span><span>            </span><span class="annot"><span class="annottext">Adapter (IOAct l l) l -&gt; IO ()
+forall act i. Adapter act i -&gt; IO ()
+</span><a href="Lattest.Adapter.Adapter.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="annot"><span class="annottext">Adapter (IOAct l l) l
+</span><a href="#local-6989586621679321287"><span class="hs-identifier hs-var">adap</span></a></span><span>
+</span><span id="line-110"></span><span>            </span><span class="annot"><span class="annottext">(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))
+-&gt; IO (q, Verdict, ([IOSuspAct l l], Maybe (Det q)))
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321284"><span class="hs-identifier hs-var">targetState</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Verdict
+</span><a href="#local-6989586621679321305"><span class="hs-identifier hs-var">verdict</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[IOSuspAct l l]
+</span><a href="#local-6989586621679321306"><span class="hs-identifier hs-var">observed</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe (Det q)
+</span><a href="#local-6989586621679321307"><span class="hs-identifier hs-var">maybeMq</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-111"></span><span>        </span><span class="annot"><span class="annottext">[(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+-&gt; IO [(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">[(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
+</span><a href="#local-6989586621679321283"><span class="hs-identifier hs-var">results</span></a></span><span>
+</span><span id="line-112"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679321304"><span class="annot"><span class="annottext">testSelector :: ConcreteSuspAutIntrpr Det q l l
+-&gt; Int
+-&gt; q
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+</span><a href="#local-6989586621679321304"><span class="hs-identifier hs-var hs-var">testSelector</span></a></span></span><span> </span><span id="local-6989586621679321319"><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321319"><span class="hs-identifier hs-var">model</span></a></span></span><span> </span><span id="local-6989586621679321320"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321320"><span class="hs-identifier hs-var">seed</span></a></span></span><span> </span><span id="local-6989586621679321321"><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321321"><span class="hs-identifier hs-var">targetState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+-&gt; Int
+-&gt; Int
+-&gt; l
+-&gt; q
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (((), [IOSuspAct l l]), Maybe (Det q))
+     ()
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+forall q l i20.
+(Ord q, Ord l, Show l) =&gt;
+ConcreteSuspAutIntrpr Det q l l
+-&gt; Int
+-&gt; Int
+-&gt; l
+-&gt; q
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (((), [IOSuspAct l l]), Maybe (Det q))
+     i20
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+</span><a href="Lattest.Exec.StandardTestControllers.CompleteTestSuite.html#nCompleteSingleState"><span class="hs-identifier hs-var">nCompleteSingleState</span></a></span><span> </span><span class="annot"><span class="annottext">ConcreteSuspAutIntrpr Det q l l
+</span><a href="#local-6989586621679321319"><span class="hs-identifier hs-var">model</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321320"><span class="hs-identifier hs-var">seed</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679321280"><span class="hs-identifier hs-var">nrSteps</span></a></span><span> </span><span class="annot"><span class="annottext">l
+</span><a href="#local-6989586621679321281"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">q
+</span><a href="#local-6989586621679321321"><span class="hs-identifier hs-var">targetState</span></a></span><span> </span><span class="annot"><span class="annottext">(TestController
+   Det
+   q
+   q
+   (IOAct l l)
+   ()
+   (IOSuspAct l l)
+   (((), [IOSuspAct l l]), Maybe (Det q))
+   ()
+   ([IOSuspAct l l], Maybe (Det q))
+ -&gt; IO
+      (TestController
+         Det
+         q
+         q
+         (IOAct l l)
+         ()
+         (IOSuspAct l l)
+         (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+          (((), [IOSuspAct l l]), Maybe (Det q)))
+         (Maybe l)
+         ([IOSuspAct l l], Maybe (Det q))))
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (((), [IOSuspAct l l]), Maybe (Det q))
+     ()
+     ([IOSuspAct l l], Maybe (Det q))
+-&gt; IO
+     (TestController
+        Det
+        q
+        q
+        (IOAct l l)
+        ()
+        (IOSuspAct l l)
+        (Either (Either [IOAct l l] StdGen, Int) (Evidence l),
+         (((), [IOSuspAct l l]), Maybe (Det q)))
+        (Maybe l)
+        ([IOSuspAct l l], Maybe (Det q)))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TestSideEffect Det q q (IOAct l l) () (IOSuspAct l l) ()
+forall act (m :: * -&gt; *) loc q t tdest.
+Show act =&gt;
+TestSideEffect m loc q t tdest act ()
+</span><a href="Lattest.Exec.StandardTestControllers.html#printActions"><span class="hs-identifier hs-var">printActions</span></a></span><span> </span><span class="annot"><span class="annottext">TestSideEffect Det q q (IOAct l l) () (IOSuspAct l l) ()
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     [IOSuspAct l l]
+     ()
+     [IOSuspAct l l]
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     ((), [IOSuspAct l l])
+     ()
+     [IOSuspAct l l]
+forall (m :: * -&gt; *) loc q t tdest act state1 i1 r1 state2 i2 r2.
+TestController m loc q t tdest act state1 i1 r1
+-&gt; TestController m loc q t tdest act state2 i2 r2
+-&gt; TestController m loc q t tdest act (state1, state2) i1 r2
+</span><a href="Lattest.Exec.StandardTestControllers.html#observingOnly"><span class="hs-operator hs-var">`observingOnly`</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  [IOSuspAct l l]
+  ()
+  [IOSuspAct l l]
+forall (m :: * -&gt; *) loc q t tdest act.
+TestObserver m loc q t tdest act [act] [act]
+</span><a href="Lattest.Exec.StandardTestControllers.html#traceObserver"><span class="hs-identifier hs-var">traceObserver</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  ((), [IOSuspAct l l])
+  ()
+  [IOSuspAct l l]
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (Maybe (Det q))
+     ()
+     (Maybe (Det q))
+-&gt; TestController
+     Det
+     q
+     q
+     (IOAct l l)
+     ()
+     (IOSuspAct l l)
+     (((), [IOSuspAct l l]), Maybe (Det q))
+     ()
+     ([IOSuspAct l l], Maybe (Det q))
+forall (m :: * -&gt; *) loc q t tdest act state1 i1 r1 state2 i2 r2.
+TestController m loc q t tdest act state1 i1 r1
+-&gt; TestController m loc q t tdest act state2 i2 r2
+-&gt; TestController m loc q t tdest act (state1, state2) i1 (r1, r2)
+</span><a href="Lattest.Exec.StandardTestControllers.html#andObserving"><span class="hs-operator hs-var">`andObserving`</span></a></span><span> </span><span class="annot"><span class="annottext">TestController
+  Det
+  q
+  q
+  (IOAct l l)
+  ()
+  (IOSuspAct l l)
+  (Maybe (Det q))
+  ()
+  (Maybe (Det q))
+forall (m :: * -&gt; *) loc q t tdest act.
+TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
+</span><a href="Lattest.Exec.StandardTestControllers.html#stateObserver"><span class="hs-identifier hs-var">stateObserver</span></a></span></pre></body></html>
