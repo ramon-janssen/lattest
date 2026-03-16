@@ -37,6 +37,7 @@ TestController(..),
 makeTester,
 runTester,
 runTesterWithMem,
+runTesterWithMemAndCache,
 Verdict(..),
 InconclusiveReason(..)
 )
@@ -230,6 +231,24 @@ runTesterWithMem spec testSelection adapter = do
     ((verdict, r), (_, finalTestController)) <- runExperimentWithMem (makeTester spec testSelection) adapter
     let finalMem = testControllerState finalTestController
     return (verdict, r, finalMem)
+
+{- |
+    Like 'runTesterWithMem', but also returns the final 'AutIntrpr' with its 'afterCache'.
+    Threading this back into subsequent test runs avoids recomputing already-seen transitions.
+
+    Use 'toConfiguration' to reset the state configuration to the initial state before reusing
+    the returned automaton for a new test.
+-}
+runTesterWithMemAndCache
+  :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q), Ord act)
+  => AutIntrpr m loc q t tdest act
+  -> TestController m loc q t tdest act state i r
+  -> Adapter act i
+  -> IO (Verdict, r, state, AutIntrpr m loc q t tdest act)
+runTesterWithMemAndCache spec testSelection adapter = do
+    ((verdict, r), (finalSpec, finalTestController)) <- runExperimentWithMem (makeTester spec testSelection) adapter
+    let finalMem = testControllerState finalTestController
+    return (verdict, r, finalMem, finalSpec)
 
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
 --runStepper spec controller = runExperiment controller (simulateSpec spec)

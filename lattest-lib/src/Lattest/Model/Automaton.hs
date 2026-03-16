@@ -52,6 +52,7 @@ stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
+precomputeTransitions,
 prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp,
@@ -63,19 +64,17 @@ import Prelude hiding (lookup)
 
 import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified, BoundedMonad, BoundedConfiguration, isForbidden, forbidden, underspecified, isSpecified,Det(..),NonDet(..))
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),Type(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
+    SymInteract(..),GateValue(..),Value(..), SymGuard, SymAssign,Variable,addTypedVar,Variable(..),SymExpr(..),Gate(..),equalTyped,assignedExpr)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 import Control.Exception(throw,Exception)
 import qualified Control.Monad as Monad(join)
 import qualified Data.Foldable as Foldable
-import Data.Map (Map, (!))
+import Data.Map (Map)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Tuple.Extra(first)
-import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
 import Grisette.Core as Grisette
 import Grisette.SymPrim as GSymPrim
@@ -458,7 +457,14 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
-
+{- |
+    Precompute the transition relation for all reachable states into a Map for quick lookup.
+-}
+precomputeTransitions :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> AutSyntax m loc t tdest
+precomputeTransitions aut =
+    let locs      = reachable aut
+        !transMap = Map.fromSet (transRel aut) locs
+    in aut { transRel = \loc -> Map.findWithDefault (transRel aut loc) loc transMap }
 
 prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)
