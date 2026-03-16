@@ -52,18 +52,15 @@ STSIntrp
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, Suspended, isInput, IFAct, SuspendedIF, SymInteract, SymGuard, SymAssign,GateValue)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, GateValue)
 import Lattest.Util.Utils(takeArbitrary)
-import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,stsTLoc,SyntaxDestStates(..), transRel, syntacticAutomaton)
-import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedConfiguration, BoundedMonad, BoundedFunctor, forbidden, underspecified, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice,(<#>))
+import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest,SyntaxDestStates(..), transRel, syntacticAutomaton)
+import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedMonad, atom, top, bot, (\/), (/\), JoinSemiLattice,(<#>))
 import qualified Lattest.Model.BoundedMonad as BM
 import Data.Foldable (toList)
-import Data.Tuple.Extra (third3)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Map.Lazy (mapWithKey)
-import qualified Data.Map.Lazy as LMap
 import  Data.Maybe as Maybe
 import qualified Data.Set as Set
 

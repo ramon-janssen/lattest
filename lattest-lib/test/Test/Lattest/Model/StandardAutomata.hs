@@ -21,7 +21,7 @@ import Test.HUnit
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint, determinize)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, Det(..), underspecified, , NonDet(..))
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, Det(..), underspecified, NonDet(..))
 import qualified Data.Map as Map (toList, insert, fromList)
 import qualified Data.Set as Set
 

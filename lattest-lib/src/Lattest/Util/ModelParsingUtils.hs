@@ -7,17 +7,14 @@ import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Util.Utils(removeDuplicates)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
-import System.FilePath (replaceExtension, takeBaseName, takeExtension, (</>))
-import Data.List (isSuffixOf, sort)
+import System.FilePath (takeBaseName, takeExtension, (</>))
+import Data.List (isSuffixOf)
 import System.Directory (listDirectory)
 import Control.Monad (zipWithM)
-import Debug.Trace (trace, traceShow)
-import Lattest.Model.StandardAutomata((\/), (/\), atom, FreeLattice, ConcreteAutIntrpr, interpretConcrete, detConcTransFromRel, ioAlphabet, automaton)
+import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, detConcTransFromRel, ioAlphabet, automaton)
 import Lattest.Model.BoundedMonad as BM
 import qualified Data.Map as M
-import qualified Data.IntMap as IM
 import Control.DeepSeq(NFData)
 import qualified GHC.Generics as Generics
 
