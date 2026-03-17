@@ -506,7 +506,10 @@ data Valuation = Valuation {
     boolValuation :: TypedValuation Bool,
     stringValuation :: TypedValuation String
     }
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord)
+
+instance Show Valuation where
+    show (Valuation i b s) = show $ (fmap show $ Map.toList i) ++ (fmap show $ Map.toList b) ++ (fmap show $ Map.toList s)
 
 toConstantsMap :: Valuation -> Map.Map Variable Constant
 toConstantsMap valuation = Map.map Cint (intValuation valuation)
