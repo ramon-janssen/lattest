@@ -15,6 +15,7 @@ import Control.Monad (zipWithM)
 import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, detConcTransFromRel, ioAlphabet, automaton)
 import Lattest.Model.BoundedMonad as BM
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Control.DeepSeq(NFData)
 import qualified GHC.Generics as Generics
 
