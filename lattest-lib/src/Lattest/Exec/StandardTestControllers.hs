@@ -72,6 +72,7 @@ import Control.Monad (forM)
 import qualified Data.Map as Map (keys, insertWith, findWithDefault, Map, (!))
 import qualified Data.Set as Set (Set, size, empty, elemAt, fromList, union, singleton, notMember, difference, toList)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
+import Control.DeepSeq(NFData)
 
 {- |
     'Testselector's are test controllers that are only concerned with selecting inputs for testing. They do not return any testing results.
