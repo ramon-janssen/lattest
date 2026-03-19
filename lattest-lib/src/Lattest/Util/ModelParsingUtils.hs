@@ -61,12 +61,19 @@ readAutFileToAutomata path mSuffix = do
             model = interpretConcrete detSpec
         in return (iAlphabet, oAlphabet, initState, transitions, (property, model))
 
+{-| 
+    Read and conjunct all .aut files from a directory into a single automaton,
+    skipping any file whose base name appears in exclusions.
+-}
 readMultipleAutFiles
   :: FilePath
+  -> S.Set String
   -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
-readMultipleAutFiles dir = do
+readMultipleAutFiles dir exclusions = do
     entries <- listDirectory dir
-    let files = [ dir </> f | f <- entries, takeExtension f == ".aut" ]
+    let files = [ dir </> f | f <- entries
+                             , takeExtension f == ".aut"
+                             , takeBaseName f `S.notMember` exclusions ]
     let suffixes = map (("_" ++) . takeBaseName) files
     parsedResults <- zipWithM (\fp s -> readAutFileToAutomata fp (Just s)) files suffixes
 
