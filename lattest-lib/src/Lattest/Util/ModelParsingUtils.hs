@@ -69,7 +69,7 @@ readAutFileToAutomata path mSuffix = do
 readMultipleAutFiles
   :: FilePath
   -> S.Set String
-  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
+  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLatticeCNF StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
 readMultipleAutFiles dir exclusions = do
     entries <- listDirectory dir
     let files = [ dir </> f | f <- entries
