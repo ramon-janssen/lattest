@@ -178,19 +178,6 @@ newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, 
 deriving instance Ord a => Ord (FreeLattice a)
 deriving instance Ord a => Ord (Free a)
 
-
--- | A single state embedded in a free distributive lattice.
-atom :: a -> FreeLattice a
-atom = FreeLattice . Levitate . Var
-
--- | The free distributive lattice element ⊥, or false.
-bot :: FreeLattice a
-bot = FreeLattice Bottom
-
--- | The free distributive lattice element ⊤, or true.
-top :: FreeLattice a
-top = FreeLattice Top
-
 {-
 -- Conjunction and disjunction on free distributive lattices.
 -- note: this is already imlpemented by the JoinSemiLattice instance
