@@ -143,7 +143,7 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     "Lattest.Adapter.StandardAdapters".
 -}
 interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
-interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
+interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut, afterCache = Map.empty }
 
 -- | The given model, in the given configuration.
 inConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
