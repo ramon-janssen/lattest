@@ -110,6 +110,8 @@ readMultipleAutFiles dir exclusions = do
             initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
             completeTransitions = transitions ++ initTransitions
 
+        putStrLn $ "Initial states found: " ++ show initialsRaw
+        putStrLn $ show initialState ++ " is the merged initial state after conjunction."
         return ( mergedInput, mergedOutput, StateName "Initial", completeTransitions, modelsByPropMap )
 
 -- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
