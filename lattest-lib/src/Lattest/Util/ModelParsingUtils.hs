@@ -69,7 +69,7 @@ readAutFileToAutomata path mSuffix = do
 readMultipleAutFiles
   :: FilePath
   -> S.Set String
-  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLatticeCNF StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
+  -> IO ([String], [String], FreeLatticeCNF StateName, [(FreeLatticeCNF StateName, IOAct String String, FreeLatticeCNF StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
 readMultipleAutFiles dir exclusions = do
     entries <- listDirectory dir
     let files = [ dir </> f | f <- entries
@@ -94,7 +94,7 @@ readMultipleAutFiles dir exclusions = do
             mergedOutput = removeDuplicates (concat outputAlphabets)
 
             transitions =
-                [ ( StateName s1
+                [ ( atom (StateName s1)
                     , t
                     , atom (StateName s2)
                     )
@@ -107,10 +107,10 @@ readMultipleAutFiles dir exclusions = do
                   [] -> error "No initial states found"
                   _  -> foldr1 (/\) atoms
 
-            initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
+            initTransitions = [ (atom (StateName "Initial"), In "Reset", initialState) ]
             completeTransitions = transitions ++ initTransitions
 
-        return ( mergedInput, mergedOutput, StateName "Initial", completeTransitions, modelsByPropMap )
+        return ( mergedInput, mergedOutput, atom (StateName "Initial"), completeTransitions, modelsByPropMap )
 
 -- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
 parseInitialState :: T.Text -> Maybe String
