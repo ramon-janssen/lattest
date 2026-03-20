@@ -69,7 +69,7 @@ readAutFileToAutomata path mSuffix = do
 readMultipleAutFiles
   :: FilePath
   -> S.Set String
-  -> IO ([String], [String], String, [(String, IOAct String String, FreeLatticeCNF String)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
+  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLattice StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
 readMultipleAutFiles dir exclusions = do
     entries <- listDirectory dir
     let files = [ dir </> f | f <- entries
@@ -79,7 +79,7 @@ readMultipleAutFiles dir exclusions = do
     parsedResults <- zipWithM (\fp s -> readAutFileToAutomata fp (Just s)) files suffixes
 
     case parsedResults of
-      [] -> return ([], [], "", [], M.empty)
+      [] -> return ([], [], StateName "", [], M.empty)
       _  -> do
         let transitionsRaw :: [[(String, IOAct String String, String)]]
             transitionsRaw = [ ts | (_, _, _, ts, _) <- parsedResults ]
@@ -94,23 +94,23 @@ readMultipleAutFiles dir exclusions = do
             mergedOutput = removeDuplicates (concat outputAlphabets)
 
             transitions =
-                [ ( s1
+                [ ( StateName s1
                     , t
-                    , atom s2
+                    , atom (StateName s2)
                     )
                 | (s1,t,s2) <- concat transitionsRaw
                 ]
 
-            atoms = [ atom s | s <- initialsRaw ]
+            atoms = [ atom (StateName s) | s <- initialsRaw ]
             initialState =
                 case atoms of
                   [] -> error "No initial states found"
                   _  -> foldr1 (/\) atoms
 
-            initTransitions = [ ("Initial", In "Reset", initialState) ]
+            initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
             completeTransitions = transitions ++ initTransitions
 
-        return ( mergedInput, mergedOutput, "Initial", completeTransitions, modelsByPropMap )
+        return ( mergedInput, mergedOutput, StateName "Initial", completeTransitions, modelsByPropMap )
 
 -- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
 parseInitialState :: T.Text -> Maybe String
