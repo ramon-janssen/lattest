@@ -54,7 +54,7 @@ readAutFileToAutomata path mSuffix = do
     (iAlphabet, oAlphabet, initState, maybeTransitions, property) <- readAutFile path mSuffix
     case maybeTransitions of
       Nothing -> error "Error: Aut file not parsed."
-      Just transitions -> 
+      Just transitions ->
         let Just detConcTransitions = detConcTransFromRel transitions
             alphabet = ioAlphabet iAlphabet oAlphabet
             initialConfiguration = pure initState
@@ -69,7 +69,7 @@ readAutFileToAutomata path mSuffix = do
 readMultipleAutFiles
   :: FilePath
   -> S.Set String
-  -> IO ([String], [String], StateName, [(StateName, IOAct String String, FreeLatticeCNF StateName)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
+  -> IO ([String], [String], String, [(String, IOAct String String, FreeLatticeCNF String)], M.Map String (ConcreteAutIntrpr BM.Det String (IOAct String String)))
 readMultipleAutFiles dir exclusions = do
     entries <- listDirectory dir
     let files = [ dir </> f | f <- entries
@@ -79,7 +79,7 @@ readMultipleAutFiles dir exclusions = do
     parsedResults <- zipWithM (\fp s -> readAutFileToAutomata fp (Just s)) files suffixes
 
     case parsedResults of
-      [] -> return ([], [], StateName "", [], M.fromList[])
+      [] -> return ([], [], "", [], M.empty)
       _  -> do
         let transitionsRaw :: [[(String, IOAct String String, String)]]
             transitionsRaw = [ ts | (_, _, _, ts, _) <- parsedResults ]
@@ -94,23 +94,23 @@ readMultipleAutFiles dir exclusions = do
             mergedOutput = removeDuplicates (concat outputAlphabets)
 
             transitions =
-                [ ( StateName s1
+                [ ( s1
                     , t
-                    , atom (StateName s2)
+                    , atom s2
                     )
                 | (s1,t,s2) <- concat transitionsRaw
                 ]
 
-            atoms = [ atom (StateName s) | s <- initialsRaw ]
+            atoms = [ atom s | s <- initialsRaw ]
             initialState =
                 case atoms of
                   [] -> error "No initial states found"
                   _  -> foldr1 (/\) atoms
 
-            initTransitions = [ (StateName "Initial", In "Reset", initialState) ]
+            initTransitions = [ ("Initial", In "Reset", initialState) ]
             completeTransitions = transitions ++ initTransitions
 
-        return ( mergedInput, mergedOutput, StateName "Initial", completeTransitions, modelsByPropMap )
+        return ( mergedInput, mergedOutput, "Initial", completeTransitions, modelsByPropMap )
 
 -- | Parse initial line of .aut file and return initialState. The line must follow the structure des (initState,nEdges,nStates).
 parseInitialState :: T.Text -> Maybe String
