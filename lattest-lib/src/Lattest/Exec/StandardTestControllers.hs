@@ -69,7 +69,7 @@ import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList)
 import Control.Monad (forM)
-import qualified Data.Map as Map (keys, insertWith, findWithDefault, Map, (!))
+import qualified Data.Map as Map (keys, insertWith, findWithDefault, Map, (!), lookup, insert)
 import qualified Data.Set as Set (Set, size, empty, elemAt, fromList, union, singleton, notMember, difference, toList)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
 
@@ -309,7 +309,7 @@ inconclusiveStateObserver = observer Nothing makeSelection return
         in return $ Just $ if isConclusive mq' then mq else mq'
         
 {- |
-    A 'TestObserver' that records (initial-state, action, final-state)
+    A 'TestObserver' that records (initial-state, action, final-state).
 -}
 transitionObserver
   :: TestObserver m loc q t tdest act
@@ -318,9 +318,9 @@ transitionObserver
 transitionObserver =
   observer [] upd (pure . reverse)
   where
-    upd tris aut act _ = do
-        let ini = stateConf aut
-        let fin = stateConf aut
+    upd tris aut act mq = do
+        let ini = mq            -- state config BEFORE the action
+            fin = stateConf aut -- state config AFTER the action
         return $ (ini, act, fin) : tris
 
 {- |
@@ -358,6 +358,7 @@ printState = testSideEffect () (\_ _ _ mq -> putStrLn $ show mq)
 -}
 data RandomMemState q i g = RandomMemState
   { usedInputs :: !(Map.Map (q, [i]) (Set.Set i))
+  , menuCache  :: !(Map.Map q (Set.Set i))
   , randGen    :: !g
   , inputHist  :: ![i]
   } deriving (Show)
@@ -382,25 +383,34 @@ randomTestSelectorWithMemoryFromState
 randomTestSelectorWithMemoryFromState g0 initMem =
   selector (initMem { randGen = g0 }) selectStep updateStep
   where
-    selectStep (RandomMemState used g inputHist) aut _ = do
-        let allActs   = takeJusts $ actToChoice <$> specifiedMenu aut
-            stateKey  = (stateConf aut, inputHist)
-            allActsSet = Set.fromList allActs
-            tried      = Map.findWithDefault Set.empty stateKey used
-            remaining  = Set.toList $ Set.difference allActsSet tried
-        
+    selectStep (RandomMemState used menuCach g inputHist) aut _ = do
+        let stateQ   = stateConf aut
+            stateKey = (stateQ, inputHist)
+
+            -- Look up the available actions set for this state from the cache.
+            -- If absent, compute it via specifiedMenu and store the result for future visits.
+            (allActsSet, menuCach') = case Map.lookup stateQ menuCach of
+                Just cached -> (cached, menuCach)
+                Nothing     ->
+                    let acts = Set.fromList $ takeJusts $ actToChoice <$> specifiedMenu aut
+                    in  (acts, Map.insert stateQ acts menuCach)
+
+            allActs   = Set.toList allActsSet
+            tried     = Map.findWithDefault Set.empty stateKey used
+            remaining = Set.toList $ Set.difference allActsSet tried
+
         case (remaining, allActs) of
-            ([], []) -> do
-                -- no available actions in this state
+            ([], []) ->
+                -- No available actions in this state.
                 return Nothing
             ([], _) -> do
                 let (actChoice, g') = takeRandom g allActs
-                    hist' = take 15 (actChoice : inputHist)
-                return (Just (actChoice, RandomMemState used g' hist'))
+                    hist'           = take 15 (actChoice : inputHist)
+                return (Just (actChoice, RandomMemState used menuCach' g' hist'))
             _ -> do
                 let (actChoice, g') = takeRandom g remaining
-                    used' = Map.insertWith Set.union stateKey (Set.singleton actChoice) used
-                    hist' = take 15 (actChoice : inputHist)
-                return (Just (actChoice, RandomMemState used' g' hist'))
+                    used'           = Map.insertWith Set.union stateKey (Set.singleton actChoice) used
+                    hist'           = take 15 (actChoice : inputHist)
+                return (Just (actChoice, RandomMemState used' menuCach' g' hist'))
 
     updateStep st _ _ _ = return (Just st)--Result Bool is True when access sequence has been followed and false when the SUT deviated
