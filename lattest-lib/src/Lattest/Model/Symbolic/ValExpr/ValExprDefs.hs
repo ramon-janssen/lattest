@@ -57,6 +57,7 @@ import           GHC.Generics     (Generic)
 import           GHC.Integer (divInteger)
 
 import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
+import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX as FMX
 import           Lattest.Model.Symbolic.ValExpr.Product
 import           Lattest.Model.Symbolic.ValExpr.Sum
 
@@ -235,9 +236,9 @@ reduce (Const v) = Const v
 reduce (Product v) = Product v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
-reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ foldrTerms (+) 0 (mapFreeMonoidX constant es)
+reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
-reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ foldrTerms (*) 1 (mapFreeMonoidX constant es)
+reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
 reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
 reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y

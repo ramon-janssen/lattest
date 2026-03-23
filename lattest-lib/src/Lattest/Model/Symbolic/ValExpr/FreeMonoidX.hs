@@ -81,6 +81,7 @@ module Lattest.Model.Symbolic.ValExpr.FreeMonoidX
   , foldrTerms
   , foldOccur
   , foldFMX
+  , Lattest.Model.Symbolic.ValExpr.FreeMonoidX.fold
 
     -- * Manipulation of the free monoid
   , append
@@ -178,6 +179,10 @@ fromListT = fromList . (wrap <$>)
 -- | Fold the free-monoid.
 foldFMX :: (IntMultipliable a, Monoid a, Semigroup a) => FreeMonoidX a -> a
 foldFMX (FMX p) = Map.foldrWithKey (\x n -> (n <.> x <>)) mempty p
+
+-- | Fold the free-monoid of term wrappers.
+fold :: (IntMultipliable (t a), Monoid (t a), TermWrapper t) => FreeMonoidX (t a) -> a
+fold = unwrap . foldFMX
 
 -- | Number of distinct terms in the free-monoid.
 nrofDistinctTerms :: FreeMonoidX a -> Int
@@ -316,7 +321,7 @@ allFreeMonoidX pred = all pred . distinctTermsT
 -- Assuming `a < b`.
 --
 flatten :: (Ord a) => FreeMonoidX (FreeMonoidX a) -> FreeMonoidX a
-flatten (FMX p) = fold $ multiplyFMX <$> Map.toAscList p
+flatten (FMX p) = Data.Foldable.fold $ multiplyFMX <$> Map.toAscList p
     where
       multiplyFMX :: Ord a => (FreeMonoidX a, Integer) -> FreeMonoidX a
       multiplyFMX (fm, n) = n <.> fm
