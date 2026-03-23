@@ -122,7 +122,7 @@ testPrintSTS = TestCase $ do
     2 ――!"coffee" []⟶ ⊥
     2 ――!"ok" [p:Int]⟶ ⊥
     -}
-    printSTS = "current state configuration: [IntrpState 0 [\"(x:Int,0)\"]]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 \8213\8213?\"water\" [p:Int]\10230 [([[(([(p:Int,-1),(10,1)]) > 0)\8743(([(p:Int,1),(-1,1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]\n0 \8213\8213!\"coffee\" []\10230 [([[([(x:Int,1),(-15,1)]) > 0]] {},2)]\n0 \8213\8213!\"ok\" [p:Int]\10230 \8869\n1 \8213\8213?\"water\" [p:Int]\10230 \8868\n1 \8213\8213!\"coffee\" []\10230 \8869\n1 \8213\8213!\"ok\" [p:Int]\10230 [([[(x:Int) = (p:Int)]] {},0)]\n2 \8213\8213?\"water\" [p:Int]\10230 \8868\n2 \8213\8213!\"coffee\" []\10230 \8869\n2 \8213\8213!\"ok\" [p:Int]\10230 \8869"
+    printSTS = "current state configuration: [IntrpState 0 [\"(x:Int,0)\"]]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 ――?\"water\" [p:Int]⟶ [([[(([(p:Int,-1),(10,1)]) > 0)∧(([(p:Int,1),(-1,1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]\n0 ――!\"coffee\" []⟶ [([[([(x:Int,1),(-15,1)]) > 0]] {},2)]\n0 ――!\"ok\" [p:Int]⟶ ⊥\n1 ――?\"water\" [p:Int]⟶ ⊤\n1 ――!\"coffee\" []⟶ ⊥\n1 ――!\"ok\" [p:Int]⟶ [([[(x:Int) = (p:Int)]] {},0)]\n2 ――?\"water\" [p:Int]⟶ ⊤\n2 ――!\"coffee\" []⟶ ⊥\n2 ――!\"ok\" [p:Int]⟶ ⊥"
 
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
