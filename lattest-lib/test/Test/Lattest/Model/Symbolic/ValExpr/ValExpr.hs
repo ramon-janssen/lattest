@@ -1,19 +1,23 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE OverloadedLists #-}
 
 module Test.Lattest.Model.Symbolic.ValExpr.ValExpr (
 prop_evalSymbolic,
-PropEvalSymbolic
+PropEvalSymbolic,
+valExprTests
 )
 where
 
-import Test.QuickCheck
 import Lattest.Model.Symbolic.ValExpr.FreeMonoidX as FM
 import Lattest.Model.Symbolic.ValExpr.ValExpr
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(Expr(Expr), allTypes)
 import qualified Data.Set as Set
-import qualified Control.Monad as CM
+import qualified Data.Map as Map
 import qualified Debug.Trace as Trace
+import qualified Control.Monad as CM
+import Test.HUnit
+import Test.QuickCheck
 
 instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (Expr a) where
     arbitrary = Expr <$> arbitrary
@@ -140,8 +144,11 @@ type PropEvalSymbolic t = Expr t -> Bool
 prop_evalSymbolic :: (Show t, Eq t, ConcreteEval t) => Expr t -> Bool
 prop_evalSymbolic e =
     let l = concreteEval e
-        r = rightToMaybe (eval e)
+        r = symbolicEval e
     in if l == r then True else Trace.trace ("concrete eval: " ++ show l ++ "\nsymbolic eval: " ++ show r ++ "\n") False
+
+symbolicEval :: Expr t -> Maybe t
+symbolicEval = rightToMaybe . eval
     where
     rightToMaybe :: Either a b -> Maybe b
     rightToMaybe (Left _) = Nothing
@@ -218,3 +225,17 @@ concreteIfThenElse i t e = do
         then concreteEval' t
         else concreteEval' e
 
+valExprTests :: [Test]
+valExprTests = [testEmptyProduct, test1Gez, testGET]
+
+testEmptyProduct :: Test
+testEmptyProduct = TestCase $ assertEqual "empty product should be 1" (symbolicEval $ sConst 1) (symbolicEval $ sProduct [])
+
+test1Gez :: Test
+test1Gez = TestCase $ assertEqual "1 should be greater or equal to zero" (Just True) (symbolicEval $ sIsNonNegative $ sConst 1)
+
+testGET :: Test
+testGET =
+    let pvar = Variable "p" IntType
+        p = sVar pvar
+    in TestCase $ assertEqual ">= should be expressed in terms of >" (p .> 1) (sNot $ 1 .- p .>= 0)

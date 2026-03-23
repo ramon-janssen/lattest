@@ -36,7 +36,8 @@ runQuickCheckTests = do
 
 
 hunitTests :: Test
-hunitTests = TestList [
+hunitTests = TestList $
+    [
     testConsumeBufferedWith,
     testConsumeBufferedWith_short,
     testJSONSocketAdapterByte,
@@ -67,6 +68,7 @@ hunitTests = TestList [
     testPrintSTS,
     testReadAutFile
     ]
+    ++ valExprTests
 
 
 
