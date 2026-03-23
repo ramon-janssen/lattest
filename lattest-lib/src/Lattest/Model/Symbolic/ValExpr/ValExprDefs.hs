@@ -50,6 +50,7 @@ import           Control.DeepSeq
 import qualified Data.List as List
 import           Data.Set         (Set)
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import           Data.Text        (Text)
 import qualified Data.Text as Text(length, pack, index, concat)
 import           GHC.Generics     (Generic)
@@ -174,12 +175,15 @@ deriving instance Ord t => Ord (ExprView t)
 instance Show t => Show (ExprView t) where
     show (Var v) = show v
     show (Const c) = show c
-    show (Product v) = show v
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
     show (Divide e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"
     show (Modulo e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
-    show (Sum es) = show es -- List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es -- FreeSum ValExpr
-    show (Product es) = show es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
+    show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
+        where
+        showSumTerm (-1)     t = "-" ++ t
+        showSumTerm 1 t = t
+        showSumTerm n t = show n ++ "⋅" ++ t
+    show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
     show (Length e) = "length(" ++ show e ++ ")"
     show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
@@ -189,6 +193,12 @@ instance Show t => Show (ExprView t) where
     show (And es) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$> Set.toList es
     show (At e1 e2) = "" ++ show e2 ++ "[" ++ show e2 ++ "]"
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
+
+showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
+showFreeMonoid plusRepr multRepr m@(FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
+    where
+    showTerm (x, i) = multRepr i (show x)
+
 
 -- | Expr: value expression
 -- 1. User can't directly construct Expr (such that invariants will always hold)

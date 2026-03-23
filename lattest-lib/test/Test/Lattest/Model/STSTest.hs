@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -16,6 +17,7 @@ import Test.HUnit
 import Data.Maybe(fromJust)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
+import qualified Text.RawString.QQ as QQ
 
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
@@ -104,26 +106,26 @@ assertThrowsError expectedError someVal = do
         handler ex = return $ Just $ show ex
 
 testPrintSTS :: Test
-testPrintSTS = TestCase $ do
-    assertEqual "print of STS does not match " printSTS $ prettyPrintIntrp stsExampleIntrpr
+testPrintSTS = TestCase $ assertEqual failureMessage expected actual
     where
-    {-
-    current state configuration: [IntrpState 0 (fromList [(x:Int,0)])]
-    initial location configuration: [0]
-    locations: 0, 1, 2
-    transitions:
-    0 ――?"water" [p:Int]⟶ [([[(([(-1,1),(p:Int,1)]) > 0)∧(([(10,1),(p:Int,-1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]
-    0 ――!"coffee" []⟶ [([[([(-15,1),(x:Int,1)]) > 0]] {},2)]
-    0 ――!"ok" [p:Int]⟶ ⊥
-    1 ――?"water" [p:Int]⟶ ⊤
-    1 ――!"coffee" []⟶ ⊥
-    1 ――!"ok" [p:Int]⟶ [([[(x:Int) = (p:Int)]] {},0)]
-    2 ――?"water" [p:Int]⟶ ⊤
-    2 ――!"coffee" []⟶ ⊥
-    2 ――!"ok" [p:Int]⟶ ⊥
-    -}
-    printSTS = "current state configuration: [IntrpState 0 [\"(x:Int,0)\"]]\ninitial location configuration: [0]\nlocations: 0, 1, 2\ntransitions:\n0 ――?\"water\" [p:Int]⟶ [([[(([(p:Int,-1),(10,1)]) > 0)∧(([(p:Int,1),(-1,1)]) > 0)]] {x:Int:=[(p:Int,1),(x:Int,1)]},1)]\n0 ――!\"coffee\" []⟶ [([[([(x:Int,1),(-15,1)]) > 0]] {},2)]\n0 ――!\"ok\" [p:Int]⟶ ⊥\n1 ――?\"water\" [p:Int]⟶ ⊤\n1 ――!\"coffee\" []⟶ ⊥\n1 ――!\"ok\" [p:Int]⟶ [([[(x:Int) = (p:Int)]] {},0)]\n2 ――?\"water\" [p:Int]⟶ ⊤\n2 ――!\"coffee\" []⟶ ⊥\n2 ――!\"ok\" [p:Int]⟶ ⊥"
-
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual ++ "=====\n"
+    actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
+    -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
+    expected = [QQ.r|
+current state configuration: [IntrpState 0 ["(x:Int,0)"]]
+initial location configuration: [0]
+locations: 0, 1, 2
+transitions:
+0 ――?"water" [p:Int]⟶ [([[(((-1⋅p:Int+10)) > 0)∧(((p:Int+-1)) > 0)]] {x:Int:=(p:Int+x:Int)},1)]
+0 ――!"coffee" []⟶ [([[((x:Int+-15)) > 0]] {},2)]
+0 ――!"ok" [p:Int]⟶ ⊥
+1 ――?"water" [p:Int]⟶ ⊤
+1 ――!"coffee" []⟶ ⊥
+1 ――!"ok" [p:Int]⟶ [([[(x:Int) = (p:Int)]] {},0)]
+2 ――?"water" [p:Int]⟶ ⊤
+2 ――!"coffee" []⟶ ⊥
+2 ――!"ok" [p:Int]⟶ ⊥
+|]
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 

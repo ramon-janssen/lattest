@@ -133,9 +133,6 @@ import           GHC.Generics    (Generic)
 newtype FreeMonoidX a = FMX { asMap :: Map a Integer }
     deriving (Eq, Ord, Read, Generic, NFData, Data)
 
-instance Show a => Show (FreeMonoidX a) where
-    show (FMX p) = show (Map.assocs p)
-
 -- | A term of the monoid which wraps a value. This could be for instance a
 -- sum-term or a product term.
 class TermWrapper f where

@@ -38,6 +38,7 @@ dependencies:
   - array >= 0.5.8.0
   - regex-tdfa >= 1.3.2.3
   - list-shuffle >= 1.0.0.1
+  - raw-strings-qq >= 1.1
 
 ghc-options:
 - -Wall
