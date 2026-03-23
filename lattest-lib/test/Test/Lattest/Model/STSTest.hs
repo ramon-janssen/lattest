@@ -112,19 +112,19 @@ testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no a
     actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
     -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
     expected = [QQ.r|
-current state configuration: [IntrpState 0 ["(x:Int,0)"]]
+current state configuration: [(0,{x:=0})]
 initial location configuration: [0]
 locations: 0, 1, 2
 transitions:
-0 ――?"water" [p:Int]⟶ [([[(((-p:Int+10)) > 0)∧(((p:Int+-1)) > 0)]] {x:Int:=(p:Int+x:Int)},1)]
-0 ――!"coffee" []⟶ [([[((x:Int+-15)) > 0]] {},2)]
-0 ――!"ok" [p:Int]⟶ ⊥
-1 ――?"water" [p:Int]⟶ ⊤
-1 ――!"coffee" []⟶ ⊥
-1 ――!"ok" [p:Int]⟶ [([[(x:Int) = (p:Int)]] {},0)]
-2 ――?"water" [p:Int]⟶ ⊤
-2 ――!"coffee" []⟶ ⊥
-2 ――!"ok" [p:Int]⟶ ⊥
+0  ――?"water" [p:Int]⟶  [((((-p+10)) > 0)∧(((p+-1)) > 0), {x:=(p+x)},1)]
+0  ――!"coffee" []⟶  [(((x+-15)) > 0, {},2)]
+0  ――!"ok" [p:Int]⟶  ⊥
+1  ――?"water" [p:Int]⟶  ⊤
+1  ――!"coffee" []⟶  ⊥
+1  ――!"ok" [p:Int]⟶  [((x) = (p), {},0)]
+2  ――?"water" [p:Int]⟶  ⊤
+2  ――!"coffee" []⟶  ⊥
+2  ――!"ok" [p:Int]⟶  ⊥
 |]
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)

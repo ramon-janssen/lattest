@@ -509,7 +509,11 @@ data Valuation = Valuation {
     deriving (Eq, Ord)
 
 instance Show Valuation where
-    show (Valuation i b s) = List.intercalate "," $ (fmap show $ Map.toList i) ++ (fmap show $ Map.toList b) ++ (fmap show $ Map.toList s)
+    show (Valuation i b s) = "{" ++ (List.intercalate "," $ printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
+        where
+        printAsAssignments :: Show t => Map.Map Variable t -> [String]
+        printAsAssignments m = printAsAssignment <$> Map.toList m
+        printAsAssignment (v,t) = varName v ++ ":=" ++ show t
 
 toConstantsMap :: Valuation -> Map.Map Variable Constant
 toConstantsMap valuation = Map.map Cint (intValuation valuation)
