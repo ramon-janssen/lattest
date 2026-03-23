@@ -118,16 +118,9 @@ instance ConcreteGenExpr String where
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr3 = genExpr (n `div` 3)
         stringExpr = listOf $ elements $ ['A'..'Z'] ++ ['a'..'z']
-    shrinkConst xs = concat [ removes k n xs | k <- takeWhile (>0) (iterate (`div`2) n) ]
-        where
-        n = length xs
-        removes k n xs
-            | k > n     = []
-            | null xs2  = [[]]
-            | otherwise = xs2 : map (xs1 ++) (removes k (n-k) xs2)
-            where
-            xs1 = take k xs
-            xs2 = drop k xs
+    shrinkConst [] = []
+     -- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
+    shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
 
 
 prop_symbolicEval :: Expr Integer -> Bool
