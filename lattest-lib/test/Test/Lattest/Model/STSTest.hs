@@ -116,8 +116,8 @@ current state configuration: [(0,{x:=0})]
 initial location configuration: [0]
 locations: 0, 1, 2
 transitions:
-0  ――?"water" [p:Int]⟶  [((((-p+11)) > 0)∧((p) > 0), {x:=(p+x)},1)]
-0  ――!"coffee" []⟶  [(((x+-14)) > 0, {},2)]
+0  ――?"water" [p:Int]⟶  [((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)]
+0  ――!"coffee" []⟶  [(((x+-15)) ≥ 0, {},2)]
 0  ――!"ok" [p:Int]⟶  ⊥
 1  ――?"water" [p:Int]⟶  ⊤
 1  ――!"coffee" []⟶  ⊥
