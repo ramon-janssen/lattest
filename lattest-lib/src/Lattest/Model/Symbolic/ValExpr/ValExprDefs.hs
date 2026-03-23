@@ -173,7 +173,7 @@ deriving instance Eq t => Eq (ExprView t)
 deriving instance Ord t => Ord (ExprView t)
 
 instance Show t => Show (ExprView t) where
-    show (Var v) = show v
+    show (Var v) = varName v
     show (Const c) = show c
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
     show (Divide e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"

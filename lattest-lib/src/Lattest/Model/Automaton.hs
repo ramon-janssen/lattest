@@ -442,7 +442,10 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Show)
+data IntrpState a = IntrpState a Valuation deriving (Eq, Ord)
+
+instance Show a => Show (IntrpState a) where
+    show (IntrpState a v) = show (a,v)
 
 newtype STStdest = STSLoc (SymGuard,VarModel) deriving (Eq, Ord)
 
@@ -450,7 +453,7 @@ stsTLoc :: SymGuard -> VarModel -> STStdest
 stsTLoc g a = STSLoc (g,a)
 
 instance Show STStdest where
-    show (STSLoc (g,a)) =  "[[" ++ show g ++ "]] " ++ show a
+    show (STSLoc (g,a)) =  show g ++ ", " ++ show a
 
 instance Completable (IOGateValue i o) where
     implicitDestination (GateValue g _) = implicitDestination g
@@ -616,7 +619,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printLocations = List.intercalate ", " (show <$> locations)
     printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
-    printTransition q (t, mt) = show q ++ " ――" ++ show t ++ "⟶ " ++ show mt
+    printTransition q (t, mt) = show q ++ "  ――" ++ show t ++ "⟶  " ++ show mt
     
 prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc q t tdest act -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut

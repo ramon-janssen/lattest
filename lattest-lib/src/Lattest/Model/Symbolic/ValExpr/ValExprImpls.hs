@@ -509,7 +509,7 @@ data Valuation = Valuation {
     deriving (Eq, Ord)
 
 instance Show Valuation where
-    show (Valuation i b s) = show $ (fmap show $ Map.toList i) ++ (fmap show $ Map.toList b) ++ (fmap show $ Map.toList s)
+    show (Valuation i b s) = List.intercalate "," $ (fmap show $ Map.toList i) ++ (fmap show $ Map.toList b) ++ (fmap show $ Map.toList s)
 
 toConstantsMap :: Valuation -> Map.Map Variable Constant
 toConstantsMap valuation = Map.map Cint (intValuation valuation)
@@ -602,7 +602,7 @@ instance Show VarModel where
         where
         showMapList map = "{" ++ (List.intercalate ", " map) ++ "}"
         showList map = showAssign <$> Map.toList map
-        showAssign (v,e) = show v ++ ":=" ++ show e
+        showAssign (v,e) = varName v ++ ":=" ++ show e
 
 evalConst :: Assignable t => Valuation -> Expr t -> Either String t
 evalConst valuation = eval . evalConst' valuation

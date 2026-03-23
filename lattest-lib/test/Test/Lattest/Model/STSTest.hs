@@ -106,9 +106,9 @@ assertThrowsError expectedError someVal = do
         handler ex = return $ Just $ show ex
 
 testPrintSTS :: Test
-testPrintSTS = TestCase $ assertEqual failureMessage expected actual
+testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no assertEquals to avoid printing the unreadable ascii-escaped variant of the tested unicode strings
     where
-    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual ++ "=====\n"
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
     actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
     -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
     expected = [QQ.r|
@@ -116,7 +116,7 @@ current state configuration: [IntrpState 0 ["(x:Int,0)"]]
 initial location configuration: [0]
 locations: 0, 1, 2
 transitions:
-0 ――?"water" [p:Int]⟶ [([[(((-1⋅p:Int+10)) > 0)∧(((p:Int+-1)) > 0)]] {x:Int:=(p:Int+x:Int)},1)]
+0 ――?"water" [p:Int]⟶ [([[(((-p:Int+10)) > 0)∧(((p:Int+-1)) > 0)]] {x:Int:=(p:Int+x:Int)},1)]
 0 ――!"coffee" []⟶ [([[((x:Int+-15)) > 0]] {},2)]
 0 ――!"ok" [p:Int]⟶ ⊥
 1 ――?"water" [p:Int]⟶ ⊤
