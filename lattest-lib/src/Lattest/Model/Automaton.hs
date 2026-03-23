@@ -87,7 +87,7 @@ import qualified Data.Set as Set
 import Data.Tuple.Extra(first)
 import GHC.OldList(find)
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, evalConst, evalConst', assignedExpr, subst, Constant(..), toBool, toInteger, toString, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, subst, Constant(..), toBool, toInteger, toString, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
 
 ------------
 -- syntax --
@@ -499,7 +499,9 @@ buildGateValuation :: [Variable] -> [Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
 buildGateValuation gateVars gateVals = assignValues $ (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) <$> (zip gateVars gateVals)
 evalVal :: (ConstType t, Assignable t) => Valuation -> Expr t -> Constant
-evalVal valuation = toConst . fromRight . evalConst valuation
+evalVal valuation e = case eval $ substConst valuation e of
+    Right v -> toConst v
+    Left m -> error $ "evalVal: " ++ m
 evalBool :: Valuation -> Expr Bool -> Bool
 evalBool valuation = toBool . evalVal valuation
 

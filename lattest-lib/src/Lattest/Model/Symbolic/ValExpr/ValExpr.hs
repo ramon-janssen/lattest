@@ -33,7 +33,8 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , assign
 , assignValues
 , eval
-, evalConst
+, subst
+, substConst
 , Valuation
 , assignedExpr
 , (=:)

@@ -5,6 +5,7 @@ import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.Testing
 import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
+import Test.Lattest.Model.Symbolic.ValExpr.ValExpr
 import Test.Lattest.Util.ModelParsingUtils
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
 
@@ -29,6 +30,7 @@ runQuickCheckTests :: IO ()
 runQuickCheckTests = do
     quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
     quickCheckWithTimeout prop_consumeBufferedWith
+    quickCheckWithTimeout (prop_evalSymbolic :: PropEvalSymbolic Bool)
     where
     quickCheckWithTimeout prop = quickCheck $ \testparam -> within (durationSeconds * 1000000) (prop testparam)
 

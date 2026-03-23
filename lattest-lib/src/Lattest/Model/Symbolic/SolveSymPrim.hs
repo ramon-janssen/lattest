@@ -10,7 +10,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
 import qualified Lattest.Model.Symbolic.ValExpr.ValExpr as E
 import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..), Constant(..))
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(eval)
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls(evalConst')
+import Lattest.Model.Symbolic.ValExpr.ValExprImpls(substConst)
 import Lattest.SMT.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import qualified Data.Map as Map
@@ -25,7 +25,8 @@ combineGuards = asDualValExpr
     In the given guard, substitute the given valuation.
 -}
 substituteInGuard :: Valuation -> SymGuard -> SymGuard
-substituteInGuard valuation guard = evalConst' valuation guard
+--substituteInGuard valuation guard = evalConst' valuation guard
+substituteInGuard valuation guard = substConst valuation guard
 
 {-|
     Evaluate the given guard

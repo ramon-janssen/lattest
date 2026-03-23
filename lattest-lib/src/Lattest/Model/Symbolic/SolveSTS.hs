@@ -13,7 +13,7 @@ import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonExc
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualValExpr)
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..), Constant(..), evalConst')
+import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..), Constant(..), substConst, toConst)
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(ExprView(..), Expr(..), eval)
 import Lattest.SMT.SMT(SMTRef,pop,getSolution,addAssertions,getSolvable,push,Solution,SolvableProblem(..),SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
@@ -56,7 +56,7 @@ stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
         Nothing -> throw $ ActionOutsideAlphabet callStack
         Just mtdestloc -> fmap guardAndLocToGuard mtdestloc
     where
-    guardAndLocToGuard (STSLoc (tguard,_), _) = evalConst' valuation tguard
+    guardAndLocToGuard (STSLoc (tguard,_), _) = substConst valuation tguard
 
 
 

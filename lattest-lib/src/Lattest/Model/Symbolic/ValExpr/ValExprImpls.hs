@@ -84,8 +84,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , assignValues
 , assignValue
 , insertIntoValuation
-, evalConst
-, evalConst'
+, substConst
 , subst
 , assignedExpr
 , assignment
@@ -608,12 +607,8 @@ instance Show VarModel where
         showList map = showAssign <$> Map.toList map
         showAssign (v,e) = varName v ++ ":=" ++ show e
 
-evalConst :: Assignable t => Valuation -> Expr t -> Either String t
-evalConst valuation = eval . evalConst' valuation
-
-
-evalConst' :: Assignable t => Valuation -> Expr t -> Expr t
-evalConst' valuation e = subst (valuationToVarModel valuation) e
+substConst :: Assignable t => Valuation -> Expr t -> Expr t
+substConst valuation e = subst (valuationToVarModel valuation) e
 
 -- | Substitute variables by value expressions in a value expression.
 --
