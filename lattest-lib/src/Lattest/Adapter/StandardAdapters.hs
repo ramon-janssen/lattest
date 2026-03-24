@@ -62,7 +62,7 @@ import Data.Aeson(FromJSON,ToJSON)
 import Data.ByteString (ByteString)
 import Data.Time.Clock(UTCTime,getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,secondsToNominalDiffTime,nominalDiffTimeToSeconds)
 import GHC.Conc(forkIO, newTVarIO, TVar, retry, atomically, writeTVar, readTVar)
-import Network.Socket(HostName, PortNumber)
+import Network.Socket(HostName, PortNumber, setSocketOption, SocketOption(NoDelay))
 import qualified Network.Socket as Socket(gracefulClose)
 import Network.Utils (niceSocketsDo, connectTCP)
 import System.IO.Streams (makeOutputStream)
@@ -479,6 +479,7 @@ connectSocketAdapter = connectSocketAdapterWith baseSocketSettings
 connectSocketAdapterWith :: SocketSettings act i -> IO (Adapter ByteString ByteString)
 connectSocketAdapterWith settings = niceSocketsDo $ do
     socket <- connectTCP (hostName settings) (portNumber settings)
+    setSocketOption socket NoDelay 1
     (actionBytes, inputCommandBytes) <- socketToStreams socket
     forkedActionBytes <- fromInputStreamBuffered actionBytes
     return $ Adapter {
