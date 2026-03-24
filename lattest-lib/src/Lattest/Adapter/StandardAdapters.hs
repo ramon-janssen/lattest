@@ -481,9 +481,16 @@ connectSocketAdapterWith settings = niceSocketsDo $ do
     socket <- connectTCP (hostName settings) (portNumber settings)
     setSocketOption socket NoDelay 1
     (actionBytes, inputCommandBytes) <- socketToStreams socket
+    -- Wrap the output stream with a 1ms delay after each write, so that consecutive                                                                
+    -- sends are not coalesced into the same TCP segment by the kernel.   
+    inputCommandBytes' <- makeOutputStream $ \mBytes -> do                
+        Streams.write mBytes inputCommandBytes                            
+        case mBytes of                                                    
+            Just _ -> delay 1000                                          
+            Nothing -> return ()   
     forkedActionBytes <- fromInputStreamBuffered actionBytes
     return $ Adapter {
-        inputCommandsToSut = inputCommandBytes,
+        inputCommandsToSut = inputCommandBytes',
         actionsFromSut = forkedActionBytes,
         close = Socket.gracefulClose socket 1000
     }
