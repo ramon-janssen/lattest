@@ -12,7 +12,7 @@ import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsume
 import Data.Functor(void)
 import System.Timeout(timeout)
 import Test.HUnit hiding (Path, path, assert)
-import Test.QuickCheck (Property, quickCheck, within)
+import Test.QuickCheck (Property, quickCheck, within, withMaxSuccess)
 
 durationSeconds :: Int
 durationSeconds = 2
@@ -30,10 +30,10 @@ runQuickCheckTests :: IO ()
 runQuickCheckTests = do
     quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
     quickCheckWithTimeout prop_consumeBufferedWith
-    quickCheckWithTimeout (prop_evalSymbolic :: PropEvalSymbolic Bool)
+    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
     where
-    quickCheckWithTimeout prop = quickCheck $ \testparam -> within (durationSeconds * 1000000) (prop testparam)
-
+    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
+    quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
 
 hunitTests :: Test
 hunitTests = TestList $
