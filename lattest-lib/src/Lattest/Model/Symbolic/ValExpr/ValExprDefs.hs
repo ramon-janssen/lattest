@@ -191,7 +191,7 @@ instance Show t => Show (ExprView t) where
     show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualString e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-    show (GezInt e) = "(" ++ show e ++ ") > 0"
+    show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⊤"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es

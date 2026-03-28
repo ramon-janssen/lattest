@@ -1,23 +1,66 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE OverloadedLists #-}
 
 module Test.Lattest.Model.Symbolic.ValExpr.ValExpr (
 prop_evalSymbolic,
-PropEvalSymbolic
+PropEvalSymbolic,
+valExprTests
 )
 where
 
-import Test.QuickCheck
 import Lattest.Model.Symbolic.ValExpr.FreeMonoidX as FM
 import Lattest.Model.Symbolic.ValExpr.ValExpr
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(Expr(Expr), allTypes)
 import qualified Data.Set as Set
-import qualified Control.Monad as CM
+import qualified Data.Map as Map
 import qualified Debug.Trace as Trace
+import qualified Control.Monad as CM
+import Test.HUnit
+import Test.QuickCheck
 
-instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (Expr a) where
+instance (Arbitrary a, ConcreteGenExpr a, SizeOf a) => Arbitrary (Expr a) where
     arbitrary = Expr <$> arbitrary
+    -- for debugging exponential blowups in Arbitrary generation
+    -- arbitrary = ((\e -> Trace.trace ("size" ++ (show $ sizeOf e) ++ " | ") e). Expr) <$> arbitrary
     shrink (view -> e) = Expr <$> shrink e
+
+sizeOf :: SizeOf a => Expr a -> Int
+sizeOf = sizeOf' . view
+
+sizeOf' :: SizeOf a => ExprView a -> Int
+sizeOf' (Var _) = 1
+sizeOf' (Const c) = sizeOfTyped c
+sizeOf' (Ite i t e) = sizeOf' i + sizeOf' t + sizeOf' t + 1
+sizeOf' (EqualInt e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (EqualBool e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (EqualString e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (Divide e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (Modulo e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (Sum es) = foldrTerms (\a b -> sizeOf' a + b) 0 es + 1
+sizeOf' (Product es) = foldrTerms (\a b -> sizeOf' a + b) 0 es + 1
+sizeOf' (Length e) = sizeOf' e + 1
+sizeOf' (GezInt e) = sizeOf' e + 1
+sizeOf' (Not e) = sizeOf' e + 1
+sizeOf' (And es) = (sum $ sizeOf' <$> Set.toList es) + 1
+sizeOf' (At e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (Concat es) = (sum $ sizeOf' <$> es) + 1
+
+class SizeOf t
+    where
+    sizeOfTyped :: t -> Int
+
+instance SizeOf Integer
+    where
+    sizeOfTyped _ = 1
+
+instance SizeOf Bool
+    where
+    sizeOfTyped _ = 1
+
+instance SizeOf String
+    where
+    sizeOfTyped s = length s
 
 instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
     arbitrary = sized genExpr
@@ -46,7 +89,7 @@ class ConcreteGenExpr t where
     shrinkConst :: t -> [t]
 
 instance ConcreteGenExpr Integer where
-    genExpr 0 = oneof [
+    genExpr n | n <= 0 = oneof [
         arbitraryVar,
         CM.liftM Const arbitrary
         ]
@@ -56,21 +99,23 @@ instance ConcreteGenExpr Integer where
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 Divide subexpr2 subexpr2,
         CM.liftM2 Modulo subexpr2 subexpr2,
-        CM.liftM Sum (FM.fromListT <$> listOf subexpr2),
-        CM.liftM Product (FM.fromListT <$> listOf subexpr2),
+        CM.liftM Sum (FM.fromListT <$> genList subexpr2),
+        CM.liftM Product (FM.fromListT <$> genList subexprSqrt),
         CM.liftM Length subexpr
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr = genExpr (n - 1)
         subexpr2 :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr2 = genExpr (n `div` 2)
+        subexpr2 = genExpr $ (n `div` 2) - 1
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr3 = genExpr (n `div` 3)
+        subexpr3 = genExpr $ (n `div` 3) - 1
+        subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
+        subexprSqrt = genExpr (intSqrt n - 1)
     shrinkConst = shrink
 
 instance ConcreteGenExpr Bool where
-    genExpr 0 = oneof [
+    genExpr n | n <= 0 = oneof [
         arbitraryVar,
         CM.liftM Const arbitrary
         ]
@@ -83,48 +128,55 @@ instance ConcreteGenExpr Bool where
         CM.liftM2 EqualString subexpr2 subexpr2,
         CM.liftM GezInt subexpr,
         CM.liftM Not subexpr,
-        CM.liftM And (Set.fromList <$> listOf subexpr2)
+        CM.liftM And (Set.fromList <$> genList subexprSqrt)
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr = genExpr (n - 1)
         subexpr2 :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr2 = genExpr (n `div` 2)
+        subexpr2 = genExpr $ (n `div` 2) - 1
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr3 = genExpr (n `div` 3)
+        subexpr3 = genExpr $ (n `div` 3) - 1
+        subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
+        subexprSqrt = genExpr (intSqrt n - 1)
     shrinkConst = shrink
 
 instance ConcreteGenExpr String where
-    genExpr 0 = oneof [
+    genExpr n | n <= 0 = oneof [
         arbitraryVar,
         CM.liftM Const arbitrary
         ]
     genExpr n | n > 0 = oneof [
         arbitraryVar,
-        CM.liftM Const stringExpr,
+        CM.liftM tConst stringExpr,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 At subexpr2 subexpr2,
-        CM.liftM Concat (listOf subexpr2)
+        CM.liftM Concat (genList subexprSqrt)
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr = genExpr (n - 1)
         subexpr2 :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr2 = genExpr (n `div` 2)
+        subexpr2 = genExpr $ (n `div` 2) - 1
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr3 = genExpr (n `div` 3)
-        stringExpr = listOf $ elements $ ['A'..'Z'] ++ ['a'..'z']
-    shrinkConst xs = concat [ removes k n xs | k <- takeWhile (>0) (iterate (`div`2) n) ]
-        where
-        n = length xs
-        removes k n xs
-            | k > n     = []
-            | null xs2  = [[]]
-            | otherwise = xs2 : map (xs1 ++) (removes k (n-k) xs2)
-            where
-            xs1 = take k xs
-            xs2 = drop k xs
+        subexpr3 = genExpr $ (n `div` 3) - 1
+        subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
+        subexprSqrt = genExpr (intSqrt n - 1)
+        stringExpr = genList $ elements $ ['A'..'Z'] ++ ['a'..'z']
+        tConst s = Const s
+        --tConst s = Const $ Trace.trace ("string of size: " ++ show (length s)) s
+    shrinkConst [] = []
+     -- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
+    shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
 
+-- generate lists, more conservatively than with listOf, in order to avoid exponential blowup
+genList :: Gen a -> Gen [a]
+genList g = sized $ \n -> do
+    n' <- choose (0, intSqrt n - 1)
+    CM.replicateM (intSqrt n) g
+
+intSqrt :: Int -> Int
+intSqrt = floor . sqrt . fromIntegral
 
 prop_symbolicEval :: Expr Integer -> Bool
 prop_symbolicEval e = rightToMaybe (eval e) == concreteEval e
@@ -140,8 +192,11 @@ type PropEvalSymbolic t = Expr t -> Bool
 prop_evalSymbolic :: (Show t, Eq t, ConcreteEval t) => Expr t -> Bool
 prop_evalSymbolic e =
     let l = concreteEval e
-        r = rightToMaybe (eval e)
+        r = symbolicEval e
     in if l == r then True else Trace.trace ("concrete eval: " ++ show l ++ "\nsymbolic eval: " ++ show r ++ "\n") False
+
+symbolicEval :: Expr t -> Maybe t
+symbolicEval = rightToMaybe . eval
     where
     rightToMaybe :: Either a b -> Maybe b
     rightToMaybe (Left _) = Nothing
@@ -218,3 +273,19 @@ concreteIfThenElse i t e = do
         then concreteEval' t
         else concreteEval' e
 
+valExprTests :: [Test]
+valExprTests = [testEmptyProduct, test1Gez, testGET]
+
+testEmptyProduct :: Test
+testEmptyProduct =
+    let emtpyProduct = sProduct []
+    in TestCase $ assertEqual "empty product evaluation incorrect" (concreteEval emtpyProduct) (symbolicEval emtpyProduct)
+
+test1Gez :: Test
+test1Gez = TestCase $ assertEqual "1 should be greater or equal to zero" (Just True) (symbolicEval $ sIsNonNegative $ sConst 1)
+
+testGET :: Test
+testGET =
+    let pvar = Variable "p" IntType
+        p = sVar pvar
+    in TestCase $ assertEqual ">= should be expressed in terms of >" (p .> 1) (sNot $ 1 .- p .>= 0)

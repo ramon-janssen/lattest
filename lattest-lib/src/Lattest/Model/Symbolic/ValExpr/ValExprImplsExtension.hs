@@ -134,7 +134,7 @@ sAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
 -- Preconditions are /not/ checked.
 (.<) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
-(.<) ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)])))
+ve1 .< ve2 = sNot $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,1),(ve2,-1)]
 
 infix 4 .<
 
@@ -142,7 +142,7 @@ infix 4 .<
 -- Preconditions are /not/ checked.
 (.>) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
-(.>) ve1 ve2 = sNot (sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)])))
+ve1 .> ve2 = sNot $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,-1),(ve2,1)]
 
 infix 4 .>
 
@@ -150,7 +150,7 @@ infix 4 .>
 -- Preconditions are /not/ checked.
 (.<=) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a <= b <==> 0 <= b - a
-(.<=) ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,-1),(ve2,1)]))
+ve1 .<= ve2 = sIsNonNegative $ sSum $ fromOccurListT [(ve1,-1),(ve2,1)]
 
 infix 4 .<=
 
@@ -158,6 +158,6 @@ infix 4 .<=
 -- Preconditions are /not/ checked.
 (.>=) :: Expr Integer -> Expr Integer -> Expr Bool
 -- a >= b <==> a - b >= 0
-(.>=) ve1 ve2 = sIsNonNegative (sSum (fromOccurListT [(ve1,1),(ve2,-1)]))
+ve1 .>= ve2 = sIsNonNegative $ sSum $ fromOccurListT [(ve1,1),(ve2,-1)]
 
 infix 4 .>=

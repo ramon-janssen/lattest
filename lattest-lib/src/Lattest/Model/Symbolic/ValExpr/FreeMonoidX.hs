@@ -19,7 +19,7 @@ See LICENSE in the parent Symbolic folder.
 -- Stability   :  experimental
 -- Portability :  portable
 --
---  Free Monoid with a multiplication operation. Symbolic representation of
+--  Free commutative Monoid with a multiplication operation. Symbolic representation of
 --  free-monoids of the form:
 --
 -- > a0 <> a1 <> ... <> an-1
