@@ -38,6 +38,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , Valuation
 , assignedExpr
 , (=:)
+, freeVars
 , module Lattest.Model.Symbolic.ValExpr.ValExprImpls
 , module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
 )

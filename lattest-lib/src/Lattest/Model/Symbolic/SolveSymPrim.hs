@@ -2,7 +2,8 @@ module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
 evaluateGuard,
-solveAnySequential
+solveAnySequential,
+solveGuard
 ) where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
@@ -70,5 +71,7 @@ solveGuard vars guard = do
             return $ Just solution
         Unsat -> return Nothing
         Unknown -> return Nothing
+        _ -> return Nothing
+        --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
     pop
     return mSolution

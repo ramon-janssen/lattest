@@ -5,6 +5,7 @@
 module Test.Lattest.Model.Symbolic.ValExpr.ValExpr (
 prop_evalSymbolic,
 PropEvalSymbolic,
+prop_solveSymbolic,
 valExprTests
 )
 where
@@ -12,17 +13,21 @@ where
 import Lattest.Model.Symbolic.ValExpr.FreeMonoidX as FM
 import Lattest.Model.Symbolic.ValExpr.ValExpr
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(Expr(Expr), allTypes)
+import Lattest.Model.Symbolic.SolveSymPrim
+import qualified Lattest.SMT.SMTData as SMT
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Debug.Trace as Trace
 import qualified Control.Monad as CM
 import Test.HUnit
 import Test.QuickCheck
+import Test.QuickCheck.Monadic
 
-instance (Arbitrary a, ConcreteGenExpr a, SizeOf a) => Arbitrary (Expr a) where
-    arbitrary = Expr <$> arbitrary
+instance (Arbitrary a, ConcreteGenExpr a, Show a) => Arbitrary (Expr a) where
+    -- arbitrary = Expr <$> arbitrary
     -- for debugging exponential blowups in Arbitrary generation
-    -- arbitrary = ((\e -> Trace.trace ("size" ++ (show $ sizeOf e) ++ " | ") e). Expr) <$> arbitrary
+    -- arbitrary = ((\e -> Trace.trace ("size " ++ (show $ sizeOf e) ++ " | ") e). Expr) <$> arbitrary
+    arbitrary = ((\e -> Trace.trace ("expr " ++ show e ++ " | ") e). Expr) <$> arbitrary
     shrink (view -> e) = Expr <$> shrink e
 
 sizeOf :: SizeOf a => Expr a -> Int
@@ -79,7 +84,7 @@ instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
     shrink (Not e) = [e]
     shrink (And es) = shrinkListExpr (And . Set.fromList) (Set.toList es)
     shrink (At e1 e2) = [At e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1
-    shrink (Concat es) = Concat <$> shrinkList shrink es
+    shrink (Concat es) = Concat <$> shrinkList (const []) es
 
 shrinkListExpr :: Arbitrary t1 => (t1 -> t2) -> t1 -> [t2]
 shrinkListExpr op es = fmap op (shrink es)
@@ -90,11 +95,11 @@ class ConcreteGenExpr t where
 
 instance ConcreteGenExpr Integer where
     genExpr n | n <= 0 = oneof [
-        arbitraryVar,
+        arbitraryVar IntType,
         CM.liftM Const arbitrary
         ]
     genExpr n | n > 0 = oneof [
-        arbitraryVar,
+        arbitraryVar IntType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 Divide subexpr2 subexpr2,
@@ -116,11 +121,11 @@ instance ConcreteGenExpr Integer where
 
 instance ConcreteGenExpr Bool where
     genExpr n | n <= 0 = oneof [
-        arbitraryVar,
+        arbitraryVar BoolType,
         CM.liftM Const arbitrary
         ]
     genExpr n | n > 0 = oneof [
-        arbitraryVar,
+        arbitraryVar BoolType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 EqualInt subexpr2 subexpr2,
@@ -143,11 +148,11 @@ instance ConcreteGenExpr Bool where
 
 instance ConcreteGenExpr String where
     genExpr n | n <= 0 = oneof [
-        arbitraryVar,
+        arbitraryVar StringType,
         CM.liftM Const arbitrary
         ]
     genExpr n | n > 0 = oneof [
-        arbitraryVar,
+        arbitraryVar StringType,
         CM.liftM tConst stringExpr,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 At subexpr2 subexpr2,
@@ -162,12 +167,15 @@ instance ConcreteGenExpr String where
         subexpr3 = genExpr $ (n `div` 3) - 1
         subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
         subexprSqrt = genExpr (intSqrt n - 1)
-        stringExpr = genList $ elements $ ['A'..'Z'] ++ ['a'..'z']
         tConst s = Const s
         --tConst s = Const $ Trace.trace ("string of size: " ++ show (length s)) s
-    shrinkConst [] = []
+    shrinkConst "" = []
      -- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
+    shrinkConst [c] = [[]]
     shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
+
+charExpr = elements ['a', 'b', 'c']--elements $ ['A'..'Z'] ++ ['a'..'z']
+stringExpr = CM.liftM2 (++) (return <$> charExpr) (genList $ charExpr)
 
 -- generate lists, more conservatively than with listOf, in order to avoid exponential blowup
 genList :: Gen a -> Gen [a]
@@ -185,7 +193,7 @@ prop_symbolicEval e = rightToMaybe (eval e) == concreteEval e
     rightToMaybe (Right x) = Just x
     concreteEval = concreteEval' . view
 
-arbitraryVar = CM.liftM2 (\n t -> Var $ Variable n t) arbitrary (elements allTypes)
+arbitraryVar t = CM.liftM (\n -> Var $ Variable n t) (return <$> charExpr)
 
 type PropEvalSymbolic t = Expr t -> Bool
 
@@ -201,6 +209,17 @@ symbolicEval = rightToMaybe . eval
     rightToMaybe :: Either a b -> Maybe b
     rightToMaybe (Left _) = Nothing
     rightToMaybe (Right b) = Just b
+
+prop_solveSymbolic :: SMT.SMTRef -> Expr Bool -> Property
+prop_solveSymbolic smt guard = monadicIO $ do
+    mValuation <- run $ SMT.runSMT smt $ solveGuard (Set.toList $ freeVars guard) guard
+    case mValuation of
+        Nothing -> return ()
+        Just valuation ->
+            let val = substConst valuation guard
+            in case concreteEval val of
+                Nothing -> return () -- we may generate an expression which can have an undefined value, e.g. division by zero, for which the SMT solver may pick an arbitrary valuation
+                Just sat -> Trace.trace (show valuation) $ assertWith sat ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard)
 
 concreteEval :: ConcreteEval t => Expr t -> Maybe t
 concreteEval = concreteEval' . view

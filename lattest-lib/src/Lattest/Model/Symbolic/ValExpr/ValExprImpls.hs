@@ -416,8 +416,7 @@ cstrPrd' ms =
 -- | Apply operator Divide on the provided value expressions.
 -- Preconditions are /not/ checked.
 (./) :: Expr Integer -> Expr Integer -> Expr Integer
-(./) _                     (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Divide"
-(./) (view ->  Const t) (view -> Const n) = sConst (t `Boute.div` n)
+(./) (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t `Boute.div` n) -- leave error case (division by zero) unevaluated
 (./) (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
 infixl 7 ./
@@ -427,8 +426,7 @@ infixl 7 ./
 -- | Apply operator Modulo on the provided value expressions.
 -- Preconditions are /not/ checked.
 (.%) :: Expr Integer -> Expr Integer -> Expr Integer
-(.%) _                    (view -> Const n) | n == 0 = error "Error in model: Division by Zero in Modulo"
-(.%) (view -> Const t) (view -> Const n) = sConst (t `Boute.mod` n)
+(.%) (view -> Const t) (view -> Const n) | n /= 0 = sConst (t `Boute.mod` n) -- leave error case (division by zero) unevaluated
 (.%) (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
 
 infixl 7 .%
@@ -451,10 +449,8 @@ sLength (view -> v)             = Expr (Length v)
 -- | Apply operator At on the provided value expressions.
 -- Preconditions are /not/ checked.
 (.@) :: Expr String -> Expr Integer -> Expr String
-(.@) (view -> Const s) (view -> Const i) =
-    if i < 0 || i >= Prelude.toInteger (length s)
-        then error ("Error in model: Accessing string " ++ show s ++ " of length " ++ show (length s) ++ " with illegal index "++ show i) 
-        else sConst (take 1 (drop (fromInteger i) s))
+(.@) (view -> Const s) (view -> Const i) 
+    | i >= 0 || i < Prelude.toInteger (length s) = sConst (take 1 (drop (fromInteger i) s)) -- leave error case (index out of bounds) unevaluated
 (.@) (view -> ves) (view -> vei) = Expr $ At ves vei
 
 infixl 5 .@

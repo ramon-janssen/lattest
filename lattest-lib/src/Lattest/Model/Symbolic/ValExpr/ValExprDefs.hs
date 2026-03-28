@@ -43,6 +43,7 @@ module Lattest.Model.Symbolic.ValExpr.ValExprDefs
 , varName
 , varType
 , isConst
+, freeVars
 )
 where
 
@@ -193,9 +194,10 @@ instance Show t => Show (ExprView t) where
     show (EqualString e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
     show (Not e) = "¬(" ++ show e ++ ")"
-    show (And (Set.toList -> [])) = "⊤"
+    show (And (Set.toList -> [])) = "⋀∅"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
     show (At e1 e2) = "" ++ show e2 ++ "[" ++ show e2 ++ "]"
+    show (Concat []) = "∑'∅"
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
@@ -284,3 +286,30 @@ reduce (Concat (fmap reduce -> e)) = Concat e
 -- ----------------------------------------------------------------------------------------- --
 --
 -- ----------------------------------------------------------------------------------------- --
+
+freeVars :: Expr t -> Set.Set Variable
+freeVars = Set.fromList . freeVars' . view
+
+freeVars' :: ExprView t -> [Variable]
+freeVars' (Var v) = [v]
+freeVars' (Const _) = []
+freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
+freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (Modulo e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (Sum (distinctTermsT -> es)) = concat $ freeVars' <$> es
+freeVars' (Product (distinctTermsT -> es)) = concat $ freeVars' <$> es
+freeVars' (Length e) = freeVars' e
+freeVars' (EqualInt e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (EqualBool e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (EqualString e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (GezInt e) = freeVars' e
+freeVars' (Not e) = freeVars' e
+freeVars' (And (Set.toList -> es)) = concat $ freeVars' <$> es
+freeVars' (At e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (Concat es) = concat $ freeVars' <$> es
+
+
+
+
+
+
