@@ -196,7 +196,7 @@ instance Show t => Show (ExprView t) where
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⋀∅"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
-    show (At e1 e2) = "" ++ show e2 ++ "[" ++ show e2 ++ "]"
+    show (At e1 e2) = "" ++ show e1 ++ "[" ++ show e2 ++ "]"
     show (Concat []) = "∑'∅"
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
 

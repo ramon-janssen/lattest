@@ -15,7 +15,7 @@ import qualified Data.Maybe as M
 import Data.Functor(void)
 import System.Timeout(timeout)
 import Test.HUnit hiding (Path, path, assert)
-import Test.QuickCheck (Property, quickCheck, within, withMaxSuccess)
+import Test.QuickCheck
 
 durationSeconds :: Int
 durationSeconds = 2
@@ -23,8 +23,9 @@ durationSeconds = 2
 main :: IO ()
 main = do
     -- unit tests, for fully written out scenarios
---    putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
---    void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
+    putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
+    hunitTests <- makeHUnitTests
+    void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
     -- property tests
     putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
     void $ runQuickCheckTests
@@ -32,54 +33,59 @@ main = do
 runQuickCheckTests :: IO ()
 runQuickCheckTests = do
     quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
-    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
+    quickCheckWithTimeoutNum prop_consumeBufferedWith 15
     --quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
     smtRef <- createTestSMTRef
-    quickCheckWithTimeoutWithNum (prop_solveSymbolic smtRef) 100
+    quickCheckWithTimeoutNumSize (prop_solveSymbolic smtRef) 100 2
     where
-    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
-    createTestSMTRef =
-        let cfg = Config.changeLog Config.defaultConfig True 
-            smtLog = Config.smtLog cfg
-            smtProc = M.fromJust (Config.getProc cfg)
-        in SMT.createSMTRef smtProc smtLog
+    quickCheckWithTimeout prop = quickCheckWithTimeoutNum prop 100
+    quickCheckWithTimeoutNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
+    
+    quickCheckWithTimeoutNumSize prop n maxSize = quickCheck $ within (durationSeconds * 1000000) $ withMaxSuccess n $ forAllShrink (scale (max maxSize) arbitrary) shrink prop
 
-hunitTests :: Test
-hunitTests = TestList $
-    [
-    testConsumeBufferedWith,
-    testConsumeBufferedWith_short,
-    testJSONSocketAdapterByte,
-    testAdapterAcceptingInput,
-    testJSONSocketAdapterInt,
-    testJSONSocketAdapterObject,
-    testQuiscence,
-    testInputDelay,
-    testTraceHappy,
-    testTraceFailsAtLastOutput,
-    testTraceFailsBeforeLastOutput,
-    testTraceIncompleteAtLastOutput,
-    testTraceIncompleteBeforeLastOutput,
-    testTraceFailsWithQuiescence,
-    testOutputOutsideAlphabet,
-    testSpecF,
-    testPrintSpecF,
-    testSpecG,
-    testSpecGQuiescent,
-    testSTSTestSelection,
-    testSTSDisnjunction1,
-    testRandomFCorrect,
-    testRandomFIncorrectOutput,
-    testRandomFIncorrectInput,
-    testSTSHappyFlow,
-    testErrorThrowingGates,
-    testSTSUnHappyFlow,
-    testPrintSTS,
-    testReadAutFile
-    ]
-    ++ valExprTests
+makeHUnitTests :: IO Test
+makeHUnitTests = do
+    smt <- createTestSMTRef
+    return $ TestList $
+        [
+        testConsumeBufferedWith,
+        testConsumeBufferedWith_short,
+        testJSONSocketAdapterByte,
+        testAdapterAcceptingInput,
+        testJSONSocketAdapterInt,
+        testJSONSocketAdapterObject,
+        testQuiscence,
+        testInputDelay,
+        testTraceHappy,
+        testTraceFailsAtLastOutput,
+        testTraceFailsBeforeLastOutput,
+        testTraceIncompleteAtLastOutput,
+        testTraceIncompleteBeforeLastOutput,
+        testTraceFailsWithQuiescence,
+        testOutputOutsideAlphabet,
+        testSpecF,
+        testPrintSpecF,
+        testSpecG,
+        testSpecGQuiescent,
+        testSTSTestSelection,
+        testSTSDisnjunction1,
+        testRandomFCorrect,
+        testRandomFIncorrectOutput,
+        testRandomFIncorrectInput,
+        testSTSHappyFlow,
+        testErrorThrowingGates,
+        testSTSUnHappyFlow,
+        testPrintSTS,
+        testReadAutFile
+        ]
+        ++ evalTests
+        ++ fmap ($ smt) solveTests
 
+createTestSMTRef =
+    let cfg = Config.changeLog Config.defaultConfig True 
+        smtLog = Config.smtLog cfg
+        smtProc = M.fromJust (Config.getProc cfg)
+    in SMT.createSMTRef smtProc smtLog
 
 
 

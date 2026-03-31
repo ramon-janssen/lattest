@@ -6,7 +6,8 @@ module Test.Lattest.Model.Symbolic.ValExpr.ValExpr (
 prop_evalSymbolic,
 PropEvalSymbolic,
 prop_solveSymbolic,
-valExprTests
+evalTests,
+solveTests
 )
 where
 
@@ -15,8 +16,9 @@ import Lattest.Model.Symbolic.ValExpr.ValExpr
 import Lattest.Model.Symbolic.ValExpr.ValExprDefs(Expr(Expr), allTypes)
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT.SMTData as SMT
-import qualified Data.Set as Set
+import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
 import qualified Control.Monad as CM
 import Test.HUnit
@@ -24,10 +26,10 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
 instance (Arbitrary a, ConcreteGenExpr a, Show a) => Arbitrary (Expr a) where
-    -- arbitrary = Expr <$> arbitrary
+    arbitrary = Expr <$> arbitrary -- max to avoid large expressions, which will choke the SMT solver
     -- for debugging exponential blowups in Arbitrary generation
     -- arbitrary = ((\e -> Trace.trace ("size " ++ (show $ sizeOf e) ++ " | ") e). Expr) <$> arbitrary
-    arbitrary = ((\e -> Trace.trace ("expr " ++ show e ++ " | ") e). Expr) <$> arbitrary
+    -- arbitrary = ((\e -> Trace.trace ("expr " ++ show e ++ " | ") e). Expr) <$> arbitrary
     shrink (view -> e) = Expr <$> shrink e
 
 sizeOf :: SizeOf a => Expr a -> Int
@@ -149,11 +151,11 @@ instance ConcreteGenExpr Bool where
 instance ConcreteGenExpr String where
     genExpr n | n <= 0 = oneof [
         arbitraryVar StringType,
-        CM.liftM Const arbitrary
+        CM.liftM Const stringExpr
         ]
     genExpr n | n > 0 = oneof [
         arbitraryVar StringType,
-        CM.liftM tConst stringExpr,
+        CM.liftM Const stringExpr,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 At subexpr2 subexpr2,
         CM.liftM Concat (genList subexprSqrt)
@@ -167,15 +169,14 @@ instance ConcreteGenExpr String where
         subexpr3 = genExpr $ (n `div` 3) - 1
         subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
         subexprSqrt = genExpr (intSqrt n - 1)
-        tConst s = Const s
-        --tConst s = Const $ Trace.trace ("string of size: " ++ show (length s)) s
+    shrinkConst _ = []
+    {--- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
     shrinkConst "" = []
-     -- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
     shrinkConst [c] = [[]]
     shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
-
-charExpr = elements ['a', 'b', 'c']--elements $ ['A'..'Z'] ++ ['a'..'z']
-stringExpr = CM.liftM2 (++) (return <$> charExpr) (genList $ charExpr)
+    -}
+charExpr = elements $ ['A'..'Z'] ++ ['a'..'z']
+stringExpr = CM.liftM2 (++) (return <$> charExpr) (genList charExpr)
 
 -- generate lists, more conservatively than with listOf, in order to avoid exponential blowup
 genList :: Gen a -> Gen [a]
@@ -193,7 +194,13 @@ prop_symbolicEval e = rightToMaybe (eval e) == concreteEval e
     rightToMaybe (Right x) = Just x
     concreteEval = concreteEval' . view
 
-arbitraryVar t = CM.liftM (\n -> Var $ Variable n t) (return <$> charExpr)
+arbitraryVar t = 
+    let prefix = case t of
+                    IntType -> 'i'
+                    BoolType -> 'b'
+                    StringType -> 's'
+                    _ -> '?'
+    in CM.liftM (\n -> Var $ Variable (prefix:n) t) (return <$> charExpr)
 
 type PropEvalSymbolic t = Expr t -> Bool
 
@@ -219,7 +226,7 @@ prop_solveSymbolic smt guard = monadicIO $ do
             let val = substConst valuation guard
             in case concreteEval val of
                 Nothing -> return () -- we may generate an expression which can have an undefined value, e.g. division by zero, for which the SMT solver may pick an arbitrary valuation
-                Just sat -> Trace.trace (show valuation) $ assertWith sat ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard)
+                Just sat -> Trace.trace ("[" ++ show valuation ++ "]" ++ show guard) $ assertWith sat ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard)
 
 concreteEval :: ConcreteEval t => Expr t -> Maybe t
 concreteEval = concreteEval' . view
@@ -265,7 +272,11 @@ instance ConcreteEval String where
     concreteEval' (Var v) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (At e1 e2) = concreteBinOp (\s n -> drop (fromInteger n) s) e1 e2
+    concreteEval' (At e1 e2) = concreteBinOp mCharAt e1 e2
+        where
+        mCharAt s n = case s List.!? fromInteger n of
+                        Nothing -> []
+                        Just c -> [c]
     concreteEval' (Concat es) = concat <$> (sequence $ concreteEval' <$> es)
 
 concreteUnaryOp :: (ConcreteEval t1) => (t1 -> t2) -> ExprView t1 -> Maybe t2
@@ -292,19 +303,31 @@ concreteIfThenElse i t e = do
         then concreteEval' t
         else concreteEval' e
 
-valExprTests :: [Test]
-valExprTests = [testEmptyProduct, test1Gez, testGET]
+evalTests :: [Test]
+evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
 
-testEmptyProduct :: Test
-testEmptyProduct =
-    let emtpyProduct = sProduct []
-    in TestCase $ assertEqual "empty product evaluation incorrect" (concreteEval emtpyProduct) (symbolicEval emtpyProduct)
+solveTests :: [SMT.SMTRef -> Test]
+solveTests = [testSolveNegativeModulo]
 
-test1Gez :: Test
-test1Gez = TestCase $ assertEqual "1 should be greater or equal to zero" (Just True) (symbolicEval $ sIsNonNegative $ sConst 1)
+testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
+testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
 
-testGET :: Test
-testGET =
-    let pvar = Variable "p" IntType
-        p = sVar pvar
-    in TestCase $ assertEqual ">= should be expressed in terms of >" (p .> 1) (sNot $ 1 .- p .>= 0)
+testEvalEmptyProduct :: Test
+testEvalEmptyProduct = testEvalExpression (sProduct []) "empty product evaluation incorrect"
+
+testSolveExpression :: Expr Bool -> SMT.SMTRef -> Test
+testSolveExpression guard smt = TestCase $ do
+    mValuation <- SMT.runSMT smt $ solveGuard (Set.toList $ freeVars guard) guard
+    case mValuation of
+        Nothing -> return ()
+        Just valuation ->
+            let val = substConst valuation guard
+            in case concreteEval val of
+                Nothing -> return () -- we may generate an expression which can have an undefined value, e.g. division by zero, for which the SMT solver may pick an arbitrary valuation
+                Just sat -> Trace.trace (show valuation) $ assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
+
+testEvalNegativeModulo :: Test
+testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"
+
+testSolveNegativeModulo :: SMT.SMTRef -> Test
+testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Variable "ix" IntType))
