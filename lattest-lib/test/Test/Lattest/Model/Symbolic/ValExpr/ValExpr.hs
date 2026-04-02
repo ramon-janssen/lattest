@@ -275,7 +275,7 @@ instance ConcreteEval String where
     concreteEval' (At e1 e2) = concreteBinOp mCharAt e1 e2
         where
         mCharAt s n = case s List.!? fromInteger n of
-                        Nothing -> []
+                        Nothing -> ""
                         Just c -> [c]
     concreteEval' (Concat es) = concat <$> (sequence $ concreteEval' <$> es)
 
@@ -304,10 +304,10 @@ concreteIfThenElse i t e = do
         else concreteEval' e
 
 evalTests :: [Test]
-evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
+evalTests = [testEvalEmptyProduct, testEvalNegativeModulo, testEvalNegativeAt]
 
 solveTests :: [SMT.SMTRef -> Test]
-solveTests = [testSolveNegativeModulo]
+solveTests = [testSolveNegativeModulo, testSolveNegativeAt]
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
@@ -331,3 +331,9 @@ testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluat
 
 testSolveNegativeModulo :: SMT.SMTRef -> Test
 testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Variable "ix" IntType))
+
+testEvalNegativeAt :: Test
+testEvalNegativeAt = testEvalExpression (sConst "abc" .@ -1) "negative At evaluates incorrectly"
+
+testSolveNegativeAt :: SMT.SMTRef -> Test
+testSolveNegativeAt = testSolveExpression (sConst "abc" .@ -1 .== sVar (Variable "sx" StringType))
