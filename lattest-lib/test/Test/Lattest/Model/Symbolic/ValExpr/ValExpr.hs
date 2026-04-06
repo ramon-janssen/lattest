@@ -208,7 +208,8 @@ prop_evalSymbolic :: (Show t, Eq t, ConcreteEval t) => Expr t -> Bool
 prop_evalSymbolic e =
     let l = concreteEval e
         r = symbolicEval e
-    in if l == r then True else Trace.trace ("concrete eval: " ++ show l ++ "\nsymbolic eval: " ++ show r ++ "\n") False
+    --in if l == r then True else Trace.trace ("concrete eval: " ++ show l ++ "\nsymbolic eval: " ++ show r ++ "\n") False
+    in l == r
 
 symbolicEval :: Expr t -> Maybe t
 symbolicEval = rightToMaybe . eval
@@ -324,7 +325,8 @@ testSolveExpression guard smt = TestCase $ do
             let val = substConst valuation guard
             in case concreteEval val of
                 Nothing -> return () -- we may generate an expression which can have an undefined value, e.g. division by zero, for which the SMT solver may pick an arbitrary valuation
-                Just sat -> Trace.trace (show valuation) $ assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
+                --Just sat -> Trace.trace (show valuation) $ assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
+                Just sat -> assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
 
 testEvalNegativeModulo :: Test
 testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"
