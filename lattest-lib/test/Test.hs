@@ -69,7 +69,6 @@ makeHUnitTests = do
         testSpecG,
         testSpecGQuiescent,
         testSTSTestSelection,
-        testSTSDisnjunction1,
         testRandomFCorrect,
         testRandomFIncorrectOutput,
         testRandomFIncorrectInput,
@@ -79,8 +78,10 @@ makeHUnitTests = do
         testPrintSTS,
         testReadAutFile
         ]
+        ++ testLatticeSTS
         ++ evalTests
         ++ fmap ($ smt) solveTests
+
 
 createTestSMTRef =
     let cfg = Config.changeLog Config.defaultConfig True 

@@ -8,7 +8,7 @@ module Test.Lattest.Model.STSTest (
     testSTSUnHappyFlow,
     testPrintSTS,
     testSTSTestSelection,
-    testSTSDisnjunction1
+    testLatticeSTS
     )
 where
 
@@ -22,7 +22,7 @@ import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runTester,runSMTTester, Verdict(Pass))
+import Lattest.Exec.Testing(runTester,runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue, InputAttempt(..))
@@ -197,50 +197,75 @@ testSTSTestSelection = TestCase $ do
     inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
     out gate vals = GateValue (Out (OutSusp gate)) vals
 
-{- stsFDL:
+{- specification:
                         end(p,q)    
-                       〚p+q=2x-6〛   
-                     ╱——————>•      
-    x:=0            ╱               
-    ———>•—————————>•    end(p,q)    
-         start(p)   ╲   〚p-q=x〛     
-         〚9<p<11〛    ╲——————>•      
-          x ≔ p                     
+                       〚p+q=x+2〛   
+                     ╱——————>•————\
+    x:=0            ╱              \
+    ———>•—————————>•    end(p,q)    ———>•
+         start(p)   ╲   〚p-q=x〛   /!done
+         〚1<p<3〛    ╲——————>•————/
+          x ≔ p                 
                                     
   parameterized by
   * whether start and end gates are input or output
   * the type of branching from the second state (conjunction or disjunction)
+  * whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-stsFDL :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> IOSTS FreeLattice Integer String String
-stsFDL startType endType comp =
+specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> IOSTS FreeLattice Integer String String
+specParameterized startType endType comp splitFirst =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
+        done = SymInteract (Out "done") []
         initConf = pure 0 :: FreeLattice Integer
-        switches = \s -> case s of
-            0 -> Map.fromList [
-                    (start, pure (stsTLoc (9 .< p .&& p .< 11) (assignment [xvar =: p]), 1))
-                    ]
-            1 -> Map.fromList [(end, pure (stsTLoc (p .+ q .== 2 .* x .- 6) noAssignment, 2) `comp` pure (stsTLoc (p .+ q .== x) noAssignment, 3))]
-            2 -> Map.empty
-            3 -> Map.empty
-    in automaton initConf (Set.fromList [start, end]) switches
+        guardStart = 1 .< p .&& p .< 3
+        guardEnd1 = p .+ q .== x .+ 2
+        guardEnd2 = p .- q .== x
+        assignX = assignment [xvar =: p]
+        switches =
+            if splitFirst
+                then \s -> case s of
+                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
+                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) `comp` pure (stsTLoc guardEnd2 noAssignment, 3))]
+                        2 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
+                        3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
+                        4 -> Map.empty
+                else \s -> case s of
+                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) `comp` pure (stsTLoc guardStart assignX, 2))]
+                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
+                        2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 4))]
+                        3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
+                        4 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
+                        5 -> Map.empty
+    in automaton initConf (Set.fromList [start, end, done]) switches
 stsFDLInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
-stsFDLIntrpr = interpretSTS (stsFDL In Out (/\)) stsFDLInitAssign
 
-t1 startType endType 0 = Map.fromList $ [((GateValue (startType "start") [Cint 10]), 1)]
-t1 startType endType 1 = Map.fromList $ [((GateValue (endType "end") [Cint 4, Cint 6]), 2)]
-t1 startType endType 2 = Map.fromList $ []
-imp1 :: (String -> IOAct String String) -> (String -> IOAct String String) -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
-imp1 startType endType = do
-    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+{- implementation:
+          start(p)   end(p,q)    !done
+    ———>•—————————>•—————————>•—————————>•
+  parameterized by
+  * whether start and end gates are input or output
+  * p and q (note, this means that only s single, specific input start(p) is defined)
+-}
+t1 startType endType p1 p2 q2 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
+t1 startType endType p1 p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
+t1 startType endType p1 p2 q2 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
+t1 startType endType p1 p2 q2 3 = Map.fromList $ []
+impParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> Integer -> Integer -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
+impParameterized startType endType p1 p2 q2 = do
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
-testLatticeSTS :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> ((String -> IOAct String String) -> (String -> IOAct String String) -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))) -> Test
-testLatticeSTS startType endType comp p1 p2 q2 impIO = TestCase $ do
-    let nrSteps = 3
+testLatticeSTSParameterized' :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
+testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expectedNonConformalTrace = TestCase $ do
+    let (startType, endType, startType', endType') =
+            if inputThenOut
+                then (In, Out, inp, out)
+                else (Out, In, out, inp)
+    let nrSteps = 4
         cfg = Config.changeLog Config.defaultConfig True 
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
@@ -249,18 +274,51 @@ testLatticeSTS startType endType comp p1 p2 q2 impIO = TestCase $ do
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    imp <- impIO startType endType
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete (stsFDL startType endType comp) stsExampleInitAssign) testSelector imp
-    assertEqual ("expected pass after " ++ show observed) Pass verdict
-    assertEqual "expected conformal trace" [
-        inp "start" [Cint p1],
-        out "end" [Cint q2, Cint p2],
-        GateValue δ []
-        ] observed
+    imp <- impParameterized startType endType p1 p2 q2
+    let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    
+    case expectedNonConformalTrace of
+        Nothing -> do
+            assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
+            assertEqual (testName ++ ": expected conformal trace") [
+                startType' "start" [Cint p1],
+                endType' "end" [Cint p2, Cint q2],
+                out "done" [],
+                GateValue δ []
+                ] observed
+        Just t -> do
+            assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
+            assertEqual (testName ++ ": expected nonconformal trace") t observed
+inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
+inpf gate vals = GateValue (In (InputAttempt(gate, False))) vals
+out gate vals = GateValue (Out (OutSusp gate)) vals
+
+testLatticeSTSParameterized :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
+testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
+    testLatticeSTSParameterized' testName inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
+    testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True p1 p2 q2 expectedNonConformalTrace
+    ]
+
+testLatticeSTS :: [Test]
+testLatticeSTS = concat [
+    -- TODO add some cases for quiescence, immediate wrong input failure values, etc.
+    testLatticeSTSParameterized "a1" inputThenOutput (\/) 2 2 2 Nothing,
+    testLatticeSTSParameterized "a2" inputThenOutput (\/) 2 4 2 Nothing,
+    testLatticeSTSParameterized "a3" inputThenOutput (\/) 2 3 1 Nothing,
+    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]),
+    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [Cint 2], out "end" [Cint 2, Cint 2]]),
+    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 2]]),
+    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]),
+    testLatticeSTSParameterized "a8" inputThenOutput (/\) 2 3 1 Nothing,
+
+    testLatticeSTSParameterized "b1" outputThenInput (\/) 2 3 1 Nothing,
+    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 3, Cint 1]]),
+     -- this next test is actually unsound: it will pass under the assumption that the test selection (SMT solver) will pick (4,0) as input, but if not, the test case will incorrectly fail. To fix this, change the implementation to accept any (p,q) satisfying any of the guards
+    testLatticeSTSParameterized "b3" outputThenInput (/\) 2 4 0 Nothing,
+    testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 4, Cint 0]])
+    ]
     where
-    inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
-    out gate vals = GateValue (Out (OutSusp gate)) vals
-
-testSTSDisnjunction1 = testLatticeSTS In Out (\/) 10 6 4 imp1
-
-
+    inputThenOutput = True
+    outputThenInput = False
+ 
