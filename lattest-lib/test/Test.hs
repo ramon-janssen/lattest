@@ -2,7 +2,9 @@
 
 import Test.Lattest.Adapter.StandardAdapters
 import Test.Lattest.Exec.StandardTestControllers
+import Test.Lattest.Exec.NComplete
 import Test.Lattest.Exec.Testing
+import Test.Lattest.Model.BoundedMonad
 import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.ValExpr.ValExpr
@@ -15,7 +17,11 @@ import qualified Data.Maybe as M
 import Data.Functor(void)
 import System.Timeout(timeout)
 import Test.HUnit hiding (Path, path, assert)
+<<<<<<< HEAD
 import Test.QuickCheck
+=======
+import Test.QuickCheck (Property, quickCheck, within, withMaxSuccess)
+>>>>>>> master
 
 durationSeconds :: Int
 durationSeconds = 2
@@ -33,22 +39,26 @@ main = do
 runQuickCheckTests :: IO ()
 runQuickCheckTests = do
     quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
-    quickCheckWithTimeoutNum prop_consumeBufferedWith 15
+    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
 --  Disable symbolic expression tests for now as they are too flaky
---    quickCheckWithTimeoutNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
+--    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
 --    smtRef <- createTestSMTRef
---    quickCheckWithTimeoutNumSize (prop_solveSymbolic smtRef) 100 2
+--    quickCheckWithTimeoutWithNumWithSize (prop_solveSymbolic smtRef) 100 2
+    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
+    quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000
+
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutNum prop 100
-    quickCheckWithTimeoutNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
-    
-    quickCheckWithTimeoutNumSize prop n maxSize = quickCheck $ within (durationSeconds * 1000000) $ withMaxSuccess n $ forAllShrink (scale (max maxSize) arbitrary) shrink prop
+    quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
+    quickCheckWithTimeoutWithNumWithSize prop n maxSize = quickCheck $ within (durationSeconds * 1000000) $ withMaxSuccess n $ forAllShrink (scale (max maxSize) arbitrary) shrink prop
 
 makeHUnitTests :: IO Test
 makeHUnitTests = do
     smt <- createTestSMTRef
     return $ TestList $
         [
+        testAccSeq,
+        testADG,
         testConsumeBufferedWith,
         testConsumeBufferedWith_short,
         testJSONSocketAdapterByte,
@@ -68,6 +78,7 @@ makeHUnitTests = do
         testPrintSpecF,
         testSpecG,
         testSpecGQuiescent,
+        testExponentialNonDeterminism,
         testSTSTestSelection,
         testRandomFCorrect,
         testRandomFIncorrectOutput,
@@ -89,13 +100,4 @@ createTestSMTRef =
         smtLog = Config.smtLog cfg
         smtProc = M.fromJust (Config.getProc cfg)
     in SMT.createSMTRef smtProc smtLog
-
-
-
-
-
-
-
-
-
 

@@ -11,7 +11,8 @@ sg,
 testSpecF,
 testPrintSpecF,
 testSpecG,
-testSpecGQuiescent
+testSpecGQuiescent,
+testExponentialNonDeterminism
 )
 where
 
@@ -22,8 +23,9 @@ import qualified Text.RawString.QQ as QQ
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..))
 import qualified Data.Map as Map (toList, insert, fromList)
+import qualified Data.Set as Set
 
 data IF = A | B deriving (Show, Eq, Ord)
 data OF = X | Y deriving (Show, Eq, Ord)
@@ -137,4 +139,19 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
+
+sDoubleState = NonDet $ Set.fromList [0,1]
+tDoubleRecursion = nonDetConcTransFromMRel 
+    [(0, "act", sDoubleState)
+    ,(1, "act", sDoubleState)
+    ]
+sDoubleRecursion = automaton sDoubleState ["act"] tDoubleRecursion
+
+testExponentialNonDeterminism :: Test
+testExponentialNonDeterminism = TestCase $ do
+    -- take 1000 steps, each 'duplicating' the state configuration. With deduplication, the state configuration should still have size 2
+    let doubleRecursion = interpretConcrete sDoubleRecursion
+        NonDet conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
+        nrStatesAfterBlowup = length $ conf 
+    assertEqual ("only 2 states in automaton but found " ++ show nrStatesAfterBlowup ++ " in state configuration") 2 nrStatesAfterBlowup
 

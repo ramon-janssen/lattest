@@ -1,10 +1,9 @@
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 {- |
     A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
@@ -28,6 +27,7 @@
     state configurations, see
     
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
+
 -}
 
 module Lattest.Model.BoundedMonad (
@@ -41,7 +41,8 @@ FreeLattice,
 atom,
 top,
 bot,
-(/\),
+-- ** Distributive lattice in CNF
+FreeLatticeCNF(FreeLatticeCNF),
 -- * Specifiednesss
 Specifiedness(..),
 BoundedConfiguration,
@@ -57,15 +58,18 @@ isIndefinite,
 isConclusive,
 -- ** Utility types
 BoundedMonad,
-BoundedApplicative,
 BoundedFunctor,
 -- ** General non-determinism
 JoinSemiLattice,
+MeetSemiLattice,
 (\/),
+(/\),
 -- ** Mapping between lattices and boolean expressions
 BooleanConfiguration,
 asValExpr,
 asDualValExpr
+-- ** 'Data.OrdMonad' re-export, for convenience.
+module OM
 )
 where
 
@@ -76,11 +80,14 @@ import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
 import Algebra.Lattice(Lattice)
 import qualified Algebra.Lattice as L ((/\), (\/))
+import qualified Data.List as List
 import qualified Data.Set as Set
+import Data.OrdMonad as OM
 import Control.Monad(ap)
 
+
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
-data Det q = Det q | ForbiddenDet | UnderspecDet
+data Det q = Det q | ForbiddenDet | UnderspecDet deriving (Ord, Eq)
 
 instance BoundedConfiguration Det where
     isForbidden ForbiddenDet = True
@@ -119,29 +126,24 @@ instance Show a => Show (Det a) where
 
 
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
-data NonDet q = NonDet [q] | UnderspecNonDet
+data NonDet q = NonDet (Set.Set q) | UnderspecNonDet
 
 instance BoundedConfiguration NonDet where
-    isForbidden (NonDet []) = True
+    isForbidden (NonDet s) = if Set.null s then True else False
     isForbidden _ = False
     isUnderspecified UnderspecNonDet = True
     isUnderspecified _ = False
-    forbidden = NonDet []
+    forbidden = NonDet Set.empty
     underspecified = UnderspecNonDet
 
-instance Functor NonDet where
-    fmap f (NonDet ss) = NonDet $ fmap f ss
-    fmap _ UnderspecNonDet = UnderspecNonDet
+instance OM.OrdFunctor NonDet where
+    ordMap f (NonDet ss) = NonDet $ OM.ordMap f ss
+    ordMap _ UnderspecNonDet = UnderspecNonDet
     
-instance Applicative NonDet where
-    pure s = NonDet [s]
-    NonDet fs <*> NonDet ss = NonDet (fs <*> ss)
-    UnderspecNonDet <*> _ = UnderspecNonDet
-    _ <*> UnderspecNonDet = UnderspecNonDet
-    
-instance Monad NonDet where
-    NonDet ss >>= f = foldr (\/) (NonDet []) $ fmap f ss  
-    UnderspecNonDet >>= _ = UnderspecNonDet
+instance OM.OrdMonad NonDet where
+    ordBind (NonDet ss) f = foldr (\/) (NonDet Set.empty) $ Set.map f ss
+    ordBind UnderspecNonDet _ = UnderspecNonDet
+    ordReturn s = NonDet $ Set.singleton s
 
 instance Foldable NonDet where
     foldr f q (NonDet qs) = foldr f q qs
@@ -149,50 +151,43 @@ instance Foldable NonDet where
 
 instance Show a => Show (NonDet a) where
     show (NonDet []) = "⊥"
-    show (NonDet a) = show a
+    show (NonDet a) = show $ Set.toList a
     show UnderspecNonDet = "⊤"
 
 instance Ord a => Eq (NonDet a) where
     UnderspecNonDet == UnderspecNonDet = True
-    (NonDet q1) == (NonDet q2) = Set.fromList q1 == Set.fromList q2
+    (NonDet q1) == (NonDet q2) = q1 == q2
     _ == _ = False
 
 instance Ord a => Ord (NonDet a) where
     _ <= UnderspecNonDet = True
     UnderspecNonDet <= _ = False
-    (NonDet q1) <= (NonDet q2) = Set.fromList q1 <= Set.fromList q2
+    (NonDet q1) <= (NonDet q2) = q1 <= q2
 
-instance JoinSemiLattice (NonDet a) where
-    (\/) (NonDet q1) (NonDet q2) = NonDet (q1 ++ q2)
+instance (Ord a) => JoinSemiLattice (NonDet a) where
+    (\/) (NonDet q1) (NonDet q2) = NonDet (Set.union q1 q2)
     (\/) _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
+
+    __Warning__: this implementation is functionally correct, but not very efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', since no reductions are performed.
 -}
 newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
 
--- | A single state embedded in a free distributive lattice.
-atom :: a -> FreeLattice a
-atom = FreeLattice . Levitate . Var
-
--- | The free distributive lattice element ⊥, or false.
-bot :: FreeLattice a
-bot = FreeLattice Bottom
-
--- | The free distributive lattice element ⊤, or true.
-top :: FreeLattice a
-top = FreeLattice Top
+deriving instance Ord a => Ord (FreeLattice a)
+deriving instance Ord a => Ord (Free a)
 
 {-
--- Disjunction on free distributive lattices.
+-- Conjunction and disjunction on free distributive lattices.
 -- note: this is already imlpemented by the JoinSemiLattice instance
 (\/) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (\/) = (L.\/)
--}
 
 -- | Conjunction on free distributive lattices.
 (/\) :: FreeLattice a -> FreeLattice a -> FreeLattice a
 (/\) = (L./\)
+-}
 
 {-|
     An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
@@ -207,7 +202,7 @@ instance BoundedConfiguration FreeLattice where
     underspecified = FreeLattice Top
 
 instance Applicative FreeLattice where
-    pure = atom
+    pure = FreeLattice . Levitate . Var
     (<*>) = ap
 
 instance Monad FreeLattice where
@@ -225,7 +220,80 @@ instance Show a => Show (FreeLattice a) where
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
 instance JoinSemiLattice (FreeLattice a) where
-    (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself 
+    (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
+
+instance MeetSemiLattice (FreeLattice a) where
+    (/\) = (L./\) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
+
+{-|
+    Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
+    This makes it potentially more efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', but also potentially slightly /less/ efficient for small lattices.
+-}
+newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
+
+-- | A single state embedded in a free distributive lattice.
+atom :: a -> FreeLatticeCNF a
+atom = ordReturn
+
+-- | The free distributive lattice element ⊥, or false.
+bot :: FreeLatticeCNF a
+bot = forbidden
+
+-- | The free distributive lattice element ⊤, or true.
+top :: FreeLatticeCNF a
+top = underspecified
+
+instance BoundedConfiguration FreeLatticeCNF where
+    isForbidden (FreeLatticeCNF x) = any Set.null x
+    isUnderspecified (FreeLatticeCNF x) = Set.null x
+    forbidden = FreeLatticeCNF $ Set.singleton Set.empty
+    underspecified = FreeLatticeCNF $ Set.empty
+
+instance OM.OrdMonad FreeLatticeCNF where
+    ordBind (FreeLatticeCNF x) f = FreeLatticeCNF $ cnfJoin $ Set.map (Set.map f1) x
+        where
+            f1 y = let FreeLatticeCNF z = f y in z
+    ordReturn x = FreeLatticeCNF  $ Set.singleton $ Set.singleton x
+
+cnfJoin :: (Ord a) => Set.Set (Set.Set (Set.Set (Set.Set a))) -> Set.Set (Set.Set a)
+cnfJoin = reduceAll . Set.map Set.unions . Set.unions . Set.map nAryCartesianProduct
+    where
+    -- some possible optimizations: 1) don't compare every element to and 2) use the ordering on sets to avoid half of the comparisons, 3) ensure that this ordering is such that absorbing/neutral elements are compared first and avoid more work in that case
+    reduceAll sets = Set.filter (not . isProperSupersetOfAny sets) sets
+
+nAryCartesianProduct :: (Ord a) => Set.Set (Set.Set a) -> Set.Set (Set.Set a)
+nAryCartesianProduct j = Set.map Set.fromList $ Set.fromList $ sequence $ Set.toList $ Set.map Set.toList j
+
+isProperSupersetOfAny :: Ord a => Set.Set (Set.Set a) -> Set.Set a -> Bool
+isProperSupersetOfAny sets a = any (isProperSupersetOf a) (Set.toList sets)
+    where
+    isProperSupersetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
+    isProperSupersetOf set potentialSubset = (potentialSubset `Set.isSubsetOf` set) && not (set `Set.isSubsetOf` potentialSubset)
+
+instance OM.OrdFunctor FreeLatticeCNF where
+    ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
+
+instance Ord a => JoinSemiLattice (FreeLatticeCNF a) where
+    (FreeLatticeCNF x) \/ (FreeLatticeCNF y) = FreeLatticeCNF $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]
+
+instance Ord a => MeetSemiLattice (FreeLatticeCNF a) where
+    (FreeLatticeCNF x) /\ (FreeLatticeCNF y) =
+        let x' = Set.filter (not . isProperSupersetOfAny y) x
+            y' = Set.filter (not . isProperSupersetOfAny x) y
+        in FreeLatticeCNF (x' `Set.union` y')
+
+instance Show a => Show (FreeLatticeCNF a) where
+    show l
+        | isForbidden l = "⊥"
+        | isUnderspecified l = "⊤"
+    show (FreeLatticeCNF x) = case Set.toList x of
+            [conjunct] -> List.intercalate " ∨ " $ show <$> Set.toList conjunct
+            conjuncts -> List.intercalate " ∧ " $ showDisjunct <$> conjuncts
+        where
+        showDisjunct :: Show a => Set.Set a -> String
+        showDisjunct y = case Set.toList y of
+            [e] -> show e
+            disjuncts -> "(" ++ List.intercalate " ∨ " (show <$> disjuncts) ++ ")" 
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
@@ -267,17 +335,20 @@ isSpecified :: (BoundedConfiguration m) => m t -> Bool
 isSpecified = not . isUnderspecified
 
 -- | Abbreviation for types which are both bounded configurations and Monads.
-type BoundedMonad m = (BoundedConfiguration m, Monad m)
-
--- | Abbreviation for types which are both bounded configurations and Applicatives.
-type BoundedApplicative m = (BoundedConfiguration m, Applicative m)
+type BoundedMonad m = (BoundedConfiguration m, OM.OrdMonad m)
 
 -- | Abbreviation for types which are both bounded configurations and Functors.
-type BoundedFunctor m = (BoundedConfiguration m, Functor m)
+type BoundedFunctor m = (BoundedConfiguration m, OM.OrdFunctor m)
 
--- | Because the lattices-library doesn't support this
+-- | Semi-lattices with a binary join ('or') operation
 class JoinSemiLattice a where
     (\/) :: a -> a -> a
+
+-- | Semi-lattices with a binary meet ('and') operation
+class MeetSemiLattice a where
+    (/\) :: a -> a -> a
+
+
 
 --this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
 --instance Lattice a => JoinSemiLattice a where
