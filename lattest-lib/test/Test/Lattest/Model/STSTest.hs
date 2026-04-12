@@ -8,7 +8,8 @@ module Test.Lattest.Model.STSTest (
     testSTSUnHappyFlow,
     testPrintSTS,
     testSTSTestSelection,
-    testLatticeSTS
+    testLatticeSTS,
+    testLatticeSTSQuiescence
     )
 where
 
@@ -203,8 +204,8 @@ testSTSTestSelection = TestCase $ do
                      ╱——————>•————\
     x:=0            ╱              \
     ———>•—————————>•    end(p,q)    ———>•
-         start(p)   ╲   〚p-q=x〛   /!done
-         〚1<p<3〛    ╲——————>•————/
+         start(p)   ╲   〚p-q=x〛    /!done
+         〚1<p<3〛     ╲——————>•————/
           x ≔ p                 
                                     
   parameterized by
@@ -228,27 +229,26 @@ specParameterized startType endType comp splitFirst =
         switches =
             if splitFirst
                 then \s -> case s of
-                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
-                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) `comp` pure (stsTLoc guardEnd2 noAssignment, 3))]
-                        2 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
-                        3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
-                        4 -> Map.empty
-                else \s -> case s of
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) `comp` pure (stsTLoc guardStart assignX, 2))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
                         2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 4))]
                         3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
                         4 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
                         5 -> Map.empty
+                else \s -> case s of
+                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
+                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) `comp` pure (stsTLoc guardEnd2 noAssignment, 3))]
+                        2 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
+                        3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
+                        4 -> Map.empty
     in automaton initConf (Set.fromList [start, end, done]) switches
-stsFDLInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 {- implementation:
           start(p)   end(p,q)    !done
     ———>•—————————>•—————————>•—————————>•
   parameterized by
   * whether start and end gates are input or output
-  * p and q (note, this means that only s single, specific input start(p) is defined)
+  * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
 -}
 t1 startType endType p1 p2 q2 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
 t1 startType endType p1 p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
@@ -266,7 +266,7 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
                 then (In, Out, inp, out)
                 else (Out, In, out, inp)
     let nrSteps = 4
-        cfg = Config.changeLog Config.defaultConfig True 
+        cfg = Config.changeLog Config.defaultConfig False
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
@@ -303,22 +303,198 @@ testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConfo
 testLatticeSTS :: [Test]
 testLatticeSTS = concat [
     -- TODO add some cases for quiescence, immediate wrong input failure values, etc.
-    testLatticeSTSParameterized "a1" inputThenOutput (\/) 2 2 2 Nothing,
-    testLatticeSTSParameterized "a2" inputThenOutput (\/) 2 4 2 Nothing,
-    testLatticeSTSParameterized "a3" inputThenOutput (\/) 2 3 1 Nothing,
-    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]),
-    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [Cint 2], out "end" [Cint 2, Cint 2]]),
-    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 2]]),
-    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]),
-    testLatticeSTSParameterized "a8" inputThenOutput (/\) 2 3 1 Nothing,
+    testLatticeSTSParameterized "a1" inputThenOutput (\/) 2 2 2 Nothing, -- pass: output (2,2) satisfies the first guard
+    testLatticeSTSParameterized "a2" inputThenOutput (\/) 2 4 2 Nothing, -- pass: output (4,2) satisfies the second guard
+    testLatticeSTSParameterized "a3" inputThenOutput (\/) 2 3 1 Nothing, -- pass: output (3,1) satisfies both guards
+    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]), -- fail: output (4,4) satisfies neither guard
+    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [Cint 2], out "end" [Cint 2, Cint 2]]), -- fail: output (2,2) satisfies the first guards, but not both
+    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 2]]), -- fail: output (4,2) satisfies the second guards, but not both
+    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]), -- fail: output (4,4) satisfies neither guard
+    testLatticeSTSParameterized "a8" inputThenOutput (/\) 2 3 1 Nothing, -- pass: output (3,1) satisfies both guards
 
-    testLatticeSTSParameterized "b1" outputThenInput (\/) 2 3 1 Nothing,
-    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 3, Cint 1]]),
-     -- this next test is actually unsound: it will pass under the assumption that the test selection (SMT solver) will pick (4,0) as input, but if not, the test case will incorrectly fail. To fix this, change the implementation to accept any (p,q) satisfying any of the guards
-    testLatticeSTSParameterized "b3" outputThenInput (/\) 2 4 0 Nothing,
-    testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 4, Cint 0]])
+    testLatticeSTSParameterized "b1" outputThenInput (\/) 2 3 1 Nothing, -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested and observed
+    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 3, Cint 1]]) -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested but refused
+     -- FIXME the next tests are actually unsound: it will pass under the assumption that the test selection (SMT solver) will pick the last two number parameters as input,
+     -- but if not, the test case will incorrectly fail. To fix this, change the implementation to accept any (p,q) satisfying any of the guards 〚p+q=4〛 or 〚p-q=2〛
+    --testLatticeSTSParameterized "b3" outputThenInput (/\) 2 0 (-2) Nothing, -- pass: (0,-2) is an input that matches one of the guards, so is specified, thus may be tested and in that case will be observed
+    --testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 0, Cint (-2)]]) -- fail: the tester will pick an input that matches one of the guards, but will be rejected by the implementation
     ]
     where
     inputThenOutput = True
     outputThenInput = False
- 
+
+ {- specification:
+
+    x:=0                               
+    ———>•—————————>•———————————>•      
+        ?start(p)    !end(p,q)         
+         〚1<p<3〛    〚p+q=p+q+x〛        
+          x ≔ p                        
+                                       
+    note, the guard of the second transition is not satisfiable so the second state is quiescent
+-}
+specQ :: IOSTS FreeLattice Integer String String
+specQ =
+    let p = sVar pvar
+        q = sVar qvar
+        x = sVar xvar
+        start = SymInteract (In "start") [pvar]
+        end = SymInteract (Out "end") [pvar, qvar]
+        initConf = pure 0 :: FreeLattice Integer
+        guardStart = 1 .< p .&& p .< 3
+        guardEnd = p .+ q .== p .+ q .+ x
+        assignX = assignment [xvar =: p]
+        switches = \s -> case s of
+                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
+                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd noAssignment, 2))]
+                        2 -> Map.empty
+    in automaton initConf (Set.fromList [start, end]) switches
+
+{- implementation:
+          start(p)
+    ———>•—————————>•
+  parameterized by
+  * whether start gate is input or output
+  * p
+-}
+tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [Cint p]), 1)]
+tq startType p 1 = Map.fromList $ []
+impQParameterized :: (String -> IOAct String String) -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
+impQParameterized startType p = do
+    imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tq startType p) 0 :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
+    Adapter.mapActionsFromSut toIOGateValue imp
+
+testLatticeSTSQuiescentPass :: String -> Bool -> Test
+testLatticeSTSQuiescentPass testName splitFirst = TestCase $ do
+    let nrSteps = 2
+        cfg = Config.changeLog Config.defaultConfig False
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    info <- SMT.runSMT smtRef SMT.openSolver
+
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    imp <- impQParameterized In 2
+    let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    
+    assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
+    assertEqual (testName ++ ": expected conformal trace") [
+                inp "start" [Cint 2],
+                GateValue δ []
+                ] observed
+
+testLatticeSTSQuiescentFail1 :: String -> Bool -> Test
+testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
+    let nrSteps = 2
+        cfg = Config.changeLog Config.defaultConfig False
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    info <- SMT.runSMT smtRef SMT.openSolver
+
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    imp <- impQParameterized In 2
+    let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    
+    assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
+    assertEqual (testName ++ ": expected nonconformal trace") [
+                inp "start" [Cint 2],
+                GateValue δ []
+                ] observed
+
+testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
+testLatticeSTSQuiescentFail2 testName splitFirst = TestCase $ do
+    let nrSteps = 2
+        cfg = Config.changeLog Config.defaultConfig False
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    info <- SMT.runSMT smtRef SMT.openSolver
+
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    imp <- impParameterized In Out 2 42 42
+    let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    
+    assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
+    assertEqual (testName ++ ": expected nonconformal trace") [
+                inp "start" [Cint 2],
+                out "end" [Cint 42, Cint 42]
+                ] observed
+
+
+ {- specification:
+                       !end(p,q) 
+                       〚p+q=x+2〛       
+                     ╱——————————\      
+    x:=0            ╱            \     
+    ———>•—————————>• ) !end(p,q)  ———>•
+        ?start(p)   ╲   〚p+q=x〛  /     
+         〚1<p<3〛     ╲——————————/      
+          x ≔ p                        
+                                       
+  parameterized by whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
+-}
+specUnimplementableParameterized :: Bool -> IOSTS FreeLattice Integer String String
+specUnimplementableParameterized splitFirst =
+    let p = sVar pvar
+        q = sVar qvar
+        x = sVar xvar
+        start = SymInteract (In "start") [pvar]
+        end = SymInteract (Out "end") [pvar, qvar]
+        initConf = pure 0 :: FreeLattice Integer
+        guardStart = 1 .< p .&& p .< 3
+        guardEnd1 = p .+ q .== x .+ 2
+        guardEnd2 = p .+ q .== x
+        assignX = assignment [xvar =: p]
+        switches =
+            if splitFirst
+                then \s -> case s of
+                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) /\ pure (stsTLoc guardStart assignX, 2))]
+                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
+                        2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 3))]
+                        3 -> Map.empty
+                else \s -> case s of
+                        0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
+                        1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) /\ pure (stsTLoc guardEnd2 noAssignment, 3))]
+                        2 -> Map.empty
+                        3 -> Map.empty
+    in automaton initConf (Set.fromList [start, end]) switches
+
+testLatticeSTSUnimplementable :: String -> Bool -> Test
+testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
+    let nrSteps = 2
+        cfg = Config.changeLog Config.defaultConfig False
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    info <- SMT.runSMT smtRef SMT.openSolver
+
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+                `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    imp <- impQParameterized In 2
+    let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    
+    assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
+    assertEqual (testName ++ ": expected nonconformal trace") [
+                inp "start" [Cint 2],
+                GateValue δ []
+                ] observed
+
+testLatticeSTSQuiescence :: [Test]
+testLatticeSTSQuiescence = [
+    testLatticeSTSQuiescentPass "q1" True, -- a quiescent implementation and STS will lead to a pass
+    testLatticeSTSQuiescentPass "q2'" False, -- a quiescent implementation and STS will lead to a pass
+    testLatticeSTSQuiescentFail1 "q3" True, -- a quiescent implementation will fail against a non-quiescent specification
+    testLatticeSTSQuiescentFail1 "q4" False, -- a quiescent implementation will fail against a non-quiescent specification
+    testLatticeSTSQuiescentFail2 "q3" True, -- a non-quiescent implementation will fail against a quiescent specification
+    testLatticeSTSQuiescentFail2 "q4" False, -- a non-quiescent implementation will fail against a quiescent specification
+    testLatticeSTSUnimplementable "u1" True, -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
+    testLatticeSTSUnimplementable "u2'" False -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
+    ]

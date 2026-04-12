@@ -79,12 +79,13 @@ makeHUnitTests = do
         testReadAutFile
         ]
         ++ testLatticeSTS
+        ++ testLatticeSTSQuiescence
         ++ evalTests
         ++ fmap ($ smt) solveTests
 
 
 createTestSMTRef =
-    let cfg = Config.changeLog Config.defaultConfig True 
+    let cfg = Config.changeLog Config.defaultConfig False
         smtLog = Config.smtLog cfg
         smtProc = M.fromJust (Config.getProc cfg)
     in SMT.createSMTRef smtProc smtLog
