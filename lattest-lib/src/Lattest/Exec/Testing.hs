@@ -101,16 +101,16 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q)) =>
+makeTester :: (After m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester = makeTester' ()
 
 --makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
-makeSMTTester :: (IOAfter m loc q t tdest act SMTRef, TestChoice i act, BoundedConfiguration m) =>
+makeSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q)) =>
     SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeSMTTester = makeTester'
 
-makeTester' :: (IOAfter m loc q t tdest act ioState, TestChoice i act, BoundedConfiguration m) =>
+makeTester' :: (IOAfter m loc q t tdest act ioState, StepSemantics m loc q t tdest act, TestChoice i act, BoundedConfiguration m, Ord q, Ord (m q)) =>
     ioState -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeTester' ioState initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
@@ -131,7 +131,7 @@ makeTester' ioState initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Refusable act, Ord q, Ord (m q)) =>
+        makeUpdate :: (StepSemantics m loc q t tdest act, BoundedConfiguration m, Ord q, Ord (m q)) =>
             (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
         makeUpdate (spec, testController) act = do
             spec' <- spec `ioAfterState` act 

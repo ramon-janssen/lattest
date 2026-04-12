@@ -67,7 +67,7 @@ MeetSemiLattice,
 -- ** Mapping between lattices and boolean expressions
 BooleanConfiguration,
 asValExpr,
-asDualValExpr
+asDualValExpr,
 -- ** 'Data.OrdMonad' re-export, for convenience.
 module OM
 )
@@ -150,8 +150,9 @@ instance Foldable NonDet where
     foldr _ q _ = q
 
 instance Show a => Show (NonDet a) where
-    show (NonDet []) = "⊥"
-    show (NonDet a) = show $ Set.toList a
+    show (NonDet a)
+        | Set.null a = "⊥"
+        | otherwise = show $ Set.toList a
     show UnderspecNonDet = "⊤"
 
 instance Ord a => Eq (NonDet a) where
@@ -364,7 +365,7 @@ instance BooleanConfiguration Det where
     asValExpr UnderspecDet = E.sTrue
 
 instance BooleanConfiguration NonDet where
-    asValExpr (NonDet qs) = (E.sOr) $ Set.fromList qs
+    asValExpr (NonDet qs) = E.sOr qs
     asValExpr UnderspecNonDet = E.sTrue
 
 instance BooleanConfiguration FreeLattice where
@@ -376,5 +377,5 @@ instance BooleanConfiguration FreeLattice where
         asValExpr' (x :\/: y) = asValExpr' x E..|| asValExpr' y
         asValExpr' (x :/\: y) = asValExpr' x E..&& asValExpr' y
 
-asDualValExpr :: (Functor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
-asDualValExpr m = E.sNot $ asValExpr $ E.sNot <$> m
+asDualValExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
+asDualValExpr m = E.sNot $ asValExpr $ E.sNot OM.<#> m

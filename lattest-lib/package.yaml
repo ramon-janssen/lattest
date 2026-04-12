@@ -39,7 +39,7 @@ dependencies:
   - list-shuffle >= 1.0.0.1
   - raw-strings-qq >= 1.1
   - parallel
-
+  - deepseq >= 1.5.0.0
 ghc-options:
 - -Wall
 - -Wcompat

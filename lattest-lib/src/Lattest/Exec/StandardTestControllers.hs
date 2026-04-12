@@ -55,7 +55,6 @@ printActions,
 printState
 )
 where
-<<<<<<< HEAD
 
 import Lattest.Exec.Testing(TestController(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction, SuspendedIFGateValue)
