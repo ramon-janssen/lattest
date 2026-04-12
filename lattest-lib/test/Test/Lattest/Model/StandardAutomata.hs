@@ -66,7 +66,7 @@ testPrintSpecF = TestCase $ assertBool failureMessage (expected == actual) -- no
 initial location configuration: Q0f
 locations: Q0f, Q1f, Q2f
 transitions:
-Q0f  ――?A⟶  (((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f)))
+Q0f  ――?A⟶  ((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f))
 Q0f  ――?B⟶  ⊤
 Q0f  ――!X⟶  ((),Q0f)
 Q0f  ――!Y⟶  ((),Q0f)

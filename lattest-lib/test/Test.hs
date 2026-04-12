@@ -17,11 +17,7 @@ import qualified Data.Maybe as M
 import Data.Functor(void)
 import System.Timeout(timeout)
 import Test.HUnit hiding (Path, path, assert)
-<<<<<<< HEAD
 import Test.QuickCheck
-=======
-import Test.QuickCheck (Property, quickCheck, within, withMaxSuccess)
->>>>>>> master
 
 durationSeconds :: Int
 durationSeconds = 2
@@ -48,7 +44,7 @@ runQuickCheckTests = do
     quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000
 
     where
-    quickCheckWithTimeout prop = quickCheckWithTimeoutNum prop 100
+    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
     quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
     quickCheckWithTimeoutWithNumWithSize prop n maxSize = quickCheck $ within (durationSeconds * 1000000) $ withMaxSuccess n $ forAllShrink (scale (max maxSize) arbitrary) shrink prop
 

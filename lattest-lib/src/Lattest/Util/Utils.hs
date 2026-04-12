@@ -30,6 +30,7 @@ import Data.Set (Set)
 import Data.List(sort, head, group)
 import System.Random(RandomGen, uniformR)
 import Control.Monad.Extra((||^), (&&^))
+import Data.OrdMonad as OM
 
 -- | Conjunction lifted to functions.
 (&&&) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
@@ -91,17 +92,17 @@ removeDuplicates :: Ord a => [a] -> [a]
 removeDuplicates = map head . group . sort
 
 {-|
-    apply a monadic computation over a functor, where the monadic computations are performed sequentially according to the natural ordering of the
+    Apply a monadic computation over a functor, where the monadic computations are performed sequentially according to the natural ordering of the
     functor elements. If m is the `Identity` monad, then this function boils down to a normal `fmap`.
     
     Strictly speaking, this function is partial: it is undefined if the functor maps the computation over an element which is not folded by that
-    same functor. In practice, the elements mapped over by a foldable functor are exactly the folded elements.
+    same functor. In practice, the elements mapped over by a foldable functor are usually exactly the folded elements.
 -}
-distributeMonadOverFoldable :: (Functor f, Foldable f, Monad m, Ord x) => (x -> m y) -> f x -> m (f y)
+distributeMonadOverFoldable :: (OM.OrdFunctor f, Foldable f, Monad m, Ord x, Ord y) => (x -> m y) -> f x -> m (f y)
 distributeMonadOverFoldable f xs = do
     let ascElems = Set.toAscList $ Set.fromList $ toList xs
     xToY <- sequence (f' <$> ascElems)
-    return $ lookup (Map.fromAscList xToY) <$> xs
+    return $ lookup (Map.fromAscList xToY) OM.<#> xs
     where
     f' x = do
         y <- f x

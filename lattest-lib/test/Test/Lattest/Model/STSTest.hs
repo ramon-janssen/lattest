@@ -27,7 +27,7 @@ import Lattest.Exec.Testing(runTester,runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..),underspecified,forbidden)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..), nonDet, underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.ValExpr.ValExpr
@@ -50,7 +50,7 @@ stsExample =
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
-        initConf = NonDet [0] :: NonDet Integer
+        initConf = nonDet [0] :: NonDet Integer
         switches = \q -> case q of
             0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
                                 (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
@@ -60,7 +60,7 @@ stsExample =
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
-getSTSIntrpState loc val = NonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
+getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do

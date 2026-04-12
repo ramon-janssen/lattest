@@ -36,6 +36,7 @@ module Lattest.Model.BoundedMonad (
 Det(..),
 -- ** Non-deterministic
 NonDet(..),
+nonDet,
 -- ** Distributive lattice
 FreeLattice,
 atom,
@@ -67,7 +68,7 @@ MeetSemiLattice,
 -- ** Mapping between lattices and boolean expressions
 BooleanConfiguration,
 asValExpr,
-asDualValExpr
+asDualValExpr,
 -- ** 'Data.OrdMonad' re-export, for convenience.
 module OM
 )
@@ -128,6 +129,9 @@ instance Show a => Show (Det a) where
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDet q = NonDet (Set.Set q) | UnderspecNonDet
 
+nonDet :: Ord q => [q] -> NonDet q
+nonDet = NonDet . Set.fromList
+
 instance BoundedConfiguration NonDet where
     isForbidden (NonDet s) = if Set.null s then True else False
     isForbidden _ = False
@@ -150,8 +154,9 @@ instance Foldable NonDet where
     foldr _ q _ = q
 
 instance Show a => Show (NonDet a) where
-    show (NonDet []) = "⊥"
-    show (NonDet a) = show $ Set.toList a
+    show (NonDet a)
+        | Set.null a = "⊥"
+        | otherwise = show $ Set.toList a
     show UnderspecNonDet = "⊤"
 
 instance Ord a => Eq (NonDet a) where
@@ -364,7 +369,7 @@ instance BooleanConfiguration Det where
     asValExpr UnderspecDet = E.sTrue
 
 instance BooleanConfiguration NonDet where
-    asValExpr (NonDet qs) = (E.sOr) $ Set.fromList qs
+    asValExpr (NonDet qs) = E.sOr qs
     asValExpr UnderspecNonDet = E.sTrue
 
 instance BooleanConfiguration FreeLattice where
@@ -376,5 +381,5 @@ instance BooleanConfiguration FreeLattice where
         asValExpr' (x :\/: y) = asValExpr' x E..|| asValExpr' y
         asValExpr' (x :/\: y) = asValExpr' x E..&& asValExpr' y
 
-asDualValExpr :: (Functor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
-asDualValExpr m = E.sNot $ asValExpr $ E.sNot <$> m
+asDualValExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
+asDualValExpr m = E.sNot $ asValExpr $ E.sNot OM.<#> m
