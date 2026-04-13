@@ -361,7 +361,6 @@ class MeetSemiLattice a where
 
 class BooleanConfiguration m where -- TODO: possibly this class can be less ad-hoc, e.g. via some lattice-theoretic concept
     asValExpr :: m (E.Expr Bool) -> E.Expr Bool
-    --asValExprInverted :: m ValExprBool -> ValExprBool
 
 instance BooleanConfiguration Det where
     asValExpr (Det q) = q
