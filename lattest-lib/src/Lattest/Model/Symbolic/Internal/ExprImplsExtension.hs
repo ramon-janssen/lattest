@@ -5,7 +5,7 @@ See LICENSE in the parent Symbolic folder.
 -}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ValExprImplsExtension
+-- Module      :  ExprImplsExtension
 -- Copyright   :  (c) TNO and Radboud University
 -- License     :  BSD3 (See LICENSE at root directory of this repository)
 --
@@ -13,13 +13,13 @@ See LICENSE in the parent Symbolic folder.
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- This module Lattest.Model.Symbolic.ValExpr.defines extension of functions on and constructors of value expressions.
+-- This module Lattest.Model.Symbolic.Expr.defines extension of functions on and constructors of value expressions.
 --
 -----------------------------------------------------------------------------
 
 {-# LANGUAGE FlexibleInstances #-}
 
-module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
+module Lattest.Model.Symbolic.Internal.ExprImplsExtension
 ( -- * Derived Boolean operators
   -- ** Or (\/)
   sOr
@@ -54,9 +54,9 @@ where
 
 import qualified Data.Set     as Set
 
-import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
-import           Lattest.Model.Symbolic.ValExpr.ValExprDefs
-import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
+import           Lattest.Model.Symbolic.Internal.FreeMonoidX
+import           Lattest.Model.Symbolic.Internal.ExprDefs
+import           Lattest.Model.Symbolic.Internal.ExprImpls
 
 
 -- | Apply operator Or (\\\/) on the provided set of value expressions.

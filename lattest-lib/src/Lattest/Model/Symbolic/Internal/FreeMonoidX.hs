@@ -59,7 +59,7 @@ See LICENSE in the parent Symbolic folder.
 --
 -----------------------------------------------------------------------------
 
-module Lattest.Model.Symbolic.ValExpr.FreeMonoidX
+module Lattest.Model.Symbolic.Internal.FreeMonoidX
   ( -- * Free Monoid with multiplication Type
     FreeMonoidX (..)
 
@@ -81,7 +81,7 @@ module Lattest.Model.Symbolic.ValExpr.FreeMonoidX
   , foldrTerms
   , foldOccur
   , foldFMX
-  , Lattest.Model.Symbolic.ValExpr.FreeMonoidX.fold
+  , Lattest.Model.Symbolic.Internal.FreeMonoidX.fold
 
     -- * Manipulation of the free monoid
   , append

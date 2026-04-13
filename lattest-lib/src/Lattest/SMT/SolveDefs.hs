@@ -23,7 +23,7 @@ where
 
 import qualified Data.Map  as Map
 
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Constant)
+import Lattest.Model.Symbolic.Expr(Constant)
 
 -- ----------------------------------------------------------------------------------------- --
 -- SMT definitions

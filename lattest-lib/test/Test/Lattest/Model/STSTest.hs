@@ -30,7 +30,7 @@ import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), Sus
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..), nonDet, underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.ValExpr.ValExpr
+import Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 

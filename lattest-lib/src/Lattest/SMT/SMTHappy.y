@@ -25,7 +25,7 @@ module Lattest.SMT.SMTHappy
 )
 where
 import Lattest.SMT.SMTAlex (Token(..), smtLexer)
-import qualified Lattest.Model.Symbolic.ValExpr.ValExprDefs as C
+import qualified Lattest.Model.Symbolic.Internal.ExprDefs as C
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Lattest.SMT.SMTString as SMTString    -- Parse SMT string according to smtlib 2.5 standard

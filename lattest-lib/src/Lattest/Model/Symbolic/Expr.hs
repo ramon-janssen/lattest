@@ -5,7 +5,7 @@ See LICENSE in the parent Symbolic folder.
 -}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ValExpr
+-- Module      :  Expr
 -- Copyright   :  (c) TNO and Radboud University
 -- License     :  BSD3 (see the file license.txt)
 --
@@ -15,7 +15,7 @@ See LICENSE in the parent Symbolic folder.
 --
 -- Interface file for Value Expressions.
 -----------------------------------------------------------------------------
-module Lattest.Model.Symbolic.ValExpr.ValExpr
+module Lattest.Model.Symbolic.Expr
 ( Expr
 , view
 , ExprView(..)
@@ -39,11 +39,11 @@ module Lattest.Model.Symbolic.ValExpr.ValExpr
 , assignedExpr
 , (=:)
 , freeVars
-, module Lattest.Model.Symbolic.ValExpr.ValExprImpls
-, module Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
+, module Lattest.Model.Symbolic.Internal.ExprImpls
+, module Lattest.Model.Symbolic.Internal.ExprImplsExtension
 )
 where
 
-import           Lattest.Model.Symbolic.ValExpr.ValExprDefs
-import           Lattest.Model.Symbolic.ValExpr.ValExprImpls
-import           Lattest.Model.Symbolic.ValExpr.ValExprImplsExtension
+import           Lattest.Model.Symbolic.Internal.ExprDefs
+import           Lattest.Model.Symbolic.Internal.ExprImpls
+import           Lattest.Model.Symbolic.Internal.ExprImplsExtension

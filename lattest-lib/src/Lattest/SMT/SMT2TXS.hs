@@ -12,14 +12,14 @@ module Lattest.SMT.SMT2TXS
 
 -- ----------------------------------------------------------------------------------------- --
 --
--- Translate SMT results to TorXakis ValExpr's
+-- Translate SMT results to TorXakis Expr's
 --
 -- ----------------------------------------------------------------------------------------- --
 -- export
 
 (
 --SMTExpr,
---smtValueToValExpr   --  :: SMTValue -> TxsDefs -> SortId -> Walue
+--smtValueToExpr   --  :: SMTValue -> TxsDefs -> SortId -> Walue
 )
 
 -- ----------------------------------------------------------------------------------------- --
@@ -35,7 +35,7 @@ import qualified Data.Text         as T
 --import           CstrDef
 --import           CstrId
 import           Lattest.SMT.SMTHappy
-import           Lattest.Model.Symbolic.ValExpr.ValExpr(Type(..), Constant(..))
+import           Lattest.Model.Symbolic.Expr(Type(..), Constant(..))
 --import           SortId
 
 
@@ -63,24 +63,24 @@ lookupConstructor cstrMap sid n
 
 
 {-
-smtValueToValExpr (SMTConstructor cname argValues) cstrMap srt =
+smtValueToExpr (SMTConstructor cname argValues) cstrMap srt =
     let nameSort = SortId.name srt in
         if T.isPrefixOf (nameSort <> "$") cname
             then  -- look up internal CstrId
                 let cstrid = lookupConstructor cstrMap srt (T.drop (1 + T.length nameSort) cname) in
                     if length (cstrargs cstrid) == length argValues
                         then  -- recursively translate the arguments:
-                            let mexprArgs = map (\(argValue, sort') -> smtValueToValExpr argValue cstrMap sort')
+                            let mexprArgs = map (\(argValue, sort') -> smtValueToExpr argValue cstrMap sort')
                                                 (zip argValues (cstrargs cstrid))
                                 (es, vexprArgs) = partitionEithers mexprArgs 
                               in
                                 case es of 
                                     [] -> Right $ Ccstr cstrid vexprArgs
                                     _  -> Left $ Utils.join "\n" es
-                        else Left $ "TXS SMT2TXS smtValueToValExpr: Number of arguments mismatch " ++
+                        else Left $ "TXS SMT2TXS smtValueToExpr: Number of arguments mismatch " ++
                                       "in constructor " ++ show cname ++ " of sort " ++ show nameSort ++
                                       " : definition " ++ show (length (cstrargs cstrid)) ++
                                       " vs actual " ++ show (length argValues) ++ "\n"
-            else Left $ "TXS SMT2TXS smtValueToValExpr: CstrName " ++ show cname ++
+            else Left $ "TXS SMT2TXS smtValueToExpr: CstrName " ++ show cname ++
                           " does not start with sort " ++ show nameSort ++ "\n"
 -}

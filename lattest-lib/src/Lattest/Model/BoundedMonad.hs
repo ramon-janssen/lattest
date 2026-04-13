@@ -67,15 +67,15 @@ MeetSemiLattice,
 (/\),
 -- ** Mapping between lattices and boolean expressions
 BooleanConfiguration,
-asValExpr,
-asDualValExpr,
+asExpr,
+asDualExpr,
 -- ** 'Data.OrdMonad' re-export, for convenience.
 module OM
 )
 where
 
-import qualified Lattest.Model.Symbolic.ValExpr.ValExpr as E
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Constant(Cbool))
+import qualified Lattest.Model.Symbolic.Expr as E
+import Lattest.Model.Symbolic.Expr(Constant(Cbool))
 
 import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
@@ -360,25 +360,25 @@ class MeetSemiLattice a where
 --    join = (L.\/)
 
 class BooleanConfiguration m where -- TODO: possibly this class can be less ad-hoc, e.g. via some lattice-theoretic concept
-    asValExpr :: m (E.Expr Bool) -> E.Expr Bool
+    asExpr :: m (E.Expr Bool) -> E.Expr Bool
 
 instance BooleanConfiguration Det where
-    asValExpr (Det q) = q
-    asValExpr ForbiddenDet = E.sFalse
-    asValExpr UnderspecDet = E.sTrue
+    asExpr (Det q) = q
+    asExpr ForbiddenDet = E.sFalse
+    asExpr UnderspecDet = E.sTrue
 
 instance BooleanConfiguration NonDet where
-    asValExpr (NonDet qs) = E.sOr qs
-    asValExpr UnderspecNonDet = E.sTrue
+    asExpr (NonDet qs) = E.sOr qs
+    asExpr UnderspecNonDet = E.sTrue
 
 instance BooleanConfiguration FreeLattice where
-    asValExpr (FreeLattice Top) = E.sTrue
-    asValExpr (FreeLattice Bottom) = E.sFalse
-    asValExpr (FreeLattice (Levitate a)) = asValExpr' a
+    asExpr (FreeLattice Top) = E.sTrue
+    asExpr (FreeLattice Bottom) = E.sFalse
+    asExpr (FreeLattice (Levitate a)) = asExpr' a
         where
-        asValExpr' (Var a) = a
-        asValExpr' (x :\/: y) = asValExpr' x E..|| asValExpr' y
-        asValExpr' (x :/\: y) = asValExpr' x E..&& asValExpr' y
+        asExpr' (Var a) = a
+        asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
+        asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 
-asDualValExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
-asDualValExpr m = E.sNot $ asValExpr $ E.sNot OM.<#> m
+asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
+asDualExpr m = E.sNot $ asExpr $ E.sNot OM.<#> m

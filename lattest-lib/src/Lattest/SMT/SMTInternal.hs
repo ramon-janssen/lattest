@@ -41,7 +41,7 @@ import           Lattest.SMT.SMTData
 import           Lattest.SMT.SMTHappy
 import           Lattest.SMT.SolveDefs
 import           Lattest.SMT.TXS2SMT
-import           Lattest.Model.Symbolic.ValExpr.ValExpr
+import           Lattest.Model.Symbolic.Expr
 --import           Variable
 
 -- ----------------------------------------------------------------------------------------- --

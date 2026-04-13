@@ -2,7 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedLists #-}
 
-module Test.Lattest.Model.Symbolic.ValExpr.ValExpr (
+module Test.Lattest.Model.Symbolic.Expr (
 prop_evalSymbolic,
 PropEvalSymbolic,
 prop_solveSymbolic,
@@ -11,9 +11,9 @@ solveTests
 )
 where
 
-import Lattest.Model.Symbolic.ValExpr.FreeMonoidX as FM
-import Lattest.Model.Symbolic.ValExpr.ValExpr
-import Lattest.Model.Symbolic.ValExpr.ValExprDefs(Expr(Expr), allTypes)
+import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
+import Lattest.Model.Symbolic.Expr
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(Expr), allTypes)
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT.SMTData as SMT
 import qualified Data.List as List

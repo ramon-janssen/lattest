@@ -46,7 +46,7 @@ import qualified Data.Text     as T
 
 --import           CstrDef
 --import           CstrId
-import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
+import           Lattest.Model.Symbolic.Internal.FreeMonoidX
 --import           FuncDef
 --import           FuncId
 --import           Lattest.SMT.RegexXSD2SMT
@@ -54,7 +54,7 @@ import           Lattest.SMT.SMTData
 import           Lattest.SMT.SMTString
 --import           SortDef
 --import           SortId
-import           Lattest.Model.Symbolic.ValExpr.ValExpr
+import           Lattest.Model.Symbolic.Expr
 --import           Variable
 --import           VarId
 

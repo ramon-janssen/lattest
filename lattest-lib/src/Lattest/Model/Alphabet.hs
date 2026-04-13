@@ -73,7 +73,7 @@ where
 
 import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
 import qualified Data.List as List (intercalate)
-import Lattest.Model.Symbolic.ValExpr.ValExpr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign, Constant(..), constType)
+import Lattest.Model.Symbolic.Expr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign, Constant(..), constType)
 
 {- |
     If an input type is an 'TestChoice' to a type of observable actions, this means that

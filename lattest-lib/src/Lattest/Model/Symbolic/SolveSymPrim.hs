@@ -7,11 +7,11 @@ solveGuard
 ) where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
-import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualValExpr)
-import qualified Lattest.Model.Symbolic.ValExpr.ValExpr as E
-import Lattest.Model.Symbolic.ValExpr.ValExpr(Valuation,Variable(..), Constant(..))
-import Lattest.Model.Symbolic.ValExpr.ValExprDefs(eval)
-import Lattest.Model.Symbolic.ValExpr.ValExprImpls(substConst)
+import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
+import qualified Lattest.Model.Symbolic.Expr as E
+import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), Constant(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs(eval)
+import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
 import Lattest.SMT.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import qualified Data.Map as Map
@@ -20,7 +20,7 @@ import qualified Data.Map as Map
     Combine the given guards into one.
 -}
 combineGuards :: (BooleanConfiguration m, OrdFunctor m) => m SymGuard -> SymGuard
-combineGuards = asDualValExpr
+combineGuards = asDualExpr
 
 {-|
     In the given guard, substitute the given valuation.

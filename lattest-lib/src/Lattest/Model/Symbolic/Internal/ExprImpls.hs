@@ -5,7 +5,7 @@ See LICENSE in the parent Symbolic folder.
 -}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ValExprImpls
+-- Module      :  ExprImpls
 -- Copyright   :  (c) TNO and Radboud University
 -- License     :  BSD3 (see the file license.txt)
 -- 
@@ -22,7 +22,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Lattest.Model.Symbolic.ValExpr.ValExprImpls
+module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
   sConst
@@ -102,50 +102,50 @@ import qualified Data.Set        as Set
 import qualified Data.Text       as T
 --import           Text.Regex.TDFA
 
-import qualified Lattest.Model.Symbolic.ValExpr.Boute as Boute
-import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX        as FMX
-import           Lattest.Model.Symbolic.ValExpr.Product as Product
---import           Lattest.Model.Symbolic.ValExpr.RegexXSD2Posix
-import           Lattest.Model.Symbolic.ValExpr.Sum as Sum
-import           Lattest.Model.Symbolic.ValExpr.ValExprDefs
+import qualified Lattest.Model.Symbolic.Internal.Boute as Boute
+import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX        as FMX
+import           Lattest.Model.Symbolic.Internal.Product as Product
+--import           Lattest.Model.Symbolic.Expr.RegexXSD2Posix
+import           Lattest.Model.Symbolic.Internal.Sum as Sum
+import           Lattest.Model.Symbolic.Internal.ExprDefs
 
 -- | Create a function call.
 -- Preconditions are /not/ checked.
-{-cstrFunc :: (Variable v, Variable w) => Map.Map FuncId (FuncDef v) -> FuncId -> [ValExpr w] -> ValExpr w
+{-cstrFunc :: (Variable v, Variable w) => Map.Map FuncId (FuncDef v) -> FuncId -> [Expr w] -> Expr w
 cstrFunc fis fi arguments =
     case Map.lookup fi fis of
         Nothing ->
             -- When implementing the body of a recursive function, a function
             -- call is made while the implementation is not (yet) finished and
             -- available.
-            ValExpr (Vfunc fi arguments)
+            Expr (Vfunc fi arguments)
         Just (FuncDef params body)->
             case view body of
                 Vconst x -> cons x
                 _        -> if all isConst arguments
                             then compSubst (Map.fromList (zip params arguments)) fis body
-                            else ValExpr (Vfunc fi arguments)
+                            else Expr (Vfunc fi arguments)
 
 -- | Apply ADT Constructor of constructor with CstrId and the provided arguments (the list of value expressions).
 -- Preconditions are /not/ checked.
-cstrCstr :: CstrId -> [ValExpr] -> ValExpr
+cstrCstr :: CstrId -> [Expr] -> Expr
 cstrCstr c a = if all isConst a
                 then cons (Ccstr c (map toConst a) )
-                else ValExpr (Vcstr c a)
-    where   toConst :: ValExpr -> Constant
+                else Expr (Vcstr c a)
+    where   toConst :: Expr -> Constant
             toConst (view -> Vconst v) = v
             toConst _                  = error "Impossible when all satisfy isConst"
 
 -- | Is the provided value expression made by the ADT constructor with CstrId?
 -- Preconditions are /not/ checked.
-cstrIsCstr :: CstrId -> ValExpr -> ValExpr
+cstrIsCstr :: CstrId -> Expr -> Expr
 cstrIsCstr c1 (view -> Vcstr c2 _)          = cons (Cbool (c1 == c2) )
 cstrIsCstr c1 (view -> Vconst (Ccstr c2 _)) = cons (Cbool (c1 == c2) )
-cstrIsCstr c e                              = ValExpr (Viscstr c e)
+cstrIsCstr c e                              = Expr (Viscstr c e)
 
 -- | Apply ADT Accessor of constructor with CstrId on field with given position on the provided value expression.
 -- Preconditions are /not/ checked.
-cstrAccess :: CstrId -> T.Text -> Int -> ValExpr -> ValExpr
+cstrAccess :: CstrId -> T.Text -> Int -> Expr -> Expr
 cstrAccess c1 n1 p1 (view -> Vcstr c2 fields) =
     if c1 == c2 -- prevent crashes due to model errors
         then fields!!p1
@@ -154,10 +154,10 @@ cstrAccess c1 n1 p1 (view -> Vconst (Ccstr c2 fields)) =
     if c1 == c2 -- prevent crashes due to model errors
         then cons (fields!!p1)
         else error ("Error in model: Accessing field " ++ show n1 ++ " of constructor " ++ show c1 ++ " on value from constructor " ++ show c2)
-cstrAccess c n p e = ValExpr (Vaccess c n p e)
+cstrAccess c n p e = Expr (Vaccess c n p e)
 -}
--- | Is ValExpr a Constant/Value Expression?
---isConst :: ValExpr -> Bool
+-- | Is Expr a Constant/Value Expression?
+--isConst :: Expr -> Bool
 --isConst (view -> Vconst{}) = True
 --isConst _                  = False
 

@@ -31,7 +31,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Lattest.Model.Symbolic.ValExpr.Product  (
+module Lattest.Model.Symbolic.Internal.Product  (
     -- * Product type
       FreeProduct
     , ProductTerm (..)
@@ -59,9 +59,9 @@ import           Data.Semigroup
 import           GHC.Generics    (Generic)
 import           Prelude         hiding (product)
 
-import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX     (FreeMonoidX (..), IntMultipliable,
+import           Lattest.Model.Symbolic.Internal.FreeMonoidX     (FreeMonoidX (..), IntMultipliable,
                                   TermWrapper, (<.>))
-import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX     as FMX
+import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX     as FMX
 
 {--------------------------------------------------------------------
   The data types

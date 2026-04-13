@@ -7,7 +7,7 @@ import Test.Lattest.Exec.Testing
 import Test.Lattest.Model.BoundedMonad
 import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
-import Test.Lattest.Model.Symbolic.ValExpr.ValExpr
+import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT

@@ -29,10 +29,10 @@ See LICENSE in the parent Symbolic folder.
 --      ACM Transactions on Programming Languages and Systems (TOPLAS) 
 --      ACM Press. 14 (2): 127 - 144. doi:10.1145/128861.128862.
 -----------------------------------------------------------------------------
-module Lattest.Model.Symbolic.ValExpr.Boute
-( Lattest.Model.Symbolic.ValExpr.Boute.divMod
-, Lattest.Model.Symbolic.ValExpr.Boute.div
-, Lattest.Model.Symbolic.ValExpr.Boute.mod
+module Lattest.Model.Symbolic.Internal.Boute
+( Lattest.Model.Symbolic.Internal.Boute.divMod
+, Lattest.Model.Symbolic.Internal.Boute.div
+, Lattest.Model.Symbolic.Internal.Boute.mod
 )
 where
 -- | operator divMod on the provided integer values.
@@ -53,7 +53,7 @@ divMod m n = if n > 0 || pm == 0
 
 -- | operator divide on the provided integer values.
 div :: Integer -> Integer -> Integer
-div m = fst . Lattest.Model.Symbolic.ValExpr.Boute.divMod m
+div m = fst . Lattest.Model.Symbolic.Internal.Boute.divMod m
 
 -- | operator modulo on the provided integer values.
 -- 
@@ -63,5 +63,5 @@ div m = fst . Lattest.Model.Symbolic.ValExpr.Boute.divMod m
 --               (<= 0 (mod m n) (- (abs n) 1))))
 -- @
 mod :: Integer -> Integer -> Integer
-mod m = snd . Lattest.Model.Symbolic.ValExpr.Boute.divMod m
+mod m = snd . Lattest.Model.Symbolic.Internal.Boute.divMod m
 

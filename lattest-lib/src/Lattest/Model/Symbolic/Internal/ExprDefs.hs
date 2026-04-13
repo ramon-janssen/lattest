@@ -5,7 +5,7 @@ See LICENSE in the parent Symbolic folder.
 -}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ValExprDefs
+-- Module      :  ExprDefs
 -- Copyright   :  (c) TNO and Radboud University
 -- License     :  BSD3 (see the file license.txt)
 -- 
@@ -24,7 +24,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Lattest.Model.Symbolic.ValExpr.ValExprDefs
+module Lattest.Model.Symbolic.Internal.ExprDefs
 ( ExprView(..)
 , Expr(..)       -- for local usage only!
 , eval
@@ -57,10 +57,10 @@ import qualified Data.Text as Text(length, pack, index, concat)
 import           GHC.Generics     (Generic)
 import           GHC.Integer (divInteger)
 
-import           Lattest.Model.Symbolic.ValExpr.FreeMonoidX
-import qualified Lattest.Model.Symbolic.ValExpr.FreeMonoidX as FMX
-import           Lattest.Model.Symbolic.ValExpr.Product
-import           Lattest.Model.Symbolic.ValExpr.Sum
+import           Lattest.Model.Symbolic.Internal.FreeMonoidX
+import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX as FMX
+import           Lattest.Model.Symbolic.Internal.Product
+import           Lattest.Model.Symbolic.Internal.Sum
 
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
@@ -187,7 +187,7 @@ instance Show t => Show (ExprView t) where
         showSumTerm 1 t = t
         showSumTerm n t = show n ++ "⋅" ++ t
     show (Product es) | es == mempty = "∏∅"
-    show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct ValExpr
+    show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
     show (Length e) = "length(" ++ show e ++ ")"
     show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
