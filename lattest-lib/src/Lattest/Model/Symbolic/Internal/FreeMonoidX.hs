@@ -114,7 +114,6 @@ module Lattest.Model.Symbolic.Internal.FreeMonoidX
 where
 
 import           Control.Arrow   (first, (***))
-import           Control.DeepSeq
 import           Data.Data
 import           Data.Foldable
 import           Data.List       hiding (partition)
@@ -132,7 +131,7 @@ import           GHC.Generics    (Generic)
 -- term is lost in this representation.
 --
 newtype FreeMonoidX a = FMX { asMap :: Map a Integer }
-    deriving (Eq, Ord, Read, Generic, NFData, Data)
+    deriving (Eq, Ord, Read, Generic, Data)
 
 -- | A term of the monoid which wraps a value. This could be for instance a
 -- sum-term or a product term.

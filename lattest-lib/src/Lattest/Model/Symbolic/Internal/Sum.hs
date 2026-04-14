@@ -24,7 +24,6 @@ module Lattest.Model.Symbolic.Internal.Sum
     , multiply
     ) where
 
-import           Control.DeepSeq
 import           Data.Data
 import           Data.Foldable   hiding (sum)
 import           Lattest.Model.Symbolic.Internal.FreeMonoidX     (FreeMonoidX, IntMultipliable, TermWrapper,
@@ -50,7 +49,7 @@ type FreeSum a = FreeMonoidX (SumTerm a)
 -- > a0 + a1 + ... + an-1
 --
 newtype SumTerm a = SumTerm { summand :: a }
-    deriving (Eq, Ord, Read, Generic, NFData, Functor, Data)
+    deriving (Eq, Ord, Read, Generic, Functor, Data)
 
 instance Show a => Show (SumTerm a) where
     show = show . summand

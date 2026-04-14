@@ -27,7 +27,6 @@ module Lattest.Model.Symbolic.Internal.Product  (
 ) where
 
 import           Control.Arrow   ((***))
-import           Control.DeepSeq
 import           Data.Data
 import           Data.Foldable   hiding (product)
 import qualified Data.Map.Strict as Map
@@ -57,7 +56,7 @@ type FreeProduct a = FreeMonoidX (ProductTerm a)
 -- > a0 * a1 * ... * an-1
 --
 newtype ProductTerm a = ProductTerm { factor :: a }
-    deriving (Eq, Ord, Read, Generic, NFData, Functor, Data)
+    deriving (Eq, Ord, Read, Generic, Functor, Data)
 
 instance Show a => Show (ProductTerm a) where
     show = show . factor
