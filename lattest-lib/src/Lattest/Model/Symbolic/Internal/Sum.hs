@@ -1,26 +1,9 @@
 {-
+This is a modified version of:
 TorXakis - Model Based Testing
 Copyright (c) 2015-2017 TNO and Radboud University
 See LICENSE in the parent Symbolic folder.
 -}
------------------------------------------------------------------------------
--- |
--- Module      :  Sum
--- Copyright   :  (c) TNO and Radboud University
--- License     :  BSD3 (see the file license.txt)
---
--- Maintainer  :  pierre.vandelaar@tno.nl (Embedded Systems Innovation by TNO)
--- Stability   :  experimental
--- Portability :  portable
---
--- Implementation for a symbolic sum.
---
--- inspiration taken from
--- https://hackage.haskell.org/package/multiset-0.3.3/docs/src/Data-MultiSet.html
---
--- In the complexity of functions /n/ refers to the number of distinct terms,
--- /t/ is the total number of terms.
------------------------------------------------------------------------------
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE DeriveFunctor         #-}

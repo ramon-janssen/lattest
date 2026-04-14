@@ -1,18 +1,9 @@
 {-
+This is a modified version of:
 TorXakis - Model Based Testing
 Copyright (c) 2015-2017 TNO and Radboud University
 See LICENSE in the parent Symbolic folder.
 -}
------------------------------------------------------------------------------
--- |
--- Module      :  Boute Division and Modulo
--- Copyright   :  (c) TNO and Radboud University
--- License     :  BSD3 (see the file license.txt)
---
--- Maintainer  :  pierre.vandelaar@tno.nl (Embedded Systems Innovation by TNO)
--- Stability   :  experimental
--- Portability :  portable
---
 -- Define div and mod according to Boute's Euclidean definition, that is,
 --  so as to satisfy the formula
 --

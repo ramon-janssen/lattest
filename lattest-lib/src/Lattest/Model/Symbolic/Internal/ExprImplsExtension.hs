@@ -1,21 +1,10 @@
 {-
+This is a modified version of:
 TorXakis - Model Based Testing
 Copyright (c) 2015-2017 TNO and Radboud University
 See LICENSE in the parent Symbolic folder.
 -}
------------------------------------------------------------------------------
--- |
--- Module      :  ExprImplsExtension
--- Copyright   :  (c) TNO and Radboud University
--- License     :  BSD3 (See LICENSE at root directory of this repository)
---
--- Maintainer  :  pierre.vandelaar@tno.nl (Embedded Systems Innovation by TNO)
--- Stability   :  experimental
--- Portability :  portable
---
--- This module Lattest.Model.Symbolic.Expr.defines extension of functions on and constructors of value expressions.
---
------------------------------------------------------------------------------
+
 
 {-# LANGUAGE FlexibleInstances #-}
 
