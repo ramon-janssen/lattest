@@ -48,9 +48,9 @@ instance {-# OVERLAPPABLE #-} Functor f => OrdFunctor f where
     Any instance should adhere to the 'Monad' laws, assuming the extensionality property for equality 'Eq'. See 'OrdFunctor' for details.
 -}
 class (OrdFunctor m) => OrdMonad m where
-    -- | Bind operation, using an 'Ord' constraint, similar to the standard monadic bind operation '>>='.
-    ordReturn :: a -> m a
     -- | Return operation, similar to the standard monadic 'return'. No 'Ord' constraint is present here, as comparing values is not needed for injecting a single value into a monadic type.
+    ordReturn :: a -> m a
+    -- | Bind operation, using an 'Ord' constraint, similar to the standard monadic bind operation '>>='.
     ordBind :: (Ord b) => m a -> (a -> m b) -> m b
 
 -- | Any 'Monad' is also an 'OrdMonad', ignoring the 'Ord' constraint.
