@@ -26,6 +26,12 @@ TestSelector,
 randomTestSelector,
 randomTestSelectorFromSeed,
 randomTestSelectorFromGen,
+randomDataTestSelector,
+randomDataTestSelectorFromSeed,
+randomDataTestSelectorFromGen,
+randomDataOrWaitForOutputTestSelector,
+randomDataOrWaitForOutputTestSelectorFromSeed,
+randomDataOrWaitForOutputTestSelectorFromGen,
 andThen,
 -- * Stop Conditions
 StopCondition,
@@ -49,6 +55,23 @@ printActions,
 printState
 )
 where
+
+import Lattest.Exec.Testing(TestController(..))
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction, SuspendedIFGateValue)
+import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), After)
+import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp, SuspInputAttemptSTSIntrp)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualExpr)
+import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
+import qualified Lattest.SMT.Config as Config(Config(..))
+import Lattest.SMT.SMT(SMTRef, runSMT)
+import Lattest.Util.Utils(takeRandom, takeJusts, flipCoin)
+
+import Data.Either(isLeft)
+import Data.Either.Combinators(leftToMaybe, maybeToLeft)
+import qualified Data.Map as Map
+import Data.Maybe(fromJust)
+import qualified Data.Set as Set (size, elemAt, fromList, union)
+import List.Shuffle(shuffle)
 import Lattest.Adapter.Adapter(close)
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
@@ -69,6 +92,8 @@ import Control.Monad (forM)
 import qualified Data.Map as Map (keys, (!))
 import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set, singleton)
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
+
+
 
 {- |
     'Testselector's are test controllers that are only concerned with selecting inputs for testing. They do not return any testing results.
@@ -97,7 +122,7 @@ selector state sel upd = TestController {
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomTestSelector :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, Ord act, Ord q, Ord i, Ord (m q))
+randomTestSelector :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, Ord act, Ord q, Ord i, Ord (m q))
     => IO (TestSelector m loc q t tdest act StdGen i)
 randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
 
@@ -105,7 +130,7 @@ randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomTestSelectorFromSeed :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, Ord act, Ord q, Ord i, Ord (m q))
+randomTestSelectorFromSeed :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, Ord act, Ord q, Ord i, Ord (m q))
     => Int -> TestSelector m loc q t tdest act StdGen i
 randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
 
@@ -113,7 +138,7 @@ randomTestSelectorFromSeed i = randomTestSelectorFromGen $ mkStdGen i
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator.
 -}
-randomTestSelectorFromGen :: (StepSemantics m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g, Ord act, Ord q, Ord i, Ord (m q))
+randomTestSelectorFromGen :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, RandomGen g, Ord act, Ord q, Ord i, Ord (m q))
     => g -> TestSelector m loc q t tdest act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
@@ -122,6 +147,90 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g ins
+
+{- |
+    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
+-}
+randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+    => SMTRef -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i))
+randomDataTestSelector smt = do
+    r <- initStdGen
+    return $ randomDataTestSelectorFromGen smt r
+
+{- |
+    A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
+    the given random seed.
+-}
+randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+    => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i)
+randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt (mkStdGen i)
+
+{- |
+    A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
+    given random generator, with arbitrary data values as picked by the given SMT solver. Will immediately stop if it cannot find any possible data values for any input gate.
+-}
+randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard), RandomGen g)
+    => SMTRef -> g -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (GateValue i)
+randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossible (\s _ _ _ -> return $ Just s)
+    where
+    solveRandomIfPossible :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard), RandomGen g)
+        => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
+    solveRandomIfPossible (g,smtRef) intrpr _ = do
+        (maybeGateValue, (g', smtRef)) <- solveRandomInput (g,smtRef) maybeFromIOAct intrpr
+        return $ case maybeGateValue of
+            Nothing -> Nothing
+            Just value -> Just (value, (g', smtRef))
+    maybeFromIOAct :: SymInteract (IOAct i1 o1) -> Maybe (SymInteract i1)
+    maybeFromIOAct = error ""
+
+{- |
+    A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, with arbitrary
+    data values as picked by the given SMT solver. See 'randomDataOrWaitForOutputTestSelectorFromGen' for details.
+-}
+randomDataOrWaitForOutputTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+    => SMTRef -> Double -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) (StdGen,SMTRef) (Maybe (GateValue i)))
+randomDataOrWaitForOutputTestSelector smt pWait = do
+    r <- initStdGen
+    return $ randomDataOrWaitForOutputTestSelectorFromGen smt r pWait
+
+{- |
+    A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
+    the given random seed., with arbitrary data values as picked by the given SMT solver. See 'randomDataOrWaitForOutputTestSelectorFromGen' for details.
+-}
+randomDataOrWaitForOutputTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+    => SMTRef -> Int -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) (StdGen,SMTRef) (Maybe (GateValue i))
+randomDataOrWaitForOutputTestSelectorFromSeed smt i pWait = randomDataOrWaitForOutputTestSelectorFromGen smt (mkStdGen i) pWait
+
+{- |
+    A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
+    given random generator, with arbitrary data values as picked by the given SMT solver. It may instead also omit picking an input gate, and wait 
+    for an output value instead, with the givene probability (clamped to [0,1]). Will always wait for an output if it cannot find any possible data
+    values for any input gate.
+-}
+randomDataOrWaitForOutputTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
+    => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) (g,SMTRef) (Maybe (GateValue i))
+randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRef) (solveRandomOrWait pWait) (\s _ _ _ -> return $ Just s)
+    where
+    solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
+        => Double -> (g,SMTRef) -> SuspInputAttemptSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
+    solveRandomOrWait pWait (g,smtRef) intrpr _ =
+        let (doWait, g') = flipCoin g pWait
+        in if doWait
+            then return $ Just (Nothing, (g', smtRef))
+            else Just <$> solveRandomInput (g', smtRef) maybeFromIFInteraction intrpr
+    maybeFromIFInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
+    maybeFromIFInteraction (SymInteract (In i) vars) = Just $ SymInteract i vars
+    maybeFromIFInteraction (SymInteract _ _) = Nothing
+
+solveRandomInput :: (Foldable m, BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord g', Ord (m SymGuard), RandomGen r)
+    => (r,SMTRef) -> (SymInteract g -> Maybe (SymInteract i)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> IO (Maybe (GateValue i), (r,SMTRef))
+solveRandomInput (g,smtRef) f intrpr = do
+    (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr f g
+    return $ (maybeGateValue, (g', smtRef)) -- append the new state to the solved value, if any
+{-        maybeFromIFInteraction' (SymInteract gate vars) = case maybeFromInput gate of
+            Just i -> Just $ SymInteract i vars
+            Nothing -> Nothing
+-}
 
 {- |
     Creates a TestController that first selects inputs according to the first provided TestController, and when that first TestController is finished, selects inputs according to the second provided TestController

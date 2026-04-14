@@ -1,0 +1,94 @@
+{-
+This is a modified version of:
+TorXakis - Model Based Testing
+See LICENSE in the parent Symbolic folder.
+-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+module Lattest.Model.Symbolic.Internal.Sum
+    (  -- * Sum types
+      FreeSum
+    , SumTerm (..)
+
+    -- * Sum of Term and Sums
+    , add
+    , subtract
+    , sum
+    , sums
+
+    -- * Multiply
+    , multiply
+    ) where
+
+import           Data.Data
+import           Data.Foldable   hiding (sum)
+import           Lattest.Model.Symbolic.Internal.FreeMonoidX     (FreeMonoidX, IntMultipliable, TermWrapper,
+                                  (<.>))
+import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX     as FMX
+import           GHC.Generics    (Generic)
+import           Prelude         hiding (subtract, sum)
+
+{--------------------------------------------------------------------
+  The data types
+--------------------------------------------------------------------}
+-- | `FreeSum` represents a symbolic sum of terms of the type parameter `a`.
+-- The same term can occur multiple times.
+--
+type FreeSum a = FreeMonoidX (SumTerm a)
+
+-- | Terms of a free-monoids of the form:
+--
+-- > a0 <> a1 <> ... <> an-1
+--
+-- where `<>` will be interpreted as the arithmetic sum of terms:
+--
+-- > a0 + a1 + ... + an-1
+--
+newtype SumTerm a = SumTerm { summand :: a }
+    deriving (Eq, Ord, Read, Generic, Functor, Data)
+
+instance Show a => Show (SumTerm a) where
+    show = show . summand
+
+instance Num a => Semigroup (SumTerm a) where
+    (SumTerm x) <> (SumTerm y) = SumTerm $ x + y
+
+instance Num a => Monoid (SumTerm a) where
+    mempty = SumTerm 0
+
+instance TermWrapper SumTerm where
+    wrap = SumTerm
+    unwrap = summand
+
+instance Integral a => IntMultipliable (SumTerm a) where
+    n <.> SumTerm x = SumTerm (fromInteger $ toInteger x * toInteger n)
+
+instance Foldable SumTerm where
+    --foldr :: (a -> b -> b) -> b -> t a -> b 
+    foldr f e (SumTerm x) = f x e
+
+{--------------------------------------------------------------------
+  Sums and multiplications
+--------------------------------------------------------------------}
+-- | /O(log n)/. Add a term to a sum.
+add :: Ord a => a -> FreeSum a -> FreeSum a
+add = FMX.append . SumTerm
+
+-- | /O(log n)/. Subtract a term from a sum.
+subtract :: Ord a => a -> FreeSum a -> FreeSum a
+subtract = FMX.remove . SumTerm
+
+-- | The sum of a list of sums.
+sums :: (Ord a) => [FreeSum a] -> FreeSum a
+sums = fold
+
+-- | /O(n+m)/. The sum of two sums.
+sum :: Ord a => FreeSum a -> FreeSum a -> FreeSum a
+sum = (<>)
+
+-- | /O(n)/. Multiply the constant with the sum.
+multiply :: Ord a => Integer -> FreeSum a -> FreeSum a
+multiply = (<.>)

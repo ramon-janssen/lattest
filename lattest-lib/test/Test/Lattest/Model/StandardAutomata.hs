@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE QuasiQuotes #-}
+
 module Test.Lattest.Model.StandardAutomata (
 IF(..),
 OF(..),
@@ -16,6 +18,7 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
+import qualified Text.RawString.QQ as QQ
 
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
@@ -54,29 +57,28 @@ testSpecF = TestCase $ do
     assertEqual "sf after ?A !B" top (stateConf $ rf `after` af `after` bf)
 
 testPrintSpecF :: Test
-testPrintSpecF = TestCase $ do
-    {-
-    initial location configuration: Q0f
-    locations: Q0f, Q1f, Q2f
-    transitions:
-    Q0f ――?A⟶ ((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f))
-    Q0f ――?B⟶ ⊤
-    Q0f ――!X⟶ ((),Q0f)
-    Q0f ――!Y⟶ ((),Q0f)
-    Q1f ――?A⟶ ⊤
-    Q1f ――?B⟶ ⊤
-    Q1f ――!X⟶ ⊤
-    Q1f ――!Y⟶ ⊥
-    Q2f ――?A⟶ ⊤
-    Q2f ――?B⟶ ((),Q0f)
-    Q2f ――!X⟶ ⊥
-    Q2f ――!Y⟶ ((),Q2f)
-    -}
-    assertEqual "print of sf does not match" printF $ prettyPrint sf
+testPrintSpecF = TestCase $ assertBool failureMessage (expected == actual) -- no assertEquals to avoid printing the unreadable ascii-escaped variant of the tested unicode strings 
     where
-    printF =
-        "initial location configuration: Q0f\nlocations: Q0f, Q1f, Q2f\ntransitions:\nQ0f \8213\8213?A\10230 ((),Q0f) \8743 (((),Q1f) \8744 ((),Q2f))\nQ0f \8213\8213?B\10230 \8868\nQ0f \8213\8213!X\10230 ((),Q0f)\nQ0f \8213\8213!Y\10230 ((),Q0f)\nQ1f \8213\8213?A\10230 \8868\nQ1f \8213\8213?B\10230 \8868\nQ1f \8213\8213!X\10230 \8868\nQ1f \8213\8213!Y\10230 \8869\nQ2f \8213\8213?A\10230 \8868\nQ2f \8213\8213?B\10230 ((),Q0f)\nQ2f \8213\8213!X\10230 \8869\nQ2f \8213\8213!Y\10230 ((),Q2f)"
-
+    failureMessage = "print of sf does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrint sf ++ "\n" -- newlines before and after to match those of the "expected" below.
+    -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
+    expected = [QQ.r|
+initial location configuration: Q0f
+locations: Q0f, Q1f, Q2f
+transitions:
+Q0f  ――?A⟶  ((),Q0f) ∧ (((),Q1f) ∨ ((),Q2f))
+Q0f  ――?B⟶  ⊤
+Q0f  ――!X⟶  ((),Q0f)
+Q0f  ――!Y⟶  ((),Q0f)
+Q1f  ――?A⟶  ⊤
+Q1f  ――?B⟶  ⊤
+Q1f  ――!X⟶  ⊤
+Q1f  ――!Y⟶  ⊥
+Q2f  ――?A⟶  ⊤
+Q2f  ――?B⟶  ((),Q0f)
+Q2f  ――!X⟶  ⊥
+Q2f  ――!Y⟶  ((),Q2f)
+|]
 
 data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
 data OG = C | T | CM | TM deriving (Show, Eq, Ord)

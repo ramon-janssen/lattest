@@ -1,0 +1,96 @@
+{-
+This is a modified version of:
+TorXakis - Model Based Testing
+See LICENSE in the parent SMT folder.
+-}
+
+-- ----------------------------------------------------------------------------------------- --
+
+module Lattest.SMT.SMTData
+
+-- ----------------------------------------------------------------------------------------- --
+--
+-- SMT Data type
+--
+-- ----------------------------------------------------------------------------------------- --
+-- export
+
+( SMT
+, SmtEnv(..)
+--, EnvNames(..)
+--, EnvDefs (..)
+, SMTRef
+, newSMTRef
+, runSMT
+, readSMTRef
+)
+
+-- ----------------------------------------------------------------------------------------- --
+-- import
+
+where
+
+import           Control.Monad.State
+import           Data.Text           (Text)
+
+import           System.IO
+import           System.Process
+
+import qualified Data.Map            as Map
+import           Data.IORef
+{-
+import           CstrDef
+import           CstrId
+import           FuncDef
+import           FuncId
+import           SortDef
+import           SortId
+import           VarId
+-}
+-- ----------------------------------------------------------------------------------------- --
+-- SMT state monad for smt solver
+{-
+data EnvDefs = EnvDefs { sortDefs   :: Map.Map SortId SortDef
+                       , cstrDefs   :: Map.Map CstrId CstrDef
+                       , funcDefs   :: Map.Map FuncId (FuncDef VarId)
+                       }
+               deriving (Eq,Ord,Read,Show)
+-}{-
+data EnvNames = EnvNames { sortNames   :: Map.Map SortId Text
+                         , cstrNames   :: Map.Map CstrId Text
+                         , funcNames   :: Map.Map FuncId Text
+                         }
+                deriving (Eq,Ord,Read,Show)
+-}
+data  SmtEnv  =  SmtEnv     { inHandle          :: Handle
+                            , outHandle         :: Handle
+                            , smtProcessHandle  :: ProcessHandle
+                            , logFileHandle     :: Maybe Handle
+--                            , envNames          :: EnvNames
+--                            , envDefs           :: EnvDefs
+                            }
+               | SmtEnvError
+
+type  SMT a   =  StateT SmtEnv IO a
+
+type SMTRef = IORef SmtEnv
+
+newSMTRef :: SmtEnv -> IO SMTRef
+newSMTRef = newIORef
+
+readSMTRef :: SMTRef -> IO SmtEnv
+readSMTRef = readIORef
+
+runSMT :: SMTRef -> SMT a -> IO a
+runSMT smtRef smtComp = do
+    smtEnv <- readIORef smtRef
+    (x, smtEnv') <- runStateT smtComp smtEnv
+    writeIORef smtRef smtEnv'
+    return x
+
+--instance Show SmtEnv where
+--  show smtEnv =  show $ envNames smtEnv
+
+-- ----------------------------------------------------------------------------------------- --
+--                                                                                           --
+-- ----------------------------------------------------------------------------------------- --

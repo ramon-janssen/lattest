@@ -1,0 +1,484 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+TorXakis - Model Based Testing
+Copyright (c) 2015-2017 TNO and Radboud University
+See LICENSE at root directory of this repository.
+-}</span><span>
+</span><span id="line-6"></span><span>
+</span><span id="line-7"></span><span class="annot"><span class="hs-comment">-- | This module defines the options that can be passed to TorXakis.</span></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.Config</span><span>
+</span><span id="line-9"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier">Config</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-10"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#getProc"><span class="hs-identifier">getProc</span></a></span><span>
+</span><span id="line-11"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#defaultConfig"><span class="hs-identifier">defaultConfig</span></a></span><span>
+</span><span id="line-12"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier">SolverId</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier">SolverConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier">ParamName</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier">ParamValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#changeSolver"><span class="hs-identifier">changeSolver</span></a></span><span>
+</span><span id="line-17"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#changeLog"><span class="hs-identifier">changeLog</span></a></span><span>
+</span><span id="line-18"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#addSolvers"><span class="hs-identifier">addSolvers</span></a></span><span>
+</span><span id="line-19"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#setParams"><span class="hs-identifier">setParams</span></a></span><span>
+</span><span id="line-20"></span><span>  </span><span class="annot"><span class="hs-comment">-- * update values in a Map of Params with a list of configured parameters</span></span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#updateParamVals"><span class="hs-identifier">updateParamVals</span></a></span><span>
+</span><span id="line-22"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#updateCfg"><span class="hs-identifier">updateCfg</span></a></span><span>
+</span><span id="line-23"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span>       </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html"><span class="hs-identifier">Lattest.SMT.ParamCore</span></a></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">data</span><span> </span><span id="SolverConfig"><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-var">SolverConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SolverConfig"><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-var">SolverConfig</span></a></span></span><span>
+</span><span id="line-32"></span><span>  </span><span class="hs-special">{</span><span>
+</span><span id="line-33"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Executable name.</span></span><span>
+</span><span id="line-34"></span><span>    </span><span id="execName"><span class="annot"><span class="annottext">SolverConfig -&gt; String
+</span><a href="Lattest.SMT.Config.html#execName"><span class="hs-identifier hs-var hs-var">execName</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-35"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Arguments for to be passed to the smtSolver.</span></span><span>
+</span><span id="line-36"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="smtArgs"><span class="annot"><span class="annottext">SolverConfig -&gt; [String]
+</span><a href="Lattest.SMT.Config.html#smtArgs"><span class="hs-identifier hs-var hs-var">smtArgs</span></a></span></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679345755"><span id="local-6989586621679345761"><span class="annot"><span class="annottext">SolverConfig -&gt; SolverConfig -&gt; Bool
+(SolverConfig -&gt; SolverConfig -&gt; Bool)
+-&gt; (SolverConfig -&gt; SolverConfig -&gt; Bool) -&gt; Eq SolverConfig
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: SolverConfig -&gt; SolverConfig -&gt; Bool
+== :: SolverConfig -&gt; SolverConfig -&gt; Bool
+$c/= :: SolverConfig -&gt; SolverConfig -&gt; Bool
+/= :: SolverConfig -&gt; SolverConfig -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345767"><span id="local-6989586621679345775"><span id="local-6989586621679345779"><span class="annot"><span class="annottext">Int -&gt; SolverConfig -&gt; ShowS
+[SolverConfig] -&gt; ShowS
+SolverConfig -&gt; String
+(Int -&gt; SolverConfig -&gt; ShowS)
+-&gt; (SolverConfig -&gt; String)
+-&gt; ([SolverConfig] -&gt; ShowS)
+-&gt; Show SolverConfig
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; SolverConfig -&gt; ShowS
+showsPrec :: Int -&gt; SolverConfig -&gt; ShowS
+$cshow :: SolverConfig -&gt; String
+show :: SolverConfig -&gt; String
+$cshowList :: [SolverConfig] -&gt; ShowS
+showList :: [SolverConfig] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">newtype</span><span> </span><span id="SolverId"><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-var">SolverId</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SolverId"><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-var">SolverId</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="solverId"><span class="annot"><span class="annottext">SolverId -&gt; String
+</span><a href="Lattest.SMT.Config.html#solverId"><span class="hs-identifier hs-var hs-var">solverId</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-40"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679345786"><span id="local-6989586621679345791"><span class="annot"><span class="annottext">SolverId -&gt; SolverId -&gt; Bool
+(SolverId -&gt; SolverId -&gt; Bool)
+-&gt; (SolverId -&gt; SolverId -&gt; Bool) -&gt; Eq SolverId
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: SolverId -&gt; SolverId -&gt; Bool
+== :: SolverId -&gt; SolverId -&gt; Bool
+$c/= :: SolverId -&gt; SolverId -&gt; Bool
+/= :: SolverId -&gt; SolverId -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345799"><span id="local-6989586621679345803"><span id="local-6989586621679345807"><span id="local-6989586621679345811"><span id="local-6989586621679345815"><span id="local-6989586621679345819"><span id="local-6989586621679345823"><span class="annot"><span class="annottext">Eq SolverId
+Eq SolverId =&gt;
+(SolverId -&gt; SolverId -&gt; Ordering)
+-&gt; (SolverId -&gt; SolverId -&gt; Bool)
+-&gt; (SolverId -&gt; SolverId -&gt; Bool)
+-&gt; (SolverId -&gt; SolverId -&gt; Bool)
+-&gt; (SolverId -&gt; SolverId -&gt; Bool)
+-&gt; (SolverId -&gt; SolverId -&gt; SolverId)
+-&gt; (SolverId -&gt; SolverId -&gt; SolverId)
+-&gt; Ord SolverId
+SolverId -&gt; SolverId -&gt; Bool
+SolverId -&gt; SolverId -&gt; Ordering
+SolverId -&gt; SolverId -&gt; SolverId
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: SolverId -&gt; SolverId -&gt; Ordering
+compare :: SolverId -&gt; SolverId -&gt; Ordering
+$c&lt; :: SolverId -&gt; SolverId -&gt; Bool
+&lt; :: SolverId -&gt; SolverId -&gt; Bool
+$c&lt;= :: SolverId -&gt; SolverId -&gt; Bool
+&lt;= :: SolverId -&gt; SolverId -&gt; Bool
+$c&gt; :: SolverId -&gt; SolverId -&gt; Bool
+&gt; :: SolverId -&gt; SolverId -&gt; Bool
+$c&gt;= :: SolverId -&gt; SolverId -&gt; Bool
+&gt;= :: SolverId -&gt; SolverId -&gt; Bool
+$cmax :: SolverId -&gt; SolverId -&gt; SolverId
+max :: SolverId -&gt; SolverId -&gt; SolverId
+$cmin :: SolverId -&gt; SolverId -&gt; SolverId
+min :: SolverId -&gt; SolverId -&gt; SolverId
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345828"><span id="local-6989586621679345833"><span id="local-6989586621679345837"><span class="annot"><span class="annottext">Int -&gt; SolverId -&gt; ShowS
+[SolverId] -&gt; ShowS
+SolverId -&gt; String
+(Int -&gt; SolverId -&gt; ShowS)
+-&gt; (SolverId -&gt; String) -&gt; ([SolverId] -&gt; ShowS) -&gt; Show SolverId
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; SolverId -&gt; ShowS
+showsPrec :: Int -&gt; SolverId -&gt; ShowS
+$cshow :: SolverId -&gt; String
+show :: SolverId -&gt; String
+$cshowList :: [SolverId] -&gt; ShowS
+showList :: [SolverId] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">newtype</span><span> </span><span id="ParamName"><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-var">ParamName</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ParamName"><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-var">ParamName</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679345841"><span id="local-6989586621679345846"><span class="annot"><span class="annottext">ParamName -&gt; ParamName -&gt; Bool
+(ParamName -&gt; ParamName -&gt; Bool)
+-&gt; (ParamName -&gt; ParamName -&gt; Bool) -&gt; Eq ParamName
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: ParamName -&gt; ParamName -&gt; Bool
+== :: ParamName -&gt; ParamName -&gt; Bool
+$c/= :: ParamName -&gt; ParamName -&gt; Bool
+/= :: ParamName -&gt; ParamName -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345854"><span id="local-6989586621679345858"><span id="local-6989586621679345862"><span id="local-6989586621679345866"><span id="local-6989586621679345870"><span id="local-6989586621679345874"><span id="local-6989586621679345878"><span class="annot"><span class="annottext">Eq ParamName
+Eq ParamName =&gt;
+(ParamName -&gt; ParamName -&gt; Ordering)
+-&gt; (ParamName -&gt; ParamName -&gt; Bool)
+-&gt; (ParamName -&gt; ParamName -&gt; Bool)
+-&gt; (ParamName -&gt; ParamName -&gt; Bool)
+-&gt; (ParamName -&gt; ParamName -&gt; Bool)
+-&gt; (ParamName -&gt; ParamName -&gt; ParamName)
+-&gt; (ParamName -&gt; ParamName -&gt; ParamName)
+-&gt; Ord ParamName
+ParamName -&gt; ParamName -&gt; Bool
+ParamName -&gt; ParamName -&gt; Ordering
+ParamName -&gt; ParamName -&gt; ParamName
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: ParamName -&gt; ParamName -&gt; Ordering
+compare :: ParamName -&gt; ParamName -&gt; Ordering
+$c&lt; :: ParamName -&gt; ParamName -&gt; Bool
+&lt; :: ParamName -&gt; ParamName -&gt; Bool
+$c&lt;= :: ParamName -&gt; ParamName -&gt; Bool
+&lt;= :: ParamName -&gt; ParamName -&gt; Bool
+$c&gt; :: ParamName -&gt; ParamName -&gt; Bool
+&gt; :: ParamName -&gt; ParamName -&gt; Bool
+$c&gt;= :: ParamName -&gt; ParamName -&gt; Bool
+&gt;= :: ParamName -&gt; ParamName -&gt; Bool
+$cmax :: ParamName -&gt; ParamName -&gt; ParamName
+max :: ParamName -&gt; ParamName -&gt; ParamName
+$cmin :: ParamName -&gt; ParamName -&gt; ParamName
+min :: ParamName -&gt; ParamName -&gt; ParamName
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345883"><span id="local-6989586621679345888"><span id="local-6989586621679345892"><span class="annot"><span class="annottext">Int -&gt; ParamName -&gt; ShowS
+[ParamName] -&gt; ShowS
+ParamName -&gt; String
+(Int -&gt; ParamName -&gt; ShowS)
+-&gt; (ParamName -&gt; String)
+-&gt; ([ParamName] -&gt; ShowS)
+-&gt; Show ParamName
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; ParamName -&gt; ShowS
+showsPrec :: Int -&gt; ParamName -&gt; ShowS
+$cshow :: ParamName -&gt; String
+show :: ParamName -&gt; String
+$cshowList :: [ParamName] -&gt; ShowS
+showList :: [ParamName] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">newtype</span><span> </span><span id="ParamValue"><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-var">ParamValue</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ParamValue"><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-var">ParamValue</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679345896"><span id="local-6989586621679345901"><span class="annot"><span class="annottext">ParamValue -&gt; ParamValue -&gt; Bool
+(ParamValue -&gt; ParamValue -&gt; Bool)
+-&gt; (ParamValue -&gt; ParamValue -&gt; Bool) -&gt; Eq ParamValue
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: ParamValue -&gt; ParamValue -&gt; Bool
+== :: ParamValue -&gt; ParamValue -&gt; Bool
+$c/= :: ParamValue -&gt; ParamValue -&gt; Bool
+/= :: ParamValue -&gt; ParamValue -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345909"><span id="local-6989586621679345913"><span id="local-6989586621679345917"><span id="local-6989586621679345921"><span id="local-6989586621679345925"><span id="local-6989586621679345929"><span id="local-6989586621679345933"><span class="annot"><span class="annottext">Eq ParamValue
+Eq ParamValue =&gt;
+(ParamValue -&gt; ParamValue -&gt; Ordering)
+-&gt; (ParamValue -&gt; ParamValue -&gt; Bool)
+-&gt; (ParamValue -&gt; ParamValue -&gt; Bool)
+-&gt; (ParamValue -&gt; ParamValue -&gt; Bool)
+-&gt; (ParamValue -&gt; ParamValue -&gt; Bool)
+-&gt; (ParamValue -&gt; ParamValue -&gt; ParamValue)
+-&gt; (ParamValue -&gt; ParamValue -&gt; ParamValue)
+-&gt; Ord ParamValue
+ParamValue -&gt; ParamValue -&gt; Bool
+ParamValue -&gt; ParamValue -&gt; Ordering
+ParamValue -&gt; ParamValue -&gt; ParamValue
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: ParamValue -&gt; ParamValue -&gt; Ordering
+compare :: ParamValue -&gt; ParamValue -&gt; Ordering
+$c&lt; :: ParamValue -&gt; ParamValue -&gt; Bool
+&lt; :: ParamValue -&gt; ParamValue -&gt; Bool
+$c&lt;= :: ParamValue -&gt; ParamValue -&gt; Bool
+&lt;= :: ParamValue -&gt; ParamValue -&gt; Bool
+$c&gt; :: ParamValue -&gt; ParamValue -&gt; Bool
+&gt; :: ParamValue -&gt; ParamValue -&gt; Bool
+$c&gt;= :: ParamValue -&gt; ParamValue -&gt; Bool
+&gt;= :: ParamValue -&gt; ParamValue -&gt; Bool
+$cmax :: ParamValue -&gt; ParamValue -&gt; ParamValue
+max :: ParamValue -&gt; ParamValue -&gt; ParamValue
+$cmin :: ParamValue -&gt; ParamValue -&gt; ParamValue
+min :: ParamValue -&gt; ParamValue -&gt; ParamValue
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345938"><span id="local-6989586621679345943"><span id="local-6989586621679345947"><span class="annot"><span class="annottext">Int -&gt; ParamValue -&gt; ShowS
+[ParamValue] -&gt; ShowS
+ParamValue -&gt; String
+(Int -&gt; ParamValue -&gt; ShowS)
+-&gt; (ParamValue -&gt; String)
+-&gt; ([ParamValue] -&gt; ShowS)
+-&gt; Show ParamValue
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; ParamValue -&gt; ShowS
+showsPrec :: Int -&gt; ParamValue -&gt; ShowS
+$cshow :: ParamValue -&gt; String
+show :: ParamValue -&gt; String
+$cshowList :: [ParamValue] -&gt; ShowS
+showList :: [ParamValue] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="annot"><span class="hs-comment">-- | TorXakis configuration options.</span></span><span>
+</span><span id="line-47"></span><span class="hs-keyword">data</span><span> </span><span id="Config"><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-var">Config</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Config"><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-var">Config</span></a></span></span><span>
+</span><span id="line-48"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="hs-comment">-- | Log all SMT commands?</span></span><span>
+</span><span id="line-49"></span><span>    </span><span id="smtLog"><span class="annot"><span class="annottext">Config -&gt; Bool
+</span><a href="Lattest.SMT.Config.html#smtLog"><span class="hs-identifier hs-var hs-var">smtLog</span></a></span></span><span>           </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-50"></span><span>    </span><span class="annot"><span class="hs-comment">-- | Available solvers that can be chosen from.</span></span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="availableSolvers"><span class="annot"><span class="annottext">Config -&gt; Map SolverId SolverConfig
+</span><a href="Lattest.SMT.Config.html#availableSolvers"><span class="hs-identifier hs-var hs-var">availableSolvers</span></a></span></span><span>     </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-type">SolverId</span></a></span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-type">SolverConfig</span></a></span><span>
+</span><span id="line-52"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="selectedSolver"><span class="annot"><span class="annottext">Config -&gt; SolverId
+</span><a href="Lattest.SMT.Config.html#selectedSolver"><span class="hs-identifier hs-var hs-var">selectedSolver</span></a></span></span><span>       </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-type">SolverId</span></a></span><span>
+</span><span id="line-53"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="configuredParameters"><span class="annot"><span class="annottext">Config -&gt; [(ParamName, ParamValue)]
+</span><a href="Lattest.SMT.Config.html#configuredParameters"><span class="hs-identifier hs-var hs-var">configuredParameters</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-type">ParamName</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-54"></span><span>  </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679345955"><span id="local-6989586621679345966"><span class="annot"><span class="annottext">Config -&gt; Config -&gt; Bool
+(Config -&gt; Config -&gt; Bool)
+-&gt; (Config -&gt; Config -&gt; Bool) -&gt; Eq Config
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Config -&gt; Config -&gt; Bool
+== :: Config -&gt; Config -&gt; Bool
+$c/= :: Config -&gt; Config -&gt; Bool
+/= :: Config -&gt; Config -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679345973"><span id="local-6989586621679345985"><span id="local-6989586621679345989"><span class="annot"><span class="annottext">Int -&gt; Config -&gt; ShowS
+[Config] -&gt; ShowS
+Config -&gt; String
+(Int -&gt; Config -&gt; ShowS)
+-&gt; (Config -&gt; String) -&gt; ([Config] -&gt; ShowS) -&gt; Show Config
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Config -&gt; ShowS
+showsPrec :: Int -&gt; Config -&gt; ShowS
+$cshow :: Config -&gt; String
+show :: Config -&gt; String
+$cshowList :: [Config] -&gt; ShowS
+showList :: [Config] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="annot"><a href="Lattest.SMT.Config.html#changeSolver"><span class="hs-identifier hs-type">changeSolver</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-57"></span><span id="changeSolver"><span class="annot"><span class="annottext">changeSolver :: Config -&gt; String -&gt; Config
+</span><a href="Lattest.SMT.Config.html#changeSolver"><span class="hs-identifier hs-var hs-var">changeSolver</span></a></span></span><span> </span><span id="local-6989586621679345994"><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679345994"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span id="local-6989586621679345995"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679345995"><span class="hs-identifier hs-var">solver</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679345994"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#selectedSolver"><span class="hs-identifier hs-var">selectedSolver</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-type">SolverId</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679345995"><span class="hs-identifier hs-type">solver</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="annot"><a href="Lattest.SMT.Config.html#changeLog"><span class="hs-identifier hs-type">changeLog</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-60"></span><span id="changeLog"><span class="annot"><span class="annottext">changeLog :: Config -&gt; Bool -&gt; Config
+</span><a href="Lattest.SMT.Config.html#changeLog"><span class="hs-identifier hs-var hs-var">changeLog</span></a></span></span><span> </span><span id="local-6989586621679345996"><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679345996"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span id="local-6989586621679345997"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679345997"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679345996"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#smtLog"><span class="hs-identifier hs-var">smtLog</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679345997"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><a href="Lattest.SMT.Config.html#addSolvers"><span class="hs-identifier hs-type">addSolvers</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-type">SolverId</span></a></span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-type">SolverConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-63"></span><span id="addSolvers"><span class="annot"><span class="annottext">addSolvers :: Config -&gt; Map SolverId SolverConfig -&gt; Config
+</span><a href="Lattest.SMT.Config.html#addSolvers"><span class="hs-identifier hs-var hs-var">addSolvers</span></a></span></span><span> </span><span id="local-6989586621679345998"><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679345998"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span id="local-6989586621679345999"><span class="annot"><span class="annottext">Map SolverId SolverConfig
+</span><a href="#local-6989586621679345999"><span class="hs-identifier hs-var">newSolvers</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679345998"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#availableSolvers"><span class="hs-identifier hs-var">availableSolvers</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679345999"><span class="hs-identifier hs-type">newSolvers</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">&lt;&gt;</span></span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#availableSolvers"><span class="hs-identifier hs-var">availableSolvers</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679345998"><span class="hs-identifier hs-type">cfg</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="annot"><a href="Lattest.SMT.Config.html#setParams"><span class="hs-identifier hs-type">setParams</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-type">ParamName</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-66"></span><span id="setParams"><span class="annot"><span class="annottext">setParams :: Config -&gt; [(ParamName, ParamValue)] -&gt; Config
+</span><a href="Lattest.SMT.Config.html#setParams"><span class="hs-identifier hs-var hs-var">setParams</span></a></span></span><span> </span><span id="local-6989586621679346000"><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346000"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span id="local-6989586621679346001"><span class="annot"><span class="annottext">[(ParamName, ParamValue)]
+</span><a href="#local-6989586621679346001"><span class="hs-identifier hs-var">newParams</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346000"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#configuredParameters"><span class="hs-identifier hs-var">configuredParameters</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679346001"><span class="hs-identifier hs-type">newParams</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span id="local-6989586621679345705"><span class="annot"><a href="Lattest.SMT.Config.html#updateCfg"><span class="hs-identifier hs-type">updateCfg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679345705"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679345705"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span></span><span>
+</span><span id="line-69"></span><span id="updateCfg"><span class="annot"><span class="annottext">updateCfg :: forall a. Maybe a -&gt; (Config -&gt; a -&gt; Config) -&gt; Config -&gt; Config
+</span><a href="Lattest.SMT.Config.html#updateCfg"><span class="hs-identifier hs-var hs-var">updateCfg</span></a></span></span><span> </span><span id="local-6989586621679346002"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679346002"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span id="local-6989586621679346003"><span class="annot"><span class="annottext">Config -&gt; a -&gt; Config
+</span><a href="#local-6989586621679346003"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679346004"><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346004"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Config -&gt; (a -&gt; Config) -&gt; Maybe a -&gt; Config
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346004"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Config -&gt; a -&gt; Config
+</span><a href="#local-6989586621679346003"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346004"><span class="hs-identifier hs-var">cfg</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679346002"><span class="hs-identifier hs-var">ma</span></a></span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="annot"><span class="hs-comment">-- | Updates a Map of parameters' values with given list of configured parameter</span></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="Lattest.SMT.Config.html#updateParamVals"><span class="hs-identifier hs-type">updateParamVals</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="annot"><span class="hs-comment">-- ^ Map of parameters ( Map.Map String (String,String-&gt;Bool) )</span></span><span>
+</span><span id="line-73"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-type">ParamName</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="hs-comment">-- ^ List of configured parameters</span></span><span>
+</span><span id="line-74"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span>
+</span><span id="line-75"></span><span id="updateParamVals"><span class="annot"><span class="annottext">updateParamVals :: Params -&gt; [(ParamName, ParamValue)] -&gt; Params
+</span><a href="Lattest.SMT.Config.html#updateParamVals"><span class="hs-identifier hs-var hs-var">updateParamVals</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Params -&gt; (ParamName, ParamValue) -&gt; Params)
+-&gt; Params -&gt; [(ParamName, ParamValue)] -&gt; Params
+forall b a. (b -&gt; a -&gt; b) -&gt; b -&gt; [a] -&gt; b
+forall (t :: * -&gt; *) b a.
+Foldable t =&gt;
+(b -&gt; a -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldl</span></span><span> </span><span class="annot"><span class="annottext">Params -&gt; (ParamName, ParamValue) -&gt; Params
+</span><a href="#local-6989586621679346007"><span class="hs-identifier hs-var">applyConfParam</span></a></span><span>
+</span><span id="line-76"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span class="annot"><a href="#local-6989586621679346007"><span class="hs-identifier hs-type">applyConfParam</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span>
+</span><span id="line-77"></span><span>                       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-type">ParamName</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>                       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span>
+</span><span id="line-79"></span><span>        </span><span id="local-6989586621679346007"><span class="annot"><span class="annottext">applyConfParam :: Params -&gt; (ParamName, ParamValue) -&gt; Params
+</span><a href="#local-6989586621679346007"><span class="hs-identifier hs-var hs-var">applyConfParam</span></a></span></span><span> </span><span id="local-6989586621679346008"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679346008"><span class="hs-identifier hs-var">allParams</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.Config.html#ParamName"><span class="hs-identifier hs-type">ParamName</span></a></span><span> </span><span id="local-6989586621679346009"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679346009"><span class="hs-identifier hs-var">pnStr</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span> </span><span id="local-6989586621679346010"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679346010"><span class="hs-identifier hs-var">pvStr</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-80"></span><span>          </span><span class="annot"><span class="annottext">((String, String -&gt; Bool) -&gt; (String, String -&gt; Bool))
+-&gt; String -&gt; Params -&gt; Params
+forall k a. Ord k =&gt; (a -&gt; a) -&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.adjust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; (String, String -&gt; Bool) -&gt; (String, String -&gt; Bool)
+forall {a}. a -&gt; (a, a -&gt; Bool) -&gt; (a, a -&gt; Bool)
+</span><a href="#local-6989586621679346012"><span class="hs-identifier hs-var">updateOldParamWith</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679346010"><span class="hs-identifier hs-var">pvStr</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;param_&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679346009"><span class="hs-identifier hs-var">pnStr</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679346008"><span class="hs-identifier hs-var">allParams</span></a></span><span>
+</span><span id="line-81"></span><span>          </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679346012"><span class="annot"><span class="annottext">updateOldParamWith :: a -&gt; (a, a -&gt; Bool) -&gt; (a, a -&gt; Bool)
+</span><a href="#local-6989586621679346012"><span class="hs-identifier hs-var hs-var">updateOldParamWith</span></a></span></span><span> </span><span id="local-6989586621679346013"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346013"><span class="hs-identifier hs-var">newValCandidate</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679346014"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346014"><span class="hs-identifier hs-var">oldVal</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679346015"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679346015"><span class="hs-identifier hs-var">validate</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>                  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679346015"><span class="hs-identifier hs-var">validate</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346013"><span class="hs-identifier hs-var">newValCandidate</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346013"><span class="hs-identifier hs-var">newValCandidate</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679346015"><span class="hs-identifier hs-var">validate</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>                  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>                 </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span>         </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346014"><span class="hs-identifier hs-var">oldVal</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679346015"><span class="hs-identifier hs-var">validate</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><span class="hs-comment">-- | TorXakis default configuration</span></span><span>
+</span><span id="line-86"></span><span class="annot"><a href="Lattest.SMT.Config.html#defaultConfig"><span class="hs-identifier hs-type">defaultConfig</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-87"></span><span id="defaultConfig"><span class="annot"><span class="annottext">defaultConfig :: Config
+</span><a href="Lattest.SMT.Config.html#defaultConfig"><span class="hs-identifier hs-var hs-var">defaultConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-88"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">smtLog :: Bool
+</span><a href="Lattest.SMT.Config.html#smtLog"><span class="hs-identifier hs-var">smtLog</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-89"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">availableSolvers :: Map SolverId SolverConfig
+</span><a href="Lattest.SMT.Config.html#availableSolvers"><span class="hs-identifier hs-var">availableSolvers</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(SolverId, SolverConfig)] -&gt; Map SolverId SolverConfig
+forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.fromList</span></span><span>
+</span><span id="line-90"></span><span>                       </span><span class="hs-special">[</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SolverId
+</span><a href="Lattest.SMT.Config.html#z3default"><span class="hs-identifier hs-var">z3default</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">SolverConfig
+</span><a href="Lattest.SMT.Config.html#z3defaultConfig"><span class="hs-identifier hs-var">z3defaultConfig</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>                       </span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SolverId
+</span><a href="Lattest.SMT.Config.html#cvc4default"><span class="hs-identifier hs-var">cvc4default</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">SolverConfig
+</span><a href="Lattest.SMT.Config.html#cvc4defaultConfig"><span class="hs-identifier hs-var">cvc4defaultConfig</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-92"></span><span>                       </span><span class="hs-special">]</span><span>
+</span><span id="line-93"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">selectedSolver :: SolverId
+</span><a href="Lattest.SMT.Config.html#selectedSolver"><span class="hs-identifier hs-var">selectedSolver</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SolverId
+</span><a href="Lattest.SMT.Config.html#z3default"><span class="hs-identifier hs-var">z3default</span></a></span><span>
+</span><span id="line-94"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">configuredParameters :: [(ParamName, ParamValue)]
+</span><a href="Lattest.SMT.Config.html#configuredParameters"><span class="hs-identifier hs-var">configuredParameters</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-95"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-96"></span><span>
+</span><span id="line-97"></span><span class="annot"><a href="Lattest.SMT.Config.html#z3default"><span class="hs-identifier hs-type">z3default</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-type">SolverId</span></a></span><span>
+</span><span id="line-98"></span><span id="z3default"><span class="annot"><span class="annottext">z3default :: SolverId
+</span><a href="Lattest.SMT.Config.html#z3default"><span class="hs-identifier hs-var hs-var">z3default</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; SolverId
+</span><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-var">SolverId</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;z3&quot;</span></span><span>
+</span><span id="line-99"></span><span class="hs-comment">{-
+z3defaultConfig :: SolverConfig
+z3defaultConfig = SolverConfig
+  { execName = &quot;z3&quot;
+  , smtArgs =
+      [ &quot;-smt2&quot;
+      , &quot;-in&quot;
+      ]
+  }
+-}</span><span>
+</span><span id="line-109"></span><span class="annot"><a href="Lattest.SMT.Config.html#z3defaultConfig"><span class="hs-identifier hs-type">z3defaultConfig</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-type">SolverConfig</span></a></span><span>
+</span><span id="line-110"></span><span id="z3defaultConfig"><span class="annot"><span class="annottext">z3defaultConfig :: SolverConfig
+</span><a href="Lattest.SMT.Config.html#z3defaultConfig"><span class="hs-identifier hs-var hs-var">z3defaultConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-type">SolverConfig</span></a></span><span>
+</span><span id="line-111"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">execName :: String
+</span><a href="Lattest.SMT.Config.html#execName"><span class="hs-identifier hs-var">execName</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;bash&quot;</span></span><span>
+</span><span id="line-112"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">smtArgs :: [String]
+</span><a href="Lattest.SMT.Config.html#smtArgs"><span class="hs-identifier hs-var">smtArgs</span></a></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-113"></span><span>      </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-c&quot;</span></span><span>
+</span><span id="line-114"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;z3 -smt2 -in | tee /tmp/tmp.txt&quot;</span></span><span>
+</span><span id="line-115"></span><span>      </span><span class="hs-special">]</span><span>
+</span><span id="line-116"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="annot"><a href="Lattest.SMT.Config.html#cvc4default"><span class="hs-identifier hs-type">cvc4default</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-type">SolverId</span></a></span><span>
+</span><span id="line-119"></span><span id="cvc4default"><span class="annot"><span class="annottext">cvc4default :: SolverId
+</span><a href="Lattest.SMT.Config.html#cvc4default"><span class="hs-identifier hs-var hs-var">cvc4default</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; SolverId
+</span><a href="Lattest.SMT.Config.html#SolverId"><span class="hs-identifier hs-var">SolverId</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;cvc4&quot;</span></span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="annot"><a href="Lattest.SMT.Config.html#cvc4defaultConfig"><span class="hs-identifier hs-type">cvc4defaultConfig</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-type">SolverConfig</span></a></span><span>
+</span><span id="line-122"></span><span id="cvc4defaultConfig"><span class="annot"><span class="annottext">cvc4defaultConfig :: SolverConfig
+</span><a href="Lattest.SMT.Config.html#cvc4defaultConfig"><span class="hs-identifier hs-var hs-var">cvc4defaultConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#SolverConfig"><span class="hs-identifier hs-type">SolverConfig</span></a></span><span>
+</span><span id="line-123"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">execName :: String
+</span><a href="Lattest.SMT.Config.html#execName"><span class="hs-identifier hs-var">execName</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;cvc4&quot;</span></span><span>
+</span><span id="line-124"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">smtArgs :: [String]
+</span><a href="Lattest.SMT.Config.html#smtArgs"><span class="hs-identifier hs-var">smtArgs</span></a></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-125"></span><span>      </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--lang=smt2.5&quot;</span></span><span>
+</span><span id="line-126"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--incremental&quot;</span></span><span>
+</span><span id="line-127"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--strings-exp&quot;</span></span><span>
+</span><span id="line-128"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--fmf-fun-rlv&quot;</span></span><span>
+</span><span id="line-129"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--uf-ss-fair&quot;</span></span><span>
+</span><span id="line-130"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--no-strings-print-ascii&quot;</span></span><span>
+</span><span id="line-131"></span><span>      </span><span class="hs-special">]</span><span>
+</span><span id="line-132"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- | Return a `CreateProcess` according to the selected solver in the</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- configuration.</span><span>
+</span><span id="line-136"></span><span class="annot"><a href="Lattest.SMT.Config.html#getProc"><span class="hs-identifier hs-type">getProc</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">CreateProcess</span></span><span>
+</span><span id="line-137"></span><span id="getProc"><span class="annot"><span class="annottext">getProc :: Config -&gt; Maybe CreateProcess
+</span><a href="Lattest.SMT.Config.html#getProc"><span class="hs-identifier hs-var hs-var">getProc</span></a></span></span><span> </span><span id="local-6989586621679346022"><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346022"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-138"></span><span>  </span><span id="local-6989586621679346023"><span class="annot"><span class="annottext">SolverConfig
+</span><a href="#local-6989586621679346023"><span class="hs-identifier hs-var">solver</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SolverId -&gt; Map SolverId SolverConfig -&gt; Maybe SolverConfig
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Map.lookup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Config -&gt; SolverId
+</span><a href="Lattest.SMT.Config.html#selectedSolver"><span class="hs-identifier hs-var">selectedSolver</span></a></span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346022"><span class="hs-identifier hs-var">cfg</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Config -&gt; Map SolverId SolverConfig
+</span><a href="Lattest.SMT.Config.html#availableSolvers"><span class="hs-identifier hs-var">availableSolvers</span></a></span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="#local-6989586621679346022"><span class="hs-identifier hs-var">cfg</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-139"></span><span>  </span><span class="annot"><span class="annottext">CreateProcess -&gt; Maybe CreateProcess
+forall a. a -&gt; Maybe a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(CreateProcess -&gt; Maybe CreateProcess)
+-&gt; CreateProcess -&gt; Maybe CreateProcess
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; CreateProcess
+</span><span class="hs-identifier hs-var">proc</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SolverConfig -&gt; String
+</span><a href="Lattest.SMT.Config.html#execName"><span class="hs-identifier hs-var">execName</span></a></span><span> </span><span class="annot"><span class="annottext">SolverConfig
+</span><a href="#local-6989586621679346023"><span class="hs-identifier hs-var">solver</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SolverConfig -&gt; [String]
+</span><a href="Lattest.SMT.Config.html#smtArgs"><span class="hs-identifier hs-var">smtArgs</span></a></span><span> </span><span class="annot"><span class="annottext">SolverConfig
+</span><a href="#local-6989586621679346023"><span class="hs-identifier hs-var">solver</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-140"></span></pre></body></html>

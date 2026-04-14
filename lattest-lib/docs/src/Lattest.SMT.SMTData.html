@@ -1,0 +1,129 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+TorXakis - Model Based Testing
+Copyright (c) 2015-2017 TNO and Radboud University
+See LICENSE at root directory of this repository.
+-}</span><span>
+</span><span id="line-6"></span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-9"></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.SMTData</span><span>
+</span><span id="line-11"></span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- SMT Data type</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- export</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier">SMT</span></a></span><span>
+</span><span id="line-20"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier">SmtEnv</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--, EnvNames(..)</span><span>
+</span><span id="line-22"></span><span class="hs-comment">--, EnvDefs (..)</span><span>
+</span><span id="line-23"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier">SMTRef</span></a></span><span>
+</span><span id="line-24"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#newSMTRef"><span class="hs-identifier">newSMTRef</span></a></span><span>
+</span><span id="line-25"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#runSMT"><span class="hs-identifier">runSMT</span></a></span><span>
+</span><span id="line-26"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#readSMTRef"><span class="hs-identifier">readSMTRef</span></a></span><span>
+</span><span id="line-27"></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- import</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>           </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span>            </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.IORef</span></span><span>
+</span><span id="line-42"></span><span class="hs-comment">{-
+import           CstrDef
+import           CstrId
+import           FuncDef
+import           FuncId
+import           SortDef
+import           SortId
+import           VarId
+-}</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- SMT state monad for smt solver</span><span>
+</span><span id="line-53"></span><span class="hs-comment">{-
+data EnvDefs = EnvDefs { sortDefs   :: Map.Map SortId SortDef
+                       , cstrDefs   :: Map.Map CstrId CstrDef
+                       , funcDefs   :: Map.Map FuncId (FuncDef VarId)
+                       }
+               deriving (Eq,Ord,Read,Show)
+-}</span><span class="hs-comment">{-
+data EnvNames = EnvNames { sortNames   :: Map.Map SortId Text
+                         , cstrNames   :: Map.Map CstrId Text
+                         , funcNames   :: Map.Map FuncId Text
+                         }
+                deriving (Eq,Ord,Read,Show)
+-}</span><span>
+</span><span id="line-66"></span><span class="hs-keyword">data</span><span>  </span><span id="SmtEnv"><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-var">SmtEnv</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span id="SmtEnv"><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-var">SmtEnv</span></a></span></span><span>     </span><span class="hs-special">{</span><span> </span><span id="inHandle"><span class="annot"><span class="annottext">SmtEnv -&gt; Handle
+</span><a href="Lattest.SMT.SMTData.html#inHandle"><span class="hs-identifier hs-var hs-var">inHandle</span></a></span></span><span>          </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span>
+</span><span id="line-67"></span><span>                            </span><span class="hs-special">,</span><span> </span><span id="outHandle"><span class="annot"><span class="annottext">SmtEnv -&gt; Handle
+</span><a href="Lattest.SMT.SMTData.html#outHandle"><span class="hs-identifier hs-var hs-var">outHandle</span></a></span></span><span>         </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span>
+</span><span id="line-68"></span><span>                            </span><span class="hs-special">,</span><span> </span><span id="smtProcessHandle"><span class="annot"><span class="annottext">SmtEnv -&gt; ProcessHandle
+</span><a href="Lattest.SMT.SMTData.html#smtProcessHandle"><span class="hs-identifier hs-var hs-var">smtProcessHandle</span></a></span></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessHandle</span></span><span>
+</span><span id="line-69"></span><span>                            </span><span class="hs-special">,</span><span> </span><span id="logFileHandle"><span class="annot"><span class="annottext">SmtEnv -&gt; Maybe Handle
+</span><a href="Lattest.SMT.SMTData.html#logFileHandle"><span class="hs-identifier hs-var hs-var">logFileHandle</span></a></span></span><span>     </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span>
+</span><span id="line-70"></span><span class="hs-comment">--                            , envNames          :: EnvNames</span><span>
+</span><span id="line-71"></span><span class="hs-comment">--                            , envDefs           :: EnvDefs</span><span>
+</span><span id="line-72"></span><span>                            </span><span class="hs-special">}</span><span>
+</span><span id="line-73"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span id="SmtEnvError"><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnvError"><span class="hs-identifier hs-var">SmtEnvError</span></a></span></span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span class="hs-keyword">type</span><span>  </span><span id="SMT"><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-var">SMT</span></a></span></span><span> </span><span id="local-6989586621679346055"><span class="annot"><a href="#local-6989586621679346055"><span class="hs-identifier hs-type">a</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">StateT</span></span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-type">SmtEnv</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679346055"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="hs-keyword">type</span><span> </span><span id="SMTRef"><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier hs-var">SMTRef</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-type">SmtEnv</span></a></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="annot"><a href="Lattest.SMT.SMTData.html#newSMTRef"><span class="hs-identifier hs-type">newSMTRef</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-type">SmtEnv</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier hs-type">SMTRef</span></a></span><span>
+</span><span id="line-80"></span><span id="newSMTRef"><span class="annot"><span class="annottext">newSMTRef :: SmtEnv -&gt; IO SMTRef
+</span><a href="Lattest.SMT.SMTData.html#newSMTRef"><span class="hs-identifier hs-var hs-var">newSMTRef</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; IO SMTRef
+forall a. a -&gt; IO (IORef a)
+</span><span class="hs-identifier hs-var">newIORef</span></span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="annot"><a href="Lattest.SMT.SMTData.html#readSMTRef"><span class="hs-identifier hs-type">readSMTRef</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier hs-type">SMTRef</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-type">SmtEnv</span></a></span><span>
+</span><span id="line-83"></span><span id="readSMTRef"><span class="annot"><span class="annottext">readSMTRef :: SMTRef -&gt; IO SmtEnv
+</span><a href="Lattest.SMT.SMTData.html#readSMTRef"><span class="hs-identifier hs-var hs-var">readSMTRef</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SMTRef -&gt; IO SmtEnv
+forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span id="local-6989586621679346035"><span class="annot"><a href="Lattest.SMT.SMTData.html#runSMT"><span class="hs-identifier hs-type">runSMT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier hs-type">SMTRef</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679346035"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679346035"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-86"></span><span id="runSMT"><span class="annot"><span class="annottext">runSMT :: forall a. SMTRef -&gt; SMT a -&gt; IO a
+</span><a href="Lattest.SMT.SMTData.html#runSMT"><span class="hs-identifier hs-var hs-var">runSMT</span></a></span></span><span> </span><span id="local-6989586621679346063"><span class="annot"><span class="annottext">SMTRef
+</span><a href="#local-6989586621679346063"><span class="hs-identifier hs-var">smtRef</span></a></span></span><span> </span><span id="local-6989586621679346064"><span class="annot"><span class="annottext">SMT a
+</span><a href="#local-6989586621679346064"><span class="hs-identifier hs-var">smtComp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-87"></span><span>    </span><span id="local-6989586621679346065"><span class="annot"><span class="annottext">SmtEnv
+</span><a href="#local-6989586621679346065"><span class="hs-identifier hs-var">smtEnv</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMTRef -&gt; IO SmtEnv
+forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">SMTRef
+</span><a href="#local-6989586621679346063"><span class="hs-identifier hs-var">smtRef</span></a></span><span>
+</span><span id="line-88"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679346066"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346066"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679346067"><span class="annot"><span class="annottext">SmtEnv
+</span><a href="#local-6989586621679346067"><span class="hs-identifier hs-var">smtEnv'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT a -&gt; SmtEnv -&gt; IO (a, SmtEnv)
+forall s (m :: * -&gt; *) a. StateT s m a -&gt; s -&gt; m (a, s)
+</span><span class="hs-identifier hs-var">runStateT</span></span><span> </span><span class="annot"><span class="annottext">SMT a
+</span><a href="#local-6989586621679346064"><span class="hs-identifier hs-var">smtComp</span></a></span><span> </span><span class="annot"><span class="annottext">SmtEnv
+</span><a href="#local-6989586621679346065"><span class="hs-identifier hs-var">smtEnv</span></a></span><span>
+</span><span id="line-89"></span><span>    </span><span class="annot"><span class="annottext">SMTRef -&gt; SmtEnv -&gt; IO ()
+forall a. IORef a -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">writeIORef</span></span><span> </span><span class="annot"><span class="annottext">SMTRef
+</span><a href="#local-6989586621679346063"><span class="hs-identifier hs-var">smtRef</span></a></span><span> </span><span class="annot"><span class="annottext">SmtEnv
+</span><a href="#local-6989586621679346067"><span class="hs-identifier hs-var">smtEnv'</span></a></span><span>
+</span><span id="line-90"></span><span>    </span><span class="annot"><span class="annottext">a -&gt; IO a
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679346066"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span class="hs-comment">--instance Show SmtEnv where</span><span>
+</span><span id="line-93"></span><span class="hs-comment">--  show smtEnv =  show $ envNames smtEnv</span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-96"></span><span class="hs-comment">--                                                                                           --</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-98"></span></pre></body></html>

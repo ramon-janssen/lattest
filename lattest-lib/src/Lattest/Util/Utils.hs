@@ -13,19 +13,24 @@ flipCoin,
 takeRandom,
 -- * Maybe
 takeJusts,
+distributeFirstMaybe,
 -- * Set
 takeArbitrary,
 -- * List utils
-removeDuplicates
+removeDuplicates,
+-- * Monad utils
+distributeMonadOverFoldable
 )
 where
 
 import Data.Foldable(toList)
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.List(sort, head, group)
 import System.Random(RandomGen, uniformR)
 import Control.Monad.Extra((||^), (&&^))
+import Data.OrdMonad as OM
 
 -- | Conjunction lifted to functions.
 (&&&) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
@@ -71,6 +76,11 @@ takeJusts maybes = takeJusts' $ toList maybes
     takeJusts' (Just x : xs) = x : takeJusts' xs
     takeJusts' (Nothing : xs) = takeJusts' xs 
 
+-- | If the first tuple element is a Nothing, then take a Nothing, ignoring the second element, otherwise take a Just of both elements.
+distributeFirstMaybe :: (Maybe a, b) -> Maybe (a, b)
+distributeFirstMaybe (Just a, b) = Just (a, b)
+distributeFirstMaybe (Nothing, _) = Nothing
+
 -- | Remove an arbitrary element from the given set, and return both that element and the remaining set, or `Nothing` if the given set was empty.
 takeArbitrary :: Set a -> Maybe (a, Set a)
 takeArbitrary set
@@ -80,3 +90,24 @@ takeArbitrary set
 -- | Remove duplicates from a list by sorting, grouping and taking only the first element of each group. Returns ordered and filtered list.
 removeDuplicates :: Ord a => [a] -> [a]
 removeDuplicates = map head . group . sort
+
+{-|
+    Apply a monadic computation over a functor, where the monadic computations are performed sequentially according to the natural ordering of the
+    functor elements. If m is the `Identity` monad, then this function boils down to a normal `fmap`.
+    
+    Strictly speaking, this function is partial: it is undefined if the functor maps the computation over an element which is not folded by that
+    same functor. In practice, the elements mapped over by a foldable functor are usually exactly the folded elements.
+-}
+distributeMonadOverFoldable :: (OM.OrdFunctor f, Foldable f, Monad m, Ord x, Ord y) => (x -> m y) -> f x -> m (f y)
+distributeMonadOverFoldable f xs = do
+    let ascElems = Set.toAscList $ Set.fromList $ toList xs
+    xToY <- sequence (f' <$> ascElems)
+    return $ lookup (Map.fromAscList xToY) OM.<#> xs
+    where
+    f' x = do
+        y <- f x
+        return (x,y)
+    lookup xToY x = case Map.lookup x xToY of
+        Nothing -> error "distributeMonadOverFoldable called on Foldable Functor which fmaps over an unfolded element"
+        Just y -> y
+

@@ -36,6 +36,7 @@ module Lattest.Model.BoundedMonad (
 Det(..),
 -- ** Non-deterministic
 NonDet(..),
+nonDet,
 -- ** Distributive lattice
 FreeLattice,
 atom,
@@ -64,10 +65,17 @@ JoinSemiLattice,
 MeetSemiLattice,
 (\/),
 (/\),
+-- ** Mapping between lattices and boolean expressions
+BooleanConfiguration,
+asExpr,
+asDualExpr,
 -- ** 'Data.OrdMonad' re-export, for convenience.
 module OM
 )
 where
+
+import qualified Lattest.Model.Symbolic.Expr as E
+import Lattest.Model.Symbolic.Expr(Constant(Cbool))
 
 import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
@@ -121,6 +129,9 @@ instance Show a => Show (Det a) where
 -- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
 data NonDet q = NonDet (Set.Set q) | UnderspecNonDet
 
+nonDet :: Ord q => [q] -> NonDet q
+nonDet = NonDet . Set.fromList
+
 instance BoundedConfiguration NonDet where
     isForbidden (NonDet s) = if Set.null s then True else False
     isForbidden _ = False
@@ -143,7 +154,9 @@ instance Foldable NonDet where
     foldr _ q _ = q
 
 instance Show a => Show (NonDet a) where
-    show (NonDet a) = show $ Set.toList a
+    show (NonDet a)
+        | Set.null a = "⊥"
+        | otherwise = show $ Set.toList a
     show UnderspecNonDet = "⊤"
 
 instance Ord a => Eq (NonDet a) where
@@ -336,12 +349,36 @@ type BoundedFunctor m = (BoundedConfiguration m, OM.OrdFunctor m)
 class JoinSemiLattice a where
     (\/) :: a -> a -> a
 
---this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
---instance Lattice a => JoinSemiLattice a where
---    join = (L.\/)
-
 -- | Semi-lattices with a binary meet ('and') operation
 class MeetSemiLattice a where
     (/\) :: a -> a -> a
 
 
+
+--this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
+--instance Lattice a => JoinSemiLattice a where
+--    join = (L.\/)
+
+class BooleanConfiguration m where -- TODO: possibly this class can be less ad-hoc, e.g. via some lattice-theoretic concept
+    asExpr :: m (E.Expr Bool) -> E.Expr Bool
+
+instance BooleanConfiguration Det where
+    asExpr (Det q) = q
+    asExpr ForbiddenDet = E.sFalse
+    asExpr UnderspecDet = E.sTrue
+
+instance BooleanConfiguration NonDet where
+    asExpr (NonDet qs) = E.sOr qs
+    asExpr UnderspecNonDet = E.sTrue
+
+instance BooleanConfiguration FreeLattice where
+    asExpr (FreeLattice Top) = E.sTrue
+    asExpr (FreeLattice Bottom) = E.sFalse
+    asExpr (FreeLattice (Levitate a)) = asExpr' a
+        where
+        asExpr' (Var a) = a
+        asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
+        asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
+
+asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
+asDualExpr m = E.sNot $ asExpr $ E.sNot OM.<#> m
