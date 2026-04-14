@@ -1,8 +1,6 @@
-{-
-This is a modified version of:
-TorXakis - Model Based Testing
-See LICENSE in the parent SMT folder.
--}
+--- This is a modified version of:
+--- TorXakis - Model Based Testing
+--- See LICENSE in the parent SMT folder.
 {
 -----------------------------------------------------------------------------
 -- Tokenize SMT response.
