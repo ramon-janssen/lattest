@@ -1,0 +1,1114 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span id="local-6989586621679339607"><span id="local-6989586621679339608"></span></span><span class="hs-comment">{-
+TorXakis - Model Based Testing
+Copyright (c) 2015-2017 TNO and Radboud University
+See LICENSE in the parent Symbolic folder.
+-}</span><span>
+</span><span id="line-6"></span><span class="hs-pragma">{-# LANGUAGE DeriveDataTypeable         #-}</span><span>
+</span><span id="line-7"></span><span class="hs-pragma">{-# LANGUAGE DeriveGeneric              #-}</span><span>
+</span><span id="line-8"></span><span class="hs-pragma">{-# LANGUAGE GeneralizedNewtypeDeriving #-}</span><span>
+</span><span id="line-9"></span><span class="hs-pragma">{-# LANGUAGE OverloadedLists            #-}</span><span>
+</span><span id="line-10"></span><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables        #-}</span><span>
+</span><span id="line-11"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies               #-}</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Module      :  FreeMonoidX</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- Copyright   :  (c) TNO and Radboud University</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- License     :  BSD3 (see the file license.txt)</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- Maintainer  :  damian.nadales@gmail.com (Embedded Systems Innovation by TNO)</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- Stability   :  experimental</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- Portability :  portable</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">--  Free commutative Monoid with a multiplication operation. Symbolic representation of</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--  free-monoids of the form:</span><span>
+</span><span id="line-24"></span><span class="hs-comment">--</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- &gt; a0 &lt;&gt; a1 &lt;&gt; ... &lt;&gt; an-1</span><span>
+</span><span id="line-26"></span><span class="hs-comment">--</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- `ai \in A`, `&lt;&gt;` is a commutative (binary) operation, `(A, &lt;&gt;)` is a</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- Monoid, there is a multiplication operator `&lt;.&gt;` that is distributive</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- w.r.t `&lt;&gt;`, and there is additive inverse for the elements of `A`:</span><span>
+</span><span id="line-30"></span><span class="hs-comment">--</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- &gt; a &lt;&gt; b         = b &lt;&gt; a                 -- for all a, b in A (commutativity)</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- &gt; a &lt;.&gt; (b &lt;&gt; c) = (a &lt;.&gt; b) &lt;&gt; (a &lt;.&gt; c) -- for all a, b, c in A (left distributivity).</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; (b &lt;&gt; c) &lt;.&gt; a = (b &lt;.&gt; a) &lt;&gt; (c &lt;.&gt; a) -- for all a, b, c in A (right distributivity).</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; a &lt;&gt; -a        = 0                      -- for all a, for some (-a), where `0 = mempty`.</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- Furthermore, to be able to assign semantics to this symbolic representation</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- it is required that the terms are integer-multipliable, meaning that</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; `a &lt;.&gt; n`</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- is equivalent to adding an element `a` `n` times if `n` is non-negative, or</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- removing it `n` times otherwise. See `IntMultipliable` class, and</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- `multiplyLaw` in `FreeMonoidXSpec`.</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- Note that we're using `&lt;.&gt;` as having both types `A -&gt; A` and `Integral n =&gt;</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- n -&gt; a`, which is fine at the moment since the `FreeMonoidX`'s we are</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- dealing with are numeric types.</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">--</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- `FreeMonoidX a` is an instance of the `IsList` class, which means that in</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- combination with the `OverloadedLists` extension is possible to write</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- free-monoids as lists. For instance the free-monoid:</span><span>
+</span><span id="line-53"></span><span class="hs-comment">--</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &gt; a0 &lt;&gt; a1 &lt;&gt; ... &lt;&gt; an-1</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- Can be written as</span><span>
+</span><span id="line-57"></span><span class="hs-comment">--</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- [a0, a1, ..., an-1]</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Model.Symbolic.Internal.FreeMonoidX</span><span>
+</span><span id="line-63"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Free Monoid with multiplication Type</span></span><span>
+</span><span id="line-64"></span><span>    </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Query</span></span><span>
+</span><span id="line-67"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#nrofDistinctTerms"><span class="hs-identifier">nrofDistinctTerms</span></a></span><span>
+</span><span id="line-68"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTerms"><span class="hs-identifier">distinctTerms</span></a></span><span>  </span><span class="hs-comment">-- exposed for performance reasons checking properties for</span><span>
+</span><span id="line-69"></span><span>                   </span><span class="hs-comment">-- all distinct terms is faster than for all terms</span><span>
+</span><span id="line-70"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTermsT"><span class="hs-identifier">distinctTermsT</span></a></span><span>
+</span><span id="line-71"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#allFreeMonoidX"><span class="hs-identifier">allFreeMonoidX</span></a></span><span>
+</span><span id="line-72"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Map</span></span><span>
+</span><span id="line-73"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapTerms"><span class="hs-identifier">mapTerms</span></a></span><span>
+</span><span id="line-74"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapFreeMonoidX"><span class="hs-identifier">mapFreeMonoidX</span></a></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Filter</span></span><span>
+</span><span id="line-77"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partition"><span class="hs-identifier">partition</span></a></span><span>
+</span><span id="line-78"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partitionT"><span class="hs-identifier">partitionT</span></a></span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span>  </span><span class="annot"><span class="hs-comment">-- | Folds</span></span><span>
+</span><span id="line-81"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldrTerms"><span class="hs-identifier">foldrTerms</span></a></span><span>
+</span><span id="line-82"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldOccur"><span class="hs-identifier">foldOccur</span></a></span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldFMX"><span class="hs-identifier">foldFMX</span></a></span><span>
+</span><span id="line-84"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fold"><span class="hs-identifier">Lattest.Model.Symbolic.Internal.FreeMonoidX.fold</span></a></span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Manipulation of the free monoid</span></span><span>
+</span><span id="line-87"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#append"><span class="hs-identifier">append</span></a></span><span>
+</span><span id="line-88"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#remove"><span class="hs-identifier">remove</span></a></span><span>
+</span><span id="line-89"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#appendMany"><span class="hs-identifier">appendMany</span></a></span><span>
+</span><span id="line-90"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#flatten"><span class="hs-identifier">flatten</span></a></span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Multiplication operator</span></span><span>
+</span><span id="line-93"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#%3C.%3E"><span class="hs-operator">(&lt;.&gt;)</span></a></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Monoid terms restriction</span></span><span>
+</span><span id="line-96"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#IntMultipliable"><span class="hs-identifier">IntMultipliable</span></a></span><span>
+</span><span id="line-97"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier">TermWrapper</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Occurrence lists</span></span><span>
+</span><span id="line-100"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurList"><span class="hs-identifier">toOccurList</span></a></span><span>
+</span><span id="line-101"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurList"><span class="hs-identifier">toDistinctAscOccurList</span></a></span><span>
+</span><span id="line-102"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurList"><span class="hs-identifier">fromOccurList</span></a></span><span>
+</span><span id="line-103"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscOccurList"><span class="hs-identifier">fromDistinctAscOccurList</span></a></span><span>
+</span><span id="line-104"></span><span>  </span><span class="annot"><span class="hs-comment">-- ** Occurrence lists of `TermWrapper`'s</span></span><span>
+</span><span id="line-105"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromListT"><span class="hs-identifier">fromListT</span></a></span><span>
+</span><span id="line-106"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurListT"><span class="hs-identifier">toOccurListT</span></a></span><span>
+</span><span id="line-107"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurListT"><span class="hs-identifier">toDistinctAscOccurListT</span></a></span><span>
+</span><span id="line-108"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurListT"><span class="hs-identifier">fromOccurListT</span></a></span><span>
+</span><span id="line-109"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscPowerListT"><span class="hs-identifier">fromDistinctAscPowerListT</span></a></span><span>
+</span><span id="line-110"></span><span>  </span><span class="annot"><span class="hs-comment">-- ** Lists of direct items</span></span><span>
+</span><span id="line-111"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Exts.toList</span></span><span>
+</span><span id="line-112"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Exts.fromList</span></span><span>
+</span><span id="line-113"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-115"></span><span>
+</span><span id="line-116"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Arrow</span></span><span>   </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">first</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(***)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-117"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.DeepSeq</span></span><span>
+</span><span id="line-118"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Data</span></span><span>
+</span><span id="line-119"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span>
+</span><span id="line-120"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span>       </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">partition</span></span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Map</span></span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-123"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Exts</span></span><span>
+</span><span id="line-124"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Generics</span></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Generic</span></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="hs-comment">-- | Symbolic representation of a polynomial, where each term is a member of</span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- type `a`.</span><span>
+</span><span id="line-128"></span><span class="hs-comment">--</span><span>
+</span><span id="line-129"></span><span class="hs-comment">-- The integer value of the map represents the number of occurrences of a term</span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- in the polynomial. Given this representation it is crucial that the</span><span>
+</span><span id="line-131"></span><span class="hs-comment">-- operation is commutative, since the information of about the order of the</span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- term is lost in this representation.</span><span>
+</span><span id="line-133"></span><span class="hs-comment">--</span><span>
+</span><span id="line-134"></span><span class="hs-keyword">newtype</span><span> </span><span id="FreeMonoidX"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-var">FreeMonoidX</span></a></span></span><span> </span><span id="local-6989586621679339371"><span class="annot"><a href="#local-6989586621679339371"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="FMX"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="asMap"><span class="annot"><span class="annottext">forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var hs-var">asMap</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679339371"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-135"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679339644"><span id="local-6989586621679339650"><span class="annot"><span class="annottext">FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+(FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool) -&gt; Eq (FreeMonoidX a)
+forall a. Eq a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: forall a. Eq a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+== :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+$c/= :: forall a. Eq a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+/= :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339662"><span id="local-6989586621679339668"><span id="local-6989586621679339673"><span id="local-6989586621679339678"><span id="local-6989586621679339683"><span id="local-6989586621679339688"><span id="local-6989586621679339693"><span class="annot"><span class="annottext">Eq (FreeMonoidX a)
+Eq (FreeMonoidX a) =&gt;
+(FreeMonoidX a -&gt; FreeMonoidX a -&gt; Ordering)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a)
+-&gt; (FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a)
+-&gt; Ord (FreeMonoidX a)
+FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+FreeMonoidX a -&gt; FreeMonoidX a -&gt; Ordering
+FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+forall a. Ord a =&gt; Eq (FreeMonoidX a)
+forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Ordering
+forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+$ccompare :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Ordering
+compare :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Ordering
+$c&lt; :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+&lt; :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+$c&lt;= :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+&lt;= :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+$c&gt; :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+&gt; :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+$c&gt;= :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+&gt;= :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; Bool
+$cmax :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+max :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+$cmin :: forall a. Ord a =&gt; FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+min :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339704"><span id="local-6989586621679339708"><span id="local-6989586621679339711"><span id="local-6989586621679339722"><span class="annot"><span class="annottext">ReadPrec [FreeMonoidX a]
+ReadPrec (FreeMonoidX a)
+Int -&gt; ReadS (FreeMonoidX a)
+ReadS [FreeMonoidX a]
+(Int -&gt; ReadS (FreeMonoidX a))
+-&gt; ReadS [FreeMonoidX a]
+-&gt; ReadPrec (FreeMonoidX a)
+-&gt; ReadPrec [FreeMonoidX a]
+-&gt; Read (FreeMonoidX a)
+forall a. (Ord a, Read a) =&gt; ReadPrec [FreeMonoidX a]
+forall a. (Ord a, Read a) =&gt; ReadPrec (FreeMonoidX a)
+forall a. (Ord a, Read a) =&gt; Int -&gt; ReadS (FreeMonoidX a)
+forall a. (Ord a, Read a) =&gt; ReadS [FreeMonoidX a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+$creadsPrec :: forall a. (Ord a, Read a) =&gt; Int -&gt; ReadS (FreeMonoidX a)
+readsPrec :: Int -&gt; ReadS (FreeMonoidX a)
+$creadList :: forall a. (Ord a, Read a) =&gt; ReadS [FreeMonoidX a]
+readList :: ReadS [FreeMonoidX a]
+$creadPrec :: forall a. (Ord a, Read a) =&gt; ReadPrec (FreeMonoidX a)
+readPrec :: ReadPrec (FreeMonoidX a)
+$creadListPrec :: forall a. (Ord a, Read a) =&gt; ReadPrec [FreeMonoidX a]
+readListPrec :: ReadPrec [FreeMonoidX a]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339727"><span id="local-6989586621679339729"><span class="annot"><span class="annottext">(forall x. FreeMonoidX a -&gt; Rep (FreeMonoidX a) x)
+-&gt; (forall x. Rep (FreeMonoidX a) x -&gt; FreeMonoidX a)
+-&gt; Generic (FreeMonoidX a)
+forall x. Rep (FreeMonoidX a) x -&gt; FreeMonoidX a
+forall x. FreeMonoidX a -&gt; Rep (FreeMonoidX a) x
+forall a.
+(forall x. a -&gt; Rep a x) -&gt; (forall x. Rep a x -&gt; a) -&gt; Generic a
+forall a x. Rep (FreeMonoidX a) x -&gt; FreeMonoidX a
+forall a x. FreeMonoidX a -&gt; Rep (FreeMonoidX a) x
+$cfrom :: forall a x. FreeMonoidX a -&gt; Rep (FreeMonoidX a) x
+from :: forall x. FreeMonoidX a -&gt; Rep (FreeMonoidX a) x
+$cto :: forall a x. Rep (FreeMonoidX a) x -&gt; FreeMonoidX a
+to :: forall x. Rep (FreeMonoidX a) x -&gt; FreeMonoidX a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Generic</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339734"><span class="annot"><span class="annottext">FreeMonoidX a -&gt; ()
+(FreeMonoidX a -&gt; ()) -&gt; NFData (FreeMonoidX a)
+forall a. NFData a =&gt; FreeMonoidX a -&gt; ()
+forall a. (a -&gt; ()) -&gt; NFData a
+$crnf :: forall a. NFData a =&gt; FreeMonoidX a -&gt; ()
+rnf :: FreeMonoidX a -&gt; ()
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">NFData</span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339749"><span id="local-6989586621679339754"><span id="local-6989586621679339758"><span id="local-6989586621679339760"><span id="local-6989586621679339762"><span id="local-6989586621679339768"><span id="local-6989586621679339774"><span id="local-6989586621679339777"><span id="local-6989586621679339780"><span id="local-6989586621679339783"><span id="local-6989586621679339786"><span id="local-6989586621679339789"><span id="local-6989586621679339794"><span id="local-6989586621679339799"><span class="annot"><span class="annottext">Typeable (FreeMonoidX a)
+Typeable (FreeMonoidX a) =&gt;
+(forall (c :: * -&gt; *).
+ (forall d b. Data d =&gt; c (d -&gt; b) -&gt; d -&gt; c b)
+ -&gt; (forall g. g -&gt; c g) -&gt; FreeMonoidX a -&gt; c (FreeMonoidX a))
+-&gt; (forall (c :: * -&gt; *).
+    (forall b r. Data b =&gt; c (b -&gt; r) -&gt; c r)
+    -&gt; (forall r. r -&gt; c r) -&gt; Constr -&gt; c (FreeMonoidX a))
+-&gt; (FreeMonoidX a -&gt; Constr)
+-&gt; (FreeMonoidX a -&gt; DataType)
+-&gt; (forall (t :: * -&gt; *) (c :: * -&gt; *).
+    Typeable t =&gt;
+    (forall d. Data d =&gt; c (t d)) -&gt; Maybe (c (FreeMonoidX a)))
+-&gt; (forall (t :: * -&gt; * -&gt; *) (c :: * -&gt; *).
+    Typeable t =&gt;
+    (forall d e. (Data d, Data e) =&gt; c (t d e))
+    -&gt; Maybe (c (FreeMonoidX a)))
+-&gt; ((forall b. Data b =&gt; b -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX a)
+-&gt; (forall r r'.
+    (r -&gt; r' -&gt; r)
+    -&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r)
+-&gt; (forall r r'.
+    (r' -&gt; r -&gt; r)
+    -&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r)
+-&gt; (forall u. (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; [u])
+-&gt; (forall u.
+    Int -&gt; (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; u)
+-&gt; (forall (m :: * -&gt; *).
+    Monad m =&gt;
+    (forall d. Data d =&gt; d -&gt; m d)
+    -&gt; FreeMonoidX a -&gt; m (FreeMonoidX a))
+-&gt; (forall (m :: * -&gt; *).
+    MonadPlus m =&gt;
+    (forall d. Data d =&gt; d -&gt; m d)
+    -&gt; FreeMonoidX a -&gt; m (FreeMonoidX a))
+-&gt; (forall (m :: * -&gt; *).
+    MonadPlus m =&gt;
+    (forall d. Data d =&gt; d -&gt; m d)
+    -&gt; FreeMonoidX a -&gt; m (FreeMonoidX a))
+-&gt; Data (FreeMonoidX a)
+FreeMonoidX a -&gt; Constr
+FreeMonoidX a -&gt; DataType
+(forall b. Data b =&gt; b -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall a. (Data a, Ord a) =&gt; Typeable (FreeMonoidX a)
+forall a. (Data a, Ord a) =&gt; FreeMonoidX a -&gt; Constr
+forall a. (Data a, Ord a) =&gt; FreeMonoidX a -&gt; DataType
+forall a.
+(Data a, Ord a) =&gt;
+(forall b. Data b =&gt; b -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall a u.
+(Data a, Ord a) =&gt;
+Int -&gt; (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; u
+forall a u.
+(Data a, Ord a) =&gt;
+(forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; [u]
+forall a r r'.
+(Data a, Ord a) =&gt;
+(r -&gt; r' -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+forall a r r'.
+(Data a, Ord a) =&gt;
+(r' -&gt; r -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+forall a (m :: * -&gt; *).
+(Data a, Ord a, Monad m) =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+forall a (m :: * -&gt; *).
+(Data a, Ord a, MonadPlus m) =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+forall a (c :: * -&gt; *).
+(Data a, Ord a) =&gt;
+(forall b r. Data b =&gt; c (b -&gt; r) -&gt; c r)
+-&gt; (forall r. r -&gt; c r) -&gt; Constr -&gt; c (FreeMonoidX a)
+forall a (c :: * -&gt; *).
+(Data a, Ord a) =&gt;
+(forall d b. Data d =&gt; c (d -&gt; b) -&gt; d -&gt; c b)
+-&gt; (forall g. g -&gt; c g) -&gt; FreeMonoidX a -&gt; c (FreeMonoidX a)
+forall a (t :: * -&gt; *) (c :: * -&gt; *).
+(Data a, Ord a, Typeable t) =&gt;
+(forall d. Data d =&gt; c (t d)) -&gt; Maybe (c (FreeMonoidX a))
+forall a (t :: * -&gt; * -&gt; *) (c :: * -&gt; *).
+(Data a, Ord a, Typeable t) =&gt;
+(forall d e. (Data d, Data e) =&gt; c (t d e))
+-&gt; Maybe (c (FreeMonoidX a))
+forall a.
+Typeable a =&gt;
+(forall (c :: * -&gt; *).
+ (forall d b. Data d =&gt; c (d -&gt; b) -&gt; d -&gt; c b)
+ -&gt; (forall g. g -&gt; c g) -&gt; a -&gt; c a)
+-&gt; (forall (c :: * -&gt; *).
+    (forall b r. Data b =&gt; c (b -&gt; r) -&gt; c r)
+    -&gt; (forall r. r -&gt; c r) -&gt; Constr -&gt; c a)
+-&gt; (a -&gt; Constr)
+-&gt; (a -&gt; DataType)
+-&gt; (forall (t :: * -&gt; *) (c :: * -&gt; *).
+    Typeable t =&gt;
+    (forall d. Data d =&gt; c (t d)) -&gt; Maybe (c a))
+-&gt; (forall (t :: * -&gt; * -&gt; *) (c :: * -&gt; *).
+    Typeable t =&gt;
+    (forall d e. (Data d, Data e) =&gt; c (t d e)) -&gt; Maybe (c a))
+-&gt; ((forall b. Data b =&gt; b -&gt; b) -&gt; a -&gt; a)
+-&gt; (forall r r'.
+    (r -&gt; r' -&gt; r) -&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; a -&gt; r)
+-&gt; (forall r r'.
+    (r' -&gt; r -&gt; r) -&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; a -&gt; r)
+-&gt; (forall u. (forall d. Data d =&gt; d -&gt; u) -&gt; a -&gt; [u])
+-&gt; (forall u. Int -&gt; (forall d. Data d =&gt; d -&gt; u) -&gt; a -&gt; u)
+-&gt; (forall (m :: * -&gt; *).
+    Monad m =&gt;
+    (forall d. Data d =&gt; d -&gt; m d) -&gt; a -&gt; m a)
+-&gt; (forall (m :: * -&gt; *).
+    MonadPlus m =&gt;
+    (forall d. Data d =&gt; d -&gt; m d) -&gt; a -&gt; m a)
+-&gt; (forall (m :: * -&gt; *).
+    MonadPlus m =&gt;
+    (forall d. Data d =&gt; d -&gt; m d) -&gt; a -&gt; m a)
+-&gt; Data a
+forall u. Int -&gt; (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; u
+forall u. (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; [u]
+forall r r'.
+(r -&gt; r' -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+forall r r'.
+(r' -&gt; r -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+forall (m :: * -&gt; *).
+Monad m =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+forall (m :: * -&gt; *).
+MonadPlus m =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+forall (c :: * -&gt; *).
+(forall b r. Data b =&gt; c (b -&gt; r) -&gt; c r)
+-&gt; (forall r. r -&gt; c r) -&gt; Constr -&gt; c (FreeMonoidX a)
+forall (c :: * -&gt; *).
+(forall d b. Data d =&gt; c (d -&gt; b) -&gt; d -&gt; c b)
+-&gt; (forall g. g -&gt; c g) -&gt; FreeMonoidX a -&gt; c (FreeMonoidX a)
+forall (t :: * -&gt; *) (c :: * -&gt; *).
+Typeable t =&gt;
+(forall d. Data d =&gt; c (t d)) -&gt; Maybe (c (FreeMonoidX a))
+forall (t :: * -&gt; * -&gt; *) (c :: * -&gt; *).
+Typeable t =&gt;
+(forall d e. (Data d, Data e) =&gt; c (t d e))
+-&gt; Maybe (c (FreeMonoidX a))
+$cgfoldl :: forall a (c :: * -&gt; *).
+(Data a, Ord a) =&gt;
+(forall d b. Data d =&gt; c (d -&gt; b) -&gt; d -&gt; c b)
+-&gt; (forall g. g -&gt; c g) -&gt; FreeMonoidX a -&gt; c (FreeMonoidX a)
+gfoldl :: forall (c :: * -&gt; *).
+(forall d b. Data d =&gt; c (d -&gt; b) -&gt; d -&gt; c b)
+-&gt; (forall g. g -&gt; c g) -&gt; FreeMonoidX a -&gt; c (FreeMonoidX a)
+$cgunfold :: forall a (c :: * -&gt; *).
+(Data a, Ord a) =&gt;
+(forall b r. Data b =&gt; c (b -&gt; r) -&gt; c r)
+-&gt; (forall r. r -&gt; c r) -&gt; Constr -&gt; c (FreeMonoidX a)
+gunfold :: forall (c :: * -&gt; *).
+(forall b r. Data b =&gt; c (b -&gt; r) -&gt; c r)
+-&gt; (forall r. r -&gt; c r) -&gt; Constr -&gt; c (FreeMonoidX a)
+$ctoConstr :: forall a. (Data a, Ord a) =&gt; FreeMonoidX a -&gt; Constr
+toConstr :: FreeMonoidX a -&gt; Constr
+$cdataTypeOf :: forall a. (Data a, Ord a) =&gt; FreeMonoidX a -&gt; DataType
+dataTypeOf :: FreeMonoidX a -&gt; DataType
+$cdataCast1 :: forall a (t :: * -&gt; *) (c :: * -&gt; *).
+(Data a, Ord a, Typeable t) =&gt;
+(forall d. Data d =&gt; c (t d)) -&gt; Maybe (c (FreeMonoidX a))
+dataCast1 :: forall (t :: * -&gt; *) (c :: * -&gt; *).
+Typeable t =&gt;
+(forall d. Data d =&gt; c (t d)) -&gt; Maybe (c (FreeMonoidX a))
+$cdataCast2 :: forall a (t :: * -&gt; * -&gt; *) (c :: * -&gt; *).
+(Data a, Ord a, Typeable t) =&gt;
+(forall d e. (Data d, Data e) =&gt; c (t d e))
+-&gt; Maybe (c (FreeMonoidX a))
+dataCast2 :: forall (t :: * -&gt; * -&gt; *) (c :: * -&gt; *).
+Typeable t =&gt;
+(forall d e. (Data d, Data e) =&gt; c (t d e))
+-&gt; Maybe (c (FreeMonoidX a))
+$cgmapT :: forall a.
+(Data a, Ord a) =&gt;
+(forall b. Data b =&gt; b -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+gmapT :: (forall b. Data b =&gt; b -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+$cgmapQl :: forall a r r'.
+(Data a, Ord a) =&gt;
+(r -&gt; r' -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+gmapQl :: forall r r'.
+(r -&gt; r' -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+$cgmapQr :: forall a r r'.
+(Data a, Ord a) =&gt;
+(r' -&gt; r -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+gmapQr :: forall r r'.
+(r' -&gt; r -&gt; r)
+-&gt; r -&gt; (forall d. Data d =&gt; d -&gt; r') -&gt; FreeMonoidX a -&gt; r
+$cgmapQ :: forall a u.
+(Data a, Ord a) =&gt;
+(forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; [u]
+gmapQ :: forall u. (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; [u]
+$cgmapQi :: forall a u.
+(Data a, Ord a) =&gt;
+Int -&gt; (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; u
+gmapQi :: forall u. Int -&gt; (forall d. Data d =&gt; d -&gt; u) -&gt; FreeMonoidX a -&gt; u
+$cgmapM :: forall a (m :: * -&gt; *).
+(Data a, Ord a, Monad m) =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+gmapM :: forall (m :: * -&gt; *).
+Monad m =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+$cgmapMp :: forall a (m :: * -&gt; *).
+(Data a, Ord a, MonadPlus m) =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+gmapMp :: forall (m :: * -&gt; *).
+MonadPlus m =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+$cgmapMo :: forall a (m :: * -&gt; *).
+(Data a, Ord a, MonadPlus m) =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+gmapMo :: forall (m :: * -&gt; *).
+MonadPlus m =&gt;
+(forall d. Data d =&gt; d -&gt; m d)
+-&gt; FreeMonoidX a -&gt; m (FreeMonoidX a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Data</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-136"></span><span>
+</span><span id="line-137"></span><span class="hs-comment">-- | A term of the monoid which wraps a value. This could be for instance a</span><span>
+</span><span id="line-138"></span><span class="hs-comment">-- sum-term or a product term.</span><span>
+</span><span id="line-139"></span><span class="hs-keyword">class</span><span> </span><span id="TermWrapper"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-var">TermWrapper</span></a></span></span><span> </span><span id="local-6989586621679339500"><span class="annot"><a href="#local-6989586621679339500"><span class="hs-identifier hs-type">f</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-140"></span><span>    </span><span id="wrap"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#wrap"><span class="hs-identifier hs-type">wrap</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679339499"><span class="annot"><a href="#local-6989586621679339499"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339500"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339499"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-141"></span><span>    </span><span id="unwrap"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#unwrap"><span class="hs-identifier hs-type">unwrap</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679339510"><span class="annot"><a href="#local-6989586621679339500"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339510"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339510"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-142"></span><span>
+</span><span id="line-143"></span><span class="hs-comment">-- | Types that can be multiplied by an integral. This restriction is required</span><span>
+</span><span id="line-144"></span><span class="hs-comment">-- to be able to assign a correct semantic to the symbolic representation of</span><span>
+</span><span id="line-145"></span><span class="hs-comment">-- the free-monoid. If the elements of the free-monoid are not</span><span>
+</span><span id="line-146"></span><span class="hs-comment">-- `IntMultipliable`, then `foldFMX` is ill-defined.</span><span>
+</span><span id="line-147"></span><span class="hs-comment">--</span><span>
+</span><span id="line-148"></span><span class="hs-comment">-- See the test code `FreeMonoidXspec` for examples of instances of this class.</span><span>
+</span><span id="line-149"></span><span class="hs-keyword">class</span><span> </span><span id="IntMultipliable"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#IntMultipliable"><span class="hs-identifier hs-var">IntMultipliable</span></a></span></span><span> </span><span id="local-6989586621679339450"><span class="annot"><a href="#local-6989586621679339450"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-150"></span><span>    </span><span class="hs-comment">-- | `n &lt;.&gt; x` multiplies `x` `n` times.</span><span>
+</span><span id="line-151"></span><span>    </span><span id="%3C.%3E"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#%3C.%3E"><span class="hs-operator hs-type">(&lt;.&gt;)</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679339447"><span class="annot"><span class="hs-identifier hs-type">Integral</span></span><span> </span><span class="annot"><a href="#local-6989586621679339447"><span class="hs-identifier hs-type">n</span></a></span><span>
+</span><span id="line-152"></span><span>         </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339447"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-comment">-- ^ Multiplication factor.</span></span><span>
+</span><span id="line-153"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339450"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><span class="hs-comment">-- ^ Element to multiply.</span></span><span>
+</span><span id="line-154"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339450"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-155"></span><span>
+</span><span id="line-156"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679339451"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339451"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#IntMultipliable"><span class="hs-identifier hs-type">IntMultipliable</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339451"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-157"></span><span>    </span><span class="annot"><span class="annottext">n
+</span><span class="hs-number">0</span></span><span> </span><span id="local-6989586621679339829"><span class="annot"><span class="annottext">&lt;.&gt; :: forall n. Integral n =&gt; n -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#%3C.%3E"><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;.&gt;</span></a></span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-158"></span><span>    </span><span id="local-6989586621679339830"><span class="annot"><span class="annottext">n
+</span><a href="#local-6989586621679339830"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#%3C.%3E"><span class="hs-operator hs-var">&lt;.&gt;</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-type">FMX</span></a></span><span> </span><span id="local-6989586621679339831"><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339831"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a) -&gt; Map a Integer -&gt; FreeMonoidX a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">n -&gt; Integer
+forall a. Integral a =&gt; a -&gt; Integer
+</span><span class="hs-identifier hs-var">toInteger</span></span><span> </span><span class="annot"><span class="annottext">n
+</span><a href="#local-6989586621679339830"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="hs-operator">*</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Integer) -&gt; Map a Integer -&gt; Map a Integer
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339831"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-159"></span><span>
+</span><span id="line-160"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679339469"><span id="local-6989586621679339836"><span id="local-6989586621679339840"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339469"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339469"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-161"></span><span>    </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-type">FMX</span></a></span><span> </span><span id="local-6989586621679339849"><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339849"><span class="hs-identifier hs-var">p0</span></a></span></span><span> </span><span id="local-6989586621679339850"><span class="annot"><span class="annottext">&lt;&gt; :: FreeMonoidX a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;&gt;</span></span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-type">FMX</span></a></span><span> </span><span id="local-6989586621679339851"><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339851"><span class="hs-identifier hs-var">p1</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a) -&gt; Map a Integer -&gt; FreeMonoidX a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Bool) -&gt; Map a Integer -&gt; Map a Integer
+forall a k. (a -&gt; Bool) -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; Map a Integer) -&gt; Map a Integer -&gt; Map a Integer
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Integer -&gt; Integer)
+-&gt; Map a Integer -&gt; Map a Integer -&gt; Map a Integer
+forall k a. Ord k =&gt; (a -&gt; a -&gt; a) -&gt; Map k a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.unionWith</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(+)</span></span><span> </span><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339849"><span class="hs-identifier hs-var">p0</span></a></span><span> </span><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339851"><span class="hs-identifier hs-var">p1</span></a></span><span>
+</span><span id="line-162"></span><span>
+</span><span id="line-163"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679339456"><span id="local-6989586621679339861"><span id="local-6989586621679339864"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339456"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339456"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-164"></span><span>    </span><span id="local-6989586621679339869"><span class="annot"><span class="annottext">mempty :: FreeMonoidX a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mempty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-165"></span><span>    </span><span>
+</span><span id="line-166"></span><span>
+</span><span id="line-167"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679339481"><span id="local-6989586621679339873"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339481"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IsList</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339481"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-168"></span><span>    </span><span class="hs-keyword">type</span><span> </span><span id="Item"><span class="annot"><span class="hs-identifier hs-var">Item</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339481"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679339481"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-169"></span><span>    </span><span id="local-6989586621679339881"><span class="annot"><span class="annottext">fromList :: [Item (FreeMonoidX a)] -&gt; FreeMonoidX a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">fromList</span></span></span><span> </span><span id="local-6989586621679339882"><span class="annot"><span class="annottext">[Item (FreeMonoidX a)]
+</span><a href="#local-6989586621679339882"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a) -&gt; Map a Integer -&gt; FreeMonoidX a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Integer -&gt; Integer) -&gt; [(a, Integer)] -&gt; Map a Integer
+forall k a. Ord k =&gt; (a -&gt; a -&gt; a) -&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.fromListWith</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(+)</span></span><span> </span><span class="annot"><span class="annottext">([(a, Integer)] -&gt; Map a Integer)
+-&gt; [(a, Integer)] -&gt; Map a Integer
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [Integer] -&gt; [(a, Integer)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[a]
+[Item (FreeMonoidX a)]
+</span><a href="#local-6989586621679339882"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer -&gt; [Integer]
+forall a. a -&gt; [a]
+</span><span class="hs-identifier hs-var">repeat</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-170"></span><span>    </span><span id="local-6989586621679339889"><span class="annot"><span class="annottext">toList :: FreeMonoidX a -&gt; [Item (FreeMonoidX a)]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">toList</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-type">FMX</span></a></span><span> </span><span id="local-6989586621679339890"><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339890"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-171"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679339891"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339891"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339892"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339892"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; [(a, Integer)]
+forall k a. Map k a -&gt; [(k, a)]
+</span><span class="hs-identifier hs-var">Map.toList</span></span><span> </span><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339890"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-172"></span><span>        </span><span class="annot"><span class="annottext">Integer -&gt; a -&gt; [a]
+forall i a. Integral i =&gt; i -&gt; a -&gt; [a]
+</span><span class="hs-identifier hs-var">genericReplicate</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339892"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339891"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-173"></span><span>
+</span><span id="line-174"></span><span class="hs-comment">-- | /O(t*log t)/. Create a product from a list of terms using the given term</span><span>
+</span><span id="line-175"></span><span class="hs-comment">-- wrapper.</span><span>
+</span><span id="line-176"></span><span id="local-6989586621679339491"><span id="local-6989586621679339492"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromListT"><span class="hs-identifier hs-type">fromListT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339491"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339492"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339491"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679339492"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339491"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339492"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-177"></span><span id="fromListT"><span class="annot"><span class="annottext">fromListT :: forall (t :: * -&gt; *) a.
+(Ord (t a), TermWrapper t) =&gt;
+[a] -&gt; FreeMonoidX (t a)
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromListT"><span class="hs-identifier hs-var hs-var">fromListT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[t a] -&gt; FreeMonoidX (t a)
+[Item (FreeMonoidX (t a))] -&gt; FreeMonoidX (t a)
+forall l. IsList l =&gt; [Item l] -&gt; l
+</span><span class="hs-identifier hs-var">fromList</span></span><span> </span><span class="annot"><span class="annottext">([t a] -&gt; FreeMonoidX (t a))
+-&gt; ([a] -&gt; [t a]) -&gt; [a] -&gt; FreeMonoidX (t a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; t a
+forall a. a -&gt; t a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; a -&gt; f a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span>
+</span><span id="line-178"></span><span>
+</span><span id="line-179"></span><span class="annot"><span class="hs-comment">-- | Fold the free-monoid.</span></span><span>
+</span><span id="line-180"></span><span id="local-6989586621679339501"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldFMX"><span class="hs-identifier hs-type">foldFMX</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#IntMultipliable"><span class="hs-identifier hs-type">IntMultipliable</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339501"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679339501"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="#local-6989586621679339501"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339501"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339501"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-181"></span><span id="foldFMX"><span class="annot"><span class="annottext">foldFMX :: forall a.
+(IntMultipliable a, Monoid a, Semigroup a) =&gt;
+FreeMonoidX a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldFMX"><span class="hs-identifier hs-var hs-var">foldFMX</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-type">FMX</span></a></span><span> </span><span id="local-6989586621679339909"><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339909"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; Integer -&gt; a -&gt; a) -&gt; a -&gt; Map a Integer -&gt; a
+forall k a b. (k -&gt; a -&gt; b -&gt; b) -&gt; b -&gt; Map k a -&gt; b
+</span><span class="hs-identifier hs-var">Map.foldrWithKey</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679339911"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339911"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679339912"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339912"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339912"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; a -&gt; a
+forall n. Integral n =&gt; n -&gt; a -&gt; a
+forall a n. (IntMultipliable a, Integral n) =&gt; n -&gt; a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#%3C.%3E"><span class="hs-operator hs-var">&lt;.&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339911"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-operator">&lt;&gt;</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">Map a Integer
+</span><a href="#local-6989586621679339909"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-182"></span><span>
+</span><span id="line-183"></span><span class="annot"><span class="hs-comment">-- | Fold the free-monoid of term wrappers.</span></span><span>
+</span><span id="line-184"></span><span id="local-6989586621679339506"><span id="local-6989586621679339507"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fold"><span class="hs-identifier hs-type">fold</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#IntMultipliable"><span class="hs-identifier hs-type">IntMultipliable</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339506"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339507"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339506"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339507"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339506"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339506"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339507"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339507"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-185"></span><span id="fold"><span class="annot"><span class="annottext">fold :: forall (t :: * -&gt; *) a.
+(IntMultipliable (t a), Monoid (t a), TermWrapper t) =&gt;
+FreeMonoidX (t a) -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fold"><span class="hs-identifier hs-var hs-var">fold</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">t a -&gt; a
+forall a. t a -&gt; a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; f a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#unwrap"><span class="hs-identifier hs-var">unwrap</span></a></span><span> </span><span class="annot"><span class="annottext">(t a -&gt; a) -&gt; (FreeMonoidX (t a) -&gt; t a) -&gt; FreeMonoidX (t a) -&gt; a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX (t a) -&gt; t a
+forall a.
+(IntMultipliable a, Monoid a, Semigroup a) =&gt;
+FreeMonoidX a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldFMX"><span class="hs-identifier hs-var">foldFMX</span></a></span><span>
+</span><span id="line-186"></span><span>
+</span><span id="line-187"></span><span class="annot"><span class="hs-comment">-- | Number of distinct terms in the free-monoid.</span></span><span>
+</span><span id="line-188"></span><span id="local-6989586621679339511"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#nrofDistinctTerms"><span class="hs-identifier hs-type">nrofDistinctTerms</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339511"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span></span><span>
+</span><span id="line-189"></span><span id="nrofDistinctTerms"><span class="annot"><span class="annottext">nrofDistinctTerms :: forall a. FreeMonoidX a -&gt; Int
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#nrofDistinctTerms"><span class="hs-identifier hs-var hs-var">nrofDistinctTerms</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; Int
+forall k a. Map k a -&gt; Int
+</span><span class="hs-identifier hs-var">Map.size</span></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; Int)
+-&gt; (FreeMonoidX a -&gt; Map a Integer) -&gt; FreeMonoidX a -&gt; Int
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; Map a Integer
+forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var">asMap</span></a></span><span>
+</span><span id="line-190"></span><span>
+</span><span id="line-191"></span><span class="hs-comment">-- | /O(n)/. The distinct terms of a free-monoid., each term occurs only once in</span><span>
+</span><span id="line-192"></span><span class="hs-comment">-- the list.</span><span>
+</span><span id="line-193"></span><span class="hs-comment">--</span><span>
+</span><span id="line-194"></span><span id="local-6989586621679339515"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTerms"><span class="hs-identifier hs-type">distinctTerms</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339515"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679339515"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-195"></span><span id="distinctTerms"><span class="annot"><span class="annottext">distinctTerms :: forall a. FreeMonoidX a -&gt; [a]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTerms"><span class="hs-identifier hs-var hs-var">distinctTerms</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; [a]
+forall k a. Map k a -&gt; [k]
+</span><span class="hs-identifier hs-var">Map.keys</span></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; [a])
+-&gt; (FreeMonoidX a -&gt; Map a Integer) -&gt; FreeMonoidX a -&gt; [a]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; Map a Integer
+forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var">asMap</span></a></span><span>
+</span><span id="line-196"></span><span>
+</span><span id="line-197"></span><span id="local-6989586621679339519"><span id="local-6989586621679339520"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTermsT"><span class="hs-identifier hs-type">distinctTermsT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339519"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339519"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339520"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679339520"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-198"></span><span id="distinctTermsT"><span class="annot"><span class="annottext">distinctTermsT :: forall (t :: * -&gt; *) a. TermWrapper t =&gt; FreeMonoidX (t a) -&gt; [a]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTermsT"><span class="hs-identifier hs-var hs-var">distinctTermsT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t a -&gt; a
+forall a. t a -&gt; a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; f a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#unwrap"><span class="hs-identifier hs-var">unwrap</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([t a] -&gt; [a])
+-&gt; (FreeMonoidX (t a) -&gt; [t a]) -&gt; FreeMonoidX (t a) -&gt; [a]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX (t a) -&gt; [t a]
+forall a. FreeMonoidX a -&gt; [a]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTerms"><span class="hs-identifier hs-var">distinctTerms</span></a></span><span>
+</span><span id="line-199"></span><span>
+</span><span id="line-200"></span><span class="hs-comment">-- | /O(n)/. Convert the free-monoid to a list of (term, occurrence) tuples.</span><span>
+</span><span id="line-201"></span><span class="hs-comment">--</span><span>
+</span><span id="line-202"></span><span class="hs-comment">-- For instance given the term:</span><span>
+</span><span id="line-203"></span><span class="hs-comment">--</span><span>
+</span><span id="line-204"></span><span class="hs-comment">-- &gt; a &lt;&gt; b &lt;&gt; a &lt;&gt; b &lt;&gt; a</span><span>
+</span><span id="line-205"></span><span class="hs-comment">--</span><span>
+</span><span id="line-206"></span><span class="hs-comment">-- `toOccurList` applied to it will result in the following list:</span><span>
+</span><span id="line-207"></span><span class="hs-comment">--</span><span>
+</span><span id="line-208"></span><span class="hs-comment">-- &gt; [(a, 3), (b, 2)]</span><span>
+</span><span id="line-209"></span><span class="hs-comment">--</span><span>
+</span><span id="line-210"></span><span id="local-6989586621679339523"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurList"><span class="hs-identifier hs-type">toOccurList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339523"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339523"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-211"></span><span id="toOccurList"><span class="annot"><span class="annottext">toOccurList :: forall a. FreeMonoidX a -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurList"><span class="hs-identifier hs-var hs-var">toOccurList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; [(a, Integer)]
+forall a. FreeMonoidX a -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurList"><span class="hs-identifier hs-var">toDistinctAscOccurList</span></a></span><span>
+</span><span id="line-212"></span><span>
+</span><span id="line-213"></span><span id="local-6989586621679339525"><span id="local-6989586621679339526"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurListT"><span class="hs-identifier hs-type">toOccurListT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339525"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339525"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339526"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339526"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-214"></span><span id="toOccurListT"><span class="annot"><span class="annottext">toOccurListT :: forall (t :: * -&gt; *) a.
+TermWrapper t =&gt;
+FreeMonoidX (t a) -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurListT"><span class="hs-identifier hs-var hs-var">toOccurListT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(t a -&gt; a) -&gt; (t a, Integer) -&gt; (a, Integer)
+forall b c d. (b -&gt; c) -&gt; (b, d) -&gt; (c, d)
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (b, d) (c, d)
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">t a -&gt; a
+forall a. t a -&gt; a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; f a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#unwrap"><span class="hs-identifier hs-var">unwrap</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(t a, Integer)] -&gt; [(a, Integer)])
+-&gt; (FreeMonoidX (t a) -&gt; [(t a, Integer)])
+-&gt; FreeMonoidX (t a)
+-&gt; [(a, Integer)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX (t a) -&gt; [(t a, Integer)]
+forall a. FreeMonoidX a -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurList"><span class="hs-identifier hs-var">toDistinctAscOccurList</span></a></span><span>
+</span><span id="line-215"></span><span>
+</span><span id="line-216"></span><span class="hs-comment">-- | /O(n)/. Convert the free-monoid to a distinct ascending list of term\/multiplier</span><span>
+</span><span id="line-217"></span><span class="hs-comment">-- pairs.</span><span>
+</span><span id="line-218"></span><span id="local-6989586621679339932"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurList"><span class="hs-identifier hs-type">toDistinctAscOccurList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339932"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339932"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-219"></span><span id="toDistinctAscOccurList"><span class="annot"><span class="annottext">toDistinctAscOccurList :: forall a. FreeMonoidX a -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurList"><span class="hs-identifier hs-var hs-var">toDistinctAscOccurList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; [(a, Integer)]
+forall k a. Map k a -&gt; [(k, a)]
+</span><span class="hs-identifier hs-var">Map.toAscList</span></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; [(a, Integer)])
+-&gt; (FreeMonoidX a -&gt; Map a Integer)
+-&gt; FreeMonoidX a
+-&gt; [(a, Integer)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; Map a Integer
+forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var">asMap</span></a></span><span>
+</span><span id="line-220"></span><span>
+</span><span id="line-221"></span><span id="local-6989586621679339934"><span id="local-6989586621679339935"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurListT"><span class="hs-identifier hs-type">toDistinctAscOccurListT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339934"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339934"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339935"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339935"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-222"></span><span id="toDistinctAscOccurListT"><span class="annot"><span class="annottext">toDistinctAscOccurListT :: forall (t :: * -&gt; *) a.
+TermWrapper t =&gt;
+FreeMonoidX (t a) -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurListT"><span class="hs-identifier hs-var hs-var">toDistinctAscOccurListT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(t a -&gt; a) -&gt; (t a, Integer) -&gt; (a, Integer)
+forall b c d. (b -&gt; c) -&gt; (b, d) -&gt; (c, d)
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (b, d) (c, d)
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">t a -&gt; a
+forall a. t a -&gt; a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; f a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#unwrap"><span class="hs-identifier hs-var">unwrap</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(t a, Integer)] -&gt; [(a, Integer)])
+-&gt; (FreeMonoidX (t a) -&gt; [(t a, Integer)])
+-&gt; FreeMonoidX (t a)
+-&gt; [(a, Integer)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX (t a) -&gt; [(t a, Integer)]
+forall a. FreeMonoidX a -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toDistinctAscOccurList"><span class="hs-identifier hs-var">toDistinctAscOccurList</span></a></span><span>
+</span><span id="line-223"></span><span>
+</span><span id="line-224"></span><span class="annot"><span class="hs-comment">-- | /O(n*log n)/. Create a free-monoid from a list of term\/multiplier pairs.</span></span><span>
+</span><span id="line-225"></span><span id="local-6989586621679339537"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurList"><span class="hs-identifier hs-type">fromOccurList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339537"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339537"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339537"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-226"></span><span id="fromOccurList"><span class="annot"><span class="annottext">fromOccurList :: forall a. Ord a =&gt; [(a, Integer)] -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurList"><span class="hs-identifier hs-var hs-var">fromOccurList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a)
+-&gt; ([(a, Integer)] -&gt; Map a Integer)
+-&gt; [(a, Integer)]
+-&gt; FreeMonoidX a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Bool) -&gt; Map a Integer -&gt; Map a Integer
+forall a k. (a -&gt; Bool) -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span class="hs-operator">/=</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; Map a Integer)
+-&gt; ([(a, Integer)] -&gt; Map a Integer)
+-&gt; [(a, Integer)]
+-&gt; Map a Integer
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Integer -&gt; Integer) -&gt; [(a, Integer)] -&gt; Map a Integer
+forall k a. Ord k =&gt; (a -&gt; a -&gt; a) -&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.fromListWith</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(+)</span></span><span>
+</span><span id="line-227"></span><span>
+</span><span id="line-228"></span><span id="local-6989586621679339539"><span id="local-6989586621679339540"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurListT"><span class="hs-identifier hs-type">fromOccurListT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339539"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339540"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339539"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339540"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339539"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339540"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-229"></span><span id="fromOccurListT"><span class="annot"><span class="annottext">fromOccurListT :: forall (t :: * -&gt; *) a.
+(Ord (t a), TermWrapper t) =&gt;
+[(a, Integer)] -&gt; FreeMonoidX (t a)
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurListT"><span class="hs-identifier hs-var hs-var">fromOccurListT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(t a, Integer)] -&gt; FreeMonoidX (t a)
+forall a. Ord a =&gt; [(a, Integer)] -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurList"><span class="hs-identifier hs-var">fromOccurList</span></a></span><span> </span><span class="annot"><span class="annottext">([(t a, Integer)] -&gt; FreeMonoidX (t a))
+-&gt; ([(a, Integer)] -&gt; [(t a, Integer)])
+-&gt; [(a, Integer)]
+-&gt; FreeMonoidX (t a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; t a) -&gt; (a, Integer) -&gt; (t a, Integer)
+forall b c d. (b -&gt; c) -&gt; (b, d) -&gt; (c, d)
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (b, d) (c, d)
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; t a
+forall a. a -&gt; t a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; a -&gt; f a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span>
+</span><span id="line-230"></span><span>
+</span><span id="line-231"></span><span class="hs-comment">-- | /O(n)/. Build a free-monoid from an ascending list of term\/multiplier</span><span>
+</span><span id="line-232"></span><span class="hs-comment">-- pairs where each term appears only once. /The precondition (input list is</span><span>
+</span><span id="line-233"></span><span class="hs-comment">-- strictly ascending) is not checked./</span><span>
+</span><span id="line-234"></span><span id="local-6989586621679339543"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscOccurList"><span class="hs-identifier hs-type">fromDistinctAscOccurList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339543"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339543"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-235"></span><span id="fromDistinctAscOccurList"><span class="annot"><span class="annottext">fromDistinctAscOccurList :: forall a. [(a, Integer)] -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscOccurList"><span class="hs-identifier hs-var hs-var">fromDistinctAscOccurList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a)
+-&gt; ([(a, Integer)] -&gt; Map a Integer)
+-&gt; [(a, Integer)]
+-&gt; FreeMonoidX a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Bool) -&gt; Map a Integer -&gt; Map a Integer
+forall a k. (a -&gt; Bool) -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span class="hs-operator">/=</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; Map a Integer)
+-&gt; ([(a, Integer)] -&gt; Map a Integer)
+-&gt; [(a, Integer)]
+-&gt; Map a Integer
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(a, Integer)] -&gt; Map a Integer
+forall k a. [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.fromDistinctAscList</span></span><span>
+</span><span id="line-236"></span><span>
+</span><span id="line-237"></span><span id="local-6989586621679339547"><span id="local-6989586621679339548"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscPowerListT"><span class="hs-identifier hs-type">fromDistinctAscPowerListT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339547"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339548"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339547"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339548"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-238"></span><span id="fromDistinctAscPowerListT"><span class="annot"><span class="annottext">fromDistinctAscPowerListT :: forall (t :: * -&gt; *) a.
+TermWrapper t =&gt;
+[(a, Integer)] -&gt; FreeMonoidX (t a)
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscPowerListT"><span class="hs-identifier hs-var hs-var">fromDistinctAscPowerListT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(t a, Integer)] -&gt; FreeMonoidX (t a)
+forall a. [(a, Integer)] -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromDistinctAscOccurList"><span class="hs-identifier hs-var">fromDistinctAscOccurList</span></a></span><span> </span><span class="annot"><span class="annottext">([(t a, Integer)] -&gt; FreeMonoidX (t a))
+-&gt; ([(a, Integer)] -&gt; [(t a, Integer)])
+-&gt; [(a, Integer)]
+-&gt; FreeMonoidX (t a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; t a) -&gt; (a, Integer) -&gt; (t a, Integer)
+forall b c d. (b -&gt; c) -&gt; (b, d) -&gt; (c, d)
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (b, d) (c, d)
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; t a
+forall a. a -&gt; t a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; a -&gt; f a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span>
+</span><span id="line-239"></span><span>
+</span><span id="line-240"></span><span class="hs-comment">-- | Append a term to the free-monoid.</span><span>
+</span><span id="line-241"></span><span class="hs-comment">--</span><span>
+</span><span id="line-242"></span><span class="hs-comment">-- &gt; append 2 [1, 2, 3]</span><span>
+</span><span id="line-243"></span><span class="hs-comment">--</span><span>
+</span><span id="line-244"></span><span class="hs-comment">-- should be equivalent to the free-monoid.</span><span>
+</span><span id="line-245"></span><span class="hs-comment">--</span><span>
+</span><span id="line-246"></span><span class="hs-comment">-- &gt; [1, 2, 3, 2]</span><span>
+</span><span id="line-247"></span><span id="local-6989586621679339551"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#append"><span class="hs-identifier hs-type">append</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339551"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339551"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339551"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339551"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-248"></span><span id="append"><span class="annot"><span class="annottext">append :: forall a. Ord a =&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#append"><span class="hs-identifier hs-var hs-var">append</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall a. Ord a =&gt; Integer -&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#appendMany"><span class="hs-identifier hs-var">appendMany</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-249"></span><span>
+</span><span id="line-250"></span><span class="hs-comment">-- | Remove a term from the free-monoid.</span><span>
+</span><span id="line-251"></span><span class="hs-comment">--</span><span>
+</span><span id="line-252"></span><span class="hs-comment">-- &gt; remove 2 (1 &lt;&gt; 2 &lt;&gt; 3)</span><span>
+</span><span id="line-253"></span><span class="hs-comment">--</span><span>
+</span><span id="line-254"></span><span class="hs-comment">-- should be equivalent to the free-monoid</span><span>
+</span><span id="line-255"></span><span class="hs-comment">--</span><span>
+</span><span id="line-256"></span><span class="hs-comment">-- &gt; (1 &lt;&gt; 3)</span><span>
+</span><span id="line-257"></span><span id="local-6989586621679339960"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#remove"><span class="hs-identifier hs-type">remove</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339960"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339960"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339960"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339960"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-258"></span><span id="remove"><span class="annot"><span class="annottext">remove :: forall a. Ord a =&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#remove"><span class="hs-identifier hs-var hs-var">remove</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall a. Ord a =&gt; Integer -&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#appendMany"><span class="hs-identifier hs-var">appendMany</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-259"></span><span>
+</span><span id="line-260"></span><span class="hs-comment">-- | Add the term `x` `n` times. If `n` is negative the term will be removed</span><span>
+</span><span id="line-261"></span><span class="hs-comment">-- `n` times.</span><span>
+</span><span id="line-262"></span><span class="hs-comment">--</span><span>
+</span><span id="line-263"></span><span class="hs-comment">-- &gt; appendMany 2 10 (10 &lt;&gt; 12 &lt;&gt; 12)</span><span>
+</span><span id="line-264"></span><span class="hs-comment">--</span><span>
+</span><span id="line-265"></span><span class="hs-comment">-- should be equivalent to</span><span>
+</span><span id="line-266"></span><span class="hs-comment">--</span><span>
+</span><span id="line-267"></span><span class="hs-comment">-- (10 &lt;&gt; 10 &lt;&gt; 10 &lt;&gt; 12 &lt;&gt; 12)</span><span>
+</span><span id="line-268"></span><span class="hs-comment">--</span><span>
+</span><span id="line-269"></span><span class="hs-comment">-- &gt; appendMany (-2) 10 (10 &lt;&gt; 12 &lt;&gt; 12)</span><span>
+</span><span id="line-270"></span><span class="hs-comment">--</span><span>
+</span><span id="line-271"></span><span class="hs-comment">-- should be equivalent to</span><span>
+</span><span id="line-272"></span><span class="hs-comment">--</span><span>
+</span><span id="line-273"></span><span class="hs-comment">-- &gt; (-10 &lt;&gt; 12 &lt;&gt; 12)</span><span>
+</span><span id="line-274"></span><span id="local-6989586621679339553"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#appendMany"><span class="hs-identifier hs-type">appendMany</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339553"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339553"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339553"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339553"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-275"></span><span id="appendMany"><span class="annot"><span class="annottext">appendMany :: forall a. Ord a =&gt; Integer -&gt; a -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#appendMany"><span class="hs-identifier hs-var hs-var">appendMany</span></a></span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679339972"><span class="annot"><span class="annottext">FreeMonoidX a
+</span><a href="#local-6989586621679339972"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a
+</span><a href="#local-6989586621679339972"><span class="hs-identifier hs-var">s</span></a></span><span>                                    </span><span class="hs-comment">-- invariant: no term with multiplier 0 is stored.</span><span>
+</span><span id="line-276"></span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#appendMany"><span class="hs-identifier hs-var">appendMany</span></a></span><span> </span><span id="local-6989586621679339973"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339973"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span id="local-6989586621679339974"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339974"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679339975"><span class="annot"><span class="annottext">FreeMonoidX a
+</span><a href="#local-6989586621679339975"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a)
+-&gt; (FreeMonoidX a -&gt; Map a Integer)
+-&gt; FreeMonoidX a
+-&gt; FreeMonoidX a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Maybe Integer -&gt; Maybe Integer)
+-&gt; a -&gt; Map a Integer -&gt; Map a Integer
+forall k a.
+Ord k =&gt;
+(Maybe a -&gt; Maybe a) -&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.alter</span></span><span> </span><span class="annot"><span class="annottext">Maybe Integer -&gt; Maybe Integer
+</span><a href="#local-6989586621679339977"><span class="hs-identifier hs-var">increment</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339974"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; Map a Integer)
+-&gt; (FreeMonoidX a -&gt; Map a Integer)
+-&gt; FreeMonoidX a
+-&gt; Map a Integer
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; Map a Integer
+forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var">asMap</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a
+</span><a href="#local-6989586621679339975"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-277"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-278"></span><span>        </span><span class="annot"><a href="#local-6989586621679339977"><span class="hs-identifier hs-type">increment</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span>
+</span><span id="line-279"></span><span>        </span><span id="local-6989586621679339977"><span class="annot"><span class="annottext">increment :: Maybe Integer -&gt; Maybe Integer
+</span><a href="#local-6989586621679339977"><span class="hs-identifier hs-var hs-var">increment</span></a></span></span><span> </span><span class="annot"><span class="annottext">Maybe Integer
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Maybe Integer
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339973"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-280"></span><span>        </span><span class="annot"><a href="#local-6989586621679339977"><span class="hs-identifier hs-var">increment</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679339978"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339978"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339978"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339973"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Integer
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>           </span><span class="hs-comment">-- Terms with multiplier zero are removed</span><span>
+</span><span id="line-281"></span><span>        </span><span class="annot"><a href="#local-6989586621679339977"><span class="hs-identifier hs-var">increment</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679339979"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339979"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Maybe Integer
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339979"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339973"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-282"></span><span>
+</span><span id="line-283"></span><span class="hs-comment">-- | /O(n)/. Partition the free-monoid into two free-monoids, one with all</span><span>
+</span><span id="line-284"></span><span class="hs-comment">-- elements that satisfy the predicate and one with all elements that don't</span><span>
+</span><span id="line-285"></span><span class="hs-comment">-- satisfy the predicate.</span><span>
+</span><span id="line-286"></span><span id="local-6989586621679339558"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partition"><span class="hs-identifier hs-type">partition</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339558"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339558"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339558"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339558"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-287"></span><span id="partition"><span class="annot"><span class="annottext">partition :: forall a.
+(a -&gt; Bool) -&gt; FreeMonoidX a -&gt; (FreeMonoidX a, FreeMonoidX a)
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partition"><span class="hs-identifier hs-var hs-var">partition</span></a></span></span><span> </span><span id="local-6989586621679339981"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679339981"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; FreeMonoidX a)
+-&gt; (Map a Integer -&gt; FreeMonoidX a)
+-&gt; (Map a Integer, Map a Integer)
+-&gt; (FreeMonoidX a, FreeMonoidX a)
+forall b c b' c'. (b -&gt; c) -&gt; (b' -&gt; c') -&gt; (b, b') -&gt; (c, c')
+forall (a :: * -&gt; * -&gt; *) b c b' c'.
+Arrow a =&gt;
+a b c -&gt; a b' c' -&gt; a (b, b') (c, c')
+</span><span class="hs-operator hs-var">***</span></span><span> </span><span class="annot"><span class="annottext">Map a Integer -&gt; FreeMonoidX a
+forall a. Map a Integer -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-var">FMX</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((Map a Integer, Map a Integer) -&gt; (FreeMonoidX a, FreeMonoidX a))
+-&gt; (FreeMonoidX a -&gt; (Map a Integer, Map a Integer))
+-&gt; FreeMonoidX a
+-&gt; (FreeMonoidX a, FreeMonoidX a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Integer -&gt; Bool)
+-&gt; Map a Integer -&gt; (Map a Integer, Map a Integer)
+forall k a. (k -&gt; a -&gt; Bool) -&gt; Map k a -&gt; (Map k a, Map k a)
+</span><span class="hs-identifier hs-var">Map.partitionWithKey</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679339983"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339983"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679339981"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679339983"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; (Map a Integer, Map a Integer))
+-&gt; (FreeMonoidX a -&gt; Map a Integer)
+-&gt; FreeMonoidX a
+-&gt; (Map a Integer, Map a Integer)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; Map a Integer
+forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var">asMap</span></a></span><span>
+</span><span id="line-288"></span><span>
+</span><span id="line-289"></span><span id="local-6989586621679339566"><span id="local-6989586621679339567"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partitionT"><span class="hs-identifier hs-type">partitionT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339566"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339567"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339566"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339567"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-290"></span><span>           </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339566"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339567"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339566"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339567"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-291"></span><span id="partitionT"><span class="annot"><span class="annottext">partitionT :: forall (t :: * -&gt; *) a.
+TermWrapper t =&gt;
+(a -&gt; Bool)
+-&gt; FreeMonoidX (t a) -&gt; (FreeMonoidX (t a), FreeMonoidX (t a))
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partitionT"><span class="hs-identifier hs-var hs-var">partitionT</span></a></span></span><span> </span><span id="local-6989586621679339986"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679339986"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(t a -&gt; Bool)
+-&gt; FreeMonoidX (t a) -&gt; (FreeMonoidX (t a), FreeMonoidX (t a))
+forall a.
+(a -&gt; Bool) -&gt; FreeMonoidX a -&gt; (FreeMonoidX a, FreeMonoidX a)
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#partition"><span class="hs-identifier hs-var">partition</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679339986"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Bool) -&gt; (t a -&gt; a) -&gt; t a -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">t a -&gt; a
+forall a. t a -&gt; a
+forall (f :: * -&gt; *) a. TermWrapper f =&gt; f a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#unwrap"><span class="hs-identifier hs-var">unwrap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-292"></span><span>
+</span><span id="line-293"></span><span class="annot"><span class="hs-comment">-- | /O(n)/. Fold over the terms of the free-monoid with their multipliers.</span></span><span>
+</span><span id="line-294"></span><span id="local-6989586621679339570"><span id="local-6989586621679339571"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldOccur"><span class="hs-identifier hs-type">foldOccur</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339570"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339571"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339571"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339571"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339570"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339571"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-295"></span><span id="foldOccur"><span class="annot"><span class="annottext">foldOccur :: forall a b. (a -&gt; Integer -&gt; b -&gt; b) -&gt; b -&gt; FreeMonoidX a -&gt; b
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldOccur"><span class="hs-identifier hs-var hs-var">foldOccur</span></a></span></span><span> </span><span id="local-6989586621679339987"><span class="annot"><span class="annottext">a -&gt; Integer -&gt; b -&gt; b
+</span><a href="#local-6989586621679339987"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679339988"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679339988"><span class="hs-identifier hs-var">z</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; Integer -&gt; b -&gt; b) -&gt; b -&gt; Map a Integer -&gt; b
+forall k a b. (k -&gt; a -&gt; b -&gt; b) -&gt; b -&gt; Map k a -&gt; b
+</span><span class="hs-identifier hs-var">Map.foldrWithKey</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Integer -&gt; b -&gt; b
+</span><a href="#local-6989586621679339987"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679339988"><span class="hs-identifier hs-var">z</span></a></span><span> </span><span class="annot"><span class="annottext">(Map a Integer -&gt; b)
+-&gt; (FreeMonoidX a -&gt; Map a Integer) -&gt; FreeMonoidX a -&gt; b
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; Map a Integer
+forall a. FreeMonoidX a -&gt; Map a Integer
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#asMap"><span class="hs-identifier hs-var">asMap</span></a></span><span>
+</span><span id="line-296"></span><span>
+</span><span id="line-297"></span><span id="local-6989586621679339574"><span id="local-6989586621679339575"><span id="local-6989586621679339576"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldrTerms"><span class="hs-identifier hs-type">foldrTerms</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339574"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Foldable</span></span><span> </span><span class="annot"><a href="#local-6989586621679339574"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339575"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339576"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339576"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339576"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339574"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339575"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339576"><span class="hs-identifier hs-type">b</span></a></span></span></span></span><span>
+</span><span id="line-298"></span><span id="foldrTerms"><span class="annot"><span class="annottext">foldrTerms :: forall (f :: * -&gt; *) a b.
+(TermWrapper f, Foldable f) =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; FreeMonoidX (f a) -&gt; b
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#foldrTerms"><span class="hs-identifier hs-var hs-var">foldrTerms</span></a></span></span><span> </span><span id="local-6989586621679339994"><span class="annot"><span class="annottext">a -&gt; b -&gt; b
+</span><a href="#local-6989586621679339994"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679339995"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679339995"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; b -&gt; b) -&gt; b -&gt; [a] -&gt; b
+forall a b. (a -&gt; b -&gt; b) -&gt; b -&gt; [a] -&gt; b
+forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; b
+</span><a href="#local-6989586621679339994"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679339995"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; b) -&gt; (FreeMonoidX (f a) -&gt; [a]) -&gt; FreeMonoidX (f a) -&gt; b
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX (f a) -&gt; [a]
+forall (t :: * -&gt; *) a. TermWrapper t =&gt; FreeMonoidX (t a) -&gt; [a]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTermsT"><span class="hs-identifier hs-var">distinctTermsT</span></a></span><span>
+</span><span id="line-299"></span><span>
+</span><span id="line-300"></span><span class="hs-comment">-- | Map the terms of the free-monoid.</span><span>
+</span><span id="line-301"></span><span class="hs-comment">--</span><span>
+</span><span id="line-302"></span><span id="local-6989586621679339583"><span id="local-6989586621679339584"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapTerms"><span class="hs-identifier hs-type">mapTerms</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339583"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339584"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339583"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339584"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339583"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-303"></span><span id="mapTerms"><span class="annot"><span class="annottext">mapTerms :: forall b a. Ord b =&gt; (a -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX b
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapTerms"><span class="hs-identifier hs-var hs-var">mapTerms</span></a></span></span><span> </span><span id="local-6989586621679340001"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679340001"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(b, Integer)] -&gt; FreeMonoidX b
+forall a. Ord a =&gt; [(a, Integer)] -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#fromOccurList"><span class="hs-identifier hs-var">fromOccurList</span></a></span><span> </span><span class="annot"><span class="annottext">([(b, Integer)] -&gt; FreeMonoidX b)
+-&gt; (FreeMonoidX a -&gt; [(b, Integer)])
+-&gt; FreeMonoidX a
+-&gt; FreeMonoidX b
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b) -&gt; (a, Integer) -&gt; (b, Integer)
+forall b c d. (b -&gt; c) -&gt; (b, d) -&gt; (c, d)
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (b, d) (c, d)
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679340001"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-operator">&lt;$&gt;</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(a, Integer)] -&gt; [(b, Integer)])
+-&gt; (FreeMonoidX a -&gt; [(a, Integer)])
+-&gt; FreeMonoidX a
+-&gt; [(b, Integer)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a -&gt; [(a, Integer)]
+forall a. FreeMonoidX a -&gt; [(a, Integer)]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#toOccurList"><span class="hs-identifier hs-var">toOccurList</span></a></span><span>
+</span><span id="line-304"></span><span>
+</span><span id="line-305"></span><span id="local-6989586621679339587"><span id="local-6989586621679339588"><span id="local-6989586621679339589"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapFreeMonoidX"><span class="hs-identifier hs-type">mapFreeMonoidX</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339587"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Functor</span></span><span> </span><span class="annot"><a href="#local-6989586621679339587"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339587"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339588"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339589"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679339588"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339587"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339589"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339587"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339588"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-306"></span><span id="mapFreeMonoidX"><span class="annot"><span class="annottext">mapFreeMonoidX :: forall (f :: * -&gt; *) b a.
+(TermWrapper f, Functor f, Ord (f b)) =&gt;
+(a -&gt; b) -&gt; FreeMonoidX (f a) -&gt; FreeMonoidX (f b)
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapFreeMonoidX"><span class="hs-identifier hs-var hs-var">mapFreeMonoidX</span></a></span></span><span> </span><span id="local-6989586621679340007"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679340007"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(f a -&gt; f b) -&gt; FreeMonoidX (f a) -&gt; FreeMonoidX (f b)
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; FreeMonoidX a -&gt; FreeMonoidX b
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#mapTerms"><span class="hs-identifier hs-var">mapTerms</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b) -&gt; f a -&gt; f b
+forall a b. (a -&gt; b) -&gt; f a -&gt; f b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679340007"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-307"></span><span>
+</span><span id="line-308"></span><span id="local-6989586621679339596"><span id="local-6989586621679339597"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#allFreeMonoidX"><span class="hs-identifier hs-type">allFreeMonoidX</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#TermWrapper"><span class="hs-identifier hs-type">TermWrapper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339596"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Functor</span></span><span> </span><span class="annot"><a href="#local-6989586621679339596"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339597"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679339596"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339597"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span></span></span><span>
+</span><span id="line-309"></span><span id="allFreeMonoidX"><span class="annot"><span class="annottext">allFreeMonoidX :: forall (f :: * -&gt; *) a.
+(TermWrapper f, Functor f) =&gt;
+(a -&gt; Bool) -&gt; FreeMonoidX (f a) -&gt; Bool
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#allFreeMonoidX"><span class="hs-identifier hs-var hs-var">allFreeMonoidX</span></a></span></span><span> </span><span id="local-6989586621679340012"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679340012"><span class="hs-identifier hs-var">pred</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; Bool) -&gt; [a] -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">all</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679340012"><span class="hs-identifier hs-var">pred</span></a></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; Bool)
+-&gt; (FreeMonoidX (f a) -&gt; [a]) -&gt; FreeMonoidX (f a) -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX (f a) -&gt; [a]
+forall (t :: * -&gt; *) a. TermWrapper t =&gt; FreeMonoidX (t a) -&gt; [a]
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#distinctTermsT"><span class="hs-identifier hs-var">distinctTermsT</span></a></span><span>
+</span><span id="line-310"></span><span>
+</span><span id="line-311"></span><span class="hs-comment">-- | Flatten a free-monoid.</span><span>
+</span><span id="line-312"></span><span class="hs-comment">--</span><span>
+</span><span id="line-313"></span><span class="hs-comment">-- For instance, the monoid</span><span>
+</span><span id="line-314"></span><span class="hs-comment">--</span><span>
+</span><span id="line-315"></span><span class="hs-comment">-- &gt; (a &lt;&gt; b) &lt;&gt; (a &lt;&gt; b) &lt;&gt; a</span><span>
+</span><span id="line-316"></span><span class="hs-comment">--</span><span>
+</span><span id="line-317"></span><span class="hs-comment">-- will be rewritten as:</span><span>
+</span><span id="line-318"></span><span class="hs-comment">--</span><span>
+</span><span id="line-319"></span><span class="hs-comment">-- &gt; a &lt;&gt; a &lt;&gt; a &lt;&gt; b &lt;&gt; b</span><span>
+</span><span id="line-320"></span><span class="hs-comment">--</span><span>
+</span><span id="line-321"></span><span class="hs-comment">-- Assuming `a &lt; b`.</span><span>
+</span><span id="line-322"></span><span class="hs-comment">--</span><span>
+</span><span id="line-323"></span><span id="local-6989586621679339602"><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#flatten"><span class="hs-identifier hs-type">flatten</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339602"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339602"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339602"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-324"></span><span id="flatten"><span class="annot"><span class="annottext">flatten :: forall a. Ord a =&gt; FreeMonoidX (FreeMonoidX a) -&gt; FreeMonoidX a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#flatten"><span class="hs-identifier hs-var hs-var">flatten</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FMX"><span class="hs-identifier hs-type">FMX</span></a></span><span> </span><span id="local-6989586621679340019"><span class="annot"><span class="annottext">Map (FreeMonoidX a) Integer
+</span><a href="#local-6989586621679340019"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[FreeMonoidX a] -&gt; FreeMonoidX a
+forall m. Monoid m =&gt; [m] -&gt; m
+forall (t :: * -&gt; *) m. (Foldable t, Monoid m) =&gt; t m -&gt; m
+</span><span class="hs-identifier hs-var">Data.Foldable.fold</span></span><span> </span><span class="annot"><span class="annottext">([FreeMonoidX a] -&gt; FreeMonoidX a)
+-&gt; [FreeMonoidX a] -&gt; FreeMonoidX a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(FreeMonoidX a, Integer) -&gt; FreeMonoidX a
+forall a. Ord a =&gt; (FreeMonoidX a, Integer) -&gt; FreeMonoidX a
+</span><a href="#local-6989586621679340021"><span class="hs-identifier hs-var">multiplyFMX</span></a></span><span> </span><span class="annot"><span class="annottext">((FreeMonoidX a, Integer) -&gt; FreeMonoidX a)
+-&gt; [(FreeMonoidX a, Integer)] -&gt; [FreeMonoidX a]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Map (FreeMonoidX a) Integer -&gt; [(FreeMonoidX a, Integer)]
+forall k a. Map k a -&gt; [(k, a)]
+</span><span class="hs-identifier hs-var">Map.toAscList</span></span><span> </span><span class="annot"><span class="annottext">Map (FreeMonoidX a) Integer
+</span><a href="#local-6989586621679340019"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-325"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-326"></span><span>      </span><span id="local-6989586621679339605"><span class="annot"><a href="#local-6989586621679340021"><span class="hs-identifier hs-type">multiplyFMX</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679339605"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339605"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#FreeMonoidX"><span class="hs-identifier hs-type">FreeMonoidX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679339605"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-327"></span><span>      </span><span id="local-6989586621679340021"><span class="annot"><span class="annottext">multiplyFMX :: forall a. Ord a =&gt; (FreeMonoidX a, Integer) -&gt; FreeMonoidX a
+</span><a href="#local-6989586621679340021"><span class="hs-identifier hs-var hs-var">multiplyFMX</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679340025"><span class="annot"><span class="annottext">FreeMonoidX a
+</span><a href="#local-6989586621679340025"><span class="hs-identifier hs-var">fm</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679340026"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679340026"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679340026"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall n. Integral n =&gt; n -&gt; FreeMonoidX a -&gt; FreeMonoidX a
+forall a n. (IntMultipliable a, Integral n) =&gt; n -&gt; a -&gt; a
+</span><a href="Lattest.Model.Symbolic.Internal.FreeMonoidX.html#%3C.%3E"><span class="hs-operator hs-var">&lt;.&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">FreeMonoidX a
+</span><a href="#local-6989586621679340025"><span class="hs-identifier hs-var">fm</span></a></span><span>
+</span><span id="line-328"></span></pre></body></html>

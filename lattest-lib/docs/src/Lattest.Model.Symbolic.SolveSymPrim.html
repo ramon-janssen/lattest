@@ -1,0 +1,221 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Model.Symbolic.SolveSymPrim</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-2"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#combineGuards"><span class="hs-identifier">combineGuards</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-3"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#substituteInGuard"><span class="hs-identifier">substituteInGuard</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-4"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#evaluateGuard"><span class="hs-identifier">evaluateGuard</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-5"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveAnySequential"><span class="hs-identifier">solveAnySequential</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-6"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveGuard"><span class="hs-identifier">solveGuard</span></a></span><span>
+</span><span id="line-7"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-8"></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html"><span class="hs-identifier">Lattest.Model.Alphabet</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymInteract"><span class="hs-identifier">SymInteract</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#GateValue"><span class="hs-identifier">GateValue</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier">SymGuard</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html"><span class="hs-identifier">Lattest.Model.BoundedMonad</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#BooleanConfiguration"><span class="hs-identifier">BooleanConfiguration</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.OrdMonad.html#OrdFunctor"><span class="hs-identifier">OrdFunctor</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#asDualExpr"><span class="hs-identifier">asDualExpr</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Expr.html"><span class="hs-identifier">Lattest.Model.Symbolic.Expr</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">E</span></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Expr.html"><span class="hs-identifier">Lattest.Model.Symbolic.Expr</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier">Valuation</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Variable"><span class="hs-identifier">Variable</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier">Constant</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html"><span class="hs-identifier">Lattest.Model.Symbolic.Internal.ExprDefs</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#eval"><span class="hs-identifier">eval</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html"><span class="hs-identifier">Lattest.Model.Symbolic.Internal.ExprImpls</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#substConst"><span class="hs-identifier">substConst</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.SMT.SMT.html"><span class="hs-identifier">Lattest.SMT.SMT</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#pop"><span class="hs-identifier">pop</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSolution"><span class="hs-identifier">getSolution</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addAssertions"><span class="hs-identifier">addAssertions</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addDeclarations"><span class="hs-identifier">addDeclarations</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSolvable"><span class="hs-identifier">getSolvable</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#push"><span class="hs-identifier">push</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SolveDefs.html#SolvableProblem"><span class="hs-identifier">SolvableProblem</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier">SMT</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="annot"><span class="hs-comment">{-|
+    Combine the given guards into one.
+-}</span></span><span>
+</span><span id="line-22"></span><span id="local-6989586621679347101"><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#combineGuards"><span class="hs-identifier hs-type">combineGuards</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#BooleanConfiguration"><span class="hs-identifier hs-type">BooleanConfiguration</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679347101"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.OrdMonad.html#OrdFunctor"><span class="hs-identifier hs-type">OrdFunctor</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679347101"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679347101"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span></span><span>
+</span><span id="line-23"></span><span id="combineGuards"><span class="annot"><span class="annottext">combineGuards :: forall (m :: * -&gt; *).
+(BooleanConfiguration m, OrdFunctor m) =&gt;
+m SymGuard -&gt; SymGuard
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#combineGuards"><span class="hs-identifier hs-var hs-var">combineGuards</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">m SymGuard -&gt; SymGuard
+forall (m :: * -&gt; *).
+(OrdFunctor m, BooleanConfiguration m) =&gt;
+m SymGuard -&gt; SymGuard
+</span><a href="Lattest.Model.BoundedMonad.html#asDualExpr"><span class="hs-identifier hs-var">asDualExpr</span></a></span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="annot"><span class="hs-comment">{-|
+    In the given guard, substitute the given valuation.
+-}</span></span><span>
+</span><span id="line-28"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#substituteInGuard"><span class="hs-identifier hs-type">substituteInGuard</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span><span>
+</span><span id="line-29"></span><span class="hs-comment">--substituteInGuard valuation guard = evalConst' valuation guard</span><span>
+</span><span id="line-30"></span><span id="substituteInGuard"><span class="annot"><span class="annottext">substituteInGuard :: Valuation -&gt; SymGuard -&gt; SymGuard
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#substituteInGuard"><span class="hs-identifier hs-var hs-var">substituteInGuard</span></a></span></span><span> </span><span id="local-6989586621679347179"><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347179"><span class="hs-identifier hs-var">valuation</span></a></span></span><span> </span><span id="local-6989586621679347180"><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347180"><span class="hs-identifier hs-var">guard</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Valuation -&gt; SymGuard -&gt; SymGuard
+forall t. Assignable t =&gt; Valuation -&gt; Expr t -&gt; Expr t
+</span><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#substConst"><span class="hs-identifier hs-var">substConst</span></a></span><span> </span><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347179"><span class="hs-identifier hs-var">valuation</span></a></span><span> </span><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347180"><span class="hs-identifier hs-var">guard</span></a></span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="annot"><span class="hs-comment">{-|
+    Evaluate the given guard
+-}</span></span><span>
+</span><span id="line-35"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#evaluateGuard"><span class="hs-identifier hs-type">evaluateGuard</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-36"></span><span id="evaluateGuard"><span class="annot"><span class="annottext">evaluateGuard :: SymGuard -&gt; Bool
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#evaluateGuard"><span class="hs-identifier hs-var hs-var">evaluateGuard</span></a></span></span><span> </span><span id="local-6989586621679347181"><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347181"><span class="hs-identifier hs-var">guard</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">SymGuard -&gt; Either String Bool
+forall v. Expr v -&gt; Either String v
+</span><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#eval"><span class="hs-identifier hs-var">eval</span></a></span><span> </span><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347181"><span class="hs-identifier hs-var">guard</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-37"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679347182"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347182"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall a. HasCallStack =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347182"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="hs-comment">-- TODO proper exception</span><span>
+</span><span id="line-38"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679347184"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679347184"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679347184"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="annot"><span class="hs-comment">{-|
+    For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
+    any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
+-}</span></span><span>
+</span><span id="line-44"></span><span id="local-6989586621679347113"><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveAnySequential"><span class="hs-identifier hs-type">solveAnySequential</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymInteract"><span class="hs-identifier hs-type">SymInteract</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679347113"><span class="hs-identifier hs-type">g</span></a></span><span class="hs-special">,</span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#GateValue"><span class="hs-identifier hs-type">GateValue</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679347113"><span class="hs-identifier hs-type">g</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-45"></span><span id="solveAnySequential"><span class="annot"><span class="annottext">solveAnySequential :: forall g. [(SymInteract g, SymGuard)] -&gt; SMT (Maybe (GateValue g))
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveAnySequential"><span class="hs-identifier hs-var hs-var">solveAnySequential</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (GateValue g) -&gt; StateT SmtEnv IO (Maybe (GateValue g))
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (GateValue g)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-46"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveAnySequential"><span class="hs-identifier hs-var">solveAnySequential</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span id="local-6989586621679347188"><span class="annot"><span class="annottext">interact :: SymInteract g
+</span><a href="#local-6989586621679347188"><span class="hs-identifier hs-var">interact</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymInteract"><span class="hs-identifier hs-type">SymInteract</span></a></span><span> </span><span class="annot"><span class="annottext">g
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679347190"><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347190"><span class="hs-identifier hs-var">vars</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span id="local-6989586621679347191"><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347191"><span class="hs-identifier hs-var">guard</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679347192"><span class="annot"><span class="annottext">[(SymInteract g, SymGuard)]
+</span><a href="#local-6989586621679347192"><span class="hs-identifier hs-var">alph</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-47"></span><span>    </span><span id="local-6989586621679347193"><span class="annot"><span class="annottext">Maybe Valuation
+</span><a href="#local-6989586621679347193"><span class="hs-identifier hs-var">maybeSolved</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Variable] -&gt; SymGuard -&gt; SMT (Maybe Valuation)
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveGuard"><span class="hs-identifier hs-var">solveGuard</span></a></span><span> </span><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347190"><span class="hs-identifier hs-var">vars</span></a></span><span> </span><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347191"><span class="hs-identifier hs-var">guard</span></a></span><span>
+</span><span id="line-48"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe Valuation
+</span><a href="#local-6989586621679347193"><span class="hs-identifier hs-var">maybeSolved</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-49"></span><span>        </span><span class="annot"><span class="annottext">Maybe Valuation
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[(SymInteract g, SymGuard)]
+-&gt; StateT SmtEnv IO (Maybe (GateValue g))
+forall g. [(SymInteract g, SymGuard)] -&gt; SMT (Maybe (GateValue g))
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveAnySequential"><span class="hs-identifier hs-var">solveAnySequential</span></a></span><span> </span><span class="annot"><span class="annottext">[(SymInteract g, SymGuard)]
+</span><a href="#local-6989586621679347192"><span class="hs-identifier hs-var">alph</span></a></span><span>
+</span><span id="line-50"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679347194"><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347194"><span class="hs-identifier hs-var">solved</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe (GateValue g) -&gt; StateT SmtEnv IO (Maybe (GateValue g))
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (GateValue g) -&gt; StateT SmtEnv IO (Maybe (GateValue g)))
+-&gt; Maybe (GateValue g) -&gt; StateT SmtEnv IO (Maybe (GateValue g))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">GateValue g -&gt; Maybe (GateValue g)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(GateValue g -&gt; Maybe (GateValue g))
+-&gt; GateValue g -&gt; Maybe (GateValue g)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">SymInteract g -&gt; Valuation -&gt; GateValue g
+forall g. SymInteract g -&gt; Valuation -&gt; GateValue g
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#valuationToGateValue"><span class="hs-identifier hs-var">valuationToGateValue</span></a></span><span> </span><span class="annot"><span class="annottext">SymInteract g
+</span><a href="#local-6989586621679347188"><span class="hs-identifier hs-var">interact</span></a></span><span> </span><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347194"><span class="hs-identifier hs-var">solved</span></a></span><span>
+</span><span id="line-51"></span><span class="hs-comment">--data SymInteract g = SymInteract g [Variable]</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--data GateValue g = GateValue g [Constant]</span><span>
+</span><span id="line-53"></span><span id="local-6989586621679347126"><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#valuationToGateValue"><span class="hs-identifier hs-type">valuationToGateValue</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymInteract"><span class="hs-identifier hs-type">SymInteract</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679347126"><span class="hs-identifier hs-type">g</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#GateValue"><span class="hs-identifier hs-type">GateValue</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679347126"><span class="hs-identifier hs-type">g</span></a></span></span><span>
+</span><span id="line-54"></span><span id="valuationToGateValue"><span class="annot"><span class="annottext">valuationToGateValue :: forall g. SymInteract g -&gt; Valuation -&gt; GateValue g
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#valuationToGateValue"><span class="hs-identifier hs-var hs-var">valuationToGateValue</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymInteract"><span class="hs-identifier hs-type">SymInteract</span></a></span><span> </span><span id="local-6989586621679347200"><span class="annot"><span class="annottext">g
+</span><a href="#local-6989586621679347200"><span class="hs-identifier hs-var">gate</span></a></span></span><span> </span><span id="local-6989586621679347201"><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347201"><span class="hs-identifier hs-var">params</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679347202"><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347202"><span class="hs-identifier hs-var">valuation</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-55"></span><span>    </span><span class="annot"><span class="annottext">g -&gt; [Constant] -&gt; GateValue g
+forall g. g -&gt; [Constant] -&gt; GateValue g
+</span><a href="Lattest.Model.Alphabet.html#GateValue"><span class="hs-identifier hs-var">GateValue</span></a></span><span> </span><span class="annot"><span class="annottext">g
+</span><a href="#local-6989586621679347200"><span class="hs-identifier hs-var">gate</span></a></span><span> </span><span class="annot"><span class="annottext">([Constant] -&gt; GateValue g) -&gt; [Constant] -&gt; GateValue g
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Variable -&gt; Constant) -&gt; [Variable] -&gt; [Constant]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map Variable Constant -&gt; Variable -&gt; Constant
+forall {k} {a}. Ord k =&gt; Map k a -&gt; k -&gt; a
+</span><a href="#local-6989586621679347204"><span class="hs-identifier hs-var">getValueForVar</span></a></span><span> </span><span class="annot"><span class="annottext">(Map Variable Constant -&gt; Variable -&gt; Constant)
+-&gt; Map Variable Constant -&gt; Variable -&gt; Constant
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Valuation -&gt; Map Variable Constant
+</span><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#toConstantsMap"><span class="hs-identifier hs-var">E.toConstantsMap</span></a></span><span> </span><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347202"><span class="hs-identifier hs-var">valuation</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347201"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-57"></span><span>        </span><span id="local-6989586621679347204"><span class="annot"><span class="annottext">getValueForVar :: Map k a -&gt; k -&gt; a
+</span><a href="#local-6989586621679347204"><span class="hs-identifier hs-var hs-var">getValueForVar</span></a></span></span><span> </span><span id="local-6989586621679347213"><span class="annot"><span class="annottext">Map k a
+</span><a href="#local-6989586621679347213"><span class="hs-identifier hs-var">valuation</span></a></span></span><span> </span><span id="local-6989586621679347214"><span class="annot"><span class="annottext">k
+</span><a href="#local-6989586621679347214"><span class="hs-identifier hs-var">var</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-58"></span><span>            </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">k -&gt; Map k a -&gt; Maybe a
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Map.lookup</span></span><span> </span><span class="annot"><span class="annottext">k
+</span><a href="#local-6989586621679347214"><span class="hs-identifier hs-var">var</span></a></span><span> </span><span class="annot"><span class="annottext">Map k a
+</span><a href="#local-6989586621679347213"><span class="hs-identifier hs-var">valuation</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-59"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679347216"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679347216"><span class="hs-identifier hs-var">value</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679347216"><span class="hs-identifier hs-var">value</span></a></span><span>
+</span><span id="line-60"></span><span>                </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; a
+forall a. HasCallStack =&gt; a
+</span><span class="hs-identifier hs-var">undefined</span></span><span>  </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;valuationToGateValue: wrong type&quot;</span></span><span> </span><span class="hs-comment">-- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveGuard"><span class="hs-identifier hs-type">solveGuard</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Alphabet.html#SymGuard"><span class="hs-identifier hs-type">SymGuard</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span id="solveGuard"><span class="annot"><span class="annottext">solveGuard :: [Variable] -&gt; SymGuard -&gt; SMT (Maybe Valuation)
+</span><a href="Lattest.Model.Symbolic.SolveSymPrim.html#solveGuard"><span class="hs-identifier hs-var hs-var">solveGuard</span></a></span></span><span> </span><span id="local-6989586621679347218"><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347218"><span class="hs-identifier hs-var">vars</span></a></span></span><span> </span><span id="local-6989586621679347219"><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347219"><span class="hs-identifier hs-var">guard</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-64"></span><span>    </span><span class="annot"><span class="annottext">SMT ()
+</span><a href="Lattest.SMT.SMTInternal.html#push"><span class="hs-identifier hs-var">push</span></a></span><span>
+</span><span id="line-65"></span><span>    </span><span class="annot"><span class="annottext">[Variable] -&gt; SMT ()
+</span><a href="Lattest.SMT.SMTInternal.html#addDeclarations"><span class="hs-identifier hs-var">addDeclarations</span></a></span><span> </span><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347218"><span class="hs-identifier hs-var">vars</span></a></span><span>
+</span><span id="line-66"></span><span>    </span><span class="annot"><span class="annottext">[SymGuard] -&gt; SMT ()
+</span><a href="Lattest.SMT.SMTInternal.html#addAssertions"><span class="hs-identifier hs-var">addAssertions</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">SymGuard
+</span><a href="#local-6989586621679347219"><span class="hs-identifier hs-var">guard</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-67"></span><span>    </span><span id="local-6989586621679347220"><span class="annot"><span class="annottext">SolvableProblem
+</span><a href="#local-6989586621679347220"><span class="hs-identifier hs-var">solveOutcome</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT SolvableProblem
+</span><a href="Lattest.SMT.SMTInternal.html#getSolvable"><span class="hs-identifier hs-var">getSolvable</span></a></span><span>
+</span><span id="line-68"></span><span>    </span><span id="local-6989586621679347221"><span class="annot"><span class="annottext">Maybe Valuation
+</span><a href="#local-6989586621679347221"><span class="hs-identifier hs-var">mSolution</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">SolvableProblem
+</span><a href="#local-6989586621679347220"><span class="hs-identifier hs-var">solveOutcome</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-69"></span><span>        </span><span class="annot"><span class="annottext">SolvableProblem
+</span><a href="Lattest.SMT.SolveDefs.html#Sat"><span class="hs-identifier hs-var">Sat</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-70"></span><span>            </span><span id="local-6989586621679347223"><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347223"><span class="hs-identifier hs-var">solution</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Variable] -&gt; SMT Valuation
+</span><a href="Lattest.SMT.SMTInternal.html#getSolution"><span class="hs-identifier hs-var">getSolution</span></a></span><span> </span><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679347218"><span class="hs-identifier hs-var">vars</span></a></span><span>
+</span><span id="line-71"></span><span>            </span><span class="annot"><span class="annottext">Maybe Valuation -&gt; SMT (Maybe Valuation)
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe Valuation -&gt; SMT (Maybe Valuation))
+-&gt; Maybe Valuation -&gt; SMT (Maybe Valuation)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Valuation -&gt; Maybe Valuation
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Valuation
+</span><a href="#local-6989586621679347223"><span class="hs-identifier hs-var">solution</span></a></span><span>
+</span><span id="line-72"></span><span>        </span><span class="annot"><span class="annottext">SolvableProblem
+</span><a href="Lattest.SMT.SolveDefs.html#Unsat"><span class="hs-identifier hs-var">Unsat</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe Valuation -&gt; SMT (Maybe Valuation)
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe Valuation
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-73"></span><span>        </span><span class="annot"><span class="annottext">SolvableProblem
+</span><a href="Lattest.SMT.SolveDefs.html#Unknown"><span class="hs-identifier hs-var">Unknown</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe Valuation -&gt; SMT (Maybe Valuation)
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe Valuation
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-74"></span><span>        </span><span class="annot"><span class="annottext">SolvableProblem
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe Valuation -&gt; SMT (Maybe Valuation)
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe Valuation
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-75"></span><span>        </span><span class="hs-comment">--_ -&gt; return $ error $ &quot;error solving guard &quot; ++ show guard ++ &quot; [&quot; ++ show vars ++ &quot;]&quot;</span><span>
+</span><span id="line-76"></span><span>    </span><span class="annot"><span class="annottext">SMT ()
+</span><a href="Lattest.SMT.SMTInternal.html#pop"><span class="hs-identifier hs-var">pop</span></a></span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><span class="annottext">Maybe Valuation -&gt; SMT (Maybe Valuation)
+forall a. a -&gt; StateT SmtEnv IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe Valuation
+</span><a href="#local-6989586621679347221"><span class="hs-identifier hs-var">mSolution</span></a></span><span>
+</span><span id="line-78"></span></pre></body></html>

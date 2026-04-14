@@ -1,0 +1,46 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+TorXakis - Model Based Testing
+Copyright (c) 2015-2017 TNO and Radboud University
+See LICENSE at root directory of this repository.
+-}</span><span>
+</span><span id="line-6"></span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.SMT</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- SMT: open a connection to SMT, send constraints, and retrieve a model</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- export</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#createSMTEnv"><span class="hs-identifier">createSMTEnv</span></a></span><span>
+</span><span id="line-17"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#openSolver"><span class="hs-identifier">openSolver</span></a></span><span>
+</span><span id="line-18"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#close"><span class="hs-identifier">close</span></a></span><span>
+</span><span id="line-19"></span><span class="hs-comment">--, addDefinitions</span><span>
+</span><span id="line-20"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addDeclarations"><span class="hs-identifier">addDeclarations</span></a></span><span>
+</span><span id="line-21"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addAssertions"><span class="hs-identifier">addAssertions</span></a></span><span>
+</span><span id="line-22"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSolvable"><span class="hs-identifier">getSolvable</span></a></span><span>
+</span><span id="line-23"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSolution"><span class="hs-identifier">getSolution</span></a></span><span>
+</span><span id="line-24"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#push"><span class="hs-identifier">push</span></a></span><span>
+</span><span id="line-25"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#pop"><span class="hs-identifier">pop</span></a></span><span>
+</span><span id="line-26"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier">put</span></a></span><span>
+</span><span id="line-27"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#putT"><span class="hs-identifier">putT</span></a></span><span>
+</span><span id="line-28"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#valExprToString"><span class="hs-identifier">valExprToString</span></a></span><span>
+</span><span id="line-29"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier">SMTRef</span></a></span><span>
+</span><span id="line-30"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#createSMTRef"><span class="hs-identifier">createSMTRef</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#newSMTRef"><span class="hs-identifier">newSMTRef</span></a></span><span>
+</span><span id="line-32"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#runSMT"><span class="hs-identifier">runSMT</span></a></span><span>
+</span><span id="line-33"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#readSMTRef"><span class="hs-identifier">readSMTRef</span></a></span><span>
+</span><span id="line-34"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solution"><span class="hs-identifier">Solution</span></a></span><span>
+</span><span id="line-35"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SolveDefs.html#SolvableProblem"><span class="hs-identifier">SolvableProblem</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier">SMT</span></a></span><span>
+</span><span id="line-37"></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- import</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SMTInternal.html"><span class="hs-identifier">Lattest.SMT.SMTInternal</span></a></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SMTData.html"><span class="hs-identifier">Lattest.SMT.SMTData</span></a></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SolveDefs.html"><span class="hs-identifier">Lattest.SMT.SolveDefs</span></a></span></pre></body></html>

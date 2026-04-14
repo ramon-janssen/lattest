@@ -1,0 +1,110 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+This is a modified version of:
+TorXakis - Model Based Testing
+Copyright (c) 2015-2017 TNO and Radboud University
+See LICENSE in the parent Symbolic folder.
+-}</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Define div and mod according to Boute's Euclidean definition, that is,</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--  so as to satisfy the formula</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--  (for all ((m Int) (n Int))</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--    (=&gt; (distinct n 0)</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--        (let ((q (div m n)) (r (mod m n)))</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--          (and (= m (+ (* n q) r))</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--               (&lt;= 0 r (- (abs n) 1))))))</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- Boute, Raymond T. (April 1992). </span><span>
+</span><span id="line-19"></span><span class="hs-comment">--      The Euclidean definition of the functions div and mod. </span><span>
+</span><span id="line-20"></span><span class="hs-comment">--      ACM Transactions on Programming Languages and Systems (TOPLAS) </span><span>
+</span><span id="line-21"></span><span class="hs-comment">--      ACM Press. 14 (2): 127 - 144. doi:10.1145/128861.128862.</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Model.Symbolic.Internal.Boute</span><span>
+</span><span id="line-24"></span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#divMod"><span class="hs-identifier">Lattest.Model.Symbolic.Internal.Boute.divMod</span></a></span><span>
+</span><span id="line-25"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#div"><span class="hs-identifier">Lattest.Model.Symbolic.Internal.Boute.div</span></a></span><span>
+</span><span id="line-26"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#mod"><span class="hs-identifier">Lattest.Model.Symbolic.Internal.Boute.mod</span></a></span><span>
+</span><span id="line-27"></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- | operator divMod on the provided integer values.</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- </span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--  (for all ((m Int) (n Int))</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--    (=&gt; (distinct n 0)</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--        (let ((q (div m n)) (r (mod m n)))</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--          (and (= m (+ (* n q) r))</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--               (&lt;= 0 r (- (abs n) 1))))))</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-38"></span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#divMod"><span class="hs-identifier hs-type">divMod</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span id="divMod"><span class="annot"><span class="annottext">divMod :: Integer -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="Lattest.Model.Symbolic.Internal.Boute.html#divMod"><span class="hs-identifier hs-var hs-var">divMod</span></a></span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; (Integer, Integer)
+forall a. HasCallStack =&gt; [Char] -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;divMod: division by zero&quot;</span></span><span>
+</span><span id="line-40"></span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#divMod"><span class="hs-identifier hs-var">divMod</span></a></span><span> </span><span id="local-6989586621679339352"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339352"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span id="local-6989586621679339353"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339353"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339353"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339356"><span class="hs-identifier hs-var">pm</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-41"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">(Integer, Integer)
+</span><a href="#local-6989586621679339357"><span class="hs-identifier hs-var">pdm</span></a></span><span>
+</span><span id="line-42"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339358"><span class="hs-identifier hs-var">pd</span></a></span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339356"><span class="hs-identifier hs-var">pm</span></a></span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339353"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679339357"><span class="annot"><span class="annottext">pdm :: (Integer, Integer)
+</span><a href="#local-6989586621679339357"><span class="hs-identifier hs-var">pdm</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679339358"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339358"><span class="hs-identifier hs-var">pd</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679339356"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339356"><span class="hs-identifier hs-var">pm</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; (Integer, Integer)
+forall a. Integral a =&gt; a -&gt; a -&gt; (a, a)
+</span><span class="hs-identifier hs-var">Prelude.divMod</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339352"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339353"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="annot"><span class="hs-comment">-- | operator divide on the provided integer values.</span></span><span>
+</span><span id="line-46"></span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#div"><span class="hs-identifier hs-type">div</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span>
+</span><span id="line-47"></span><span id="div"><span class="annot"><span class="annottext">div :: Integer -&gt; Integer -&gt; Integer
+</span><a href="Lattest.Model.Symbolic.Internal.Boute.html#div"><span class="hs-identifier hs-var hs-var">div</span></a></span></span><span> </span><span id="local-6989586621679339363"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339363"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Integer, Integer) -&gt; Integer
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">((Integer, Integer) -&gt; Integer)
+-&gt; (Integer -&gt; (Integer, Integer)) -&gt; Integer -&gt; Integer
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="Lattest.Model.Symbolic.Internal.Boute.html#divMod"><span class="hs-identifier hs-var">Lattest.Model.Symbolic.Internal.Boute.divMod</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339363"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- | operator modulo on the provided integer values.</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- </span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--  (for all ((m Int) (n Int)) </span><span>
+</span><span id="line-53"></span><span class="hs-comment">--    (=&gt; (distinct n 0)</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--               (&lt;= 0 (mod m n) (- (abs n) 1))))</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-56"></span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.Boute.html#mod"><span class="hs-identifier hs-type">mod</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span>
+</span><span id="line-57"></span><span id="mod"><span class="annot"><span class="annottext">mod :: Integer -&gt; Integer -&gt; Integer
+</span><a href="Lattest.Model.Symbolic.Internal.Boute.html#mod"><span class="hs-identifier hs-var hs-var">mod</span></a></span></span><span> </span><span id="local-6989586621679339366"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339366"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Integer, Integer) -&gt; Integer
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">((Integer, Integer) -&gt; Integer)
+-&gt; (Integer -&gt; (Integer, Integer)) -&gt; Integer -&gt; Integer
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="Lattest.Model.Symbolic.Internal.Boute.html#divMod"><span class="hs-identifier hs-var">Lattest.Model.Symbolic.Internal.Boute.divMod</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679339366"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span></pre></body></html>
