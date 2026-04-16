@@ -11,7 +11,6 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
@@ -53,7 +52,8 @@ import           Lattest.Model.Symbolic.Internal.Sum
 
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
-import           GHC.Generics(Generic)
+import qualified Data.Aeson.Types as JSON
+import qualified Data.Scientific as DS
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
 
@@ -101,12 +101,18 @@ data Constant = -- | Constructor of Boolean constant.
                 -- | Constructor of ANY constant.
               | Cany     { sort :: SortId }
 -}
-  deriving (Eq, Ord, Read, Generic)
-instance JSON.FromJSON Constant
+  deriving (Eq, Ord, Read)
+instance JSON.FromJSON Constant where
+    parseJSON (JSON.Object m)
+        | JSON.size m /= 1 = fail "expected Constant with exactly one field"
+    parseJSON (JSON.Object (JSON.lookup "bool" -> Just (JSON.Bool b))) = return $ Cbool b
+    parseJSON (JSON.Object (JSON.lookup "int" -> Just (JSON.Number (DS.floatingOrInteger -> Right i)))) = return $ Cint i
+    parseJSON (JSON.Object (JSON.lookup "string" -> Just (JSON.String s))) = return $ Cstring $ Text.unpack s
+    parseJSON _ = fail "expected Constant JSON"
 
 instance JSON.ToJSON Constant where
     toJSON (Cbool b) = JSON.Object $ JSON.singleton "bool" $ JSON.Bool b
-    toJSON (Cint i) = JSON.Object $ JSON.singleton "number" $ JSON.Number $ fromInteger i
+    toJSON (Cint i) = JSON.Object $ JSON.singleton "int" $ JSON.Number $ fromInteger i
     toJSON (Cstring s) = JSON.Object $ JSON.singleton "string" $ JSON.String $ Text.pack s
 
 constType :: Constant -> Type
