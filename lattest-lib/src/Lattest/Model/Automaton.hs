@@ -519,9 +519,6 @@ evalBool valuation = toBool . evalVal valuation
 --------------------
 -- STS quiescence --
 --------------------
-instance Completable (IOSuspGateValue i o) where
-    implicitDestination (GateValue g _) = implicitDestination g
-
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
@@ -542,9 +539,6 @@ hasSymbolicQuiescence smtRef stateVal m = do
 -----------------------
 -- STS input-failure --
 -----------------------
-instance Completable (IFGateValue i o) where
-    implicitDestination (GateValue g _) = implicitDestination g
-
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
     ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
@@ -566,9 +560,6 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
 ------------------------------------
 -- STS input-failure + quiescence --
 ------------------------------------
-instance Completable (SuspendedIFGateValue i o) where
-    implicitDestination (GateValue g _) = implicitDestination g
-
 -- Ideally this would automatically follow from the above two interpretations stacked to avoid the boilerplate below, but that is a hassle
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) SmtEnv where
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
