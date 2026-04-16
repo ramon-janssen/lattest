@@ -49,7 +49,7 @@ where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended, IOSuspGateValue(..), GateValue(..))
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM, waitUntil)
 import Control.Applicative((<|>))
@@ -506,12 +506,12 @@ connectJSONSocketAdapterAcceptingInputs = connectJSONSocketAdapter >>= accepting
 connectJSONSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o) => SocketSettings act i -> IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputsWith settings = connectJSONSocketAdapterWith settings >>= acceptingInputs
 
-asSymbolicSuspAdapter :: Adapter (IOSuspAct (GateValue i) (GateValue o)) (GateValue i) -> IO (Adapter (IOSuspGateValue i o) (GateValue i))
+asSymbolicSuspAdapter :: Adapter (IOSuspAct (GateValue i) (GateValue o)) (Maybe (GateValue i)) -> IO (Adapter (IOSuspGateValue i o) (Maybe (GateValue i)))
 asSymbolicSuspAdapter = mapActionsFromSut ioSuspActGateToSuspGateValue
     where
         ioSuspActGateToSuspGateValue (In (GateValue i cs)) = GateValue (In i) cs
         ioSuspActGateToSuspGateValue (Out (OutSusp (GateValue o cs))) = GateValue (Out (OutSusp o)) cs
         ioSuspActGateToSuspGateValue (Out Quiescence) = GateValue (Out Quiescence) []
 
-connectJSONSocketAdapterSTSwithQuiescence ::  (ToJSON i, FromJSON o) => Int -> IO (Adapter (IOSuspGateValue i o) (GateValue i))
+connectJSONSocketAdapterSTSwithQuiescence ::  (ToJSON i, FromJSON o) => Int -> IO (Adapter (IOSuspGateValue i o) (Maybe (GateValue i)))
 connectJSONSocketAdapterSTSwithQuiescence millis = connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis millis >>= asSymbolicSuspAdapter
