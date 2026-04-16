@@ -11,6 +11,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
 ( ExprView(..)
@@ -49,6 +50,8 @@ import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX as FMX
 import           Lattest.Model.Symbolic.Internal.Product
 import           Lattest.Model.Symbolic.Internal.Sum
 
+import           Data.Aeson(FromJSON, ToJSON)
+import           GHC.Generics(Generic)
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
 
@@ -96,7 +99,9 @@ data Constant = -- | Constructor of Boolean constant.
                 -- | Constructor of ANY constant.
               | Cany     { sort :: SortId }
 -}
-  deriving (Eq, Ord, Read)
+  deriving (Eq, Ord, Read, Generic)
+instance FromJSON Constant
+instance ToJSON Constant
 
 constType :: Constant -> Type
 constType (Cbool _) = BoolType
