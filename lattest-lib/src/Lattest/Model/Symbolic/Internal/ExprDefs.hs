@@ -12,6 +12,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
 ( ExprView(..)
@@ -41,7 +42,7 @@ import           Data.Set         (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Data.Text        (Text)
-import qualified Data.Text as Text(length, pack, index, concat)
+import qualified Data.Text as Text(length, pack, index, concat, unpack)
 import           GHC.Generics     (Generic)
 import           GHC.Integer (divInteger)
 
@@ -50,7 +51,8 @@ import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX as FMX
 import           Lattest.Model.Symbolic.Internal.Product
 import           Lattest.Model.Symbolic.Internal.Sum
 
-import           Data.Aeson(FromJSON, ToJSON)
+import qualified Data.Aeson as JSON
+import qualified Data.Aeson.KeyMap as JSON
 import           GHC.Generics(Generic)
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
@@ -100,8 +102,12 @@ data Constant = -- | Constructor of Boolean constant.
               | Cany     { sort :: SortId }
 -}
   deriving (Eq, Ord, Read, Generic)
-instance FromJSON Constant
-instance ToJSON Constant
+instance JSON.FromJSON Constant
+
+instance JSON.ToJSON Constant where
+    toJSON (Cbool b) = JSON.Object $ JSON.singleton "bool" $ JSON.Bool b
+    toJSON (Cint i) = JSON.Object $ JSON.singleton "number" $ JSON.Number $ fromInteger i
+    toJSON (Cstring s) = JSON.Object $ JSON.singleton "string" $ JSON.String $ Text.pack s
 
 constType :: Constant -> Type
 constType (Cbool _) = BoolType
