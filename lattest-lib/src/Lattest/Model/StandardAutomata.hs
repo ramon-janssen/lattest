@@ -53,6 +53,8 @@ STSIntrp,
 IOSTSIntrp,
 accessSequences,
 interpretSTS,
+SuspSTSIntrp,
+interpretSTSQuiescent,
 SuspInputAttemptSTSIntrp,
 interpretSTSQuiescentInputAttemptConcrete,
 )
@@ -264,10 +266,10 @@ type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
 interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc)), Completable (GateValue g)) => STS m loc g -> Valuation -> STSIntrp m loc g
 interpretSTS sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 
-interpretSTSQuiescent  :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => IOSTS m loc i o -> Valuation -> SuspSTSIntrp m loc i o
-interpretSTSQuiescent sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
-
 type SuspSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o)
+
+interpretSTSQuiescent :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => IOSTS m loc i o -> Valuation -> SuspSTSIntrp m loc i o
+interpretSTSQuiescent sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 
 -- TODO also list an interpretation for quiescence only and input-failure only
 type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o)

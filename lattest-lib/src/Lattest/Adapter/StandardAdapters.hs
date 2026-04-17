@@ -29,6 +29,7 @@ connectJSONSocketAdapter,
 connectJSONSocketAdapterWith,
 connectJSONSocketAdapterAcceptingInputs,
 connectJSONSocketAdapterAcceptingInputsWith,
+connectJSONSocketAdapterSTSwithQuiescence,
 -- * Transformations on Adapters
 -- ** Encoding and Decoding
 encodeUtf8,
