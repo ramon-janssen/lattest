@@ -57,7 +57,7 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction, SuspendedIFGateValue)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction, SuspendedIFGateValue, IOSuspGateValue)
 import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), After)
 import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp, SuspInputAttemptSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualExpr)
@@ -187,8 +187,8 @@ randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossi
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, with arbitrary
     data values as picked by the given SMT solver. See 'randomDataOrWaitForOutputTestSelectorFromGen' for details.
 -}
-randomDataOrWaitForOutputTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
-    => SMTRef -> Double -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) (StdGen,SMTRef) (Maybe (GateValue i)))
+randomDataOrWaitForOutputTestSelector :: (TestChoice (Maybe (GateValue i)) (IOSuspGateValue i' o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), Foldable m, BooleanConfiguration m, Ord i, Ord i', Ord o, Ord (m SymGuard))
+    => SMTRef -> Double -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (StdGen,SMTRef) (Maybe (GateValue i)))
 randomDataOrWaitForOutputTestSelector smt pWait = do
     r <- initStdGen
     return $ randomDataOrWaitForOutputTestSelectorFromGen smt r pWait
@@ -197,8 +197,8 @@ randomDataOrWaitForOutputTestSelector smt pWait = do
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed., with arbitrary data values as picked by the given SMT solver. See 'randomDataOrWaitForOutputTestSelectorFromGen' for details.
 -}
-randomDataOrWaitForOutputTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
-    => SMTRef -> Int -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) (StdGen,SMTRef) (Maybe (GateValue i))
+randomDataOrWaitForOutputTestSelectorFromSeed :: (TestChoice (Maybe (GateValue i)) (IOSuspGateValue i' o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), Foldable m, BooleanConfiguration m, Ord i, Ord i', Ord o, Ord (m SymGuard))
+    => SMTRef -> Int -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (StdGen,SMTRef) (Maybe (GateValue i))
 randomDataOrWaitForOutputTestSelectorFromSeed smt i pWait = randomDataOrWaitForOutputTestSelectorFromGen smt (mkStdGen i) pWait
 
 {- |
@@ -207,12 +207,12 @@ randomDataOrWaitForOutputTestSelectorFromSeed smt i pWait = randomDataOrWaitForO
     for an output value instead, with the givene probability (clamped to [0,1]). Will always wait for an output if it cannot find any possible data
     values for any input gate.
 -}
-randomDataOrWaitForOutputTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
-    => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) (g,SMTRef) (Maybe (GateValue i))
+randomDataOrWaitForOutputTestSelectorFromGen :: (TestChoice (Maybe (GateValue i)) (IOSuspGateValue i' o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), Foldable m, BooleanConfiguration m, Ord i, Ord i', Ord o, RandomGen g, Ord (m SymGuard))
+    => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (g,SMTRef) (Maybe (GateValue i))
 randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRef) (solveRandomOrWait pWait) (\s _ _ _ -> return $ Just s)
     where
-    solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o), Foldable m, BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
-        => Double -> (g,SMTRef) -> SuspInputAttemptSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
+    solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), Foldable m, BooleanConfiguration m, Ord i, Ord i', Ord o, RandomGen g, Ord (m SymGuard))
+        => Double -> (g,SMTRef) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
     solveRandomOrWait pWait (g,smtRef) intrpr _ =
         let (doWait, g') = flipCoin g pWait
         in if doWait

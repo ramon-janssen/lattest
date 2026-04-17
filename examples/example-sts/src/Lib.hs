@@ -17,26 +17,6 @@ import           Lattest.Exec.Testing(TestController(..), Verdict(..), runTester
 import           Lattest.Exec.StandardTestControllers
 --import           Network.Socket(withSocketsDo)
 
-data State = PickEither | PickEitherIn | Picked2 | Picked1 | Confirm1 | Confirmed1 | Confirm2 | Confirmed2 deriving (Eq, Ord, Show)
-
-Just trans = detConcTransFromRel
-    [   (PickEither, In 0, PickEitherIn),
-        (PickEither, Out 1, Picked1),
-        (PickEither, Out 2, Picked2),
-        (PickEitherIn, Out 1, Confirm1),
-        (PickEitherIn, Out 2, Confirm2),
-        (Picked1, In 0, Confirm1),
-        (Picked2, In 0, Confirm2),
-        (Confirm1, Out 1, Confirmed1),
-        (Confirm2, Out 2, Confirmed2),
-        (Confirmed1, In 1, PickEither),
-        (Confirmed2, In 2, PickEither)
-    ]
-alphabet = ioAlphabet [0, 1, 2] [1, 2]
-initialConfiguration = pure PickEither
-
-spec = automaton initialConfiguration alphabet trans
-
 
 pvar = (Variable "p" IntType)
 xvar = (Variable "x" IntType)
@@ -53,16 +33,11 @@ stsExample =
         okGuard = x .== p
         coffeeGuard = x .>= 15
         initConf = return 0 -- return $ Aut.IntrpState 0 stsExampleInitAssign :: FreeLattice (Aut.IntrpState Integer)
-        switches = nonDetConcTransFromMRel
-            [   (0, water, pure (Aut.stsTLoc waterGuard waterAssign, 1) /\ pure (Aut.stsTLoc waterGuard waterAssign, 2)),
-                (1, ok, pure (Aut.stsTLoc waterGuard waterAssign, 1) \/ pure (Aut.stsTLoc waterGuard waterAssign, 1)),
-                (2, coffee, pure (Aut.stsTLoc waterGuard waterAssign, 1))
-            ]
-        {-switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
-                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
-            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
-            2 -> Map.empty-}
+        switches = \q -> case q of
+            0 -> Map.fromList [(water, pure (Aut.stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, pure (Aut.stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, pure (Aut.stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
@@ -80,7 +55,7 @@ run = do
     putStrLn $ "connecting to SUT..."
     let quiesenceMillis = 200
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    adap <- connectJSONSocketAdapterSTSwithQuiescence quiesenceMillis :: IO (Adapter (Alph.IOSuspGateValue Integer Integer) (Maybe (Alph.GateValue Integer)))
+    adap <- connectJSONSocketAdapterSTSwithQuiescence quiesenceMillis :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
     
     putStrLn $ "starting test..."
     let nrSteps = 50
