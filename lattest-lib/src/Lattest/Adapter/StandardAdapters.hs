@@ -44,6 +44,8 @@ withQuiescence,
 withQuiescenceMillis,
 withInputDelay,
 withInputDelayMillis,
+withSuccessiveInputDelay,
+withSuccessiveInputDelayMillis,
 -- ** Adapters with Data Parameters
 asSymbolicSuspAdapter,
 connectJSONSocketAdapterSTSwithQuiescence
@@ -57,9 +59,9 @@ import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM, waitUntil)
 import Control.Applicative((<|>))
 import Control.Monad(forever,void)
-import Control.Monad.Extra ((||^))
+import Control.Monad.Extra ((||^), (&&^))
 import Control.Concurrent.STM.TMVar(TMVar, newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar, takeTMVar)
-import Control.Concurrent.STM.TQueue(newTQueueIO, readTQueue, writeTQueue, isEmptyTQueue)
+import Control.Concurrent.STM.TQueue(newTQueueIO, readTQueue, writeTQueue, isEmptyTQueue, flushTQueue)
 import Control.Concurrent.Thread.Delay(delay)
 import Data.Aeson(FromJSON,ToJSON)
 import Data.ByteString (ByteString)
@@ -99,6 +101,8 @@ import Lattest.Util.Utils(flipCoin, takeRandom)
 import Lattest.Util.IOUtils(whileM, statefulIO, statefulIO', doAfter)
 import Data.List(singleton)
 import System.IO.Streams.Combinators(contramap)
+
+import Debug.Trace(trace)
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends 'String's encoded in utf-8.
 encodeUtf8 :: Adapter act ByteString -> IO (Adapter act String)
@@ -384,19 +388,107 @@ withQuiescence timeoutDiff adap = do
         close = ensureObservationTime >> close adap
         }
 
--- | Transform the given Adapter by introducing a short delay after every provided input. See 'withInputDelay', where the delay time given in milliseconds.
+-- | Transform the given Adapter by introducing a short delay before every provided input. See 'withInputDelay', with the delay time given in milliseconds.
 withInputDelayMillis :: Int -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
 withInputDelayMillis timeDelayMillis = withInputDelay $ secondsToNominalDiffTime $ 0.001 * realToFrac timeDelayMillis
+
+{-|
+    Transform the given Adapter by introducing a short delay before passing on any provided input. If, during that delay, an observation is made, then
+    that input is _not_ passed on.
+    
+    This may be used to slow down a tester which performs inputs too fast for observation responses to occur, both after sending an input and after
+    making an observation.
+-}
+withInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withInputDelay timeDelayDiff adap = do
+    lastObservationTime <- newEmptyTMVarIO
+    inputBlocked <- newTVarIO True
+    discardInput <- newTVarIO False
+    updateLastObservationTime <- newTVarIO False
+    let updateObservationTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
+            writeTVar inputBlocked True
+            mLastTime <- tryReadTMVar lastObservationTime
+            case mLastTime of
+                Nothing -> writeTMVar lastObservationTime currentTime
+                Just lastTime -> ifM_ (lastTime < currentTime) $ writeTMVar lastObservationTime currentTime
+        getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
+            lastTime <- readTMVar lastObservationTime -- should never be nothing, the unblocker ensures this
+            let targetTime = addUTCTime timeDelayDiff lastTime
+                currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
+                                                        -- currentTime, in particular when blocking on reading lastObservationTime
+            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
+        waitUntilDelay = do
+            currentTime <- getCurrentTime
+            waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
+            ifM_ (waitTimeMicros > 0) $ do
+                delay waitTimeMicros
+                waitUntilDelay
+        unblocker = do
+            -- this exists only because STM-monads cannot wait for a given delay, so this is a monitor that waits for the right TVar state to do so
+            atomically $ waitUntil $ readTVar inputBlocked &&^ (not <$> readTVar updateLastObservationTime)
+            waitUntilDelay
+            atomically $ writeTVar inputBlocked False
+            unblocker
+        observationTimeUpdater = do
+            -- this exists only because STM-monads cannot fetch the current time, so this is a monitor that waits for the right TVar state to do so
+            atomically $ waitUntil $ readTVar updateLastObservationTime
+            currentTime <- getCurrentTime
+            atomically $ do
+                updateObservationTime currentTime
+                writeTVar updateLastObservationTime False
+            observationTimeUpdater
+        waitUntilUnblocked = waitUntil $ not <$> readTVar inputBlocked
+        readFromSut = do
+            writeTVar updateLastObservationTime True -- signal the observationTimeUpdater to record the current time
+            writeTVar discardInput True -- an observation was made: discard any pending inputs
+            Streams.read $ actionsFromSut adap -- continue as usual
+    void $ forkIO unblocker
+    void $ forkIO observationTimeUpdater
+    inputCommandsToSut' <- makeOutputStream $ \mInCmd -> do
+        case mInCmd of
+            Just inCmd -> do
+                currentTime <- getCurrentTime
+                atomically $ do
+                    -- sending an input command is strictly not an observation, but treat it as an observation as well: reset the observation time
+                    updateObservationTime currentTime
+                    writeTVar inputBlocked True
+                    writeTVar discardInput False
+                discard <- atomically $ do
+                    waitUntilUnblocked
+                    readTVar discardInput
+                    -- the previous atomic block set discardInput to False, send the input iff it wasn't set to True (due to an observation) in the meantime
+                ifM_ (not discard) $ Streams.write (Just inCmd) $ inputCommandsToSut adap
+            Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
+    actionsFromSut' <- makeTInputStream readFromSut (hasInput $ actionsFromSut adap)
+    return $ Adapter {
+        inputCommandsToSut = inputCommandsToSut',
+        actionsFromSut = actionsFromSut',
+        close = close adap -- FIXME this should also close the forked threads
+        }
+
+
+-- | Transform the given Adapter by introducing a short delay after every provided input. See 'withSuccessiveInputDelay', with the delay time given in milliseconds.
+withSuccessiveInputDelayMillis :: Int -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withSuccessiveInputDelayMillis timeDelayMillis = withSuccessiveInputDelay $ secondsToNominalDiffTime $ 0.001 * realToFrac timeDelayMillis
 
 {-|
     Transform the given Adapter by introducing a short delay after every provided input. After an input is provided, then observing the adapter (or
     even calling `hasObservation`) will block until the specified time duration has passed, or until an output is observed, or until the action stream
     of the adapter closes, whichever comes first.
     
-    This may be used to slow down a tester which performs inputs too fast for observation responses to occur.
+    This may be used to slow down a tester which performs successive inputs too fast for observation responses to occur.
+    
+    More precisely, this may be needed in case of a state with incoming transitions for inputs, and outgoing transitions for /both/ inputs and
+    outputs. Without input delay, the tester may perform one input to enter the state, immediately observe that input, and immediately perform the
+    second input from that state, whereas the wrapped adapter may receive the first input and respond with an output, followed by the second input.
+    The wrapped adapter and the tester then observe different traces of actions.
+    
+    Note: this function does /not/ help to resolve states with an incoming transition for an /output/, and transitions for both inputs and output. To
+    resolve that situation, use `withInputDelay` instead.
 -}
-withInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
-withInputDelay timeDelayDiff adap = do
+withSuccessiveInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withSuccessiveInputDelay timeDelayDiff adap = do
+    -- FIXME loads of code duplication with withInputDelay, deduplicate this
     lastInputTime <- newEmptyTMVarIO
     observationBlocked <- newTVarIO False
     let updateInputTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
@@ -411,13 +503,13 @@ withInputDelay timeDelayDiff adap = do
                                                         -- currentTime, in particular when blocking on reading lastObservationTime
             return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
         waitUntilDelay = do
-            inputTime <- atomically $ readTMVar lastInputTime
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
             ifM_ (waitTimeMicros > 0) $ do
                 delay waitTimeMicros
                 waitUntilDelay
         unblocker = do
+            -- this exists only because STM-monads cannot wait for a given delay, so this is a monitor that waits for the right TVar state to do so
             atomically $ waitUntil $ readTVar observationBlocked
             waitUntilDelay
             atomically $ writeTVar observationBlocked False
@@ -453,7 +545,7 @@ withInputDelay timeDelayDiff adap = do
     return $ Adapter {
         inputCommandsToSut = inputCommandsToSut',
         actionsFromSut = actionsFromSut',
-        close = close adap
+        close = close adap -- FIXME this should also close the forked threads
         }
 
 

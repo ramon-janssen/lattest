@@ -404,7 +404,7 @@ testInputDelay = TestCase $ do
     jsonAdap <- SA.encodeJSONTestChoices parsingAdap :: IO (Adapter String String)
     acceptingAdap <- SA.acceptingInputs jsonAdap
     adap' <- SA.withQuiescenceMillis deltaMillis acceptingAdap :: IO (Adapter (IOSuspAct String String) (Maybe String))
-    adap <- (SA.withInputDelayMillis delayMillis adap') :: IO (Adapter (IOSuspAct String String) (Maybe String))
+    adap <- (SA.withSuccessiveInputDelayMillis delayMillis adap') :: IO (Adapter (IOSuspAct String String) (Maybe String))
 
     impQueue <- newTQueueIO
     void $ forkIO $ impFromQueue impQueue actQueue
