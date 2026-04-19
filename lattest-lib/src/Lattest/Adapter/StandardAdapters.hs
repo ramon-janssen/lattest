@@ -43,13 +43,16 @@ acceptingInputsWithIncompletenessAsFailures,
 withQuiescence,
 withQuiescenceMillis,
 withInputDelay,
-withInputDelayMillis
+withInputDelayMillis,
+-- ** Adapters with Data Parameters
+asSymbolicSuspAdapter,
+connectJSONSocketAdapterSTSwithQuiescence
 )
 where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended)
+import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended, IOSuspGateValue(..), GateValue(..))
 import Lattest.Model.Alphabet(IOAct)
 import Lattest.Util.IOUtils(ifM_, ifM, waitUntil)
 import Control.Applicative((<|>))
@@ -506,3 +509,14 @@ connectJSONSocketAdapterAcceptingInputs = connectJSONSocketAdapter >>= accepting
 connectJSONSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o) => SocketSettings act i -> IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputsWith settings = connectJSONSocketAdapterWith settings >>= acceptingInputs
 
+-- | Transform the given I/O-Adapter (for action `IOAct` by interpreting the input and output actions as gate values with data parameters.
+asSymbolicSuspAdapter :: Adapter (IOSuspAct (GateValue i) (GateValue o)) (Maybe (GateValue i)) -> IO (Adapter (IOSuspGateValue i o) (Maybe (GateValue i)))
+asSymbolicSuspAdapter = mapActionsFromSut ioSuspActGateToSuspGateValue
+    where
+        ioSuspActGateToSuspGateValue (In (GateValue i cs)) = GateValue (In i) cs
+        ioSuspActGateToSuspGateValue (Out (OutSusp (GateValue o cs))) = GateValue (Out (OutSusp o)) cs
+        ioSuspActGateToSuspGateValue (Out Quiescence) = GateValue (Out Quiescence) []
+
+-- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs with data, in JSON format, observing any input as accepted.
+connectJSONSocketAdapterSTSwithQuiescence ::  (ToJSON i, FromJSON o) => Int -> IO (Adapter (IOSuspGateValue i o) (Maybe (GateValue i)))
+connectJSONSocketAdapterSTSwithQuiescence millis = connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis millis >>= asSymbolicSuspAdapter

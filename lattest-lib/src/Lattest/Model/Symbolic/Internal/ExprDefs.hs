@@ -11,6 +11,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
 ( ExprView(..)
@@ -39,8 +40,9 @@ import qualified Data.List as List
 import           Data.Set         (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
 import           Data.Text        (Text)
-import qualified Data.Text as Text(length, pack, index, concat)
+import qualified Data.Text as Text(length, pack, index, concat, unpack)
 import           GHC.Generics     (Generic)
 import           GHC.Integer (divInteger)
 
@@ -49,6 +51,10 @@ import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX as FMX
 import           Lattest.Model.Symbolic.Internal.Product
 import           Lattest.Model.Symbolic.Internal.Sum
 
+import qualified Data.Aeson as JSON
+import qualified Data.Aeson.KeyMap as JSON
+import qualified Data.Aeson.Types as JSON
+import qualified Data.Scientific as DS
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
 
@@ -97,6 +103,29 @@ data Constant = -- | Constructor of Boolean constant.
               | Cany     { sort :: SortId }
 -}
   deriving (Eq, Ord, Read)
+instance JSON.FromJSON Constant where
+    parseJSON (JSON.Object m)
+        | not $ JSON.member "value" m = fail "expected Constant with a value field"
+        | not $ JSON.member "type" m = fail "expected Constant with a type field"
+    parseJSON (JSON.Object m)
+        | JSON.lookup "type" m == Just "bool" = parseBool $ lookup "value" m
+        | JSON.lookup "type" m == Just "int" = parseInt $ lookup "value" m
+        | JSON.lookup "type" m == Just "string" = parseString $ lookup "value" m
+        where
+        lookup :: JSON.Key -> JSON.KeyMap v -> v
+        lookup k = Maybe.fromJust . JSON.lookup k
+        parseBool (JSON.Bool b) = return $ Cbool b
+        parseBool _ = fail "type indicates bool, but value is not of type bool"
+        parseInt (JSON.Number (DS.floatingOrInteger -> Right i)) = return $ Cint i
+        parseInt _ = fail "type indicates int, but value is not of type int"
+        parseString (JSON.String s) = return $ Cstring $ Text.unpack s
+        parseString _ = fail "type indicates string, but value is not of type string"
+    parseJSON _ = fail "expected Constant JSON"
+
+instance JSON.ToJSON Constant where
+    toJSON (Cbool b) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) $ JSON.empty
+    toJSON (Cint i) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) $ JSON.empty
+    toJSON (Cstring s) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) $ JSON.empty
 
 constType :: Constant -> Type
 constType (Cbool _) = BoolType

@@ -1,54 +1,53 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+This is a modified version of:
 TorXakis - Model Based Testing
-Copyright (c) 2015-2017 TNO and Radboud University
-See LICENSE at root directory of this repository.
+See LICENSE in the parent SMT folder.
 -}</span><span>
 </span><span id="line-6"></span><span>
-</span><span id="line-7"></span><span>
-</span><span id="line-8"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-9"></span><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
-</span><span id="line-10"></span><span class="hs-pragma">{-# LANGUAGE FlexibleInstances #-}</span><span>
-</span><span id="line-11"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.SMT2TXS</span><span>
-</span><span id="line-12"></span><span>
-</span><span id="line-13"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-14"></span><span class="hs-comment">--</span><span>
-</span><span id="line-15"></span><span class="hs-comment">-- Translate SMT results to TorXakis Expr's</span><span>
-</span><span id="line-16"></span><span class="hs-comment">--</span><span>
-</span><span id="line-17"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-18"></span><span class="hs-comment">-- export</span><span>
-</span><span id="line-19"></span><span>
-</span><span id="line-20"></span><span class="hs-special">(</span><span>
-</span><span id="line-21"></span><span class="hs-comment">--SMTExpr,</span><span>
-</span><span id="line-22"></span><span class="hs-comment">--smtValueToExpr   --  :: SMTValue -&gt; TxsDefs -&gt; SortId -&gt; Walue</span><span>
-</span><span id="line-23"></span><span class="hs-special">)</span><span>
-</span><span id="line-24"></span><span>
-</span><span id="line-25"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-26"></span><span class="hs-comment">-- import</span><span>
-</span><span id="line-27"></span><span>
-</span><span id="line-28"></span><span class="hs-keyword">where</span><span>
-</span><span id="line-29"></span><span>
-</span><span id="line-30"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Either</span></span><span>
-</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span>          </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
-</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.String.Utils</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Utils</span></span><span>
-</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>         </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
-</span><span id="line-34"></span><span>
-</span><span id="line-35"></span><span class="hs-comment">--import           CstrDef</span><span>
-</span><span id="line-36"></span><span class="hs-comment">--import           CstrId</span><span>
-</span><span id="line-37"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTHappy</span></span><span>
-</span><span id="line-38"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.Model.Symbolic.Expr.html"><span class="hs-identifier">Lattest.Model.Symbolic.Expr</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Type"><span class="hs-identifier">Type</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier">Constant</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
-</span><span id="line-39"></span><span class="hs-comment">--import           SortId</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-8"></span><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
+</span><span id="line-9"></span><span class="hs-pragma">{-# LANGUAGE FlexibleInstances #-}</span><span>
+</span><span id="line-10"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.SMT2TXS</span><span>
+</span><span id="line-11"></span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Translate SMT results to TorXakis Expr's</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- export</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--SMTExpr,</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--smtValueToExpr   --  :: SMTValue -&gt; TxsDefs -&gt; SortId -&gt; Walue</span><span>
+</span><span id="line-22"></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- import</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Either</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span>          </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.String.Utils</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Utils</span></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>         </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-comment">--import           CstrDef</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--import           CstrId</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTHappy</span></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.Model.Symbolic.Expr.html"><span class="hs-identifier">Lattest.Model.Symbolic.Expr</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Type"><span class="hs-identifier">Type</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier">Constant</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--import           SortId</span><span>
+</span><span id="line-39"></span><span>
 </span><span id="line-40"></span><span>
-</span><span id="line-41"></span><span>
-</span><span id="line-42"></span><span class="hs-comment">-- ---------------------------------------------------------</span><span>
-</span><span id="line-43"></span><span class="hs-comment">-- Note:</span><span>
-</span><span id="line-44"></span><span class="hs-comment">-- performance might improve, when parsing of smt value</span><span>
-</span><span id="line-45"></span><span class="hs-comment">-- and mapping onto Torxakis data structure is combined</span><span>
-</span><span id="line-46"></span><span class="hs-comment">-- into a single attribute grammar</span><span>
-</span><span id="line-47"></span><span class="hs-comment">-- ----------------------------------------------------------</span><span>
-</span><span id="line-48"></span><span>
-</span><span id="line-49"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-50"></span><span class="annot"><span class="hs-comment">-- | lookup a constructor given its sort and constructor name in the given TorXakis definitions</span></span><span>
-</span><span id="line-51"></span><span class="hs-comment">{-lookupConstructor :: Map.Map CstrId CstrDef -&gt; SortId -&gt; Text -&gt; CstrId
+</span><span id="line-41"></span><span class="hs-comment">-- ---------------------------------------------------------</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- Note:</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- performance might improve, when parsing of smt value</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- and mapping onto Torxakis data structure is combined</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- into a single attribute grammar</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- ----------------------------------------------------------</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-49"></span><span class="annot"><span class="hs-comment">-- | lookup a constructor given its sort and constructor name in the given TorXakis definitions</span></span><span>
+</span><span id="line-50"></span><span class="hs-comment">{-lookupConstructor :: Map.Map CstrId CstrDef -&gt; SortId -&gt; Text -&gt; CstrId
 lookupConstructor cstrMap sid n
   =  case [ cstr
           | cstr@CstrId{ CstrId.name = n', cstrsort = sid' } &lt;- Map.keys cstrMap
@@ -60,9 +59,9 @@ lookupConstructor cstrMap sid n
                       show sid ++ &quot; and name &quot; ++ show n ++ &quot;\n&quot;
      }
 -}</span><span>
+</span><span id="line-62"></span><span>
 </span><span id="line-63"></span><span>
-</span><span id="line-64"></span><span>
-</span><span id="line-65"></span><span class="hs-comment">{-
+</span><span id="line-64"></span><span class="hs-comment">{-
 smtValueToExpr (SMTConstructor cname argValues) cstrMap srt =
     let nameSort = SortId.name srt in
         if T.isPrefixOf (nameSort &lt;&gt; &quot;$&quot;) cname
@@ -84,4 +83,4 @@ smtValueToExpr (SMTConstructor cname argValues) cstrMap srt =
             else Left $ &quot;TXS SMT2TXS smtValueToExpr: CstrName &quot; ++ show cname ++
                           &quot; does not start with sort &quot; ++ show nameSort ++ &quot;\n&quot;
 -}</span><span>
-</span><span id="line-87"></span></pre></body></html>
+</span><span id="line-86"></span></pre></body></html>

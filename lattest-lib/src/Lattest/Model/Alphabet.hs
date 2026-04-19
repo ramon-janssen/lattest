@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 {-|
     This module contains the definitions and semantics of different forms of observable actions, and inputs used in testing experiments.
@@ -74,6 +75,8 @@ where
 import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
 import qualified Data.List as List (intercalate)
 import Lattest.Model.Symbolic.Expr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign, Constant(..), constType)
+import Data.Aeson(FromJSON, ToJSON)
+import GHC.Generics (Generic)
 
 {- |
     If an input type is an 'TestChoice' to a type of observable actions, this means that
@@ -279,7 +282,11 @@ instance (Show g) => Show (SymInteract g) where
 
 type SymGuard = Expr Bool
 
-data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor)
+data GateValue g = GateValue {gate :: g, values :: [Constant]} deriving (Eq, Ord, Functor, Generic)
+
+instance FromJSON a => FromJSON (GateValue a)
+instance ToJSON a => ToJSON (GateValue a)
+
 type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where

@@ -1,55 +1,54 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+This is a modified version of:
 TorXakis - Model Based Testing
-Copyright (c) 2015-2017 TNO and Radboud University
-See LICENSE at root directory of this repository.
+See LICENSE in the parent SMT folder.
 -}</span><span>
 </span><span id="line-6"></span><span>
-</span><span id="line-7"></span><span>
-</span><span id="line-8"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-9"></span><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
-</span><span id="line-10"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.SMTString</span><span>
-</span><span id="line-11"></span><span>
-</span><span id="line-12"></span><span class="hs-keyword">where</span><span>
-</span><span id="line-13"></span><span>
-</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span>
-</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
-</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
-</span><span id="line-17"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Text.Printf</span></span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-8"></span><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.SMTString</span><span>
+</span><span id="line-10"></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-12"></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Text.Printf</span></span><span>
+</span><span id="line-17"></span><span>
 </span><span id="line-18"></span><span>
-</span><span id="line-19"></span><span>
-</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTStringAlex</span></span><span>
-</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTStringHappy</span></span><span>
-</span><span id="line-22"></span><span>
-</span><span id="line-23"></span><span class="hs-comment">-- | Encode String to SMT.</span><span>
-</span><span id="line-24"></span><span class="hs-comment">--</span><span>
-</span><span id="line-25"></span><span class="hs-comment">--   According to smt-lib-version 2.5 standard (http://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.5-r2015-06-28.pdf),</span><span>
-</span><span id="line-26"></span><span class="hs-comment">--   quote and escape characters are escaped.</span><span>
-</span><span id="line-27"></span><span class="hs-comment">--   </span><span>
-</span><span id="line-28"></span><span class="hs-comment">--   Furthermore, prevent CVC4 Parse Error &quot;Extended/unprintable characters are not part of SMT-LIB, and they must be encoded as escape sequences&quot;</span><span>
-</span><span id="line-29"></span><span class="annot"><a href="Lattest.SMT.SMTString.html#stringToSMT"><span class="hs-identifier hs-type">stringToSMT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
-</span><span id="line-30"></span><span id="stringToSMT"><span class="annot"><span class="annottext">stringToSMT :: Text -&gt; Text
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTStringAlex</span></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTStringHappy</span></span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- | Encode String to SMT.</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--</span><span>
+</span><span id="line-24"></span><span class="hs-comment">--   According to smt-lib-version 2.5 standard (http://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.5-r2015-06-28.pdf),</span><span>
+</span><span id="line-25"></span><span class="hs-comment">--   quote and escape characters are escaped.</span><span>
+</span><span id="line-26"></span><span class="hs-comment">--   </span><span>
+</span><span id="line-27"></span><span class="hs-comment">--   Furthermore, prevent CVC4 Parse Error &quot;Extended/unprintable characters are not part of SMT-LIB, and they must be encoded as escape sequences&quot;</span><span>
+</span><span id="line-28"></span><span class="annot"><a href="Lattest.SMT.SMTString.html#stringToSMT"><span class="hs-identifier hs-type">stringToSMT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-29"></span><span id="stringToSMT"><span class="annot"><span class="annottext">stringToSMT :: Text -&gt; Text
 </span><a href="Lattest.SMT.SMTString.html#stringToSMT"><span class="hs-identifier hs-var hs-var">stringToSMT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Text) -&gt; Text -&gt; Text
 </span><span class="hs-identifier hs-var">T.concatMap</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Text
-</span><a href="#local-6989586621679346106"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span>
-</span><span id="line-31"></span><span>    </span><span class="hs-keyword">where</span><span>
-</span><span id="line-32"></span><span>        </span><span class="annot"><a href="#local-6989586621679346106"><span class="hs-identifier hs-type">toSMTChar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
-</span><span id="line-33"></span><span>        </span><span id="local-6989586621679346106"><span class="annot"><span class="annottext">toSMTChar :: Char -&gt; Text
-</span><a href="#local-6989586621679346106"><span class="hs-identifier hs-var hs-var">toSMTChar</span></a></span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679347965"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span>
+</span><span id="line-30"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-31"></span><span>        </span><span class="annot"><a href="#local-6989586621679347965"><span class="hs-identifier hs-type">toSMTChar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-32"></span><span>        </span><span id="local-6989586621679347965"><span class="annot"><span class="annottext">toSMTChar :: Char -&gt; Text
+</span><a href="#local-6989586621679347965"><span class="hs-identifier hs-var hs-var">toSMTChar</span></a></span></span><span> </span><span class="annot"><span class="annottext">Char
 </span><span class="hs-char">'&quot;'</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text
 </span><span class="hs-string">&quot;\&quot;\&quot;&quot;</span></span><span>
-</span><span id="line-34"></span><span>        </span><span class="annot"><a href="#local-6989586621679346106"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span id="line-33"></span><span>        </span><span class="annot"><a href="#local-6989586621679347965"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span class="annot"><span class="annottext">Char
 </span><span class="hs-char">'\\'</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text
 </span><span class="hs-string">&quot;\\\\&quot;</span></span><span>
-</span><span id="line-35"></span><span>        </span><span class="annot"><a href="#local-6989586621679346106"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679346107"><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679346107"><span class="hs-identifier hs-var">c</span></a></span></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
+</span><span id="line-34"></span><span>        </span><span class="annot"><a href="#local-6989586621679347965"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679347966"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679347966"><span class="hs-identifier hs-var">c</span></a></span></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
 </span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679346107"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+</span><a href="#local-6989586621679347966"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
 forall a. Ord a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Int
 </span><span class="hs-number">32</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
 </span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
 </span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679346107"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+</span><a href="#local-6989586621679347966"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
 forall a. Ord a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
 </span><span class="hs-number">127</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Text
@@ -60,15 +59,15 @@ forall r. PrintfType r =&gt; String -&gt; r
 </span><span class="hs-identifier hs-var">printf</span></span><span> </span><span class="annot"><span class="annottext">String
 </span><span class="hs-string">&quot;\\x%02x&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Int
 </span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679346107"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
-</span><span id="line-36"></span><span>        </span><span class="annot"><a href="#local-6989586621679346106"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679346113"><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679346113"><span class="hs-identifier hs-var">c</span></a></span></span><span>                                   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Text
+</span><a href="#local-6989586621679347966"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>        </span><span class="annot"><a href="#local-6989586621679347965"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679347972"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679347972"><span class="hs-identifier hs-var">c</span></a></span></span><span>                                   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Text
 </span><span class="hs-identifier hs-var">T.singleton</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679346113"><span class="hs-identifier hs-var">c</span></a></span><span>
-</span><span id="line-37"></span><span>        </span><span>
-</span><span id="line-38"></span><span class="annot"><span class="hs-comment">-- | Decode SMT to String.</span></span><span>
-</span><span id="line-39"></span><span class="annot"><a href="Lattest.SMT.SMTString.html#stringFromSMT"><span class="hs-identifier hs-type">stringFromSMT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
-</span><span id="line-40"></span><span id="stringFromSMT"><span class="annot"><span class="annottext">stringFromSMT :: Text -&gt; Text
+</span><a href="#local-6989586621679347972"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-36"></span><span>        </span><span>
+</span><span id="line-37"></span><span class="annot"><span class="hs-comment">-- | Decode SMT to String.</span></span><span>
+</span><span id="line-38"></span><span class="annot"><a href="Lattest.SMT.SMTString.html#stringFromSMT"><span class="hs-identifier hs-type">stringFromSMT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-39"></span><span id="stringFromSMT"><span class="annot"><span class="annottext">stringFromSMT :: Text -&gt; Text
 </span><a href="Lattest.SMT.SMTString.html#stringFromSMT"><span class="hs-identifier hs-var hs-var">stringFromSMT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Text
 </span><span class="hs-identifier hs-var">T.pack</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Text) -&gt; (Text -&gt; String) -&gt; Text -&gt; Text
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
@@ -80,5 +79,5 @@ forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; String
 </span><span class="hs-identifier hs-var">T.unpack</span></span><span>
-</span><span id="line-41"></span><span>
-</span><span id="line-42"></span></pre></body></html>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span></pre></body></html>
