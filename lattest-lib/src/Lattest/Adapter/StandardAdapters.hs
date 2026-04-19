@@ -29,7 +29,6 @@ connectJSONSocketAdapter,
 connectJSONSocketAdapterWith,
 connectJSONSocketAdapterAcceptingInputs,
 connectJSONSocketAdapterAcceptingInputsWith,
-connectJSONSocketAdapterSTSwithQuiescence,
 -- * Transformations on Adapters
 -- ** Encoding and Decoding
 encodeUtf8,
@@ -44,7 +43,10 @@ acceptingInputsWithIncompletenessAsFailures,
 withQuiescence,
 withQuiescenceMillis,
 withInputDelay,
-withInputDelayMillis
+withInputDelayMillis,
+-- ** Adapters with Data Parameters
+asSymbolicSuspAdapter,
+connectJSONSocketAdapterSTSwithQuiescence
 )
 where
 

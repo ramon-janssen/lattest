@@ -32,7 +32,7 @@ stsExample =
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
-        initConf = return 0 -- return $ Aut.IntrpState 0 stsExampleInitAssign :: FreeLattice (Aut.IntrpState Integer)
+        initConf = return 0
         switches = \q -> case q of
             0 -> Map.fromList [(water, pure (Aut.stsTLoc waterGuard waterAssign, 1)),
                                 (coffee, pure (Aut.stsTLoc coffeeGuard noAssignment, 2))]
@@ -54,8 +54,10 @@ run = do
 
     putStrLn $ "connecting to SUT..."
     let quiesenceMillis = 200
+    let delayMillis = 100
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    adap <- connectJSONSocketAdapterSTSwithQuiescence quiesenceMillis :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
+    adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelay delayMillis >>= asSymbolicSuspAdapter
+                 :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
     
     putStrLn $ "starting test..."
     let nrSteps = 50

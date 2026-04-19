@@ -282,7 +282,7 @@ instance (Show g) => Show (SymInteract g) where
 
 type SymGuard = Expr Bool
 
-data GateValue g = GateValue g [Constant] deriving (Eq, Ord, Functor, Generic)
+data GateValue g = GateValue {gate :: g, values :: [Constant]} deriving (Eq, Ord, Functor, Generic)
 
 instance FromJSON a => FromJSON (GateValue a)
 instance ToJSON a => ToJSON (GateValue a)
