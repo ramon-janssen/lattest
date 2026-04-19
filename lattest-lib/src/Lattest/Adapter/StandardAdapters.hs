@@ -384,19 +384,57 @@ withQuiescence timeoutDiff adap = do
         close = ensureObservationTime >> close adap
         }
 
--- | Transform the given Adapter by introducing a short delay after every provided input. See 'withInputDelay', where the delay time given in milliseconds.
-withInputDelayMillis :: Int -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
-withInputDelayMillis timeDelayMillis = withInputDelay $ secondsToNominalDiffTime $ 0.001 * realToFrac timeDelayMillis
+withInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withInputDelay timeDelayDiff adap = do
+    lastObservationTime <- newEmptyTMVarIO
+    inputBlocked <- newTVarIO False
+    let updateInputTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
+            mLastTime <- tryReadTMVar lastInputTime
+            case mLastTime of
+                Nothing -> writeTMVar lastInputTime currentTime
+                Just lastTime -> ifM_ (lastTime < currentTime) $ writeTMVar lastInputTime currentTime
+        getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
+            lastTime <- readTMVar lastInputTime -- should never be nothing, the unblocker ensures this
+            let targetTime = addUTCTime timeDelayDiff lastTime
+                currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
+                                                        -- currentTime, in particular when blocking on reading lastObservationTime
+            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
+        waitUntilDelay = do
+            inputTime <- atomically $ readTMVar lastInputTime
+            currentTime <- getCurrentTime
+            waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
+            ifM_ (waitTimeMicros > 0) $ do
+                delay waitTimeMicros
+                waitUntilDelay
+        unblocker = do
+            atomically $ waitUntil $ readTVar inputBlocked
+            waitUntilDelay
+            atomically $ writeTVar inputBlocked False
+            unblocker
+    
+
+-- | Transform the given Adapter by introducing a short delay after every provided input. See 'withInputDelay', with the delay time given in milliseconds.
+withSuccessiveInputDelayMillis :: Int -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withSuccessiveInputDelayMillis timeDelayMillis = withInputDelay $ secondsToNominalDiffTime $ 0.001 * realToFrac timeDelayMillis
 
 {-|
     Transform the given Adapter by introducing a short delay after every provided input. After an input is provided, then observing the adapter (or
     even calling `hasObservation`) will block until the specified time duration has passed, or until an output is observed, or until the action stream
     of the adapter closes, whichever comes first.
     
-    This may be used to slow down a tester which performs inputs too fast for observation responses to occur.
+    This may be used to slow down a tester which performs successive inputs too fast for observation responses to occur.
+    
+    More precisely, this may be needed in case of a state with incoming transitions for inputs, and outgoing transitions for /both/ inputs and
+    outputs. Without input delay, the tester may perform one input to enter the state, and immediately perform the second input from that state,
+    whereas the wrapped adapter may receive the first input and respond with an output, followed by the second input. The wrapped adapter and the
+    tester then observe different traces of actions.
+    
+    Note: this function does /not/ help to resolve states with an incoming transition for an /output/, and transitions for both inputs and output. To
+    resolve that situation, use `withInputDelay` instead.
 -}
-withInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
-withInputDelay timeDelayDiff adap = do
+withSuccessiveInputDelay :: NominalDiffTime -> Adapter (IOAct i o) i' -> IO (Adapter (IOAct i o) i')
+withSuccessiveInputDelay timeDelayDiff adap = do
+    -- FIXME loads of code duplication with withInputDelay, deduplicate this
     lastInputTime <- newEmptyTMVarIO
     observationBlocked <- newTVarIO False
     let updateInputTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
