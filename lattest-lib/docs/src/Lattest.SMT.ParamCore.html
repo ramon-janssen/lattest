@@ -1,83 +1,82 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{-
+This is a modified version of:
 TorXakis - Model Based Testing
-Copyright (c) 2015-2017 TNO and Radboud University
-See LICENSE at root directory of this repository.
+See LICENSE in the parent SMT folder.
 -}</span><span>
 </span><span id="line-6"></span><span>
-</span><span id="line-7"></span><span>
-</span><span id="line-8"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-9"></span><span>
-</span><span id="line-10"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.ParamCore</span><span>
-</span><span id="line-11"></span><span>
-</span><span id="line-12"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-13"></span><span class="hs-comment">-- </span><span>
-</span><span id="line-14"></span><span class="hs-comment">-- TorXakis Core Parameters</span><span>
-</span><span id="line-15"></span><span class="hs-comment">-- </span><span>
-</span><span id="line-16"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-17"></span><span class="hs-comment">-- export</span><span>
-</span><span id="line-18"></span><span>
-</span><span id="line-19"></span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier">Params</span></a></span><span>                 </span><span class="hs-comment">-- Params = Map.Map String (String,String-&gt;Bool)</span><span>
-</span><span id="line-20"></span><span class="hs-comment">--, ImpRel (..)</span><span>
-</span><span id="line-21"></span><span class="hs-comment">--, InputCompletion (..)</span><span>
-</span><span id="line-22"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#initParams"><span class="hs-identifier">initParams</span></a></span><span>             </span><span class="hs-comment">-- initParams :: Map.Map String (String,String-&gt;Bool)</span><span>
-</span><span id="line-23"></span><span>                         </span><span class="hs-comment">-- initial values of parameters</span><span>
-</span><span id="line-24"></span><span class="hs-special">)</span><span>
-</span><span id="line-25"></span><span>
-</span><span id="line-26"></span><span class="hs-keyword">where</span><span>
-</span><span id="line-27"></span><span>
-</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Char</span></span><span>
-</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span>  </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-8"></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.SMT.ParamCore</span><span>
+</span><span id="line-10"></span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- </span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- TorXakis Core Parameters</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- </span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- export</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier">Params</span></a></span><span>                 </span><span class="hs-comment">-- Params = Map.Map String (String,String-&gt;Bool)</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--, ImpRel (..)</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--, InputCompletion (..)</span><span>
+</span><span id="line-21"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#initParams"><span class="hs-identifier">initParams</span></a></span><span>             </span><span class="hs-comment">-- initParams :: Map.Map String (String,String-&gt;Bool)</span><span>
+</span><span id="line-22"></span><span>                         </span><span class="hs-comment">-- initial values of parameters</span><span>
+</span><span id="line-23"></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Char</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span>  </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-29"></span><span>
 </span><span id="line-30"></span><span>
-</span><span id="line-31"></span><span>
-</span><span id="line-32"></span><span class="hs-comment">----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-33"></span><span class="hs-comment">-- Params</span><span>
-</span><span id="line-34"></span><span>
-</span><span id="line-35"></span><span class="hs-keyword">type</span><span>  </span><span id="Params"><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-var">Params</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-glyph">-&gt;</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span class="hs-comment">----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- Params</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">type</span><span>  </span><span id="Params"><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-var">Params</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-glyph">-&gt;</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>
 </span><span id="line-36"></span><span>
-</span><span id="line-37"></span><span>
-</span><span id="line-38"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-39"></span><span class="hs-comment">-- types of parameters</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- types of parameters</span><span>
+</span><span id="line-39"></span><span>
 </span><span id="line-40"></span><span>
-</span><span id="line-41"></span><span>
-</span><span id="line-42"></span><span class="hs-comment">-- Represent String a positive integer within the given range?</span><span>
-</span><span id="line-43"></span><span class="hs-comment">-- lower and upper bound are inclusive.</span><span>
-</span><span id="line-44"></span><span class="annot"><a href="Lattest.SMT.ParamCore.html#withinRangeInt"><span class="hs-identifier hs-type">withinRangeInt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
-</span><span id="line-45"></span><span id="withinRangeInt"><span class="annot"><span class="annottext">withinRangeInt :: Int -&gt; Int -&gt; String -&gt; Bool
-</span><a href="Lattest.SMT.ParamCore.html#withinRangeInt"><span class="hs-identifier hs-var hs-var">withinRangeInt</span></a></span></span><span> </span><span id="local-6989586621679345661"><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679345661"><span class="hs-identifier hs-var">low</span></a></span></span><span> </span><span id="local-6989586621679345662"><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679345662"><span class="hs-identifier hs-var">high</span></a></span></span><span> </span><span id="local-6989586621679345663"><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345663"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span id="line-41"></span><span class="hs-comment">-- Represent String a positive integer within the given range?</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- lower and upper bound are inclusive.</span><span>
+</span><span id="line-43"></span><span class="annot"><a href="Lattest.SMT.ParamCore.html#withinRangeInt"><span class="hs-identifier hs-type">withinRangeInt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-44"></span><span id="withinRangeInt"><span class="annot"><span class="annottext">withinRangeInt :: Int -&gt; Int -&gt; String -&gt; Bool
+</span><a href="Lattest.SMT.ParamCore.html#withinRangeInt"><span class="hs-identifier hs-var hs-var">withinRangeInt</span></a></span></span><span> </span><span id="local-6989586621679347520"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679347520"><span class="hs-identifier hs-var">low</span></a></span></span><span> </span><span id="local-6989586621679347521"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679347521"><span class="hs-identifier hs-var">high</span></a></span></span><span> </span><span id="local-6989586621679347522"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347522"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
 </span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Bool
 forall a. [a] -&gt; Bool
 forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
 </span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345663"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><a href="#local-6989586621679347522"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
 </span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; Bool
 forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Bool
 </span><span class="hs-identifier hs-var">all</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
 </span><span class="hs-identifier hs-var">Char.isDigit</span></span><span> </span><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345663"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
-</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679345671"><span class="annot"><span class="annottext">v :: Int
-</span><a href="#local-6989586621679345671"><span class="hs-identifier hs-var hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Int
+</span><a href="#local-6989586621679347522"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679347530"><span class="annot"><span class="annottext">v :: Int
+</span><a href="#local-6989586621679347530"><span class="hs-identifier hs-var hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Int
 forall a. Read a =&gt; String -&gt; a
 </span><span class="hs-identifier hs-var">read</span></span><span> </span><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345663"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679345661"><span class="hs-identifier hs-var">low</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+</span><a href="#local-6989586621679347522"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679347520"><span class="hs-identifier hs-var">low</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
 forall a. Ord a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679345671"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><a href="#local-6989586621679347530"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
 </span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679345671"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+</span><a href="#local-6989586621679347530"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
 forall a. Ord a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679345662"><span class="hs-identifier hs-var">high</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
-</span><span id="line-46"></span><span>      </span><span>
-</span><span id="line-47"></span><span>
-</span><span id="line-48"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-49"></span><span class="hs-comment">-- parameter initialization</span><span>
-</span><span id="line-50"></span><span>
-</span><span id="line-51"></span><span class="annot"><a href="Lattest.SMT.ParamCore.html#initParams"><span class="hs-identifier hs-type">initParams</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span>
-</span><span id="line-52"></span><span id="initParams"><span class="annot"><span class="annottext">initParams :: Params
+</span><a href="#local-6989586621679347521"><span class="hs-identifier hs-var">high</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>      </span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- parameter initialization</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="annot"><a href="Lattest.SMT.ParamCore.html#initParams"><span class="hs-identifier hs-type">initParams</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.ParamCore.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span>
+</span><span id="line-51"></span><span id="initParams"><span class="annot"><span class="annottext">initParams :: Params
 </span><a href="Lattest.SMT.ParamCore.html#initParams"><span class="hs-identifier hs-var hs-var">initParams</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">[(String, (String, String -&gt; Bool))] -&gt; Params
 forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
 </span><span class="hs-identifier hs-var">Map.fromList</span></span><span> </span><span class="annot"><span class="annottext">([(String, (String, String -&gt; Bool))] -&gt; Params)
@@ -88,20 +87,20 @@ forall a b. (a -&gt; b) -&gt; a -&gt; b
 -&gt; [(String, String, String -&gt; Bool)]
 -&gt; [(String, (String, String -&gt; Bool))]
 forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
-</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679345675"><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345675"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679345676"><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345676"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679345677"><span class="annot"><span class="annottext">String -&gt; Bool
-</span><a href="#local-6989586621679345677"><span class="hs-identifier hs-var">z</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345675"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
-</span><a href="#local-6989586621679345676"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String -&gt; Bool
-</span><a href="#local-6989586621679345677"><span class="hs-identifier hs-var">z</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
-</span><span id="line-53"></span><span>
-</span><span id="line-54"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-55"></span><span>  </span><span class="hs-special">[</span><span>
-</span><span id="line-56"></span><span class="hs-comment">-- no params at the moment</span><span>
-</span><span id="line-57"></span><span>  </span><span class="hs-special">]</span><span>
-</span><span id="line-58"></span><span>
-</span><span id="line-59"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-60"></span><span class="hs-comment">--                                                                                           --</span><span>
-</span><span id="line-61"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
-</span><span id="line-62"></span></pre></body></html>
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679347534"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347534"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679347535"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347535"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679347536"><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679347536"><span class="hs-identifier hs-var">z</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347534"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679347535"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679347536"><span class="hs-identifier hs-var">z</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-54"></span><span>  </span><span class="hs-special">[</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- no params at the moment</span><span>
+</span><span id="line-56"></span><span>  </span><span class="hs-special">]</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--                                                                                           --</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
+</span><span id="line-61"></span></pre></body></html>
