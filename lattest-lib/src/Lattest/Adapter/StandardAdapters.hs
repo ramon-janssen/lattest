@@ -39,7 +39,7 @@ parseJSONActionsFromSut,
 -- ** Observing Inputs
 acceptingInputs,
 acceptingInputsWithIncompletenessAsFailures,
--- ** Timing and Quiescences
+-- ** Timing and Quiescence
 withQuiescence,
 withQuiescenceMillis,
 withInputDelay,
@@ -101,8 +101,6 @@ import Lattest.Util.Utils(flipCoin, takeRandom)
 import Lattest.Util.IOUtils(whileM, statefulIO, statefulIO', doAfter)
 import Data.List(singleton)
 import System.IO.Streams.Combinators(contramap)
-
-import Debug.Trace(trace)
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends 'String's encoded in utf-8.
 encodeUtf8 :: Adapter act ByteString -> IO (Adapter act String)
