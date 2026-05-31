@@ -420,14 +420,14 @@ withInputDelay timeDelayDiff adap = do
         waitUntilDelay = do
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
-            ifM_ (waitTimeMicros > 0) $ do
+            trace ("wait time " ++ show waitTimeMicros ++ " μs") $ ifM_ (waitTimeMicros > 0) $ do
                 delay waitTimeMicros
                 waitUntilDelay
         unblocker = do
             -- this exists only because STM-monads cannot wait for a given delay, so this is a monitor that waits for the right TVar state to do so
-            atomically $ waitUntil $ readTVar inputBlocked &&^ (not <$> readTVar updateLastObservationTime)
-            waitUntilDelay
-            atomically $ writeTVar inputBlocked False
+            trace ("unblocker waiting for block") $ atomically $ waitUntil $ readTVar inputBlocked &&^ (not <$> readTVar updateLastObservationTime)
+            trace ("unblocker waiting for delay") $ waitUntilDelay
+            trace ("unblocker unblocks") $ atomically $ writeTVar inputBlocked False
             unblocker
         observationTimeUpdater = do
             -- this exists only because STM-monads cannot fetch the current time, so this is a monitor that waits for the right TVar state to do so
@@ -448,16 +448,16 @@ withInputDelay timeDelayDiff adap = do
         case mInCmd of
             Just inCmd -> do
                 currentTime <- getCurrentTime
-                atomically $ do
+                trace ("start of input at " ++ show currentTime) atomically $ do
                     -- sending an input command is strictly not an observation, but treat it as an observation as well: reset the observation time
                     updateObservationTime currentTime
                     writeTVar inputBlocked True
                     writeTVar discardInput False
-                discard <- atomically $ do
+                discard <- trace ("waiting for unblock") $ atomically $ do
                     waitUntilUnblocked
                     readTVar discardInput
                     -- the previous atomic block set discardInput to False, send the input iff it wasn't set to True (due to an observation) in the meantime
-                ifM_ (not discard) $ Streams.write (Just inCmd) $ inputCommandsToSut adap
+                trace ("discarding input: " ++ show discard) $ ifM_ (not discard) $ Streams.write (Just inCmd) $ inputCommandsToSut adap
             Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
     actionsFromSut' <- makeTInputStream readFromSut (hasInput $ actionsFromSut adap)
     return $ Adapter {
