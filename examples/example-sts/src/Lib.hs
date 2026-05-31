@@ -53,7 +53,7 @@ run = do
     smtRef <- SMT.createSMTRef smtProc smtLog
 
     putStrLn $ "connecting to SUT..."
-    let quiesenceMillis = 300
+    let quiesenceMillis = 150
     let delayMillis = 100
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
     adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelayMillis delayMillis >>= asSymbolicSuspAdapter
