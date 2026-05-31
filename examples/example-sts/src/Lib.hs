@@ -53,10 +53,10 @@ run = do
     smtRef <- SMT.createSMTRef smtProc smtLog
 
     putStrLn $ "connecting to SUT..."
-    let quiesenceMillis = 200
+    let quiesenceMillis = 300
     let delayMillis = 100
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelay delayMillis >>= asSymbolicSuspAdapter
+    adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelayMillis delayMillis >>= asSymbolicSuspAdapter
                  :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
     
     putStrLn $ "starting test..."
