@@ -165,7 +165,7 @@ loopbackAdapter adap fduplicate fmerge = do
         close = close adap
         }
 
-outputToActionIS :: Adapter a i -> TInputStream (IOAct i a)
+outputToActionIS :: Adapter a i1 -> TInputStream (IOAct i2 a)
 outputToActionIS adap = mapUnbuffered Out (error "acceptingInputs buffer from SUT does not support pushback") (actionsFromSut adap)
 actionToInputOS :: TestChoice a1 a2 => OutputStream a2 -> IO (OutputStream a1)
 actionToInputOS actionOS = streamSequence actionOS >>= contramap choiceToActs

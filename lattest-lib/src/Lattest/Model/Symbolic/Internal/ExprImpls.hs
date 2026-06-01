@@ -534,6 +534,7 @@ insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
 insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
 insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
 insertIntoValuation v@(Variable name StringType) c = assignValue v (fromConst' c name StringType :: String)
+fromConst' :: (ConstType a, Show b) => Constant -> String -> b -> a
 fromConst' smtValue name t = case fromConst smtValue of
     Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
     Right val -> val

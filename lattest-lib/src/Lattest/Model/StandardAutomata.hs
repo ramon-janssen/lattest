@@ -141,12 +141,16 @@ nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuous
     listToNonDet (list@(_:_)) () t = vacuousLoc <#> NonDet (Set.fromList list)
     listToNonDet [] () t = implicitDestination t
 
+combineNonDet :: JoinSemiLattice a => a -> a -> Maybe a
 combineNonDet x y = Just $ x \/ y
 
+combineDet :: p1 -> p2 -> Maybe a
 combineDet _ _ = Nothing
 
+vacuousTrans :: (a, b, d) -> (a, b, (), d)
 vacuousTrans (a,b,c) = (a,b,(),c)
 
+vacuousLoc :: b -> ((), b)
 vacuousLoc l = ((), l)
 
 transFromRelWith :: (Ord loc, Ord t) =>

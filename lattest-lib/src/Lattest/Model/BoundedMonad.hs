@@ -318,6 +318,7 @@ class BoundedConfiguration m where
     isUnderspecified :: m t -> Bool -- ^ Is this state configuration underspecified?
 
 -- | Extract the current 'Specifiedness' from a bounded monad.
+specifiedness :: BoundedConfiguration m => m t -> Specifiedness
 specifiedness c
     | isForbidden c = Forbidden
     | isUnderspecified c = Underspecified

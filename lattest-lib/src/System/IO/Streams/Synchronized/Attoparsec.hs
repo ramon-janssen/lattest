@@ -11,6 +11,7 @@ where
 
 import           Control.Exception(Exception)
 import           Control.Monad(unless)
+import           Data.String(IsString)
 import           Control.Monad.Extra((||^), (&&^))
 import qualified Data.Attoparsec.ByteString as C8(parse,feed)
 import qualified Data.Attoparsec.ByteString as C8(Parser)
@@ -69,6 +70,7 @@ parseFromStream' stateVar blockUntilFinished is = do
     unread' (Done rest result) = unread rest >> return (Done "" result)
     unread' partial = return partial
 
+errorContext :: IsString a => IResult a r -> (a, [String], String)
 errorContext (Fail residual ctx msg) = (residual, ctx, msg)
 errorContext (Partial _) = ("", [], "")
 
