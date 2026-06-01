@@ -8,6 +8,7 @@ See LICENSE in the parent SMT folder.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 module Lattest.SMT.TXS2SMT
 
 -- ----------------------------------------------------------------------------------------- --
