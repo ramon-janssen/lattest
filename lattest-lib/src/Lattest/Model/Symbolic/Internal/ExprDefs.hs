@@ -41,9 +41,7 @@ import           Data.Set         (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
-import           Data.Text        (Text)
-import qualified Data.Text as Text(length, pack, index, concat, unpack)
-import           GHC.Generics     (Generic)
+import qualified Data.Text as Text(pack, unpack)
 import           GHC.Integer (divInteger)
 
 import           Lattest.Model.Symbolic.Internal.FreeMonoidX
@@ -53,7 +51,7 @@ import           Lattest.Model.Symbolic.Internal.Sum
 
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
-import qualified Data.Aeson.Types as JSON
+
 import qualified Data.Scientific as DS
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)

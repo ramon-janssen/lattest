@@ -10,7 +10,7 @@ parserToInputStream
 where
 
 import           Control.Exception(Exception)
-import           Control.Monad(unless, void)
+import           Control.Monad(unless)
 import           Control.Monad.Extra((||^), (&&^))
 import qualified Data.Attoparsec.ByteString as C8(parse,feed)
 import qualified Data.Attoparsec.ByteString as C8(Parser)
@@ -18,16 +18,11 @@ import           Data.Attoparsec.Types(Parser,IResult(..))
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as C8(null)
 import           Data.List(intercalate)
-import           Data.String(IsString)
-import           Data.Typeable(Typeable)
-import           Data.IORef(IORef,newIORef,writeIORef,readIORef)
+
 import           System.IO.Streams.Synchronized (TInputStream,makeTInputStream,hasInput)
-import qualified System.IO.Streams as Streams (makeInputStream)
 import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
 import Control.Concurrent.STM.TVar(TVar, newTVarIO, writeTVar, readTVar)
-import Control.Concurrent.STM(STM)
-import System.IO.Streams.Synchronized(TInputStream, makeTInputStream)
-import Control.Concurrent.STM(throwSTM,catchSTM)
+import Control.Concurrent.STM(STM, throwSTM)
 
 parseFromStream :: TVar (Bool, IResult ByteString (Maybe r)) -> Parser ByteString (Maybe r) -> TInputStream ByteString -> STM (Maybe r)
 parseFromStream stateVar parser is = do

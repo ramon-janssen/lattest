@@ -22,19 +22,18 @@ tryReadIO'
 where
 
 import Prelude hiding (read, map)
-import Control.Concurrent.STM(STM, orElse, retry)
+import Control.Concurrent.STM(STM, retry)
 import Control.Concurrent.STM.TQueue(TQueue, newTQueueIO, writeTQueue, readTQueue, isEmptyTQueue, unGetTQueue)
-import Control.Concurrent.STM.TMVar(TMVar, newTMVarIO, takeTMVar, isEmptyTMVar)
-import Control.Concurrent.STM.TVar(TVar, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.STM.TMVar(TMVar, takeTMVar, isEmptyTMVar)
+import Control.Concurrent.STM.TVar(newTVarIO, readTVar, writeTVar)
 import Control.Exception(throwIO, Exception)
 import Control.Monad (void)
 import Data.List(singleton)
-import Data.Maybe(isJust)
+
 import GHC.Conc (atomically, forkIO)
-import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
-import qualified System.IO.Streams.Combinators as Streams (map)
-import qualified System.IO.Streams as Streams (read, write, writeTo)
-import Control.Monad.Extra((||^), (&&^))
+import System.IO.Streams (InputStream, OutputStream, makeOutputStream, connect)
+import qualified System.IO.Streams as Streams (write)
+import Control.Monad.Extra((||^))
 
 data TInputStream a = TInputStream {
     tRead :: STM (Maybe a),

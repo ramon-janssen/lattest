@@ -8,7 +8,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
-import System.FilePath (replaceExtension)
+
 import Data.List (isSuffixOf)
 
 {-|

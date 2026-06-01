@@ -26,15 +26,8 @@ module Lattest.SMT.SMT2TXS
 
 where
 
-import           Data.Either
-import qualified Data.Map          as Map
-import qualified Data.String.Utils as Utils
-import qualified Data.Text         as T
-
 --import           CstrDef
 --import           CstrId
-import           Lattest.SMT.SMTHappy
-import           Lattest.Model.Symbolic.Expr(Type(..), Constant(..))
 --import           SortId
 
 

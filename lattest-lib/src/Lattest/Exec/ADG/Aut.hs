@@ -12,13 +12,12 @@ import Data.Map as Map (Map, (!))
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.List as List
-import qualified Data.Foldable as Foldable
 import qualified Lattest.Model.Automaton as Automaton
 import qualified Lattest.Model.StandardAutomata as StandardAutomata
 import Lattest.Model.BoundedMonad(Det(..))
 import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct(..),Suspended(..))
 
-import Debug.Trace as Trace
+
 
 data Aut a b = Aut {initial :: (State a b), states :: Set (State a b), idStateMap :: (Map a (State a b)), inputs ::  (Set b), outputs :: (Set b)}
 

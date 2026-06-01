@@ -82,12 +82,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 where
 
 import           Control.Arrow   (first)
-import           Control.Exception ( assert )
 import qualified Data.List       as List
 import qualified Data.Map        as Map
-import           Data.Maybe      (fromMaybe)
 import qualified Data.Set        as Set
-import qualified Data.Text       as T
 --import           Text.Regex.TDFA
 
 import qualified Lattest.Model.Symbolic.Internal.Boute as Boute

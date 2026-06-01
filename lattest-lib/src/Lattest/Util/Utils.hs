@@ -27,7 +27,7 @@ import Data.Foldable(toList)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
-import Data.List(sort, head, group)
+import Data.List(sort, group)
 import System.Random(RandomGen, uniformR)
 import Control.Monad.Extra((||^), (&&^))
 import Data.OrdMonad as OM

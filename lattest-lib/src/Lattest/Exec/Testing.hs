@@ -45,13 +45,13 @@ where
 
 import Lattest.Model.Alphabet(TestChoice)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
-import Lattest.Model.BoundedMonad(BoundedConfiguration, BooleanConfiguration, isConclusive, isForbidden)
+import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
-import Lattest.SMT.SMTData(SMTRef, SmtEnv)
+import Lattest.SMT.SMTData(SMTRef)
 
 
 import Control.Exception(catch,evaluate)
-import Data.IORef(IORef)
+
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
 

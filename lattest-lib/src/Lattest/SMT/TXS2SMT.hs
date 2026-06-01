@@ -36,10 +36,7 @@ assertionsToSMT
 
 where
 
-import qualified Data.Map      as Map
-import           Data.Maybe
 import qualified Data.Set      as Set
-import qualified Data.List     as List
 import           Data.Text     (Text)
 import qualified Data.Text     as T
 
@@ -49,7 +46,7 @@ import           Lattest.Model.Symbolic.Internal.FreeMonoidX
 --import           FuncDef
 --import           FuncId
 --import           Lattest.SMT.RegexXSD2SMT
-import           Lattest.SMT.SMTData
+
 import           Lattest.SMT.SMTString
 --import           SortDef
 --import           SortId

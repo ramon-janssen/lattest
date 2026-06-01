@@ -72,9 +72,7 @@ toIOGateValue
 )
 where
 
-import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
-import qualified Data.List as List (intercalate)
-import Lattest.Model.Symbolic.Expr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign, Constant(..), constType)
+import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..))
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
 

@@ -15,14 +15,13 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), Constant(..), substConst, toConst)
-import Lattest.Model.Symbolic.Internal.ExprDefs(ExprView(..), Expr(..), eval)
-import Lattest.SMT.SMT(SMTRef,pop,getSolution,addAssertions,getSolvable,push,Solution,SolvableProblem(..),SMT)
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..))
+import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
 import Control.Arrow((&&&))
 import Control.Exception(throw)
-import Control.Monad(join)
+
 import Data.Foldable(toList)
 import qualified Data.Map as Map
 import GHC.Stack(callStack)

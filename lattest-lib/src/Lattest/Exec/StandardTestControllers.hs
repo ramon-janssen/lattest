@@ -57,41 +57,22 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, maybeFromInputInteraction, SuspendedIFGateValue, IOSuspGateValue)
-import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest,transRel,alphabet, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), After)
-import Lattest.Model.StandardAutomata(STS, IOSTS, STSIntrp, IOSTSIntrp, SuspInputAttemptSTSIntrp)
-import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration, underspecified, asDualExpr)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, SymGuard, IOSuspGateValue)
+import Lattest.Model.Automaton(AutSyntax,AutIntrpr(..), StepSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest, After)
+import Lattest.Model.StandardAutomata(IOSTSIntrp)
+import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
-import qualified Lattest.SMT.Config as Config(Config(..))
+
 import Lattest.SMT.SMT(SMTRef, runSMT)
 import Lattest.Util.Utils(takeRandom, takeJusts, flipCoin)
 
-import Data.Either(isLeft)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
-import qualified Data.Map as Map
-import Data.Maybe(fromJust)
-import qualified Data.Set as Set (size, elemAt, fromList, union)
-import List.Shuffle(shuffle)
-import Lattest.Adapter.Adapter(close)
-import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
-import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
-import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
-import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), IOSuspAct, Suspended(..), asSuspended, actToChoice, isInput)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, TransitionSemantics, FiniteMenu, specifiedMenu, stateConf, AutSyntax,syntacticAutomaton)
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, ConcreteAutIntrpr, interpretQuiescentConcrete)
-import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Util.Utils(takeRandom, takeJusts)
-
-import Data.Either(isLeft)
-import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import Data.Foldable(toList, forM_)
 import Control.Monad (forM)
 import qualified Data.Map as Map (keys, (!))
 import qualified Data.Set as Set (size, elemAt, fromList, union, empty, Set, singleton)
-import System.Random(RandomGen, StdGen, initStdGen, mkStdGen, uniformR)
+import System.Random(RandomGen, StdGen, initStdGen, mkStdGen)
 
 
 
