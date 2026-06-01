@@ -25,7 +25,7 @@ import System.Random(StdGen)
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
 -}
-accessSeqSelector :: (Ord q, Eq i, Eq o, Show i, Show o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
+accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
 accessSeqSelector aut targetState =
     let initState = case stateConf aut of
             Det q -> q
@@ -47,7 +47,7 @@ accessSeqSelector aut targetState =
 
 {- | A TestController that selects inputs according to the adaptive distinguishing sequence of the given automaton
 -}
-adgTestSelector :: (Ord q, Ord l, Eq l, Show l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector :: (Ord q, Ord l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
 adgTestSelector aut delta =
     let adgaut = case adgAutFromAutomaton aut delta of
                     Just a -> a
@@ -85,7 +85,7 @@ adgTestSelector aut delta =
 
 {- | A TestController that yields tests that tries to take an access sequence to the targetState and then executes the adaptive distinguishing sequence
 -}
-nCompleteSingleState :: (Ord q, Ord l, Show l) => ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q
+nCompleteSingleState :: (Ord q, Ord l) => ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q
                                                     -> TestController Det q q (IOAct l l) () (IOSuspAct l l) (((), [IOSuspAct l l]), Maybe (Det q)) i20 ([IOSuspAct l l], Maybe (Det q))
                                                     -> IO (TestController Det q q (IOAct l l) () (IOSuspAct l l) (Either (Either [IOAct l l] StdGen, Int) (Evidence l), (((), [IOSuspAct l l]), Maybe (Det q))) (Maybe l) ([IOSuspAct l l], Maybe (Det q)))
 nCompleteSingleState model seed nrSteps delta targetState observer = do

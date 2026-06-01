@@ -70,7 +70,7 @@ getNodeSizeCount (SplitGraph _ nodeMap) =
                               Nothing -> Map.insert count 1 map)
         Map.empty (List.map Set.size (Map.keys nodeMap))
 
-size :: (Ord a, Ord b) => (SplitGraph a b) -> Int
+size :: (SplitGraph a b) -> Int
 size graph = Map.size $ nodeMap graph
 
 getRootNode :: (Ord a, Ord b) => (SplitGraph a b) -> (SplitNode a b)
@@ -129,7 +129,7 @@ getMaxInjective aut stateSet compRel getNode lcas =
                             getNode
                             lcas
 
-getMaxInjectiveAbstract :: (Ord a, Ord b) => ((SplitNode a b) -> (Bool,Set (Set (State a b)))) -> ((t a b) -> SplitNode a b) -> Set (t a b) -> (t a b)
+getMaxInjectiveAbstract :: ((SplitNode a b) -> (Bool,Set (Set (State a b)))) -> ((t a b) -> SplitNode a b) -> Set (t a b) -> (t a b)
 getMaxInjectiveAbstract f getNode nodes =
     let res = [(n,f (getNode n)) | n <- Set.toList nodes]
     in if Set.null nodes

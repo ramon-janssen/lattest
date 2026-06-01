@@ -69,7 +69,7 @@ parseTupleLine line =
         _ -> Nothing  -- Malformed line
 
 -- | Build a .dot file representation of LTS transitions and save it in the specified File Path
-dumpLTSdot :: (Ord s, Show s, Ord i, Show i, Ord o, Show o) => FilePath -> [(s, IOAct i o, s)] -> IO ()
+dumpLTSdot :: (Show s, Show i, Show o) => FilePath -> [(s, IOAct i o, s)] -> IO ()
 dumpLTSdot path transitions = do
     let edges = [ (show from, T.unpack (T.replace "!" "" . T.replace "?" "" $ T.pack (show label)), show to)
                 | (from, label, to) <- transitions ]

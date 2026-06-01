@@ -60,7 +60,7 @@ interpretSTSQuiescentInputAttemptConcrete,
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue, IOSuspGateValue)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
 import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
 import qualified Lattest.Model.BoundedMonad as BM
@@ -79,21 +79,21 @@ ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
 -- | To a transition relation without tdest, add vacuous tdests ().
-concreteTrans :: (Functor m, Completable t) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
+concreteTrans :: (Functor m) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
 concreteTrans trans q = Map.map (fmap (\loc -> ((), loc))) (trans q)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
     Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromRel :: (Completable t, Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (Det ((), loc)))
+detConcTransFromRel :: (Ord loc, Ord t) => [(loc, t, loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromRel = transFromRelWith combineDet vacuousTrans (\l () _ -> Det $ vacuousLoc l)
 
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as deterministic state
     configuration. Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.
 -}
-detConcTransFromMRel :: (Completable t, Ord loc, Ord t) => [(loc, t, Det loc)] -> Maybe (loc -> Map t (Det ((), loc)))
+detConcTransFromMRel :: (Ord loc, Ord t) => [(loc, t, Det loc)] -> Maybe (loc -> Map t (Det ((), loc)))
 detConcTransFromMRel = transFromRelWith combineDet vacuousTrans (\dl () _ -> fmap vacuousLoc dl)
 
 {- |
@@ -111,7 +111,7 @@ detConcTransFromMaybeRel = transFromRelWith combineDet vacuousTrans $ \mLoc () t
     The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted as non-deterministic choice
     between the destinations.
 -}
-nonDetConcTransFromRel :: (Completable t, Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromRel :: (Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\l () _ -> BM.ordReturn $ vacuousLoc l)
 
 {- |
@@ -127,7 +127,7 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
     configuration. The state configuration must support non-determinism, and having multiple occurrences of a transition label is interpreted
     as non-deterministic choice between the destinations.
 -}
-nonDetConcTransFromMRel :: (Completable t, Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
+nonDetConcTransFromMRel :: (Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> BM.ordMap vacuousLoc ndl)
 
 {- |
@@ -149,7 +149,7 @@ vacuousTrans (a,b,c) = (a,b,(),c)
 
 vacuousLoc l = ((), l)
 
-transFromRelWith :: (Completable t, Ord loc, Ord t) =>
+transFromRelWith :: (Ord loc, Ord t) =>
     (m (tdest, loc) -> m (tdest, loc) -> Maybe (m (tdest, loc))) -- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined
     -> (te -> (loc, t, tdest, loc')) -- the way of creating a 4-tuple with all the transition info from a list element
     -> (loc' -> tdest -> t -> m (tdest, loc)) -- the way of creating a monadic transition result from the transition info of a list element
@@ -161,7 +161,7 @@ transFromRelWith c' fe' f' trans = do
         Just tMap -> tMap
         Nothing -> Map.empty
     where
-    addToMap :: (Completable t, Ord loc, Ord t) => (m (tdest, loc) -> m (tdest, loc) -> Maybe (m (tdest, loc))) -> (te -> (loc, t, tdest, loc')) -> (loc' -> tdest -> t -> m (tdest, loc)) -> te -> Maybe (Map loc (Map t (m (tdest, loc)))) -> Maybe (Map loc (Map t (m (tdest, loc))))
+    addToMap :: (Ord loc, Ord t) => (m (tdest, loc) -> m (tdest, loc) -> Maybe (m (tdest, loc))) -> (te -> (loc, t, tdest, loc')) -> (loc' -> tdest -> t -> m (tdest, loc)) -> te -> Maybe (Map loc (Map t (m (tdest, loc)))) -> Maybe (Map loc (Map t (m (tdest, loc))))
     addToMap c fe f te maybeTMapMap = do
         tMapMap <- maybeTMapMap
         let (loc, t, tdest, loc') = fe te
@@ -228,28 +228,28 @@ addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
 type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-interpretConcrete :: (BoundedMonad m, Ord t, Show t, Show loc, Ord loc, Completable t) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
+interpretConcrete :: (BoundedMonad m, Ord t, Ord loc, Completable t) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
 interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
 type ConcreteSuspAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspAutIntrpr m loc i o
+interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspAutIntrpr m loc i o
 interpretQuiescentConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
 type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
+interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
 interpretInputAttemptConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
 type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Show i, Show o, Show loc, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
+interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
 type STS m loc g = AutSyntax m loc (SymInteract g) STStdest
@@ -258,17 +258,17 @@ type IOSTS m loc i o = STS m loc (IOAct i o)
 type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
 type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
 
-interpretSTS :: (Ord g, Ord loc, Show loc, Show g, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc)), Completable (GateValue g)) => STS m loc g -> Valuation -> STSIntrp m loc g
+interpretSTS :: (Ord loc, BoundedMonad m, Completable (GateValue g)) => STS m loc g -> Valuation -> STSIntrp m loc g
 interpretSTS sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 
 type SuspSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o)
 
-interpretSTSQuiescent :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => IOSTS m loc i o -> Valuation -> SuspSTSIntrp m loc i o
+interpretSTSQuiescent :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspSTSIntrp m loc i o
 interpretSTSQuiescent sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 
 -- TODO also list an interpretation for quiescence only and input-failure only
 type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o)
 
-interpretSTSQuiescentInputAttemptConcrete  :: (Ord i, Ord o, Ord loc, Show loc, Show i, Show o, Show (m (IntrpState loc)), BoundedMonad m, Show (m (STStdest, loc))) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o
+interpretSTSQuiescentInputAttemptConcrete  :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o
 interpretSTSQuiescentInputAttemptConcrete sts initialValuation = interpret sts (\loc -> IntrpState loc initialValuation)
 

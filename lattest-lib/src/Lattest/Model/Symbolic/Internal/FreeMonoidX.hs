@@ -176,7 +176,7 @@ fromListT :: (Ord (t a), TermWrapper t) => [a] -> FreeMonoidX (t a)
 fromListT = fromList . (wrap <$>)
 
 -- | Fold the free-monoid.
-foldFMX :: (IntMultipliable a, Monoid a, Semigroup a) => FreeMonoidX a -> a
+foldFMX :: (IntMultipliable a, Monoid a) => FreeMonoidX a -> a
 foldFMX (FMX p) = Map.foldrWithKey (\x n -> (n <.> x <>)) mempty p
 
 -- | Fold the free-monoid of term wrappers.
@@ -293,7 +293,7 @@ partitionT p = partition (p . unwrap)
 foldOccur :: (a -> Integer -> b -> b) -> b -> FreeMonoidX a -> b
 foldOccur f z = Map.foldrWithKey f z . asMap
 
-foldrTerms :: (TermWrapper f, Foldable f) => (a -> b -> b) -> b -> FreeMonoidX (f a) -> b
+foldrTerms :: (TermWrapper f) => (a -> b -> b) -> b -> FreeMonoidX (f a) -> b
 foldrTerms f e = foldr f e . distinctTermsT
 
 -- | Map the terms of the free-monoid.
@@ -301,10 +301,10 @@ foldrTerms f e = foldr f e . distinctTermsT
 mapTerms :: Ord b => (a -> b) -> FreeMonoidX a -> FreeMonoidX b
 mapTerms f = fromOccurList . (first f <$>) . toOccurList
 
-mapFreeMonoidX :: (TermWrapper f, Functor f, Ord (f b)) => (a -> b) -> FreeMonoidX (f a) -> FreeMonoidX (f b)
+mapFreeMonoidX :: (Functor f, Ord (f b)) => (a -> b) -> FreeMonoidX (f a) -> FreeMonoidX (f b)
 mapFreeMonoidX f = mapTerms (fmap f)
 
-allFreeMonoidX :: (TermWrapper f, Functor f) => (a -> Bool) -> FreeMonoidX (f a) -> Bool
+allFreeMonoidX :: (TermWrapper f) => (a -> Bool) -> FreeMonoidX (f a) -> Bool
 allFreeMonoidX pred = all pred . distinctTermsT
 
 -- | Flatten a free-monoid.

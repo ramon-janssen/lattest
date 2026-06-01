@@ -94,7 +94,7 @@ pexpandCompRel aut@(Aut _ states _ _ _) rel =
 compMemFunc :: (Ord a, Ord b) => (Aut a b) -> Set (State a b,State a b) -> State a b -> State a b -> b -> Bool
 compMemFunc aut rel q q' c = Set.member (Maybe.fromJust $ after q c aut, Maybe.fromJust $ after q' c aut)  rel
 
-computeCompRelAbstract :: (Ord a, Ord b, Eq c) => Aut a b -> (Aut a b -> c) -> (Aut a b -> c -> c) -> c
+computeCompRelAbstract :: (Eq c) => Aut a b -> (Aut a b -> c) -> (Aut a b -> c -> c) -> c
 computeCompRelAbstract aut firstAbstract expand =
     let first = firstAbstract aut
         second = expand aut first
@@ -204,7 +204,7 @@ adgAutFromAutomaton aut delta = let
             case Automaton.stateConf (Automaton.inConfiguration aut (Det sid) `Automaton.after` ioact) of
                 Det q -> Map.insert (getLabel delta ioact) q m
                 _ -> m
-        getLabel :: Ord b => b -> IOSuspAct b b -> b
+        getLabel :: b -> IOSuspAct b b -> b
         getLabel delta ioact =  case ioact of
                              (In i) -> i
                              (Out (OutSusp o)) -> o

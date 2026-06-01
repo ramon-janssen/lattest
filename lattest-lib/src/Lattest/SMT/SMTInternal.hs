@@ -270,7 +270,7 @@ putT :: Text -> SMT ()
 putT = put . T.unpack
 
 -- | Transform value expression to an SMT string.
-valExprToString :: (ConstType t, ConstToSMT t) => Expr t -> SMT Text
+valExprToString :: (ConstToSMT t) => Expr t -> SMT Text
 valExprToString v = do
 --  mapI <- gets envNames
   return $ valexprToSMT v
