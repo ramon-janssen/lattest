@@ -116,7 +116,7 @@ where
 import           Control.Arrow   (first, (***))
 import           Data.Data
 import           Data.Foldable
-import           Data.List       hiding (partition)
+import Data.List (genericReplicate)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           GHC.Exts
