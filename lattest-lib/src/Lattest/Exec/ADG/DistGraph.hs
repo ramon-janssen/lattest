@@ -17,7 +17,7 @@ import Lattest.Exec.ADG.Aut as Aut (Aut, State)
 computeAdaptiveDistGraph :: (Ord a, Ord b) => Aut a b -> Bool -> Bool -> Bool -> Evidence b
 computeAdaptiveDistGraph aut doBestSplit splitOutputFirst useBucketLCA = let
     compRel = Aut.computeCompRel aut
-    (splitGraph,nadmin) = SplitGraph.buildSplitGraph aut compRel (SplitGraph.initializeSplitGraphAdmin doBestSplit splitOutputFirst True)
+    (splitGraph,_nadmin) = SplitGraph.buildSplitGraph aut compRel (SplitGraph.initializeSplitGraphAdmin doBestSplit splitOutputFirst True)
     in buildDistGraph aut splitGraph (Aut.states aut) compRel useBucketLCA
 
 buildDistGraph :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> Set (State a b) -> Set ((State a b),(State a b)) -> Bool -> Evidence b
