@@ -41,7 +41,7 @@ fromSuspended,
 
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 3 and 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
 -}
-IFAct(..),
+IFAct,
 InputAttempt(..),
 asInputAttempt,
 fromInputAttempt,
