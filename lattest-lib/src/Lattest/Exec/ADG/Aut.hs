@@ -22,7 +22,7 @@ import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct,Suspended(
 data Aut a b = Aut {initial :: (State a b), states :: Set (State a b), idStateMap :: (Map a (State a b)), inputs ::  (Set b), outputs :: (Set b)}
 
 instance (Show a, Show b) => Show (Aut a b) where
-    show (Aut initial states map inps outs) = "Initial: " ++ (show initial) ++ "\n" ++
+    show (Aut initial states _ inps outs) = "Initial: " ++ (show initial) ++ "\n" ++
                                         "States: " ++ (show $ Set.toList $ states) ++ "\n" ++
                                         "Input alphabet:" ++ (show $ inps) ++
                                         "Output alphabet:" ++ (show $ outs)
@@ -60,7 +60,7 @@ afterSet :: (Ord a, Ord b) => Set (State a b) -> b -> (Aut a b) -> Set (State a 
 afterSet stateSet mu aut = Set.foldl (\set s -> case after s mu aut of Nothing -> set; Just s' -> Set.insert s' set) Set.empty stateSet
 
 afterSequence :: (Ord a, Ord b) => (State a b) -> [b] -> (Aut a b) -> Maybe (State a b)
-afterSequence state [] aut = Just state
+afterSequence state [] _ = Just state
 afterSequence state (mu:mus) aut =
     case after state mu aut of
         Nothing -> Nothing
@@ -127,7 +127,7 @@ getTransitionExtendedAccesSequences :: (Ord a,Ord b) => Aut a b -> [[b]]
 getTransitionExtendedAccesSequences aut = Set.toList $ Set.unions $ Set.fromList (getAccesSequences aut) : List.map (extendAccWithTransition aut) (getAccesSequences aut)
 
 union :: (Ord a,Ord b) => Aut a b -> Aut a b -> Aut a b
-union (Aut initial1 states1 idStateMap1 inputs1 outputs1) (Aut initial2 states2 idStateMap2 inputs2 outputs2) =
+union (Aut initial1 states1 idStateMap1 inputs1 outputs1) (Aut _ states2 idStateMap2 inputs2 outputs2) =
     if Set.null $ Set.intersection states1 states2
     then (Aut initial1 (Set.union states1 states2) (Map.union idStateMap1 idStateMap2) (Set.union inputs1 inputs2) (Set.union outputs1 outputs2))
     else error "states identifiers of automata not disjunct"
@@ -135,7 +135,7 @@ union (Aut initial1 states1 idStateMap1 inputs1 outputs1) (Aut initial2 states2 
 constrAut :: (Ord a, Ord b, Show a, Show b) => (a, Set (a,b,a), Set b, Set b) -> Aut a b
 constrAut (initial, transs, inps, outs) =
     let statemap = stautToStateMap transs inps outs
-        noTransStates = [t | (f,mu,t) <- Set.toList transs, Map.notMember t statemap]
+        noTransStates = [t | (_,_,t) <- Set.toList transs, Map.notMember t statemap]
         fullStateMap = List.foldr (\s m -> Map.insert s (Set.empty,Set.empty,Map.empty) m) statemap noTransStates
          in case Map.lookup initial fullStateMap of
                 Nothing -> error ("Initial state does not have any transitions")
@@ -144,7 +144,7 @@ constrAut (initial, transs, inps, outs) =
                      in Aut (State initial ini outi tmapi) (fst statesandmap) (snd statesandmap) inps outs
 
 addDelta :: (Ord a) => String -> (Aut a String) -> (Aut a String)
-addDelta delta (Aut initial states idStateMap inputs outputs) =
+addDelta delta (Aut initial states _ inputs outputs) =
     let newStates = Set.foldl (\set s@(State sid inp out trans) ->
                                        if Set.null out
                                        then Set.insert (State sid inp (Set.insert delta out) (Map.insert delta sid trans)) set
@@ -182,9 +182,9 @@ getDistingCompPairs :: (Ord a, Ord b) => Aut a b -> Set (State a b,State a b) ->
 getDistingCompPairs aut comp sigma =
     List.length [(q1,q2) | (q1,q2) <- Set.toList comp,
                            case (afterSequence q1 sigma aut, afterSequence q2 sigma aut) of
-                                (Just q, Nothing) -> True
-                                (Nothing, Just q) -> True
-                                otherwise -> False]
+                                (Just _, Nothing) -> True
+                                (Nothing, Just _) -> True
+                                _ -> False]
 
 adgAutFromAutomaton :: (Ord a, Ord b) => StandardAutomata.ConcreteSuspAutIntrpr Det a b b -> b -> Maybe (Aut a b)
 adgAutFromAutomaton aut delta = let

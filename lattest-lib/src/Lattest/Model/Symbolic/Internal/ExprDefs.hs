@@ -191,8 +191,8 @@ instance Show t => Show (ExprView t) where
     show (Var v) = varName v
     show (Const c) = show c
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
-    show (Divide e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"
-    show (Modulo e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
+    show (Divide _e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"
+    show (Modulo _e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
     show (Sum es) | es == mempty = "∑∅"
     show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
         where
@@ -214,7 +214,7 @@ instance Show t => Show (ExprView t) where
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
-showFreeMonoid plusRepr multRepr m@(FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
+showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
     where
     showTerm (x, i) = multRepr i (show x)
 
@@ -235,7 +235,7 @@ eval = evalView . view
 
 evalView :: ExprView v -> Either String v
 evalView (reduce -> Const v) = Right v
-evalView x = Left $ "Value Expression is not a constant value"
+evalView _ = Left $ "Value Expression is not a constant value"
 
 isConst :: ExprView v -> Bool
 isConst (Const _) = True

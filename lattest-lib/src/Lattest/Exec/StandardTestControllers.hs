@@ -221,7 +221,7 @@ andThen tester1 tester2 =
         selectTest = andThenSelect,
         updateTestController = andThenUpdate,
         handleTestClose = \state -> case state of
-            (Left s) -> handleTestClose tester2 (testControllerState tester2)
+            (Left _) -> handleTestClose tester2 (testControllerState tester2)
             (Right s) -> handleTestClose tester2 s
     }
     where
@@ -245,7 +245,7 @@ andThen tester1 tester2 =
                 res1 <- updateTestController tester1 s specState ioact mq
                 return $ case res1 of
                     Left s1 ->  Left $ Left s1
-                    Right r1 -> Left $ Right $ testControllerState tester2
+                    Right _ -> Left $ Right $ testControllerState tester2
             Right s -> do
                 res2 <- updateTestController tester2 s specState ioact mq
                 return $ case res2 of
@@ -368,7 +368,7 @@ andObserving controller = andObservingWith controller (,)
     Apply an observer: use the (former) test controller, but only return the result of the (latter) observer.
 -}
 observingOnly :: TestController m loc q t tdest act state1 i1 r1 -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 r2
-observingOnly controller = andObservingWith controller (\r1 r2 -> r2)
+observingOnly controller = andObservingWith controller (\_ r2 -> r2)
 
 {- |
     A 'TestObserver' that returns the trace of all observed actions

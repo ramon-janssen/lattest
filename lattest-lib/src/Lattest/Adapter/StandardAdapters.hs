@@ -229,7 +229,7 @@ acceptingInputsWithIncompletenessAsFailures adap = do
     attemptInputToAdap :: OutputStream i -> i -> IO Bool
     attemptInputToAdap adapInputOS i = handle (patternMatchHandler i) (Streams.write (Just i) adapInputOS >> return True)
     patternMatchHandler :: i -> PatternMatchFail -> IO Bool
-    patternMatchHandler i _ = return False
+    patternMatchHandler _ _ = return False
 
 
 -- | adapter which, after every input, directly sends the corresponding sequence of outputs

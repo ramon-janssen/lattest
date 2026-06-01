@@ -35,15 +35,15 @@ accessSeqSelector aut targetState =
         testControllerState = (Map.!) accSeqs targetState,
         selectTest = accSeqSelectTest,
         updateTestController = accSeqUpdateTest,
-        handleTestClose = \testState -> return $ case testState of [] ->  True; _ -> False
+        handleTestClose = \testState' -> return $ case testState' of [] ->  True; _ -> False
     }
     where
-    accSeqSelectTest [] specIntrpState _ = return $ Right True
-    accSeqSelectTest (l:ls) specIntrpState _ = return $ case l of
+    accSeqSelectTest [] _ _ = return $ Right True
+    accSeqSelectTest (l:ls) _ _ = return $ case l of
         In i -> Left (Just i, (l:ls))
         _ -> Left (Nothing, (l:ls))
-    accSeqUpdateTest [] specIntrpState label _ = return $ Right True
-    accSeqUpdateTest (l:ls) specIntrpState label _ = return $ if (asSuspended l) == label then Left ls else Right False
+    accSeqUpdateTest [] _ _ _ = return $ Right True
+    accSeqUpdateTest (l:ls) _ label _ = return $ if (asSuspended l) == label then Left ls else Right False
 
 {- | A TestController that selects inputs according to the adaptive distinguishing sequence of the given automaton
 -}
@@ -57,16 +57,16 @@ adgTestSelector aut delta =
         testControllerState = adg,
         selectTest = adgSelectTest,
         updateTestController = adgUpdateTest,
-        handleTestClose = \testState -> return Set.empty
+        handleTestClose = \_ -> return Set.empty
     }
     where
-    adgSelectTest testState specIntrpState _ =
+    adgSelectTest testState _ _ =
         return $ case testState of
             Nil -> Right Set.empty
-            Prefix l next -> Left (Just l, testState)
+            Prefix l _ -> Left (Just l, testState)
             Plus _ -> Left (Nothing,testState)
 
-    adgUpdateTest testState specIntrpState ioact _ =
+    adgUpdateTest testState _ ioact _ =
        return $ case testState of
             Nil -> Right Set.empty
             Prefix l next -> if ioact == In l then Left next else error "Error: expected to have selected an input but seeing some ioact"

@@ -138,7 +138,7 @@ nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTra
 nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDet ((), loc)))
 nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
     where
-    listToNonDet (list@(_:_)) () t = vacuousLoc <#> NonDet (Set.fromList list)
+    listToNonDet (list@(_:_)) () _ = vacuousLoc <#> NonDet (Set.fromList list)
     listToNonDet [] () t = implicitDestination t
 
 combineNonDet :: JoinSemiLattice a => a -> a -> Maybe a
@@ -222,7 +222,7 @@ insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap o
 addStateAndAccSeq :: (Ord loc) => Map loc [t] -> loc -> [t] -> (Map loc [t], Maybe loc)
 addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
         Nothing -> (Map.insert q accSeq accMap, Just q)
-        Just oldAccSeq -> (accMap, Nothing)
+        Just _ -> (accMap, Nothing)
 
 ---------------------------------
 -- instantiations of interpret --

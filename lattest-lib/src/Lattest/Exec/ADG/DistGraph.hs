@@ -61,7 +61,7 @@ getEvidenceStats aut adg =
 
 
 prune :: (Ord a, Ord b) => (Aut a b) -> Set (State a b) -> Evidence b -> Evidence b
-prune aut set Nil = Nil
+prune _ _ Nil = Nil
 prune aut set (Prefix mu ev) = let nset = Aut.afterSet set mu aut in if Set.null nset then Nil else (Prefix mu (prune aut nset ev))
 prune aut set (Plus evs) = let res = List.filter (\ev -> case ev of Nil -> False; _ -> True) $ List.map (prune aut set) evs
                            in if List.null res then Nil else Plus res

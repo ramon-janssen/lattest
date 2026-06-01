@@ -176,7 +176,7 @@ instance TestChoice (Maybe i) (IOSuspAct i o) where
     choiceToActs (Just i) = asSuspended <$> choiceToActs i
     choiceToActs Nothing = []
     actToChoice (Out Quiescence) = Just Nothing
-    actToChoice (Out (OutSusp o)) = Nothing
+    actToChoice (Out (OutSusp _)) = Nothing
     actToChoice (In i) = Just $ Just i
 
 {- |
@@ -345,7 +345,7 @@ instance TestChoice (Maybe (GateValue i)) (IOSuspGateValue i o) where
     choiceToActs (Just i) = fmap asSuspended <$> choiceToActs i
     choiceToActs Nothing = []
     actToChoice (GateValue (Out Quiescence) _) = Just Nothing
-    actToChoice (GateValue (Out (OutSusp o)) _) = Nothing
+    actToChoice (GateValue (Out (OutSusp _)) _) = Nothing
     actToChoice (GateValue (In i) values) = Just $ Just $ GateValue i values
 
 instance TestChoice (GateValue i) (IFGateValue i o) where

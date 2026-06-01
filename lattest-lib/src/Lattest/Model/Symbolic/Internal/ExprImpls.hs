@@ -554,9 +554,9 @@ instance Assignable Integer where
     assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
     assignValue v@(Variable _ IntType) val m = m {intValuation = Map.insert v val (intValuation m)}
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignedExpr v@(Variable _ IntType) (VarModel ints bools strings) = Map.lookup v ints
+    assignedExpr v@(Variable _ IntType) (VarModel ints _bools _strings) = Map.lookup v ints
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
-    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints bools strings) = Map.findWithDefault (sVar v) v ints
+    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints _bools _strings) = Map.findWithDefault (sVar v) v ints
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
 
 instance Assignable Bool where
@@ -564,9 +564,9 @@ instance Assignable Bool where
     assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
     assignValue v@(Variable _ BoolType) val m = m {boolValuation = Map.insert v val (boolValuation m)}
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignedExpr v@(Variable _ BoolType) (VarModel ints bools strings) = Map.lookup v bools
+    assignedExpr v@(Variable _ BoolType) (VarModel _ints bools _strings) = Map.lookup v bools
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
-    assignedExprWithDefault v@(Variable _ BoolType) (VarModel ints bools strings) = Map.findWithDefault (sVar v) v bools
+    assignedExprWithDefault v@(Variable _ BoolType) (VarModel _ints bools _strings) = Map.findWithDefault (sVar v) v bools
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
 
 instance Assignable String where
@@ -574,9 +574,9 @@ instance Assignable String where
     assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
     assignValue v@(Variable _ StringType) val m = m {stringValuation = Map.insert v val (stringValuation m)}
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignedExpr v@(Variable _ StringType) (VarModel ints bools strings) = Map.lookup v strings
+    assignedExpr v@(Variable _ StringType) (VarModel _ints _bools strings) = Map.lookup v strings
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
-    assignedExprWithDefault v@(Variable _ StringType) (VarModel ints bools strings) = Map.findWithDefault (sVar v) v strings
+    assignedExprWithDefault v@(Variable _ StringType) (VarModel _ints _bools strings) = Map.findWithDefault (sVar v) v strings
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
 
 noAssignment :: VarModel

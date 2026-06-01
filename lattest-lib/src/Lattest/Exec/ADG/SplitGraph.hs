@@ -32,7 +32,7 @@ instance (Ord a, Ord b, Show a, Show b) => Show (SplitNode a b) where
 data SplitGraph a b = SplitGraph {root :: (Set (State a b)), nodeMap :: Map (Set (State a b)) (SplitNode a b)} --, lcaMap :: Map (Set SuspState) (Set SplitNode)
 
 instance (Ord a, Ord b, Show a, Show b) => Show (SplitGraph a b) where
-    show (SplitGraph r map) = Map.foldr (\s str -> str ++ (show s) ++ "\n\n") "" map
+    show (SplitGraph _ map) = Map.foldr (\s str -> str ++ (show s) ++ "\n\n") "" map
 
 data Evidence b = Nil | Prefix b (Evidence b) | Plus [Evidence b]
     deriving (Eq,Ord)
@@ -47,7 +47,7 @@ instance (Show b) => Show (Evidence b) where
 
 depth :: (Ord b) => Evidence b -> Int
 depth Nil = 0
-depth (Prefix mu ev) = 1 + (depth ev)
+depth (Prefix _ ev) = 1 + (depth ev)
 depth (Plus evs) = if evs == [] then error "empty!" else maximum (List.map depth evs)
 
 getObservations :: (Ord b) => Evidence b -> Set [b]
@@ -60,7 +60,7 @@ getWeight [] _ _ _ = 1
 getWeight (mu : sigma) (Prefix nu ev) states aut = if mu == nu then getWeight sigma ev (Aut.afterSet states mu aut) aut else error $ "Prefix: observation not matching evidence: " ++ (show mu) ++ " " ++ (show nu)
 getWeight (mu : sigma) (Plus evs) states aut =
      case List.find (\ev -> case ev of (Prefix nu _) -> nu == mu) evs of
-        Just (Prefix _ nuev) -> (getWeight sigma nuev (Aut.afterSet states mu aut) aut) * (List.length [ev | ev <- evs, case ev of (Prefix nu _) -> Set.member nu (Aut.outSet states) ; otherwise -> False])
+        Just (Prefix _ nuev) -> (getWeight sigma nuev (Aut.afterSet states mu aut) aut) * (List.length [ev | ev <- evs, case ev of (Prefix nu _) -> Set.member nu (Aut.outSet states) ; _ -> False])
         Nothing -> error $ "Plus: observation not matching evidence: " ++ (show mu) ++ " " ++ (show evs)
 
 getNodeSizeCount :: (SplitGraph a b) -> Map Int Int
@@ -138,7 +138,7 @@ getMaxInjectiveAbstract f getNode nodes =
             case Foldable.find (fst . snd) res of
                 Just (n,_) -> n
                 Nothing -> fst $ List.foldr (\el (best,bestNr) -> let (n,nr) = getNr el in if nr < bestNr then (n,nr) else (best,bestNr)) (getNr $ head res) (tail res)
-              where getNr (n,(b,s)) = (n,Set.size s)
+              where getNr (n,(_,s)) = (n,Set.size s)
 
 evidenceInjectiveForStates :: (Ord a, Ord b) => (Aut a b) -> Evidence b -> Set (State a b) -> Set ((State a b),(State a b)) -> (Bool,Set (Set (State a b)))
 evidenceInjectiveForStates aut ev stateSet compRel =
@@ -165,7 +165,7 @@ getLCAgreedyStep graph states node =
                             Nothing
     else let cont = Set.filter (\ch -> Set.isSubsetOf states ch) (children node)
          in if Set.null cont then Just node
-            else case Foldable.find (\m -> case m of Nothing -> False; Just a -> True) $
+            else case Foldable.find (\m -> case m of Nothing -> False; Just _ -> True) $
                                     (let todoList = (List.map (\ch -> (getLCAgreedyStep graph states) (nodeMap graph ! ch)) (Set.toList cont))
                                       in todoList `ParallelS.using` ParallelS.parList ParallelS.rseq) of
                 Nothing -> Nothing
@@ -277,7 +277,7 @@ splitNode aut graph node compRel admin =
                                        else (Just (assignChildren graph node ci ei), admin{inputSplit = (inputSplit admin) + 1})
 
 outputCondition :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> (SplitNode a b) -> Set ((State a b),(State a b)) -> Maybe (Map b (Set (SplitNode a b)))
-outputCondition aut graph node compRel =
+outputCondition aut graph node _ =
     let states = (nodeStates node)
         (bools,map) = getSymbolSplitNodeMap aut graph node (Aut.outSet states) (\x -> any (\q -> Set.notMember x (Aut.out q)) states)
     in if and bools then Just map else Nothing
@@ -327,7 +327,7 @@ getSplitOnOutputTransition aut graph node compRel doBestSplit =
                                                     (selectSplitNodeForLabel aut (nodeStates node) compRel spMap doBestSplit))
 
 inputCondition :: (Ord a, Ord b) => (Aut a b) -> (SplitGraph a b) -> (SplitNode a b) -> Set ((State a b),(State a b)) -> Maybe (Map b (Set (SplitNode a b)))
-inputCondition aut graph node compRel = let (bools,map) = getSymbolSplitNodeMap aut graph node
+inputCondition aut graph node _ = let (bools,map) = getSymbolSplitNodeMap aut graph node
                                                                     (Aut.inSet (nodeStates node))
                                                                     (const False)
                                        in if or bools then Just map else Nothing
@@ -353,7 +353,7 @@ getSplitOnInputTransition aut graph node compRel doBestSplit addInputStates =
         Just spMap ->  let splitNodePerLabel = Set.fromList $ List.map (\(a,b) -> ATup a b) $
                                                Map.toList (selectSplitNodeForLabel aut (nodeStates node) compRel spMap doBestSplit)
                            (ATup a (Just bestNode)) = if doBestSplit
-                                                      then getBestSplitNode aut (nodeStates node) compRel (\(ATup a (Just n)) -> n) splitNodePerLabel
+                                                      then getBestSplitNode aut (nodeStates node) compRel (\(ATup _ (Just n)) -> n) splitNodePerLabel
                                                       else getFirstSplitNode splitNodePerLabel
                            (indsplit, ev) = getChildsEvForSplitNode aut node a (Just bestNode)
                        in if Set.null indsplit then error $ "no children for node" ++ -- (show node) ++

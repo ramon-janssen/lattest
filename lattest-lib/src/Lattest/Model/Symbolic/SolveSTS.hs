@@ -52,7 +52,7 @@ interactToGuard intrpr interaction = let
     in asDualExpr $ BM.ordJoin $ stateAndInteractToGuards aut interaction BM.<#> stateConf intrpr
 
 stateAndInteractToGuards :: (Ord g, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> IntrpState loc -> m SymGuard
-stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
+stateAndInteractToGuards aut interaction (IntrpState l valuation) =
     case Map.lookup interaction (transRel aut l) of
         Nothing -> throw $ ActionOutsideAlphabet callStack
         Just mtdestloc -> BM.ordMap guardAndLocToGuard mtdestloc

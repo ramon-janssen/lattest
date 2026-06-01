@@ -403,17 +403,17 @@ hasQuiescence m = not $ any (isOutput . fst &&& not . isForbidden . snd) (Map.to
 -------------------
 
 instance TransitionMapping (IOAct i o) (IFAct i o) where
-    asTransition _ (In (InputAttempt(i, False))) = Nothing
+    asTransition _ (In (InputAttempt(_, False))) = Nothing
     asTransition _ other = Just $ fromInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics  q q (IOAct i o) () (IFAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m =
+    takeTransition _ _ (In (InputAttempt(i, False))) m =
         let mtdestloc = m $ In i
         in LocationMove $ if isSpecified mtdestloc
             then forbidden -- if ?i is specified, then the failure of ?i is forbidden
             else underspecified -- input failure is not repetitive: it is allowed, and nothing can be done afterwards, i.e., underspecified
-    takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
+    takeTransition _ _ act' m = TransitionMove (fromInputAttempt act', m $ fromInputAttempt act')
 
 instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
     asActions t = [asInputAttempt t]
@@ -425,13 +425,13 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 -- Ideally this would automatically follow from the above two interpretations stacked to avoid the boilerplate below, but that is a hassle
 
 instance TransitionMapping (IOAct i o) (SuspendedIF i o) where
-    asTransition _ (In (InputAttempt(i, False))) = Nothing
+    asTransition _ (In (InputAttempt(_, False))) = Nothing
     asTransition _ (Out Quiescence) = Nothing
     asTransition _ other = Just $ fromSuspendedInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m =
+    takeTransition _ _ (In (InputAttempt(i, False))) m =
         let mtdestloc = m $ In i
         in LocationMove $ if isSpecified mtdestloc
             then forbidden -- if ?i is specified, then the failure of ?i is forbidden
@@ -476,7 +476,7 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
         ig' <- asTransition ts g
         case List.find (\(SymInteract ig _) -> ig == ig') (Set.toList interactions) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
-            Just i@(SymInteract g vars) ->
+            Just i@(SymInteract _ vars) ->
                 if List.length values /= List.length vars
                     then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
                     else if List.all (\(var,val) -> varType var == constType val) (zip vars values)
@@ -486,7 +486,7 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
 instance (Completable (GateValue g'), BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
-    move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
+    move (IntrpState _l1 stateValuation) gv@(GateValue _ gateVals) (Just (SymInteract _ gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
             valuation = fromConstantsMap $ toConstantsMap stateValuation `Map.union` toConstantsMap gateValuation
@@ -535,7 +535,7 @@ hasSymbolicQuiescence smtRef stateVal m = do
 -- STS input-failure --
 -----------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
-    ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+    ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact@(SymInteract _ gateVars) ->
@@ -560,7 +560,7 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
         qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
-    ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+    ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact@(SymInteract _ gateVars) ->
