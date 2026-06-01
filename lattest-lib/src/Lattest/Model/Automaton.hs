@@ -323,10 +323,8 @@ data AutomatonException
     deriving (Show)
 instance Eq AutomatonException where
     (==) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
-    (==) _ _ = False
 instance Ord AutomatonException where
     (<=) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
-    (<=) _ _ = False
 
 instance Exception AutomatonException
 
