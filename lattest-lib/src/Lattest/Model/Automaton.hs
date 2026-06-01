@@ -254,7 +254,7 @@ instance (StepSemantics m loc q t tdest act, IOTransitionSemantics loc q t tdest
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal :: (StepSemantics m loc q t tdest act, BM.OrdMonad m, Monad execM, Ord t, Ord q, Ord (m q)) =>
+afterInternal :: (StepSemantics m loc q t tdest act, Monad execM, Ord t, Ord q, Ord (m q)) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
@@ -271,7 +271,7 @@ after intrpr act' =
     in intrpr { stateConf = stateConf' }
     -}
 
-afterInternal' :: (StepSemantics m loc q t tdest act, BM.OrdMonad m, Ord t, Ord q, Ord (m q), Monad execM) =>
+afterInternal' :: (StepSemantics m loc q t tdest act, Ord t, Ord q, Ord (m q), Monad execM) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
 afterInternal' internalTakeTransition alph transMap act q = do
@@ -349,7 +349,7 @@ actionMenu :: (Foldable m, Ord t, Ord act, FiniteMenu t act, BoundedMonad m) => 
 actionMenu aut = (locationActions aut ++) $ concat $ BM.ordMap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord t, BM.OrdMonad m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
+specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
     => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
@@ -365,7 +365,7 @@ instance TransitionMapping act act where
 
 instance (Ord act, Completable act) => TransitionSemantics q q act () act
 
-instance (Ord act) => FiniteMenu act act where
+instance FiniteMenu act act where
     asActions t = [t] 
     locationActions _ = []
 
@@ -391,7 +391,7 @@ instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IOSuspAct i o
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then BM.ordReturn loc else forbidden
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
+instance FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
 
@@ -415,7 +415,7 @@ instance (Ord i, Ord o) => TransitionSemantics  q q (IOAct i o) () (IFAct i o) w
             else underspecified -- input failure is not repetitive: it is allowed, and nothing can be done afterwards, i.e., underspecified
     takeTransition _ _ act' m = TransitionMove (fromInputAttempt act', m $ fromInputAttempt act')
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
+instance FiniteMenu (IOAct i o) (IFAct i o) where
     asActions t = [asInputAttempt t]
     locationActions _ = []
 
@@ -440,7 +440,7 @@ instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else BM.ordReturn loc
     takeTransition _ _ act m = TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
+instance FiniteMenu (IOAct i o) (SuspendedIF i o) where
     asActions t = [asSuspendedInputAttempt t]
     locationActions _ = [Out Quiescence]
 
@@ -485,7 +485,7 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
-instance (Completable (GateValue g'), BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
+instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
     move (IntrpState _l1 stateValuation) gv@(GateValue _ gateVals) (Just (SymInteract _ gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
