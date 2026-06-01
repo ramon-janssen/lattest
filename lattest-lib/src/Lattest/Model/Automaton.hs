@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 --{-# LANGUAGE ScopedTypeVariables #-}
@@ -358,8 +357,7 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 -- special case where the semantic states and actions are directly represented syntactically --
 -----------------------------------------------------------------------------------------------
 
-{-# PRAGMA overlappable #-}
-instance (Completable act) where
+instance {-# OVERLAPPABLE #-} (Completable act) where
     implicitDestination _ = forbidden
 
 instance TransitionMapping act act where
