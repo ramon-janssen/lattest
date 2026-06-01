@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE  DefaultSignatures #-}
 
-module Lattest.Exec.ADG.Aut(Aut(..),State(..),show,after,computeCompRel,inp,out,enab,trans,initial,states,inputs,outputs,outSet,afterSet,
+module Lattest.Exec.ADG.Aut(Aut(..),State(..),show,after,computeCompRel,enab,outSet,afterSet,
         statesToAut,addDelta,afterSequence,inSet,getAccesSequences, adgAutFromAutomaton,
         getTransitionExtendedAccesSequences,union,constrAut,printCompRel,getDistingCompPairs) where
 

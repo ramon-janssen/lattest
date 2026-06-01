@@ -29,8 +29,6 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , ExprType
 , typeOf
 , typeOf'
-, varName
-, varType
 , isConst
 , freeVars
 )
