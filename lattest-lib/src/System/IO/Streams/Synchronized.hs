@@ -204,10 +204,10 @@ consumeBufferedWith producer producerHasInput = do
             else return ()
     writeSeqTo [] _ = return True  -- TODO this is an OutputStream utils function, similar to Streams.write/writeTo, move to an appropriate module
     writeSeqTo (Nothing:_) writeToBuffer = do
-        writeToBuffer Nothing
+        _ <- writeToBuffer Nothing
         return False
     writeSeqTo (Just a:as) writeToBuffer = do
-        writeToBuffer (Just a)
+        _ <- writeToBuffer (Just a)
         writeSeqTo as writeToBuffer
     pickOneAndMergeRest buffer writeToBuffer = do
         bufferHasInput <- not <$> isEmptyTQueue buffer

@@ -377,8 +377,8 @@ withQuiescence timeoutDiff adap = do
             Just (Just inCmd) -> Streams.write (Just inCmd) $ inputCommandsToSut adap
             Just Nothing -> atomically $ waitUntil $ not <$> isEmptyTQueue observedQueue -- Just Nothing input means waiting, on an output or until a timeout
             Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
-    forkIO quiescenceMonitor
-    forkIO actMonitor
+    _ <- forkIO quiescenceMonitor
+    _ <- forkIO actMonitor
     return $ Adapter {
         inputCommandsToSut = inputCommandsToSut',
         actionsFromSut = actionsFromSut',
