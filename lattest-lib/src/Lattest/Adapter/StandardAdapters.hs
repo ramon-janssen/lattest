@@ -282,18 +282,18 @@ pureAdapter g p transitionFunction initialState = do
     }
     where 
         --processInput :: (Ord i, Ord o, RandomGen g) => (q -> Map.Map (IOAct i o) q) -> (g, q) -> Maybe i -> ((g, q), [Suspended o])
-        processInput t (g, q) Nothing = randomOutputTransitions t g q True
-        processInput t (g, q) (Just i) = case Map.lookup (In i) (t q) of
-            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g q' False
-            Nothing -> ((g, q), [In $ InputAttempt(i, False)])
+        processInput t (g', q) Nothing = randomOutputTransitions t g' q True
+        processInput t (g', q) (Just i) = case Map.lookup (In i) (t q) of
+            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g' q' False
+            Nothing -> ((g', q), [In $ InputAttempt(i, False)])
         --randomOutputTransitions :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> Bool -> ((g, q), [Suspended o])
-        randomOutputTransitions t g q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g q [] isAfterNoInput in ((g', q'), reverse outs)
+        randomOutputTransitions t g'' q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g'' q [] isAfterNoInput in ((g', q'), reverse outs)
         --randomOutputTransitions' :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> [Suspended o] -> Bool -> (g, q, [Suspended o])
-        randomOutputTransitions' t g q outs isAfterNoInput =
+        randomOutputTransitions' t g''' q outs isAfterNoInput =
             let ts = Map.filterWithKey (\k _ -> isOutput k) (t q)
-            in if Map.null ts -- if no outputs are available at all, 
-                then if isAfterNoInput then (g, q, Out Quiescence : outs) else (g, q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
-                else let (produceOut, g') = if isAfterNoInput then (True, g) else flipCoin g p -- else decide whether to produce more actions. This is mandatory if a "Nothing" input was previously received, otherwise flip a coin
+            in if Map.null ts -- if no outputs are available at all,
+                then if isAfterNoInput then (g''', q, Out Quiescence : outs) else (g''', q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
+                else let (produceOut, g') = if isAfterNoInput then (True, g''') else flipCoin g''' p -- else decide whether to produce more actions. This is mandatory if a "Nothing" input was previously received, otherwise flip a coin
                     in if not produceOut
                         then (g', q, outs)
                         else -- pick a random output, and continue randomly picking more outputs

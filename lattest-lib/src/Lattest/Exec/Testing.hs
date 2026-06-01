@@ -132,8 +132,8 @@ makeTester' ioState initSpec initTestController = ActionController {
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
         makeUpdate :: (IOAfter m loc q t tdest act ioState, StepSemantics m loc q t tdest act) =>
             ioState -> (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
-        makeUpdate ioState (spec, testController) act = do
-            spec' <- ioAfter ioState spec act 
+        makeUpdate ioState' (spec, testController) act = do
+            spec' <- ioAfter ioState' spec act
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do

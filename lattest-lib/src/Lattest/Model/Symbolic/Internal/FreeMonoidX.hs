@@ -305,7 +305,7 @@ mapFreeMonoidX :: (Functor f, Ord (f b)) => (a -> b) -> FreeMonoidX (f a) -> Fre
 mapFreeMonoidX f = mapTerms (fmap f)
 
 allFreeMonoidX :: (TermWrapper f) => (a -> Bool) -> FreeMonoidX (f a) -> Bool
-allFreeMonoidX pred = all pred . distinctTermsT
+allFreeMonoidX p = all p . distinctTermsT
 
 -- | Flatten a free-monoid.
 --

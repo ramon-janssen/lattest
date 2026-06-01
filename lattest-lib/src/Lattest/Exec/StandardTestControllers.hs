@@ -119,11 +119,11 @@ randomTestSelectorFromGen :: (After m loc q t tdest act, FiniteMenu t act, Folda
     => g -> TestSelector m loc q t tdest act g i
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
-    randomSelectTest g aut _ =
+    randomSelectTest g' aut _ =
         let ins = takeJusts $ actToChoice <$> specifiedMenu aut
         in if null ins
             then error "random test selector found an empty menu"
-            else return $ Just $ takeRandom g ins
+            else return $ Just $ takeRandom g' ins
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
@@ -152,11 +152,11 @@ randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossi
     where
     solveRandomIfPossible :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard), RandomGen g)
         => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
-    solveRandomIfPossible (g,smtRef) intrpr _ = do
-        (maybeGateValue, (g', smtRef)) <- solveRandomInput (g,smtRef) maybeFromIOAct intrpr
+    solveRandomIfPossible (g'',smtRef') intrpr _ = do
+        (maybeGateValue, (g', smtRef'')) <- solveRandomInput (g'',smtRef') maybeFromIOAct intrpr
         return $ case maybeGateValue of
             Nothing -> Nothing
-            Just value -> Just (value, (g', smtRef))
+            Just value -> Just (value, (g', smtRef''))
     maybeFromIOAct :: SymInteract (IOAct i1 o1) -> Maybe (SymInteract i1)
     maybeFromIOAct = error ""
 
@@ -190,11 +190,11 @@ randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRe
     where
     solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
         => Double -> (g,SMTRef) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
-    solveRandomOrWait pWait (g,smtRef) intrpr _ =
-        let (doWait, g') = flipCoin g pWait
+    solveRandomOrWait pWait' (g'',smtRef') intrpr _ =
+        let (doWait, g') = flipCoin g'' pWait'
         in if doWait
-            then return $ Just (Nothing, (g', smtRef))
-            else Just <$> solveRandomInput (g', smtRef) maybeFromIFInteraction intrpr
+            then return $ Just (Nothing, (g', smtRef'))
+            else Just <$> solveRandomInput (g', smtRef') maybeFromIFInteraction intrpr
     maybeFromIFInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
     maybeFromIFInteraction (SymInteract (In i) vars) = Just $ SymInteract i vars
     maybeFromIFInteraction (SymInteract _ _) = Nothing
@@ -298,7 +298,7 @@ untilCondition controller condition = TestController {
     }
     where
     updateStopCondition :: TestController m loc q t tdest act state i r -> state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe state)
-    updateStopCondition condition state aut act q = updateTestController condition state aut act q >>= return . leftToMaybe
+    updateStopCondition condition' state aut act q = updateTestController condition' state aut act q >>= return . leftToMaybe
 
 
 {- |

@@ -81,7 +81,7 @@ adgTestSelector aut delta =
                     Prefix l next -> if l == delta
                                         then if ioact == Out Quiescence then [next] else []
                                      else if ioact == Out (OutSusp l) then [next] else []
-                    Plus ls -> concat $ fmap getNextState ls
+                    Plus ls' -> concat $ fmap getNextState ls'
 
 {- | A TestController that yields tests that tries to take an access sequence to the targetState and then executes the adaptive distinguishing sequence
 -}

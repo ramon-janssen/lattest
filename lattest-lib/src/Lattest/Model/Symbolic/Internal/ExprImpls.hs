@@ -583,10 +583,10 @@ noAssignment :: VarModel
 noAssignment = VarModel Map.empty Map.empty Map.empty
 
 instance Show VarModel where
-    show (VarModel ints bools strings) = showMapList $ showList ints ++ showList bools ++ showList strings
+    show (VarModel ints bools strings) = showMapList $ showList' ints ++ showList' bools ++ showList' strings
         where
-        showMapList map = "{" ++ (List.intercalate ", " map) ++ "}"
-        showList map = showAssign <$> Map.toList map
+        showMapList m' = "{" ++ (List.intercalate ", " m') ++ "}"
+        showList' m' = showAssign <$> Map.toList m'
         showAssign (v,e) = varName v ++ ":=" ++ show e
 
 substConst :: Assignable t => Valuation -> Expr t -> Expr t

@@ -220,7 +220,7 @@ instance Show a => Show (FreeLattice a) where
     show (FreeLattice Bottom) = "⊥"
     show (FreeLattice (Levitate a)) = show' a
         where
-        show' (Var a) = show a
+        show' (Var a') = show a'
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
@@ -377,7 +377,7 @@ instance BooleanConfiguration FreeLattice where
     asExpr (FreeLattice Bottom) = E.sFalse
     asExpr (FreeLattice (Levitate a)) = asExpr' a
         where
-        asExpr' (Var a) = a
+        asExpr' (Var a') = a'
         asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
         asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 

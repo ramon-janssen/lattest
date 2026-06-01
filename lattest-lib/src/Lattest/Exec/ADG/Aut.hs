@@ -22,10 +22,10 @@ import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct,Suspended(
 data Aut a b = Aut {initial :: (State a b), states :: Set (State a b), idStateMap :: (Map a (State a b)), inputs ::  (Set b), outputs :: (Set b)}
 
 instance (Show a, Show b) => Show (Aut a b) where
-    show (Aut initial states _ inps outs) = "Initial: " ++ (show initial) ++ "\n" ++
-                                        "States: " ++ (show $ Set.toList $ states) ++ "\n" ++
-                                        "Input alphabet:" ++ (show $ inps) ++
-                                        "Output alphabet:" ++ (show $ outs)
+    show (Aut initial' states' _ inps' outs') = "Initial: " ++ (show initial') ++ "\n" ++
+                                        "States: " ++ (show $ Set.toList $ states') ++ "\n" ++
+                                        "Input alphabet:" ++ (show $ inps') ++
+                                        "Output alphabet:" ++ (show $ outs')
                                         --"IdStateMap: " ++ (show $ (Map.mapKeys Util.stateToName . Map.map (Util.stateToName . sid)) map)
 
 data State a b = State {sid :: a, inp :: Set b, out :: Set b, trans :: Map b a}
@@ -39,8 +39,8 @@ instance (Eq a) => Eq (State a b) where
     (/=) s1 s2 = (sid s1) /= (sid s2)
 
 statesToAut :: (Ord a,Ord b) => State a b -> Set (State a b) -> Aut a b
-statesToAut ini states = let (map,inps,outs) = Set.foldr (\s (map,inps,outs) -> (Map.insert (sid s) s map, Set.union inps (inp s), Set.union outs (out s))) (Map.empty,Set.empty,Set.empty) states
-                            in Aut ini states map inps outs
+statesToAut ini states' = let (m,inps',outs') = Set.foldr (\s (m',inps'',outs'') -> (Map.insert (sid s) s m', Set.union inps'' (inp s), Set.union outs'' (out s))) (Map.empty,Set.empty,Set.empty) states'
+                            in Aut ini states' m inps' outs'
 
 enab :: Ord b => (State a b) -> Set b
 enab s = Set.union (inp s) (out s)
@@ -73,8 +73,8 @@ firstCompRel :: (Ord a, Ord b) => (Aut a b) -> Set (State a b,State a b)
 firstCompRel aut = Set.fromList [(q,q') | q <- Set.toList (states aut),  q' <- Set.toList (states aut)]
 
 expandCompRel :: (Ord a, Ord b) => (Aut a b) -> Set (State a b,State a b) -> Set (State a b,State a b)
-expandCompRel aut@(Aut _ states _ _ _) rel =
-    Set.fromList [(q,q') | q <- Set.toList states, q' <- Set.toList states,
+expandCompRel aut@(Aut _ states' _ _ _) rel =
+    Set.fromList [(q,q') | q <- Set.toList states', q' <- Set.toList states',
              let mem = compMemFunc aut rel q q',
              (all mem (Set.intersection (inp q) (inp q'))) && (any mem (Set.intersection (out q) (out q')))]
 {-
@@ -111,11 +111,11 @@ getAccesSequences' :: (Ord a,Ord b) => Aut a b -> Set (State a b) -> Map (State 
 getAccesSequences' aut toInv accMap =
     if Set.null toInv then accMap
     else let state = Set.elemAt 0 toInv
-             (newToInv,newAccMap) = List.foldr (\(mu,dest) (inv,map) ->
+             (newToInv,newAccMap) = List.foldr (\(mu,dest) (inv,m') ->
                                                 let destState = (idStateMap aut) ! dest
-                                                in if Map.notMember destState map
-                                                    then (Set.insert destState inv, Map.insert destState ((map ! state) ++ [mu]) map)
-                                                    else (inv,map)) ((Set.delete state toInv),accMap) (Map.toList (trans state))
+                                                in if Map.notMember destState m'
+                                                    then (Set.insert destState inv, Map.insert destState ((m' ! state) ++ [mu]) m')
+                                                    else (inv,m')) ((Set.delete state toInv),accMap) (Map.toList (trans state))
          in getAccesSequences' aut newToInv newAccMap
 
 extendAccWithTransition :: (Ord a,Ord b) => Aut a b -> [b] -> Set [b]
@@ -133,24 +133,24 @@ union (Aut initial1 states1 idStateMap1 inputs1 outputs1) (Aut _ states2 idState
     else error "states identifiers of automata not disjunct"
 
 constrAut :: (Ord a, Ord b, Show a, Show b) => (a, Set (a,b,a), Set b, Set b) -> Aut a b
-constrAut (initial, transs, inps, outs) =
-    let statemap = stautToStateMap transs inps outs
+constrAut (initial', transs, inps', outs') =
+    let statemap = stautToStateMap transs inps' outs'
         noTransStates = [t | (_,_,t) <- Set.toList transs, Map.notMember t statemap]
         fullStateMap = List.foldr (\s m -> Map.insert s (Set.empty,Set.empty,Map.empty) m) statemap noTransStates
-         in case Map.lookup initial fullStateMap of
+         in case Map.lookup initial' fullStateMap of
                 Nothing -> error ("Initial state does not have any transitions")
                 Just (ini,outi,tmapi) ->
                     let statesandmap = getStatesAndMap fullStateMap
-                     in Aut (State initial ini outi tmapi) (fst statesandmap) (snd statesandmap) inps outs
+                     in Aut (State initial' ini outi tmapi) (fst statesandmap) (snd statesandmap) inps' outs'
 
 addDelta :: (Ord a) => String -> (Aut a String) -> (Aut a String)
-addDelta delta (Aut initial states _ inputs outputs) =
-    let newStates = Set.foldl (\set s@(State sid inp out trans) ->
-                                       if Set.null out
-                                       then Set.insert (State sid inp (Set.insert delta out) (Map.insert delta sid trans)) set
-                                       else Set.insert s set) Set.empty states
+addDelta delta (Aut initial' states' _ inputs' outputs') =
+    let newStates = Set.foldl (\set s@(State sid' inp' out' trans') ->
+                                       if Set.null out'
+                                       then Set.insert (State sid' inp' (Set.insert delta out') (Map.insert delta sid' trans')) set
+                                       else Set.insert s set) Set.empty states'
         stateMap = (Map.fromList $ List.map (\s -> (sid s,s)) $ Set.toList newStates)
-    in (Aut (stateMap Map.! sid initial) newStates stateMap inputs (Set.insert delta outputs))
+    in (Aut (stateMap Map.! sid initial') newStates stateMap inputs' (Set.insert delta outputs'))
 
 getStatesAndMap :: (Ord a, Ord b) => Map a (Set b, Set b, Map b a) -> (Set (State a b), Map a (State a b))
 getStatesAndMap statemap =
@@ -162,9 +162,9 @@ getStatesAndMap statemap =
 stautToStateMap :: (Ord a, Ord b, Show a, Show b) => Set (a,b,a) -> Set b -> Set b -> Map a (Set b, Set b, Map b a)
 stautToStateMap transs inps outs =
     Set.foldl (\m t -> case t of
-        (f, mu, t) -> -- map: statid -> (inp,out,Map(sym,statid))
-            if (Set.member mu inps) then Map.insertWith (mergeMaps f) f (Set.singleton mu, Set.empty,Map.singleton mu t) m
-            else if (Set.member mu outs) then Map.insertWith (mergeMaps f) f (Set.empty,Set.singleton mu,Map.singleton mu t) m
+        (f, mu, t') -> -- map: statid -> (inp,out,Map(sym,statid))
+            if (Set.member mu inps) then Map.insertWith (mergeMaps f) f (Set.singleton mu, Set.empty,Map.singleton mu t') m
+            else if (Set.member mu outs) then Map.insertWith (mergeMaps f) f (Set.empty,Set.singleton mu,Map.singleton mu t') m
             else error ("Channel " ++ (show mu) ++ " neither input nor output!") -- ++ (show (f, mu, t)))
                                        ) Map.empty transs
 
@@ -190,24 +190,24 @@ adgAutFromAutomaton :: (Ord a, Ord b) => StandardAutomata.ConcreteSuspAutIntrpr 
 adgAutFromAutomaton aut delta = let
     stateIds = Automaton.reachable $ Automaton.syntacticAutomaton aut
     alphabet = Set.map asSuspended $ Automaton.alphabet $ Automaton.syntacticAutomaton aut
-    (inputs,outputs) = Set.foldr (\l (i,o) -> if isInput l then (Set.insert l i,o) else (i,Set.insert l o)) (Set.empty,Set.singleton (Out Quiescence)) alphabet
-    stateTrans = Set.map (\sid -> (sid, insertTransitions sid (insertTransitions sid Map.empty inputs aut delta) outputs aut delta)) stateIds
-    (inp,out) = (Set.map (getLabel delta) inputs, Set.map (getLabel delta) outputs)
-    stateMap = Map.fromList $ Set.toList $ Set.map (\(sid,trans) -> (sid, State sid (Set.intersection inp $ Set.fromList $ Map.keys trans) (Set.intersection out $ Set.fromList $ Map.keys trans) trans)) stateTrans
+    (inputs',outputs') = Set.foldr (\l (i,o) -> if isInput l then (Set.insert l i,o) else (i,Set.insert l o)) (Set.empty,Set.singleton (Out Quiescence)) alphabet
+    stateTrans = Set.map (\sid' -> (sid', insertTransitions sid' (insertTransitions sid' Map.empty inputs' aut delta) outputs' aut delta)) stateIds
+    (inp',out') = (Set.map (getLabel delta) inputs', Set.map (getLabel delta) outputs')
+    stateMap = Map.fromList $ Set.toList $ Set.map (\(sid',trans') -> (sid', State sid' (Set.intersection inp' $ Set.fromList $ Map.keys trans') (Set.intersection out' $ Set.fromList $ Map.keys trans') trans')) stateTrans
     in case Automaton.stateConf aut of
         Det q -> case Map.lookup q stateMap of
             Nothing -> Nothing
             Just s -> Just $ statesToAut s $ Set.fromList $ Map.elems stateMap
     where
         insertTransition :: (Ord a, Ord b) => a -> (Map b a) -> (IOSuspAct b b) -> StandardAutomata.ConcreteSuspAutIntrpr Det a b b -> b -> (Map b a)
-        insertTransition sid m ioact aut delta =
-            case Automaton.stateConf (Automaton.inConfiguration aut (Det sid) `Automaton.after` ioact) of
-                Det q -> Map.insert (getLabel delta ioact) q m
-                _ -> m
+        insertTransition sid' m' ioact aut' delta' =
+            case Automaton.stateConf (Automaton.inConfiguration aut' (Det sid') `Automaton.after` ioact) of
+                Det q -> Map.insert (getLabel delta' ioact) q m'
+                _ -> m'
         getLabel :: b -> IOSuspAct b b -> b
-        getLabel delta ioact =  case ioact of
+        getLabel delta' ioact =  case ioact of
                              (In i) -> i
                              (Out (OutSusp o)) -> o
-                             (Out Quiescence) -> delta
+                             (Out Quiescence) -> delta'
         insertTransitions :: (Ord a, Ord b) => a -> Map b a -> Set (IOSuspAct b b) -> StandardAutomata.ConcreteSuspAutIntrpr Det a b b -> b -> Map b a
-        insertTransitions sid trans alf aut delta = Set.foldr (\l m -> insertTransition sid m l aut delta) trans alf
+        insertTransitions sid' trans' alf aut' delta' = Set.foldr (\l m' -> insertTransition sid' m' l aut' delta') trans' alf

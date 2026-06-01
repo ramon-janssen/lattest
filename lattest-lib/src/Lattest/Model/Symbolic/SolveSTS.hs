@@ -42,9 +42,9 @@ solveRandomInteraction intrpr subsetFunction r = do
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
     selectInteractionsAndGuards :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
-    selectInteractionsAndGuards intrpr subsetFunction =
-        let alph = toList $ alphabet $ syntacticAutomaton intrpr
-        in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction &&& interactToGuard intrpr)) $ alph
+    selectInteractionsAndGuards intrpr' subsetFunction' =
+        let alph = toList $ alphabet $ syntacticAutomaton intrpr'
+        in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction' &&& interactToGuard intrpr')) $ alph
 
 interactToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymInteract g -> SymGuard
 interactToGuard intrpr interaction = let

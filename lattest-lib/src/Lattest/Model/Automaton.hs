@@ -110,11 +110,11 @@ data AutSyntax m loc t tdest = Automaton {
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
 automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
-automaton mqi alphFld trans = Automaton mqi alph trans'
+automaton mqi alphFld transRel' = Automaton mqi alph trans'
     where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
     alph = Set.fromList $ Foldable.toList alphFld
-    trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
+    trans' q = Map.restrictKeys (transRel' q) alph `Map.union` setToList alph implicitDestination -- left-biased union
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
@@ -236,7 +236,7 @@ after :: (After m loc q t tdest act, Ord (m q), Ord q) => AutIntrpr m loc q t td
 after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     where
     takeTransitionId :: (BoundedMonad m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
-    takeTransitionId q alph act trans' = Identity $ takeTransition q alph act trans'
+    takeTransitionId q alph act' trans' = Identity $ takeTransition q alph act' trans'
     fmapId :: (BM.OrdFunctor f, Ord y) => (x -> Identity y) -> f x -> Identity (f y)
     fmapId f = Identity . BM.ordMap (runIdentity . f)
 
@@ -283,10 +283,10 @@ afterInternal' internalTakeTransition alph transMap act q = do
             -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
             nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
             nothingTTdest _ = Nothing
-        TransitionMove (t, mtdestloc) -> moveAlongTransition q act t BM.<#> mtdestloc
+        TransitionMove (t', mtdestloc) -> moveAlongTransition q act t' BM.<#> mtdestloc
             where
             moveAlongTransition :: (StepSemantics m loc q t tdest act) => q -> act -> t -> (tdest, loc) -> m q
-            moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+            moveAlongTransition q' act' t'' (tdest, loc) = move q' act' (Just (t'', tdest)) loc
         where
         lookupAction :: Ord k => Map k a -> k -> a
         lookupAction m k = case Map.lookup k m of
@@ -471,15 +471,15 @@ instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
 instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (GateValue g') where
-    asTransition interactions (GateValue g values) = do
+    asTransition interactions (GateValue g vals) = do
         let ts = Set.map interactionGate interactions
         ig' <- asTransition ts g
         case List.find (\(SymInteract ig _) -> ig == ig') (Set.toList interactions) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
             Just i@(SymInteract _ vars) ->
-                if List.length values /= List.length vars
+                if List.length vals /= List.length vars
                     then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
-                    else if List.all (\(var,val) -> varType var == constType val) (zip vars values)
+                    else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
@@ -497,9 +497,9 @@ instance (Completable (GateValue g'), BoundedMonad m, TransitionMapping g g') =>
         where
         assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
         -- the following case distinctino could be removed if constants were also typed
-        assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr Integer))
-        assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr Bool))
-        assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr String))
+        assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
+        assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
+        assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
@@ -538,9 +538,9 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
     ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
-            Just interact@(SymInteract _ gateVars) ->
+            Just interact'@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
-                    mtdestloc = m interact
+                    mtdestloc = m interact'
                     guard = combineGuards $ tdestlocToGuard BM.<#> mtdestloc
                     guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
                 in return $ LocationMove $ if isSpecified mtdestloc && guardVal
@@ -563,9 +563,9 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
     ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
-            Just interact@(SymInteract _ gateVars) ->
+            Just interact'@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
-                    mtdestloc = m interact
+                    mtdestloc = m interact'
                     guard = combineGuards $ tdestlocToGuard BM.<#> mtdestloc
                     guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
                 in return $ LocationMove $ if isSpecified mtdestloc && guardVal

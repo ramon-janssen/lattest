@@ -43,19 +43,19 @@ evaluateGuard guard = case eval guard of
 -}
 solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
 solveAnySequential [] = return Nothing
-solveAnySequential ((interact@(SymInteract _ vars),guard):alph) = do
+solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
     case maybeSolved of
         Nothing -> solveAnySequential alph
-        Just solved -> return $ Just $ valuationToGateValue interact solved
+        Just solved -> return $ Just $ valuationToGateValue interact' solved
 --data SymInteract g = SymInteract g [Variable]
 --data GateValue g = GateValue g [Constant]
 valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
-valuationToGateValue (SymInteract gate params) valuation =
-    GateValue gate $ fmap (getValueForVar $ E.toConstantsMap valuation) params
+valuationToGateValue (SymInteract g' params) valuation =
+    GateValue g' $ fmap (getValueForVar $ E.toConstantsMap valuation) params
     where
-        getValueForVar valuation var =
-            case Map.lookup var valuation of
+        getValueForVar val' var =
+            case Map.lookup var val' of
                 Just value -> value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 

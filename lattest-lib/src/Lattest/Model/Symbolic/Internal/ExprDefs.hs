@@ -105,12 +105,12 @@ instance JSON.FromJSON Constant where
         | not $ JSON.member "value" m = fail "expected Constant with a value field"
         | not $ JSON.member "type" m = fail "expected Constant with a type field"
     parseJSON (JSON.Object m)
-        | JSON.lookup "type" m == Just "bool" = parseBool $ lookup "value" m
-        | JSON.lookup "type" m == Just "int" = parseInt $ lookup "value" m
-        | JSON.lookup "type" m == Just "string" = parseString $ lookup "value" m
+        | JSON.lookup "type" m == Just "bool" = parseBool $ lkup "value" m
+        | JSON.lookup "type" m == Just "int" = parseInt $ lkup "value" m
+        | JSON.lookup "type" m == Just "string" = parseString $ lkup "value" m
         where
-        lookup :: JSON.Key -> JSON.KeyMap v -> v
-        lookup k = Maybe.fromJust . JSON.lookup k
+        lkup :: JSON.Key -> JSON.KeyMap v -> v
+        lkup k = Maybe.fromJust . JSON.lookup k
         parseBool (JSON.Bool b) = return $ Cbool b
         parseBool _ = fail "type indicates bool, but value is not of type bool"
         parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Cint i

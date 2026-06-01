@@ -207,7 +207,7 @@ accessSequences' aut accMap boundary = case takeArbitrary boundary of
     Just (q, boundaryRem) ->
         let ts = transRel aut q
             labelqs = concat $ fmap (\(l,qs) -> zip (replicate (length qs) l) qs) $ Map.toList $ Map.map getStates ts
-            (accMap',new) = foldr (\(label,dq) (m,new) -> insertLabelAndDestLocInAccMap q label dq m new) (accMap,Set.empty) labelqs
+            (accMap',new) = foldr (\(label,dq) (m,new') -> insertLabelAndDestLocInAccMap q label dq m new') (accMap,Set.empty) labelqs
         in accessSequences' aut accMap' (boundaryRem `Set.union` new)
         where
         getStates = fmap snd . Foldable.toList
@@ -217,7 +217,7 @@ insertLabelAndDestLocInAccMap q label dq accMap new = case Map.lookup q accMap o
     Nothing -> error "could not lookup known location for access sequence"
     Just accSeq -> case addStateAndAccSeq accMap dq (accSeq ++ [label]) of
         (newMap,Nothing) -> (newMap, new)
-        (newMap, Just q) -> (newMap, Set.insert q new)
+        (newMap, Just q') -> (newMap, Set.insert q' new)
 
 addStateAndAccSeq :: (Ord loc) => Map loc [t] -> loc -> [t] -> (Map loc [t], Maybe loc)
 addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
