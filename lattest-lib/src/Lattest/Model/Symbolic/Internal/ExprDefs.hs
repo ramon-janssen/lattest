@@ -5,6 +5,7 @@ See LICENSE in the parent Symbolic folder.
 -}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
@@ -112,7 +113,7 @@ instance JSON.FromJSON Constant where
         lookup k = Maybe.fromJust . JSON.lookup k
         parseBool (JSON.Bool b) = return $ Cbool b
         parseBool _ = fail "type indicates bool, but value is not of type bool"
-        parseInt (JSON.Number (DS.floatingOrInteger -> Right i)) = return $ Cint i
+        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Cint i
         parseInt _ = fail "type indicates int, but value is not of type int"
         parseString (JSON.String s) = return $ Cstring $ Text.unpack s
         parseString _ = fail "type indicates string, but value is not of type string"
