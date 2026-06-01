@@ -15,7 +15,7 @@ import qualified Data.List as List
 import qualified Lattest.Model.Automaton as Automaton
 import qualified Lattest.Model.StandardAutomata as StandardAutomata
 import Lattest.Model.BoundedMonad(Det(..))
-import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct(..),Suspended(..))
+import Lattest.Model.Alphabet(IOAct(..),isInput,asSuspended,IOSuspAct,Suspended(..))
 
 
 

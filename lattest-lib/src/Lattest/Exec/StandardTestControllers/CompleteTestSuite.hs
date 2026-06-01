@@ -15,7 +15,7 @@ import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended)
 import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax)
 import Lattest.Model.BoundedMonad(Det(..))
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, interpretQuiescentConcrete)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
 import Control.Monad (forM)
 import qualified Data.Map as Map ((!))
