@@ -199,7 +199,6 @@ arbitraryVar t =
                     IntType -> 'i'
                     BoolType -> 'b'
                     StringType -> 's'
-                    _ -> '?'
     in CM.liftM (\n -> Var $ Variable (prefix:n) t) (return <$> charExpr)
 
 type PropEvalSymbolic t = Expr t -> Bool

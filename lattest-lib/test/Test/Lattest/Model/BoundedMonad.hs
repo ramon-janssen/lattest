@@ -54,7 +54,6 @@ instance (Arbitrary a, Ord a) => Arbitrary (LatticeOp a) where
     shrink (Var _) = [Top, Bot]
     shrink (Join x y) = [Join x' y' | (x', y') <- shrink (x, y)] ++ shrink x ++ shrink y
     shrink (Meet x y) = [Meet x' y' | (x', y') <- shrink (x, y)] ++ shrink x ++ shrink y
-    shrink _ = []
     shrink (Bind l subs) = [let subs' = Map.restrictKeys subs (freeVars l') in if Map.null subs then l' else (Bind l' subs') | l' <- shrink l]
                             ++ [Bind l subs' | subs' <- simplifiedSubs]
         where
