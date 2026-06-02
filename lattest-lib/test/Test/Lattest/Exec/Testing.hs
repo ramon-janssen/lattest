@@ -157,10 +157,10 @@ testOutputOutsideAlphabet :: Test
 testOutputOutsideAlphabet = TestCase $ do
     imp <- impWithX
     let model = interpretQuiescentInputAttemptConcrete specWithY
-    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
+    (verdict, ((_, _), _)) <- runTester model testSelector imp
     case verdict of
         Inconclusive _ -> return ()
-        v -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
+        _ -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
 
 
 

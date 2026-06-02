@@ -39,7 +39,7 @@ sizeOf = sizeOf' . view
 sizeOf' :: SizeOf a => ExprView a -> Int
 sizeOf' (Var _) = 1
 sizeOf' (Const c) = sizeOfTyped c
-sizeOf' (Ite i t e) = sizeOf' i + sizeOf' t + sizeOf' t + 1
+sizeOf' (Ite i t _) = sizeOf' i + sizeOf' t + sizeOf' t + 1
 sizeOf' (EqualInt e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
 sizeOf' (EqualBool e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
 sizeOf' (EqualString e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
@@ -80,8 +80,8 @@ instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
     shrink (EqualString e1 e2) = [EqualString e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
     shrink (Divide e1 e2) = [Divide e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1
     shrink (Modulo e1 e2) = [Modulo e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1 ++ shrink e2
-    shrink (Sum es) = [] -- shrinkListExpr (Sum . FM.fromListT) (FM.toListT es)
-    shrink (Product es) = [] -- shrinkListExpr (Product . FM.fromListT) (FM.toList es)
+    shrink (Sum _) = [] -- shrinkListExpr (Sum . FM.fromListT) (FM.toListT es)
+    shrink (Product _) = [] -- shrinkListExpr (Product . FM.fromListT) (FM.toList es)
     shrink (Length e) = Length <$> shrink e
     shrink (GezInt e) = GezInt <$> shrink e
     shrink (Not e) = [e]
@@ -180,7 +180,7 @@ stringExpr = CM.liftM2 (++) (return <$> charExpr) (genList charExpr)
 -- generate lists, more conservatively than with listOf, in order to avoid exponential blowup
 genList :: Gen a -> Gen [a]
 genList g = sized $ \n -> do
-    n' <- choose (0, intSqrt n - 1)
+    _ <- choose (0, intSqrt n - 1)
     CM.replicateM (intSqrt n) g
 
 intSqrt :: Int -> Int
@@ -234,7 +234,7 @@ class ConcreteEval t where
     concreteEval' :: ExprView t -> Maybe t
 
 instance ConcreteEval Integer where
-    concreteEval' (Var v) = Nothing
+    concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
@@ -257,7 +257,7 @@ foldOccurList zero add mult monoid = (foldr add zero) <$> sequence (maybeEvalTer
 
 
 instance ConcreteEval Bool where
-    concreteEval' (Var v) = Nothing
+    concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (EqualInt e1 e2) = concreteBinOp (==) e1 e2
@@ -268,7 +268,7 @@ instance ConcreteEval Bool where
     concreteEval' (And es) = fmap and $ sequence (concreteEval' <$> Set.toList es)
 
 instance ConcreteEval String where
-    concreteEval' (Var v) = Nothing
+    concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (At e1 e2) = concreteBinOp mCharAt e1 e2

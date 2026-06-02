@@ -367,7 +367,7 @@ testQuiscence = TestCase $ do
     send Nothing adap
     send (Just "i") adap
     sendWithDelay impQueue "12" 0
-    t10 <- getCurrentTime
+    _ <- getCurrentTime
     assertObserve' Quiescence adap
     assertObserveIO (In "i") adap
     assertObserve' (OutSusp "12") adap
@@ -376,7 +376,7 @@ testQuiscence = TestCase $ do
     sendWithDelay impQueue "13" halfDeltaMillis
     send Nothing adap
     send (Just "j") adap
-    t11 <- getCurrentTime
+    _ <- getCurrentTime
     assertObserve' (OutSusp "13") adap
     assertObserveIO (In "j") adap
 

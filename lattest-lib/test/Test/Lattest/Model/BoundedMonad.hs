@@ -57,7 +57,7 @@ instance (Arbitrary a, Ord a) => Arbitrary (LatticeOp a) where
     shrink (Bind l subs) = [let subs' = Map.restrictKeys subs (freeVars l') in if Map.null subs then l' else (Bind l' subs') | l' <- shrink l]
                             ++ [Bind l subs' | subs' <- simplifiedSubs]
         where
-        simplifiedSubs = [ Map.insert var sub subs | (var,sub) <- Map.toList subs, sub' <- shrink sub ]
+        simplifiedSubs = [ Map.insert var sub subs | (var,sub) <- Map.toList subs, _ <- shrink sub ]
 
 constructLattice :: (BM.BoundedConfiguration l, BM.JoinSemiLattice (l a), BM.MeetSemiLattice (l a), BM.OrdMonad l, Ord a) => LatticeOp a -> l a
 constructLattice Top = BM.underspecified

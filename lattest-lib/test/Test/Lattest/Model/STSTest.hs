@@ -147,12 +147,12 @@ testSTSTestSelection = TestCase $ do
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
-    info <- SMT.runSMT smtRef SMT.openSolver
+    _ <- SMT.runSMT smtRef SMT.openSolver
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     assertEqual "expected conformal trace" [-- FIXME this test case assumes the SMT solver to return 1, but any solution in (1,10) is correct
         inp "water" [Cint 1],
         out "ok" [Cint 1],
@@ -249,10 +249,10 @@ specParameterized startType endType comp splitFirst =
   * whether start and end gates are input or output
   * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
 -}
-t1 startType endType p1 p2 q2 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
-t1 startType endType p1 p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
-t1 startType endType p1 p2 q2 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
-t1 startType endType p1 p2 q2 3 = Map.fromList $ []
+t1 startType _ p1 _ _ 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
+t1 _ endType _ p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
+t1 _ _ _ _ _ 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
+t1 _ _ _ _ _ 3 = Map.fromList $ []
 impParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> Integer -> Integer -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impParameterized startType endType p1 p2 q2 = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -269,13 +269,13 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
-    info <- SMT.runSMT smtRef SMT.openSolver
+    _ <- SMT.runSMT smtRef SMT.openSolver
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized startType endType p1 p2 q2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
     
     case expectedNonConformalTrace of
         Nothing -> do
@@ -357,26 +357,26 @@ specQ =
   * p
 -}
 tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [Cint p]), 1)]
-tq startType p 1 = Map.fromList $ []
+tq _ _ 1 = Map.fromList $ []
 impQParameterized :: (String -> IOAct String String) -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impQParameterized startType p = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tq startType p) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
 testLatticeSTSQuiescentPass :: String -> Bool -> Test
-testLatticeSTSQuiescentPass testName splitFirst = TestCase $ do
+testLatticeSTSQuiescentPass testName _ = TestCase $ do
     let nrSteps = 2
         cfg = Config.changeLog Config.defaultConfig False
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
-    info <- SMT.runSMT smtRef SMT.openSolver
+    _ <- SMT.runSMT smtRef SMT.openSolver
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
     assertEqual (testName ++ ": expected conformal trace") [
@@ -391,13 +391,13 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
-    info <- SMT.runSMT smtRef SMT.openSolver
+    _ <- SMT.runSMT smtRef SMT.openSolver
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -406,19 +406,19 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
                 ] observed
 
 testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
-testLatticeSTSQuiescentFail2 testName splitFirst = TestCase $ do
+testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     let nrSteps = 2
         cfg = Config.changeLog Config.defaultConfig False
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
-    info <- SMT.runSMT smtRef SMT.openSolver
+    _ <- SMT.runSMT smtRef SMT.openSolver
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -472,13 +472,13 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
         smtLog = Config.smtLog cfg
         smtProc = fromJust (Config.getProc cfg)
     smtRef <- SMT.createSMTRef smtProc smtLog
-    info <- SMT.runSMT smtRef SMT.openSolver
+    _ <- SMT.runSMT smtRef SMT.openSolver
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [

@@ -63,7 +63,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
     assertWith (lastInput == Nothing) ("expected Nothing, received " ++ show lastInput ++ " at end of test")
     where
     assertBufferedIS is es wts = assertBufferedIS' is es wts es
-    assertBufferedIS' is [] [] es = return ()
+    assertBufferedIS' _ [] [] _ = return ()
     assertBufferedIS' is (e:es) (wt:wts) oes = do
         run $ threadDelay $ waitTimeToMillis wt * 1000
         hasNext <- run $ atomically $ Streams.hasInput is
@@ -118,7 +118,7 @@ prop_jsonStream testInput = monadicIO $ do
     --return Discard
     void $ checkObjs actionStream' typedData
     where
-    checkObjs actionStream [] = return []
+    checkObjs _ [] = return []
     checkObjs actionStream [x] = checkObj actionStream x >>= \y -> return [y]
     checkObjs actionStream (x:xs) = do
         y <- checkObj actionStream x
