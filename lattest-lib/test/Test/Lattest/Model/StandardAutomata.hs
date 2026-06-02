@@ -139,7 +139,7 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 
-sDoubleState = NonDet $ Set.fromList [0,1]
+sDoubleState = NonDet $ Set.fromList [0 :: Integer, 1]
 tDoubleRecursion = nonDetConcTransFromMRel 
     [(0, "act", sDoubleState)
     ,(1, "act", sDoubleState)

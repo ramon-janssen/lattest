@@ -185,7 +185,7 @@ genList g = sized $ \n -> do
     CM.replicateM (intSqrt n) g
 
 intSqrt :: Int -> Int
-intSqrt = floor . sqrt . fromIntegral
+intSqrt = floor . (sqrt :: Double -> Double) . fromIntegral
 
 prop_symbolicEval :: Expr Integer -> Bool
 prop_symbolicEval e = rightToMaybe (eval e) == concreteEval e
