@@ -99,7 +99,7 @@ testSTSUnHappyFlow = TestCase $ do
 assertThrowsError :: String -> a -> IO ()
 assertThrowsError expectedError someVal = do
     actualError <- Exception.handle handler $ do
-        Exception.evaluate someVal
+        _ <- Exception.evaluate someVal
         return Nothing -- no exception thrown, so no error message
     assertEqual "expected error: " (Just expectedError) actualError
     where
