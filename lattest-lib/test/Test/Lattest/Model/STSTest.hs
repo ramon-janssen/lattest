@@ -152,7 +152,6 @@ testSTSTestSelection = TestCase $ do
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
-    let initAssign = Map.singleton (Variable "x" IntType) (Cint 0)
     (verdict, ((observed, maybeMq), maybePrvMq)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     assertEqual "expected conformal trace" [-- FIXME this test case assumes the SMT solver to return 1, but any solution in (1,10) is correct
         inp "water" [Cint 1],

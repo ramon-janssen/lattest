@@ -46,7 +46,7 @@ runQuickCheckTests = do
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
     quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
-    quickCheckWithTimeoutWithNumWithSize prop n maxSize = quickCheck $ within (durationSeconds * 1000000) $ withMaxSuccess n $ forAllShrink (scale (max maxSize) arbitrary) shrink prop
+
 
 makeHUnitTests :: IO Test
 makeHUnitTests = do

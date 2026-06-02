@@ -161,8 +161,6 @@ instance ConcreteGenExpr String where
         CM.liftM Concat (genList subexprSqrt)
         ]
         where
-        subexpr :: ConcreteGenExpr t => Gen (ExprView t)
-        subexpr = genExpr (n - 1)
         subexpr2 :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr2 = genExpr $ (n `div` 2) - 1
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
