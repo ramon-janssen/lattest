@@ -8,31 +8,41 @@ where
 
 import Test.HUnit hiding (Path, path)
 
-import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),sf)
+import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),StateF,sf)
 
 -- TODO prototype imports, (re)move or insert into alphabetical order
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(Verdict(..), runTester, Verdict(Pass))
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.BoundedMonad(isConclusive, isForbidden)
+import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF)
 import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), InputAttempt(..))
-import System.Random(mkStdGen)
-import qualified Data.Map as Map (fromList)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, InputAttempt(..))
+import Lattest.Adapter.Adapter(Adapter(..))
+import System.Random(StdGen, mkStdGen)
+import qualified Data.Map as Map (Map, fromList)
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 
+nrSteps :: Int
 nrSteps = 50
+testSelector :: TestController BM.FreeLatticeCNF StateF StateF (IOAct IF OF) () (SuspendedIF IF OF) ((((StdGen, Int), [SuspendedIF IF OF]), Maybe (BM.FreeLatticeCNF StateF)), Maybe (BM.FreeLatticeCNF StateF)) (Maybe IF) (([SuspendedIF IF OF], Maybe (BM.FreeLatticeCNF StateF)), Maybe (BM.FreeLatticeCNF StateF))
 testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
 
+x :: IOAct i OF
 x = Out X
+y :: IOAct i OF
 y = Out Y
+af :: IOAct IF o
 af = In A
+bf :: IOAct IF o
 bf = In B
 
 data StateFDet = Q0fd | Q1fd | Q2fd deriving (Show, Eq, Ord)
+tFDetCorrect :: StateFDet -> Map.Map (IOAct IF OF) StateFDet
 tFDetCorrect Q0fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q0fd)]
 tFDetCorrect Q1fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q2fd)]
 tFDetCorrect Q2fd = Map.fromList [(af, Q1fd), (bf, Q0fd), (y, Q2fd)]
+impFDetCorrect :: IO (Adapter (SuspendedIF IF OF) (Maybe IF))
 impFDetCorrect = pureAdapter (mkStdGen 123) 0.5 tFDetCorrect Q0fd
 
 testRandomFCorrect :: Test
@@ -44,9 +54,11 @@ testRandomFCorrect = TestCase $ do
     assertEqual "incorrect number of observations made" nrSteps (length observed)
     assertEqual "final state should be inconclusive" (Just True) (not . isConclusive <$> maybeMq)
 
+tFDetIncorrectOutput :: StateFDet -> Map.Map (IOAct IF OF) StateFDet
 tFDetIncorrectOutput Q0fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q0fd)]
 tFDetIncorrectOutput Q1fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q2fd)]
 tFDetIncorrectOutput Q2fd = Map.fromList [(af, Q1fd), (bf, Q0fd), (x, Q2fd), (y, Q2fd)] -- incorrect x-transition
+impFDetIncorrectOutput :: IO (Adapter (SuspendedIF IF OF) (Maybe IF))
 impFDetIncorrectOutput = pureAdapter (mkStdGen 123) 0.5 tFDetIncorrectOutput Q0fd
 
 testRandomFIncorrectOutput :: Test
@@ -64,9 +76,11 @@ testRandomFIncorrectOutput = TestCase $ do
     assertEqual "state before the final state should be inconclusive" (Just True) (not . isConclusive <$> maybePrvMq)
     assertEqual "final state should be conclusive" (Just True) (isConclusive <$> maybeMq)
 
+tFDetIncorrectInput :: StateFDet -> Map.Map (IOAct IF OF) StateFDet
 tFDetIncorrectInput Q0fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q0fd)]
 tFDetIncorrectInput Q1fd = Map.fromList [(af, Q1fd), (x, Q0fd), (y, Q2fd)]
 tFDetIncorrectInput Q2fd = Map.fromList [(af, Q1fd), (y, Q2fd)] -- incorrect absence of a b-transition
+impFDetIncorrectInput :: IO (Adapter (SuspendedIF IF OF) (Maybe IF))
 impFDetIncorrectInput = pureAdapter (mkStdGen 123) 0.5 tFDetIncorrectInput Q0fd
 
 testRandomFIncorrectInput :: Test

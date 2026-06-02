@@ -4,6 +4,7 @@
 module Test.Lattest.Model.StandardAutomata (
 IF(..),
 OF(..),
+StateF(..),
 sf,
 IG(..),
 OG(..),
@@ -20,23 +21,34 @@ import Prelude hiding (take)
 import Test.HUnit
 import qualified Text.RawString.QQ as QQ
 
-import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
+import Lattest.Model.Automaton(AutSyntax, after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), asSuspended, δ)
 import Lattest.Model.BoundedMonad((/\), (\/), atom, top, bot, NonDet(..))
+import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF)
+import qualified Data.Map as Map (Map)
 import qualified Data.Set as Set
 
 data IF = A | B deriving (Show, Eq, Ord)
 data OF = X | Y deriving (Show, Eq, Ord)
 data StateF = Q0f | Q1f | Q2f deriving (Show, Eq, Ord)
+x :: IOAct i OF
 x = Out X
+y :: IOAct i OF
 y = Out Y
+af :: IOAct IF o
 af = In A
+bf :: IOAct IF o
 bf = In B
+q0f :: BM.FreeLatticeCNF StateF
 q0f = atom Q0f
+q1f :: BM.FreeLatticeCNF StateF
 q1f = atom Q1f
+q2f :: BM.FreeLatticeCNF StateF
 q2f = atom Q2f
+menuf :: [IOAct IF OF]
 menuf = [af, bf, x, y]
+tf :: StateF -> Map.Map (IOAct IF OF) (BM.FreeLatticeCNF ((), StateF))
 tf = nonDetConcTransFromMRel
     [(Q0f, af, q0f /\ (q1f \/ q2f))
     ,(Q0f, x, q0f)
@@ -45,6 +57,7 @@ tf = nonDetConcTransFromMRel
     ,(Q2f, bf, q0f)
     ,(Q2f, y, q2f)
     ]
+sf :: AutSyntax BM.FreeLatticeCNF StateF (IOAct IF OF) ()
 sf = automaton q0f menuf tf
 
 testSpecF :: Test
@@ -83,28 +96,49 @@ data IG = A2 | B2 | On | Take deriving (Show, Eq, Ord)
 data OG = C | T | CM | TM deriving (Show, Eq, Ord)
 data StateG = Q0g | Q1g | Q2g | Q3g | Q4g | Q5g | Q6g | Q7g | Q8g | Q9g | Q10g deriving (Show, Eq, Ord)
 
+c :: IOAct i OG
 c = Out C
+t :: IOAct i OG
 t = Out T
+cm :: IOAct i OG
 cm = Out CM
+tm :: IOAct i OG
 tm = Out TM
+ag :: IOAct IG o
 ag = In A2
+bg :: IOAct IG o
 bg = In B2
+on :: IOAct IG o
 on = In On
+take :: IOAct IG o
 take = In Take
+menug :: [IOAct IG OG]
 menug = [c, t, cm, tm, ag, bg, on, take]
 
+q0g :: BM.FreeLatticeCNF StateG
 q0g = atom Q0g
+q1g :: BM.FreeLatticeCNF StateG
 q1g = atom Q1g
+q2g :: BM.FreeLatticeCNF StateG
 q2g = atom Q2g
+q3g :: BM.FreeLatticeCNF StateG
 q3g = atom Q3g
+q4g :: BM.FreeLatticeCNF StateG
 q4g = atom Q4g
+q5g :: BM.FreeLatticeCNF StateG
 q5g = atom Q5g
+q6g :: BM.FreeLatticeCNF StateG
 q6g = atom Q6g
+q7g :: BM.FreeLatticeCNF StateG
 q7g = atom Q7g
+q8g :: BM.FreeLatticeCNF StateG
 q8g = atom Q8g
+q9g :: BM.FreeLatticeCNF StateG
 q9g = atom Q9g
+q10g :: BM.FreeLatticeCNF StateG
 q10g = atom Q10g
 
+tg :: StateG -> Map.Map (IOAct IG OG) (BM.FreeLatticeCNF ((), StateG))
 tg = nonDetConcTransFromMRel
     [(Q0g, on, q1g /\ q3g /\ q5g /\ q8g)
     ,(Q1g, ag, q2g)
@@ -123,6 +157,7 @@ tg = nonDetConcTransFromMRel
     ,(Q9g, tm, q10g)
     ,(Q10g, take, q1g /\ q3g /\ q5g /\ q8g)
     ]
+sg :: AutSyntax BM.FreeLatticeCNF StateG (IOAct IG OG) ()
 sg = automaton q0g menug tg
 
 testSpecG :: Test
@@ -139,11 +174,14 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 
+sDoubleState :: NonDet Integer
 sDoubleState = NonDet $ Set.fromList [0 :: Integer, 1]
+tDoubleRecursion :: Integer -> Map.Map String (NonDet ((), Integer))
 tDoubleRecursion = nonDetConcTransFromMRel 
     [(0, "act", sDoubleState)
     ,(1, "act", sDoubleState)
     ]
+sDoubleRecursion :: AutSyntax NonDet Integer String ()
 sDoubleRecursion = automaton sDoubleState ["act"] tDoubleRecursion
 
 testExponentialNonDeterminism :: Test

@@ -174,7 +174,9 @@ instance ConcreteGenExpr String where
     shrinkConst [c] = [[]]
     shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
     -}
+charExpr :: Gen Char
 charExpr = elements $ ['A'..'Z'] ++ ['a'..'z']
+stringExpr :: Gen String
 stringExpr = CM.liftM2 (++) (return <$> charExpr) (genList charExpr)
 
 -- generate lists, more conservatively than with listOf, in order to avoid exponential blowup
@@ -193,6 +195,7 @@ prop_symbolicEval e = rightToMaybe (eval e) == localConcreteEval e
     rightToMaybe (Right x) = Just x
     localConcreteEval = concreteEval' . view
 
+arbitraryVar :: Type -> Gen (ExprView t)
 arbitraryVar t = 
     let prefix = case t of
                     IntType -> 'i'

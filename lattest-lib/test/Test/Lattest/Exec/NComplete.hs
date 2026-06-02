@@ -3,14 +3,17 @@ where
 
 import Test.HUnit
 import qualified Data.Map as Map (Map,lookup)
+import qualified Data.Set as Set (Set)
 
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Model.BoundedMonad(Det(..))
-import Lattest.Model.StandardAutomata(accessSequences, detConcTransFromRel,ioAlphabet,automaton,interpretQuiescentConcrete, accessSequences)
+import Lattest.Model.Automaton(AutSyntax)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, detConcTransFromRel,ioAlphabet,automaton,interpretQuiescentConcrete, accessSequences)
 
+trans :: Integer -> Map.Map (IOAct String String) (Det ((), Integer))
 Just trans = detConcTransFromRel
     [   (1, In "a", 3),
         (1, Out "x", 1),
@@ -20,9 +23,13 @@ Just trans = detConcTransFromRel
         (3, Out "x", 4),
         (4, Out "y", 2)
     ] :: Maybe (Integer -> Map.Map (IOAct String String) (Det ((), Integer)))
+alphabet :: Set.Set (IOAct String String)
 alphabet = ioAlphabet ["a"] ["x", "y"]
+initialConfiguration :: Det Integer
 initialConfiguration = pure 1
+spec :: AutSyntax Det Integer (IOAct String String) ()
 spec = automaton initialConfiguration alphabet trans
+model :: ConcreteSuspAutIntrpr Det Integer String String
 model = interpretQuiescentConcrete spec
 
 testADG :: Test

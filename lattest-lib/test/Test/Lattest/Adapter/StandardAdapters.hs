@@ -26,7 +26,7 @@ import qualified Data.ByteString.Char8 as C8 (pack)
 import Data.Text(unpack, pack)
 import Data.Text.Encoding(decodeUtf8, decodeUtf8With, encodeUtf8)
 import Data.Text.Encoding.Error(lenientDecode)
-import Data.Time.Clock(getCurrentTime,diffUTCTime,nominalDiffTimeToSeconds)
+import Data.Time.Clock(UTCTime,getCurrentTime,diffUTCTime,nominalDiffTimeToSeconds)
 import Data.Functor(void)
 import GHC.Conc (forkIO)
 import GHC.Generics (Generic)
@@ -184,6 +184,7 @@ assertRecv assertName expected sock = do
                             (rest,tl) <- recvMax (maxChars - length recvd)
                             return $ (recvd ++ rest,tl)
 
+assertObserveBytes :: (Show a, Eq a) => a -> Adapter a i -> IO ()
 assertObserveBytes expected adap = do
     maybeObserved <- timeout 100000 $ observe adap
     case maybeObserved of
@@ -191,6 +192,7 @@ assertObserveBytes expected adap = do
         Just Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
         Just (Just observed) -> assertEqual ("receiving wrong output on adap") expected observed
 
+assertObserve :: (Show a, Eq a) => a -> Adapter (IOAct a a) i -> IO ()
 assertObserve expected adap = do
     maybeObserved <- timeout 100000 $ observe adap
     case maybeObserved of
@@ -202,6 +204,7 @@ assertObserve expected adap = do
     fromIOAct (Out a) = a
     fromIOAct (In a) = a
 
+assertObserveIO :: (Show a, Eq a) => a -> Adapter a i -> IO ()
 assertObserveIO expected adap = do
     maybeObserved <- timeout 100000 $ observe adap
     case maybeObserved of
@@ -209,6 +212,7 @@ assertObserveIO expected adap = do
         Just Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
         Just (Just observed) -> assertEqual ("receiving wrong observation on adap") expected observed
 
+assertObserveNonDet :: (Show a, Eq a) => a -> a -> Adapter (IOAct a a) i -> IO ()
 assertObserveNonDet expected1 expected2 adap = do
     maybeObserved <- timeout 100000 $ observe adap
     case maybeObserved of
@@ -225,6 +229,7 @@ assertObserveNonDet expected1 expected2 adap = do
     fromIOAct (Out a) = a
     fromIOAct (In a) = a
 
+assertObserve' :: (Eq i1, Eq o, Show o, Show i1) => o -> Adapter (IOAct i1 o) i2 -> IO ()
 assertObserve' expected adap = do
     maybeObserved <- observe adap
     case maybeObserved of
@@ -279,6 +284,7 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
 
 
 
+waitMillis :: Int -> IO ()
 waitMillis x = threadDelay $ 1000*x
 
 testQuiscence :: Test
@@ -476,6 +482,7 @@ assertEqualWithMargin msg margin expected actual =
     let msg' = msg ++ ": expected " ++ show expected ++ "±" ++ show margin ++ ", was " ++ show actual
     in assertBool msg' $ actual <= expected + margin && actual >= expected - margin
 
+diffMillis :: Integral b => UTCTime -> UTCTime -> b
 diffMillis t2 t1 = ceiling $ 1000 * (nominalDiffTimeToSeconds $ diffUTCTime t2 t1)
 
 impFromQueue :: TQueue (Maybe (String, Int)) -> TQueue (Maybe String) -> IO ()

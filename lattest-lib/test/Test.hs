@@ -91,6 +91,7 @@ makeHUnitTests = do
         ++ fmap ($ smt) solveTests
 
 
+createTestSMTRef :: IO SMT.SMTRef
 createTestSMTRef =
     let cfg = Config.changeLog Config.defaultConfig False
         smtLog = Config.smtLog cfg

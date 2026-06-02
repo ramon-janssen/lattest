@@ -38,6 +38,7 @@ instance Arbitrary WaitTime where
    shrink ShortWT = [NoWT]
    shrink LongWT = [NoWT, ShortWT]
 
+waitTimeToMillis :: Num a => WaitTime -> a
 waitTimeToMillis NoWT = 0
 waitTimeToMillis ShortWT = 2
 waitTimeToMillis LongWT = 20

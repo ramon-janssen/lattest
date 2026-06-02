@@ -18,6 +18,7 @@ import Test.HUnit
 import Data.Maybe(fromJust)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
+import Data.String(IsString)
 import qualified Text.RawString.QQ as QQ
 
 import qualified Lattest.Adapter.Adapter as Adapter
@@ -25,7 +26,7 @@ import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
-import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
+import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
 import qualified Data.Map as Map
@@ -34,9 +35,13 @@ import Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 
+pvar :: Variable
 pvar = (Variable "p" IntType)
+qvar :: Variable
 qvar = (Variable "q" IntType)
+xvar :: Variable
 xvar = (Variable "x" IntType)
+stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 stsExample :: IOSTS NonDet Integer String String
@@ -57,6 +62,7 @@ stsExample =
             1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
@@ -131,6 +137,7 @@ transitions:
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 
 -- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
+tExampleCorrect :: (Ord i, Ord o, IsString i, IsString o) => (ImpExampleLoc, Integer) -> Map.Map (GateValue (IOAct i o)) (ImpExampleLoc, Integer)
 tExampleCorrect (L0, x) = Map.fromList $
     [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
 tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L0, x))]
@@ -249,6 +256,7 @@ specParameterized startType endType comp splitFirst =
   * whether start and end gates are input or output
   * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
 -}
+t1 :: (Ord i, Ord o, Num a1, Num a2, IsString t1, IsString t2, IsString o, Eq a1) => (t1 -> IOAct i o) -> (t2 -> IOAct i o) -> Integer -> Integer -> Integer -> a1 -> Map.Map (GateValue (IOAct i o)) a2
 t1 startType _ p1 _ _ 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
 t1 _ endType _ p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
 t1 _ _ _ _ _ 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
@@ -289,8 +297,11 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
         Just t -> do
             assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
             assertEqual (testName ++ ": expected nonconformal trace") t observed
+inp :: i -> [Constant] -> GateValue (IOAct (InputAttempt i) o)
 inp g vals = GateValue (In (InputAttempt(g, True))) vals
+inpf :: i -> [Constant] -> GateValue (IOAct (InputAttempt i) o)
 inpf g vals = GateValue (In (InputAttempt(g, False))) vals
+out :: o -> [Constant] -> GateValue (IOAct i (Suspended o))
 out g vals = GateValue (Out (OutSusp g)) vals
 
 testLatticeSTSParameterized :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
@@ -356,6 +367,7 @@ specQ =
   * whether start gate is input or output
   * p
 -}
+tq :: (Ord g, IsString t, Num a1, Num a2, Eq a1) => (t -> g) -> Integer -> a1 -> Map.Map (GateValue g) a2
 tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [Cint p]), 1)]
 tq _ _ 1 = Map.fromList $ []
 impQParameterized :: (String -> IOAct String String) -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
