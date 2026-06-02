@@ -162,40 +162,40 @@ testSTSTestSelection = TestCase $ do
         inp "water" [Cint 1],
         out "ok" [Cint 3],
         inp "water" [Cint 1],
-        out "ok" [Cint 4],
-        inp "water" [Cint 1],
-        out "ok" [Cint 5],
+        outL "ok" [Cint 4],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 5],
         GateValue δ [],
-        inp "water" [Cint 1],
-        out "ok" [Cint 6],
-        inp "water" [Cint 1],
-        out "ok" [Cint 7],
-        inp "water" [Cint 1],
-        out "ok" [Cint 8],
-        inp "water" [Cint 1],
-        out "ok" [Cint 9],
-        inp "water" [Cint 1],
-        out "ok" [Cint 10],
-        inp "water" [Cint 1],
-        out "ok" [Cint 11],
-        inp "water" [Cint 1],
-        out "ok" [Cint 12],
-        inp "water" [Cint 1],
-        out "ok" [Cint 13],
-        inp "water" [Cint 1],
-        out "ok" [Cint 14],
-        inp "water" [Cint 1],
-        out "ok" [Cint 15],
-        inp "water" [Cint 1],
-        out "ok" [Cint 16],
-        out "coffee" [],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 6],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 7],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 8],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 9],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 10],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 11],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 12],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 13],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 14],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 15],
+        inpL "water" [Cint 1],
+        outL "ok" [Cint 16],
+        outL "coffee" [],
         GateValue δ [],
         GateValue δ []
         ] observed
     assertEqual "expected pass " Pass verdict
     where
-    inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
-    out gate vals = GateValue (Out (OutSusp gate)) vals
+    inpL g vals = GateValue (In (InputAttempt(g, True))) vals
+    outL g vals = GateValue (Out (OutSusp g)) vals
 
 {- specification:
                         end(p,q)    
@@ -289,9 +289,9 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
         Just t -> do
             assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
             assertEqual (testName ++ ": expected nonconformal trace") t observed
-inp gate vals = GateValue (In (InputAttempt(gate, True))) vals
-inpf gate vals = GateValue (In (InputAttempt(gate, False))) vals
-out gate vals = GateValue (Out (OutSusp gate)) vals
+inp g vals = GateValue (In (InputAttempt(g, True))) vals
+inpf g vals = GateValue (In (InputAttempt(g, False))) vals
+out g vals = GateValue (Out (OutSusp g)) vals
 
 testLatticeSTSParameterized :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [

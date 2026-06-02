@@ -44,10 +44,10 @@ instance (Arbitrary a, Ord a) => Arbitrary (LatticeOp a) where
             ]
             where
                 sub = arbitrary' (n - 1)
-                wrapInBind n a = Bind a <$> (arbitraryMapping n $ Set.toList $ freeVars a)
-                arbitraryMapping n vars = Map.fromList <$> sequence (arbitraryIdPlusLatticeOp n <$> vars)
-                arbitraryIdPlusLatticeOp n a = do
-                    l <- arbitrary' n
+                wrapInBind n' a = Bind a <$> (arbitraryMapping n' $ Set.toList $ freeVars a)
+                arbitraryMapping n' vars = Map.fromList <$> sequence (arbitraryIdPlusLatticeOp n' <$> vars)
+                arbitraryIdPlusLatticeOp n' a = do
+                    l <- arbitrary' n'
                     return (a, l)
     shrink Top = []
     shrink Bot = []
@@ -78,13 +78,13 @@ prop_latticeIsCNF l =
     in if outcome then True else Trace.trace message False
     where
     cnfToLattice :: BM.FreeLatticeCNF a -> BM.FreeLattice a
-    cnfToLattice (BM.FreeLatticeCNF l) = cnfToLattice' l
+    cnfToLattice (BM.FreeLatticeCNF ls) = cnfToLattice' ls
     cnfToLattice' = Set.foldr mergeConjunct BM.underspecified
     mergeConjunct :: Set.Set a -> BM.FreeLattice a -> BM.FreeLattice a
-    mergeConjunct conjunct l = conjunctToLattice conjunct BM./\ l
+    mergeConjunct conjunct l' = conjunctToLattice conjunct BM./\ l'
     conjunctToLattice = Set.foldr mergeDisjunct BM.forbidden
     mergeDisjunct :: a -> BM.FreeLattice a -> BM.FreeLattice a
-    mergeDisjunct a l = return a BM.\/ l
+    mergeDisjunct a l' = return a BM.\/ l'
 
 
 

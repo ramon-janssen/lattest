@@ -187,11 +187,11 @@ intSqrt :: Int -> Int
 intSqrt = floor . (sqrt :: Double -> Double) . fromIntegral
 
 prop_symbolicEval :: Expr Integer -> Bool
-prop_symbolicEval e = rightToMaybe (eval e) == concreteEval e
+prop_symbolicEval e = rightToMaybe (eval e) == localConcreteEval e
     where
     rightToMaybe (Left _) = Nothing
     rightToMaybe (Right x) = Just x
-    concreteEval = concreteEval' . view
+    localConcreteEval = concreteEval' . view
 
 arbitraryVar t = 
     let prefix = case t of

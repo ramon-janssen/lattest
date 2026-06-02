@@ -72,7 +72,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
         assertWith (e == next) ("expected " ++ show e ++ ", received " ++ show next ++ " in " ++ show oes)
         assertBufferedIS' is es wts oes
     mapToLast [] _ a = [a]
-    mapToLast [last] f _ = [f last]
+    mapToLast [lastElem] f _ = [f lastElem]
     mapToLast (a:as) f _ = (a:mapToLast as f (error "unused"))
 
 testConsumeBufferedWith_short :: Test
@@ -164,8 +164,8 @@ prop_jsonStream testInput = monadicIO $ do
         makeTInputStream (consume tSomeData) (return True)
         where
         consume tSomeData = do
-            someData <- readTVar tSomeData
-            case someData of
+            someData' <- readTVar tSomeData
+            case someData' of
                 [] -> return Nothing
                 (x:xs) -> do
                     writeTVar tSomeData xs
