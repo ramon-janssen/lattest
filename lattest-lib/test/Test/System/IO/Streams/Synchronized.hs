@@ -45,7 +45,7 @@ waitTimeToMillis LongWT = 20
 prop_consumeBufferedWith :: ([[(Int, WaitTime)]], WaitTime) -> Property
 prop_consumeBufferedWith = prop_consumeBufferedWith'
 
-prop_consumeBufferedWith' :: (Arbitrary a, Eq a, Show a) => ([[(a, WaitTime)]], WaitTime) -> Property
+prop_consumeBufferedWith' :: (Eq a, Show a) => ([[(a, WaitTime)]], WaitTime) -> Property
 prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monadicIO $ do
     let lastTestInput = (Nothing, lastWaitTime)
     let testInput = mapToLast (fmap (fmap (first Just)) testInput') (\x -> x ++ [lastTestInput]) [lastTestInput]
@@ -103,7 +103,7 @@ testConsumeBufferedWith = TestCase $ do
     shouldBeNothing <- atomically $ Streams.read is
     assertEqual ("testConsumeBufferedWith checking Nothing") (Nothing) shouldBeNothing
 
-prop_jsonStream :: (Arbitrary a, FromJSON a, ToJSON a, Show a, Eq a) => [(a,Bool,Bool)] -> Property
+prop_jsonStream :: (FromJSON a, ToJSON a, Show a, Eq a) => [(a,Bool,Bool)] -> Property
 prop_jsonStream testInput = monadicIO $ do
     -- first bool in list states that the bytes of the next elements should be appended to the bytes of this elements. If the element is the last one, then this boolean states that the second half is included, as opposed to being omitted entirely (if the element is streamed as half bytestring), or is ignored (if the element is streamed as single bytestring).
     -- second bool in the list state that the bytes of the element should be streamed as two half bytestrings, as opposed to a single bytestring

@@ -25,7 +25,7 @@ import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
-instance (Arbitrary a, ConcreteGenExpr a, Show a) => Arbitrary (Expr a) where
+instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (Expr a) where
     arbitrary = Expr <$> arbitrary -- max to avoid large expressions, which will choke the SMT solver
     -- for debugging exponential blowups in Arbitrary generation
     -- arbitrary = ((\e -> Trace.trace ("size " ++ (show $ sizeOf e) ++ " | ") e). Expr) <$> arbitrary
@@ -204,7 +204,7 @@ arbitraryVar t =
 
 type PropEvalSymbolic t = Expr t -> Bool
 
-prop_evalSymbolic :: (Show t, Eq t, ConcreteEval t) => Expr t -> Bool
+prop_evalSymbolic :: (Eq t, ConcreteEval t) => Expr t -> Bool
 prop_evalSymbolic e =
     let l = concreteEval e
         r = symbolicEval e
