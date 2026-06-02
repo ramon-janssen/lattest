@@ -23,11 +23,11 @@ import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runTester,runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, afters, stateConf,automaton,interpret,IntrpState(..),Valuation,prettyPrintIntrp,stsTLoc, Valuation)
+import Lattest.Exec.Testing(runSMTTester, Verdict(..))
+import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), SuspendedIF, SuspendedIFGateValue, asSuspended, δ, SymInteract(..),GateValue(..), ioActAsGateValue, gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr

@@ -22,9 +22,8 @@ import qualified Text.RawString.QQ as QQ
 
 import Lattest.Model.Automaton(after, afters, stateConf, automaton, prettyPrint)
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), asSuspended, δ)
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, atom, top, bot, NonDet(..))
-import qualified Data.Map as Map (toList, insert, fromList)
+import Lattest.Model.Alphabet(IOAct(..), asSuspended, δ)
+import Lattest.Model.BoundedMonad((/\), (\/), atom, top, bot, NonDet(..))
 import qualified Data.Set as Set
 
 data IF = A | B deriving (Show, Eq, Ord)

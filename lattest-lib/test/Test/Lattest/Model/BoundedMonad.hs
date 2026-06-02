@@ -9,7 +9,7 @@ where
 
 import Test.QuickCheck
 import qualified Lattest.Model.BoundedMonad as BM
-import qualified Lattest.Util.Utils as Utils
+
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Control.Monad as CM

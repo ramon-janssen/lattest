@@ -8,21 +8,17 @@ where
 
 import Test.HUnit hiding (Path, path)
 
-import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),sf,IG(..),OG(..),sg)
+import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),sf)
 
 -- TODO prototype imports, (re)move or insert into alphabetical order
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Model.BoundedMonad(Det(..),NonDet(..), isConclusive, isForbidden)
-import Lattest.Model.Automaton(AutSyntax, AutIntrpr, automaton, transRel, initConf)
-import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), isOutput, IOSuspAct, Suspended(..), InputAttempt(..))
-import Lattest.Util.Utils((&&&))
-import System.Random(StdGen, uniformR, mkStdGen)
-import Data.List (span)
-import qualified Data.Map as Map (toList, insert, fromList)
-import qualified Data.Set as Set (toList, fromList)
-import Lattest.Adapter.StandardAdapters(Adapter,pureAdapter,acceptingInputs)
+import Lattest.Exec.Testing(Verdict(..), runTester, Verdict(Pass))
+import Lattest.Model.BoundedMonad(isConclusive, isForbidden)
+import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), InputAttempt(..))
+import System.Random(mkStdGen)
+import qualified Data.Map as Map (fromList)
+import Lattest.Adapter.StandardAdapters(pureAdapter)
 
 nrSteps = 50
 testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps

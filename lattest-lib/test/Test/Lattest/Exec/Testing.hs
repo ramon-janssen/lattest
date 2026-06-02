@@ -18,11 +18,11 @@ import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
 import Lattest.Model.BoundedMonad
 import qualified Data.Map as Map (insert, fromList)
 import Data.Maybe (fromJust)
-import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter,acceptingInputs)
+import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter)
 
-import Lattest.Adapter.StandardAdapters(Adapter,pureAdapter,acceptingInputs)
-import System.Random(StdGen, uniformR, mkStdGen)
-import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete, detConcTransFromRel, interpretQuiescentConcrete)
+import Lattest.Adapter.StandardAdapters(pureAdapter)
+import System.Random(mkStdGen)
+import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete, detConcTransFromRel)
 import Lattest.Exec.StandardTestControllers
 
 
