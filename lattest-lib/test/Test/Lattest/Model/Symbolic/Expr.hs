@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE GADTs #-}
 
 module Test.Lattest.Model.Symbolic.Expr (
 prop_evalSymbolic,
