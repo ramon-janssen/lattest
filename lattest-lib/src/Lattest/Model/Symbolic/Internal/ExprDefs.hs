@@ -191,8 +191,8 @@ instance Show t => Show (ExprView t) where
     show (Var v) = varName v
     show (Const c) = show c
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
-    show (Divide _e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"
-    show (Modulo _e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
+    show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
+    show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
     show (Sum es) | es == mempty = "∑∅"
     show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
         where
@@ -248,11 +248,12 @@ reduce :: ExprView v -> ExprView v
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
 reduce (Var v) = Var v
 reduce (Const v) = Const v
-reduce (Product v) = Product v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
 reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
+reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
 reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
 reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y
 reduce (Modulo (reduce -> e1) (reduce -> e2)) = Modulo e1 e2
