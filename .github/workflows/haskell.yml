@@ -30,7 +30,7 @@ jobs:
       env:
         cache-name: cache
       with:
-        path: ~/lattest-lib/.stack-work
+        path: lattest-lib/.stack-work
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
         restore-keys: |
           ${{ runner.os }}-build-${{ env.cache-name }}-
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache/save@v4
       if: steps.cache.outputs.cache-hit != 'true'
       with:
-        path: ~/lattest-lib/.stack-work
+        path: lattest-lib/.stack-work
         key: ${{ steps.cache.outputs.cache-primary-key }}
 
     - name: Build
