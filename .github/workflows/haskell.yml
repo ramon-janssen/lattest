@@ -1,0 +1,49 @@
+name: Haskell CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  stack:
+    name: stack-lts-23.18
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: haskell-actions/setup@v2
+      id: setup
+      with:
+        ghc-version: '9.8.4'
+        enable-stack: true
+        stack-version: 'latest'
+
+    - name: Cache
+      uses: actions/cache@v3
+      env:
+        cache-name: cache
+      with:
+        path: ~/lattest-lib/.stack-work
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install z3
+        cd lattest-lib
+        stack update
+        stack build --only-dependencies --enable-tests --enable-benchmarks
+    - name: Build
+      run: stack build --enable-tests --enable-benchmarks all
+    - name: Run tests
+      run: stack test
