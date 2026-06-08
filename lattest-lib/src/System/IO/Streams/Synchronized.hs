@@ -26,7 +26,8 @@ import Control.Concurrent.STM(STM, retry)
 import Control.Concurrent.STM.TQueue(TQueue, newTQueueIO, writeTQueue, readTQueue, isEmptyTQueue, unGetTQueue)
 import Control.Concurrent.STM.TMVar(TMVar, takeTMVar, isEmptyTMVar)
 import Control.Concurrent.STM.TVar(newTVarIO, readTVar, writeTVar)
-import Control.Exception(throwIO, Exception)
+import GHC.IO.Exception (ioe_location, ioe_errno)
+import Control.Exception(throwIO, Exception, catchJust)
 import Control.Monad (void)
 import Data.List(singleton)
 
@@ -34,6 +35,7 @@ import GHC.Conc (atomically, forkIO)
 import System.IO.Streams (InputStream, OutputStream, makeOutputStream, connect)
 import qualified System.IO.Streams as Streams (write)
 import Control.Monad.Extra((||^))
+import Foreign.C.Error (eBADF, Errno (Errno))
 
 data TInputStream a = TInputStream {
     tRead :: STM (Maybe a),
@@ -145,8 +147,18 @@ fromInputStreamBuffered :: InputStream a -> IO (TInputStream a)
 fromInputStreamBuffered is = do
     buffer <- newTQueueIO
     bufferOS <- makeOutputStream $ atomically . writeTQueue buffer -- an intermediate output stream to write to the queue
-    void $ forkIO $ connect is bufferOS -- move items from the original adapter into the buffer in a separate thread
+    void $ forkIO $ catchSocketClosed $ connect is bufferOS -- move items from the original adapter into the buffer in a separate thread
     fromBuffer buffer
+ where
+   -- catches "threadWait: invalid argument (Bad file descriptor)"
+   -- which is thrown when the socket is closed while this thread is running, e.g. on Adaptor.close()
+   -- The alternative solution is to keep track of the threadID given by forkIO,
+   -- and explicitly stop the thread before closing the socket.
+   catchSocketClosed forkedThread = catchJust threadwaitinvalid forkedThread pure
+   threadwaitinvalid e
+    | ioe_location e == "threadWait"
+    , fmap Errno (ioe_errno e) == Just eBADF = Just ()
+    | otherwise = Nothing
 
 mapUnbuffered :: (a -> b) -> (b -> a) -> TInputStream a -> TInputStream b -- we need an inverse to push a's back to the original TInputStream of b's
 mapUnbuffered f f' tis = TInputStream { -- FIXME either remove or wrap in withClosedState
