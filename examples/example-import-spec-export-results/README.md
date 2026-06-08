@@ -1,3 +1,7 @@
+# Description
+
+This example shows how to load a specification from an .aut file (instead of manually hardcoding it), and how to write test results to a CSV file. Results are buffered and written in batches to avoid writting after every single test, with a final flush at the end. In this example, the specification is also written to a .dot file, a useful functionality to, for example, debugging the result of a model composition.
+
 # Instructions
 
 To run the example:

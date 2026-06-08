@@ -1,3 +1,6 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Lib
     ( runMultipleTests
     ) where
@@ -5,15 +8,17 @@ module Lib
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Adapter.Adapter(send, Adapter(..), close, observe)
 import Lattest.Util.ModelParsingUtils(dumpLTSdot, readAutFile)
-import Control.Monad (forM_)
+import Lattest.Util.ReportUtils(writeResults, flushResults, initResultsFile, TestResult(..))
+import Control.Monad (forM_, foldM)
 
-nrSteps = 10
-nrTests = 10
+nrSteps = 20
+nrTests = 12
 initialSeed = 111
+csvPath = "results.csv"
 
 runMultipleTests :: IO ()
 runMultipleTests = do
@@ -31,16 +36,18 @@ runMultipleTests = do
             print states
             putStrLn "\nTransitions:"
             mapM_ print transitions
-            
+
             let Just detConcTransitions = detConcTransFromRel transitions
                 alphabet = ioAlphabet inputAlphabet outputAlphabet
                 initialConfiguration = pure initialState
                 spec = automaton initialConfiguration alphabet detConcTransitions
                 model = interpretQuiescentConcrete spec
-            
+
+            -- Initialize CSV file for results (with default header)
+            initResultsFile csvPath Nothing
             putStrLn "Starting tests..."
             
-            forM_ [1..nrTests] $ \i -> do
+            (finalRevBuf, _) <- foldM (\(revBuf, bufLen) i -> do
                 putStrLn $ "\n--- Test #" ++ show i ++ " ---"
                 putStrLn "Connecting..."
                 adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct String String) String)
@@ -51,13 +58,13 @@ runMultipleTests = do
                                 `observingOnly` traceObserver
                                 `andObserving` stateObserver
                 (verdict, (observed, maybeMq)) <- runTester model testSelector imp
-                putStrLn $ "Verdict: " ++ show verdict
-                putStrLn $ "Observed: " ++ show observed
-                putStrLn $ "Final state: " ++ show maybeMq
                 close adap
+                writeResults csvPath [TestResult i (show verdict) (show observed)] revBuf bufLen 5
+                ) ([], 0) [1..nrTests]
             
             putStrLn "\nAll tests completed."
-            
-            -- Dump the DOT file next to the executable
-            dumpLTSdot "LTS.dot" transitions
+            -- Flush any remaining results to CSV
+            flushResults csvPath finalRevBuf
 
+            -- Dump the DOT file with the specification
+            dumpLTSdot "LTS.dot" transitions
