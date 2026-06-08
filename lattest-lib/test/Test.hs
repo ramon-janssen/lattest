@@ -16,7 +16,11 @@ import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsume
 import qualified Data.Maybe as M
 import Data.Functor(void)
 import System.Timeout(timeout)
-import Test.HUnit hiding (Path, path, assert)
+
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.HUnit 
+import Test.Tasty.QuickCheck
 import Test.QuickCheck
 
 durationSeconds :: Int
@@ -24,34 +28,41 @@ durationSeconds = 2
 
 main :: IO ()
 main = do
-    -- unit tests, for fully written out scenarios
-    putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
     hunitTests <- makeHUnitTests
-    void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
-    -- property tests
-    putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
-    void $ runQuickCheckTests
+    defaultMain $ testGroup "Lattest-tests"
+      [ hunitTests
+      , quickCheckTests
+      ]
+    -- -- unit tests, for fully written out scenarios
+    -- putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
+    -- void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
+    -- -- property tests
+    -- putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
+    -- void $ runQuickCheckTests
 
-runQuickCheckTests :: IO ()
-runQuickCheckTests = do
-    quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
-    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
+quickCheckTests :: TestTree
+quickCheckTests = testGroup "Quickcheck"
+  [ quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property) "jsonStream"
+  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
 --    smtRef <- createTestSMTRef
 --    quickCheckWithTimeoutWithNumWithSize (prop_solveSymbolic smtRef) 100 2
-    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
-    quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000
+  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
+  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
+  ]
 
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
+    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
 
 
-makeHUnitTests :: IO Test
+makeHUnitTests :: IO TestTree
 makeHUnitTests = do
     smt <- createTestSMTRef
-    return $ TestList $
+    return $ 
+      testGroup "unit tests" $ 
+      map (\(TestCase a) -> testCase "unitTest" a) $
         [
         testAccSeq,
         testADG,
