@@ -1,6 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
-
 module Lib
     ( runMultipleTests
     ) where
@@ -15,7 +12,7 @@ import Lattest.Util.ModelParsingUtils(dumpLTSdot, readAutFile)
 import Lattest.Util.ReportUtils(writeResults, flushResults, initResultsFile, TestResult(..))
 import Control.Monad (forM_, foldM)
 
-nrSteps = 20
+nrSteps = 10
 nrTests = 12
 initialSeed = 111
 csvPath = "results.csv"
