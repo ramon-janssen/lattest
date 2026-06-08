@@ -6,8 +6,12 @@ module Lattest.Util.ReportUtils
     ) where
 
 import Data.Csv (ToRecord(..), record, toField, encode)
-import qualified Data.ByteString.Lazy as BL
 import Data.Maybe (fromMaybe)
+import Data.Foldable (toList)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Sequence as Seq
+
 
 data TestResult = TestResult
     { testNumber :: Int
@@ -24,7 +28,7 @@ defaultHeader = ("test_number", "verdict", "trace")
 -}
 initResultsFile :: FilePath -> Maybe (String, String, String) -> IO ()
 initResultsFile csvPath mHeader =
-    BL.writeFile csvPath (encode [fromMaybe defaultHeader mHeader])
+    BS.writeFile csvPath (BL.toStrict (encode [fromMaybe defaultHeader mHeader]))
 
 instance ToRecord TestResult where
     toRecord (TestResult n v t) = record [toField n, toField v, toField t]
@@ -40,24 +44,23 @@ instance ToRecord TestResult where
 writeResults
     :: FilePath
     -> [TestResult]
-    -> [TestResult]
+    -> Seq.Seq TestResult
     -> Int
-    -> Int
-    -> IO ([TestResult], Int)
-writeResults csvPath newResults revBuf bufLen threshold = do
-    let newRevBuf = reverse newResults ++ revBuf
-        newBufLen = bufLen + length newResults
+    -> IO (Seq.Seq TestResult)
+writeResults csvPath newResults buf threshold = do
+    let newBuf    = buf Seq.>< Seq.fromList newResults
+        newBufLen = Seq.length newBuf
     if threshold == 0 || newBufLen >= threshold
         then do
-            BL.appendFile csvPath (encode (reverse newRevBuf))
-            return ([], 0)
+            BS.appendFile csvPath (BL.toStrict (encode (toList newBuf)))
+            return (Seq.empty)
         else
-            return (newRevBuf, newBufLen)
+            return newBuf
 
 {-| 
     Flush remaining 'TestResult' rows to a CSV file.
     Note: this function assumes the CSV file already exists.
 -}
-flushResults :: FilePath -> [TestResult] -> IO ()
+flushResults :: FilePath -> Seq.Seq TestResult -> IO ()
 flushResults csvPath revBuf =
-    writeResults csvPath [] revBuf (length revBuf) 0 >> return ()
+    writeResults csvPath [] (revBuf) 0 >> return ()

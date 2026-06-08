@@ -11,6 +11,7 @@ import Lattest.Adapter.Adapter(send, Adapter(..), close, observe)
 import Lattest.Util.ModelParsingUtils(dumpLTSdot, readAutFile)
 import Lattest.Util.ReportUtils(writeResults, flushResults, initResultsFile, TestResult(..))
 import Control.Monad (forM_, foldM)
+import qualified Data.Sequence as Seq
 
 nrSteps = 10
 nrTests = 12
@@ -44,11 +45,11 @@ runMultipleTests = do
             initResultsFile csvPath Nothing
             putStrLn "Starting tests..."
             
-            (finalRevBuf, _) <- foldM (\(revBuf, bufLen) i -> do
+            finalRevBuf <- foldM (\revBuf i -> do
                 putStrLn $ "\n--- Test #" ++ show i ++ " ---"
                 putStrLn "Connecting..."
                 adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct String String) String)
-                imp  <- withQuiescenceMillis 500 adap
+                imp  <- withQuiescenceMillis 200 adap
                 let testSelector = randomTestSelectorFromSeed (initialSeed + i)
                                 `untilCondition` stopAfterSteps nrSteps
                                 `observingOnly` printActions
@@ -56,8 +57,8 @@ runMultipleTests = do
                                 `andObserving` stateObserver
                 (verdict, (observed, maybeMq)) <- runTester model testSelector imp
                 close adap
-                writeResults csvPath [TestResult i (show verdict) (show observed)] revBuf bufLen 5
-                ) ([], 0) [1..nrTests]
+                writeResults csvPath [TestResult i (show verdict) (show observed)] revBuf 5
+                ) (Seq.empty) [1..nrTests]
             
             putStrLn "\nAll tests completed."
             -- Flush any remaining results to CSV
