@@ -23,7 +23,6 @@ jobs:
         ghc-version: '9.8.4'
         enable-stack: true
         stack-version: 'latest'
-        stack-setup-ghc: true
 
     - name: Restore cached dependencies
       id: cache
@@ -43,7 +42,7 @@ jobs:
         sudo apt-get update
         sudo apt-get -y install z3
         cd lattest-lib
-        stack build lattest-lib:lib lattest-lib:test:lattest-test --only-dependencies
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc --only-dependencies
 
     - name: Cache the dependencies
       uses: actions/cache/save@v4
@@ -55,8 +54,8 @@ jobs:
     - name: Build
       run: |
         cd lattest-lib
-        stack build lattest-lib:lib lattest-lib:test:lattest-test
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc
     - name: Run tests
       run: |
         cd lattest-lib
-        stack test
+        stack test --system-ghc
