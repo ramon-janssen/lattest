@@ -23,6 +23,7 @@ jobs:
         ghc-version: '9.8.4'
         enable-stack: true
         stack-version: 'latest'
+        stack-setup-ghc: true
 
     - name: Cache
       uses: actions/cache@v3
@@ -42,7 +43,7 @@ jobs:
         sudo apt-get -y install z3
         cd lattest-lib
         stack update
-        stack build --only-dependencies --enable-tests --enable-benchmarks
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --only-dependencies
     - name: Build
       run: stack build --enable-tests --enable-benchmarks all
     - name: Run tests
