@@ -10,31 +10,25 @@ import Control.Applicative((<|>))
 import Control.Concurrent.STM.TQueue(TQueue, newTQueueIO, writeTQueue, readTQueue, isEmptyTQueue)
 import Control.Concurrent(threadDelay)
 import Control.Arrow(first)
-import Data.Aeson(FromJSON,ToJSON,encode,decode,fromJSON)
+import Data.Aeson(FromJSON,ToJSON,encode,fromJSON)
 import qualified Data.Aeson as Aeson(Result(..))
 import Data.Aeson.Parser(jsonNoDup)
 import qualified Data.Attoparsec.ByteString.Char8 as Parse
-import qualified Data.ByteString.UTF8 as UTF8(fromString,toString)
+
 import Data.Bits.Utils(c2w8)
 import Data.ByteString(ByteString)
-import Data.ByteString.Lazy(toStrict,fromStrict,snoc)
+import Data.ByteString.Lazy(toStrict,snoc)
 import qualified Data.ByteString as BS(splitAt,length)
 import Data.Functor(void)
 import qualified Data.List as List(splitAt)
-import Data.Maybe(fromJust, isJust)
-import Data.Monoid(mappend,mempty)
-import qualified Data.Text as Text(pack, unpack)
 import GHC.Conc(atomically, newTVar, readTVar, writeTVar)
-import System.IO(hPutStrLn,stderr)
 import System.IO.Streams.Synchronized()
 import System.IO.Streams.Synchronized (tryReadIO, Streamed(Available), consumeBufferedWith, makeTInputStream)
 import qualified System.IO.Streams.Synchronized as Streams (hasInput,read,map)
 import System.IO.Streams.Synchronized.Attoparsec(parserToInputStream)
 import Test.HUnit
 import Test.QuickCheck
-import Test.QuickCheck.Monadic (assert, assertWith, monadicIO, run, PropertyM)
-import Test.QuickCheck.Arbitrary(Arbitrary,arbitrary)
-import Test.QuickCheck.Gen(elements)
+import Test.QuickCheck.Monadic (assertWith, monadicIO, run)
 
 data WaitTime = NoWT | ShortWT | LongWT deriving (Eq, Show, Ord)
 
@@ -44,6 +38,7 @@ instance Arbitrary WaitTime where
    shrink ShortWT = [NoWT]
    shrink LongWT = [NoWT, ShortWT]
 
+waitTimeToMillis :: Num a => WaitTime -> a
 waitTimeToMillis NoWT = 0
 waitTimeToMillis ShortWT = 2
 waitTimeToMillis LongWT = 20
@@ -51,7 +46,7 @@ waitTimeToMillis LongWT = 20
 prop_consumeBufferedWith :: ([[(Int, WaitTime)]], WaitTime) -> Property
 prop_consumeBufferedWith = prop_consumeBufferedWith'
 
-prop_consumeBufferedWith' :: (Arbitrary a, Eq a, Show a) => ([[(a, WaitTime)]], WaitTime) -> Property
+prop_consumeBufferedWith' :: (Eq a, Show a) => ([[(a, WaitTime)]], WaitTime) -> Property
 prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monadicIO $ do
     let lastTestInput = (Nothing, lastWaitTime)
     let testInput = mapToLast (fmap (fmap (first Just)) testInput') (\x -> x ++ [lastTestInput]) [lastTestInput]
@@ -69,7 +64,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
     assertWith (lastInput == Nothing) ("expected Nothing, received " ++ show lastInput ++ " at end of test")
     where
     assertBufferedIS is es wts = assertBufferedIS' is es wts es
-    assertBufferedIS' is [] [] es = return ()
+    assertBufferedIS' _ [] [] _ = return ()
     assertBufferedIS' is (e:es) (wt:wts) oes = do
         run $ threadDelay $ waitTimeToMillis wt * 1000
         hasNext <- run $ atomically $ Streams.hasInput is
@@ -78,7 +73,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
         assertWith (e == next) ("expected " ++ show e ++ ", received " ++ show next ++ " in " ++ show oes)
         assertBufferedIS' is es wts oes
     mapToLast [] _ a = [a]
-    mapToLast [last] f _ = [f last]
+    mapToLast [lastElem] f _ = [f lastElem]
     mapToLast (a:as) f _ = (a:mapToLast as f (error "unused"))
 
 testConsumeBufferedWith_short :: Test
@@ -109,7 +104,7 @@ testConsumeBufferedWith = TestCase $ do
     shouldBeNothing <- atomically $ Streams.read is
     assertEqual ("testConsumeBufferedWith checking Nothing") (Nothing) shouldBeNothing
 
-prop_jsonStream :: (Arbitrary a, FromJSON a, ToJSON a, Show a, Eq a) => [(a,Bool,Bool)] -> Property
+prop_jsonStream :: (FromJSON a, ToJSON a, Show a, Eq a) => [(a,Bool,Bool)] -> Property
 prop_jsonStream testInput = monadicIO $ do
     -- first bool in list states that the bytes of the next elements should be appended to the bytes of this elements. If the element is the last one, then this boolean states that the second half is included, as opposed to being omitted entirely (if the element is streamed as half bytestring), or is ignored (if the element is streamed as single bytestring).
     -- second bool in the list state that the bytes of the element should be streamed as two half bytestrings, as opposed to a single bytestring
@@ -124,7 +119,7 @@ prop_jsonStream testInput = monadicIO $ do
     --return Discard
     void $ checkObjs actionStream' typedData
     where
-    checkObjs actionStream [] = return []
+    checkObjs _ [] = return []
     checkObjs actionStream [x] = checkObj actionStream x >>= \y -> return [y]
     checkObjs actionStream (x:xs) = do
         y <- checkObj actionStream x
@@ -170,8 +165,8 @@ prop_jsonStream testInput = monadicIO $ do
         makeTInputStream (consume tSomeData) (return True)
         where
         consume tSomeData = do
-            someData <- readTVar tSomeData
-            case someData of
+            someData' <- readTVar tSomeData
+            case someData' of
                 [] -> return Nothing
                 (x:xs) -> do
                     writeTVar tSomeData xs

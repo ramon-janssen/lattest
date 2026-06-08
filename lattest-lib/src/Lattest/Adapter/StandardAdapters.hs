@@ -54,18 +54,16 @@ where
 
 import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
 import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct(Out), IOSuspAct, Suspended(Quiescence), asSuspended, fromSuspended, IOSuspGateValue(..), GateValue(..))
-import Lattest.Model.Alphabet(IOAct)
-import Lattest.Util.IOUtils(ifM_, ifM, waitUntil)
-import Control.Applicative((<|>))
+import Lattest.Model.Alphabet(IOAct, IOSuspAct, asSuspended, IOSuspGateValue, GateValue(..))
+import Lattest.Util.IOUtils(ifM_, waitUntil)
 import Control.Monad(forever,void)
 import Control.Monad.Extra ((||^), (&&^))
-import Control.Concurrent.STM.TMVar(TMVar, newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar, takeTMVar)
-import Control.Concurrent.STM.TQueue(newTQueueIO, readTQueue, writeTQueue, isEmptyTQueue, flushTQueue)
+import Control.Concurrent.STM.TMVar(newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar)
+import Control.Concurrent.STM.TQueue(newTQueueIO, readTQueue, writeTQueue, isEmptyTQueue)
 import Control.Concurrent.Thread.Delay(delay)
 import Data.Aeson(FromJSON,ToJSON)
 import Data.ByteString (ByteString)
-import Data.Time.Clock(UTCTime,getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,secondsToNominalDiffTime,nominalDiffTimeToSeconds)
+import Data.Time.Clock(getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,secondsToNominalDiffTime,nominalDiffTimeToSeconds)
 import GHC.Conc(forkIO, newTVarIO, TVar, retry, atomically, writeTVar, readTVar)
 import Network.Socket(HostName, PortNumber)
 import qualified Network.Socket as Socket(gracefulClose)
@@ -76,29 +74,28 @@ import System.IO.Streams.Network(socketToStreams)
 import System.IO.Streams.Synchronized(fromInputStreamBuffered,makeTInputStream,hasInput)
 import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
 
-import Data.Aeson(fromJSON,encode,Result(Error, Success),FromJSON,ToJSON)
+import Data.Aeson(fromJSON,encode,Result(Error, Success))
 import Data.Aeson.Parser(jsonNoDup)
 import qualified Data.Attoparsec.ByteString.Char8 as Parse
 import Data.Bits.Utils(c2w8)
 import Data.ByteString.Lazy(toStrict,snoc)
-import Data.Maybe(isJust)
+
 import Data.Text.Encoding.Error(lenientDecode)
 import qualified Data.Text.Encoding as Encoding(decodeUtf8With, encodeUtf8)
 import qualified Data.Text as Text(pack, unpack)
-import System.IO.Streams (makeInputStream)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), IOSuspAct, Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
-import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
-import System.IO.Streams.Synchronized(TInputStream, makeTInputStream, fromInputStreamBuffered, duplicate, tryReadIO, tryReadIO', fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, hasInput, Streamed)
-import qualified System.IO.Streams as Streams (write, writeTo)
-import GHC.Conc (forkIO, STM, orElse)
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
+import System.IO.Streams (OutputStream)
+import System.IO.Streams.Synchronized(TInputStream, duplicate, fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll)
+import qualified System.IO.Streams as Streams (writeTo)
+import GHC.Conc (STM, orElse)
 import qualified Data.Map as Map (Map, filterWithKey, null, lookup, toList)
-import Control.Exception(handle,Exception,PatternMatchFail, SomeException)
+import Control.Exception(handle,PatternMatchFail)
 import System.Random(RandomGen)
-import Control.Concurrent.STM.TMVar(newEmptyTMVarIO, putTMVar)
+import Control.Concurrent.STM.TMVar(putTMVar)
 import Lattest.Util.Utils(flipCoin, takeRandom)
-import Lattest.Util.IOUtils(whileM, statefulIO, statefulIO', doAfter)
+import Lattest.Util.IOUtils(statefulIO', doAfter)
 import Data.List(singleton)
 import System.IO.Streams.Combinators(contramap)
 
@@ -168,7 +165,9 @@ loopbackAdapter adap fduplicate fmerge = do
         close = close adap
         }
 
+outputToActionIS :: Adapter a i1 -> TInputStream (IOAct i2 a)
 outputToActionIS adap = mapUnbuffered Out (error "acceptingInputs buffer from SUT does not support pushback") (actionsFromSut adap)
+actionToInputOS :: TestChoice a1 a2 => OutputStream a2 -> IO (OutputStream a1)
 actionToInputOS actionOS = streamSequence actionOS >>= contramap choiceToActs
 -- direct pushbacks to the streams below is not needed, the merge buffer will handle pushbacks instead
 streamSequence :: OutputStream a -> IO (OutputStream [a])
@@ -230,7 +229,7 @@ acceptingInputsWithIncompletenessAsFailures adap = do
     attemptInputToAdap :: OutputStream i -> i -> IO Bool
     attemptInputToAdap adapInputOS i = handle (patternMatchHandler i) (Streams.write (Just i) adapInputOS >> return True)
     patternMatchHandler :: i -> PatternMatchFail -> IO Bool
-    patternMatchHandler i _ = return False
+    patternMatchHandler _ _ = return False
 
 
 -- | adapter which, after every input, directly sends the corresponding sequence of outputs
@@ -283,18 +282,18 @@ pureAdapter g p transitionFunction initialState = do
     }
     where 
         --processInput :: (Ord i, Ord o, RandomGen g) => (q -> Map.Map (IOAct i o) q) -> (g, q) -> Maybe i -> ((g, q), [Suspended o])
-        processInput t (g, q) Nothing = randomOutputTransitions t g q True
-        processInput t (g, q) (Just i) = case Map.lookup (In i) (t q) of
-            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g q' False
-            Nothing -> ((g, q), [In $ InputAttempt(i, False)])
+        processInput t (g', q) Nothing = randomOutputTransitions t g' q True
+        processInput t (g', q) (Just i) = case Map.lookup (In i) (t q) of
+            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g' q' False
+            Nothing -> ((g', q), [In $ InputAttempt(i, False)])
         --randomOutputTransitions :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> Bool -> ((g, q), [Suspended o])
-        randomOutputTransitions t g q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g q [] isAfterNoInput in ((g', q'), reverse outs)
+        randomOutputTransitions t g'' q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g'' q [] isAfterNoInput in ((g', q'), reverse outs)
         --randomOutputTransitions' :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> [Suspended o] -> Bool -> (g, q, [Suspended o])
-        randomOutputTransitions' t g q outs isAfterNoInput =
+        randomOutputTransitions' t g''' q outs isAfterNoInput =
             let ts = Map.filterWithKey (\k _ -> isOutput k) (t q)
-            in if Map.null ts -- if no outputs are available at all, 
-                then if isAfterNoInput then (g, q, Out Quiescence : outs) else (g, q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
-                else let (produceOut, g') = if isAfterNoInput then (True, g) else flipCoin g p -- else decide whether to produce more actions. This is mandatory if a "Nothing" input was previously received, otherwise flip a coin
+            in if Map.null ts -- if no outputs are available at all,
+                then if isAfterNoInput then (g''', q, Out Quiescence : outs) else (g''', q, outs) -- then stop producing actions (meaning a timeout or just no more actions, depending on whether a "Nothing" input was previously received)
+                else let (produceOut, g') = if isAfterNoInput then (True, g''') else flipCoin g''' p -- else decide whether to produce more actions. This is mandatory if a "Nothing" input was previously received, otherwise flip a coin
                     in if not produceOut
                         then (g', q, outs)
                         else -- pick a random output, and continue randomly picking more outputs
@@ -378,8 +377,8 @@ withQuiescence timeoutDiff adap = do
             Just (Just inCmd) -> Streams.write (Just inCmd) $ inputCommandsToSut adap
             Just Nothing -> atomically $ waitUntil $ not <$> isEmptyTQueue observedQueue -- Just Nothing input means waiting, on an output or until a timeout
             Nothing -> Streams.write Nothing $ inputCommandsToSut adap -- Nothing means closing the adapter, forward this to the underlying adapter
-    forkIO quiescenceMonitor
-    forkIO actMonitor
+    _ <- forkIO quiescenceMonitor
+    _ <- forkIO actMonitor
     return $ Adapter {
         inputCommandsToSut = inputCommandsToSut',
         actionsFromSut = actionsFromSut',

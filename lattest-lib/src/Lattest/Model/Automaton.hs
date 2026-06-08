@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
 --{-# LANGUAGE ScopedTypeVariables #-}
@@ -64,32 +63,31 @@ where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, Det(..), NonDet(..), asDualExpr)
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct(..),InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
-    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputGate, isOutputInteract, interactionGate)
+import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
+    SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
 import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
-import Lattest.SMT.SMT(SMTRef, runSMT, SMT)
+import Lattest.SMT.SMT(SMTRef, runSMT)
 import Lattest.SMT.SMTData(SmtEnv)
 import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
 
 import Control.Exception(throw,Exception)
-import qualified Control.Monad as Monad(join)
+
 import Control.Arrow(second)
-import Data.Either.Utils (fromRight)
+
 import qualified Data.Foldable as Foldable
 import Data.Functor.Identity(Identity(Identity), runIdentity)
 import Data.IORef(IORef)
 import qualified Data.List as List
-import Data.Map (Map, (!))
+import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Tuple.Extra(first)
-import GHC.OldList(find)
+
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, subst, Constant(..), toBool, toInteger, toString, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
+import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
 
 ------------
 -- syntax --
@@ -112,11 +110,11 @@ data AutSyntax m loc t tdest = Automaton {
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
 automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
-automaton mqi alphFld trans = Automaton mqi alph trans'
+automaton mqi alphFld transRel' = Automaton mqi alph trans'
     where -- FIXME t is now Completable, in other functions we expect actions instead of transitions to be Completable.
           -- some alternatives: instead of forbidden, just throw an error (not nice), or add a separate class for transitions
     alph = Set.fromList $ Foldable.toList alphFld
-    trans' q = Map.restrictKeys (trans q) alph `Map.union` setToList alph implicitDestination -- left-biased union 
+    trans' q = Map.restrictKeys (transRel' q) alph `Map.union` setToList alph implicitDestination -- left-biased union
     setToList s f = Set.foldr (\k -> Map.insert k (f k)) Map.empty s
 
 -- | Construct an automaton from an initial state and a transition mapping
@@ -234,11 +232,11 @@ type After m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionS
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: (BM.OrdMonad m, After m loc q t tdest act, Ord (m q), Ord q) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: (After m loc q t tdest act, Ord (m q), Ord q) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
 after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     where
     takeTransitionId :: (BoundedMonad m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
-    takeTransitionId q alph act trans' = Identity $ takeTransition q alph act trans'
+    takeTransitionId q alph act' trans' = Identity $ takeTransition q alph act' trans'
     fmapId :: (BM.OrdFunctor f, Ord y) => (x -> Identity y) -> f x -> Identity (f y)
     fmapId f = Identity . BM.ordMap (runIdentity . f)
 
@@ -248,7 +246,7 @@ class IOAfter m loc q t tdest act ioState where
 instance (After m loc q t tdest act, Ord (m q), Ord q) => IOAfter m loc q t tdest act () where
     ioAfter () aut act = return $ after aut act
 
-instance (StepSemantics m loc q t tdest act, IOTransitionSemantics loc q t tdest act z, BooleanConfiguration m, Foldable m, Ord tdest, Ord q, Ord loc, Ord t, Ord (m q)) => IOAfter m loc q t tdest act (IORef z) where
+instance (StepSemantics m loc q t tdest act, IOTransitionSemantics loc q t tdest act z, BooleanConfiguration m, Foldable m, Ord q, Ord t, Ord (m q)) => IOAfter m loc q t tdest act (IORef z) where
     ioAfter execState = afterInternal (ioTakeTransition execState) distributeMonadOverFoldable
 
 --takeTransition :: (BoundedMonad m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
@@ -256,7 +254,7 @@ instance (StepSemantics m loc q t tdest act, IOTransitionSemantics loc q t tdest
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal :: (StepSemantics m loc q t tdest act, BM.OrdMonad m, Monad execM, Ord t, Ord q, Ord (m q), BoundedConfiguration m, StateSemantics loc q) =>
+afterInternal :: (StepSemantics m loc q t tdest act, Monad execM, Ord t, Ord q, Ord (m q)) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
@@ -273,7 +271,7 @@ after intrpr act' =
     in intrpr { stateConf = stateConf' }
     -}
 
-afterInternal' :: (StepSemantics m loc q t tdest act, BM.OrdMonad m, BoundedConfiguration m, Ord t, Ord q, Ord (m q), StateSemantics loc q, Monad execM) =>
+afterInternal' :: (StepSemantics m loc q t tdest act, Ord t, Ord q, Ord (m q), Monad execM) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
 afterInternal' internalTakeTransition alph transMap act q = do
@@ -285,10 +283,10 @@ afterInternal' internalTakeTransition alph transMap act q = do
             -- ugly solution to get a Nothing of the type (Maybe (t, tdest)) without ScopedTypeVariables
             nothingTTdest :: (x1 -> Map t (x2 (tdest, x3))) -> Maybe (t, tdest)
             nothingTTdest _ = Nothing
-        TransitionMove (t, mtdestloc) -> moveAlongTransition q act t BM.<#> mtdestloc
+        TransitionMove (t', mtdestloc) -> moveAlongTransition q act t' BM.<#> mtdestloc
             where
             moveAlongTransition :: (StepSemantics m loc q t tdest act) => q -> act -> t -> (tdest, loc) -> m q
-            moveAlongTransition q act t (tdest, loc) = move q act (Just (t, tdest)) loc
+            moveAlongTransition q' act' t'' (tdest, loc) = move q' act' (Just (t'', tdest)) loc
         where
         lookupAction :: Ord k => Map k a -> k -> a
         lookupAction m k = case Map.lookup k m of
@@ -324,10 +322,8 @@ data AutomatonException
     deriving (Show)
 instance Eq AutomatonException where
     (==) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
-    (==) _ _ = False
 instance Ord AutomatonException where
     (<=) (ActionOutsideAlphabet _) (ActionOutsideAlphabet _) = True
-    (<=) _ _ = False
 
 instance Exception AutomatonException
 
@@ -353,7 +349,7 @@ actionMenu :: (Foldable m, Ord t, Ord act, FiniteMenu t act, BoundedMonad m) => 
 actionMenu aut = (locationActions aut ++) $ concat $ BM.ordMap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord t, BM.OrdMonad m, BM.OrdFunctor m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
+specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
     => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
@@ -361,16 +357,15 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 -- special case where the semantic states and actions are directly represented syntactically --
 -----------------------------------------------------------------------------------------------
 
-{-# PRAGMA overlappable #-}
-instance (Completable act) where
+instance {-# OVERLAPPABLE #-} (Completable act) where
     implicitDestination _ = forbidden
 
-instance (Ord act) => TransitionMapping act act where
+instance TransitionMapping act act where
     asTransition _ = Just
 
 instance (Ord act, Completable act) => TransitionSemantics q q act () act
 
-instance (Ord act) => FiniteMenu act act where
+instance FiniteMenu act act where
     asActions t = [t] 
     locationActions _ = []
 
@@ -387,7 +382,7 @@ instance (Completable (IOAct i o)) where
     implicitDestination (Out _) = forbidden
     implicitDestination _ = underspecified
 
-instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (IOSuspAct i o) where
+instance TransitionMapping (IOAct i o) (IOSuspAct i o) where
     asTransition _ (Out Quiescence) = Nothing
     asTransition _ other = Just $ fromSuspended other
 
@@ -396,7 +391,7 @@ instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (IOSuspAct i o
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then BM.ordReturn loc else forbidden
     takeTransition _ _ act m = TransitionMove (fromSuspended act, m $ fromSuspended act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IOSuspAct i o) where
+instance FiniteMenu (IOAct i o) (IOSuspAct i o) where
     asActions t = [asSuspended t]
     locationActions _ = [Out Quiescence]
 
@@ -407,20 +402,20 @@ hasQuiescence m = not $ any (isOutput . fst &&& not . isForbidden . snd) (Map.to
 -- input-failure --
 -------------------
 
-instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (IFAct i o) where
-    asTransition _ (In (InputAttempt(i, False))) = Nothing
+instance TransitionMapping (IOAct i o) (IFAct i o) where
+    asTransition _ (In (InputAttempt(_, False))) = Nothing
     asTransition _ other = Just $ fromInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics  q q (IOAct i o) () (IFAct i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m =
+    takeTransition _ _ (In (InputAttempt(i, False))) m =
         let mtdestloc = m $ In i
         in LocationMove $ if isSpecified mtdestloc
             then forbidden -- if ?i is specified, then the failure of ?i is forbidden
             else underspecified -- input failure is not repetitive: it is allowed, and nothing can be done afterwards, i.e., underspecified
-    takeTransition _ _ act m = TransitionMove (fromInputAttempt act, m $ fromInputAttempt act)
+    takeTransition _ _ act' m = TransitionMove (fromInputAttempt act', m $ fromInputAttempt act')
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
+instance FiniteMenu (IOAct i o) (IFAct i o) where
     asActions t = [asInputAttempt t]
     locationActions _ = []
 
@@ -429,14 +424,14 @@ instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (IFAct i o) where
 --------------------------------
 -- Ideally this would automatically follow from the above two interpretations stacked to avoid the boilerplate below, but that is a hassle
 
-instance (Ord i, Ord o) => TransitionMapping (IOAct i o) (SuspendedIF i o) where
-    asTransition _ (In (InputAttempt(i, False))) = Nothing
+instance TransitionMapping (IOAct i o) (SuspendedIF i o) where
+    asTransition _ (In (InputAttempt(_, False))) = Nothing
     asTransition _ (Out Quiescence) = Nothing
     asTransition _ other = Just $ fromSuspendedInputAttempt other
 
 instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    takeTransition loc _ (In (InputAttempt(i, False))) m =
+    takeTransition _ _ (In (InputAttempt(i, False))) m =
         let mtdestloc = m $ In i
         in LocationMove $ if isSpecified mtdestloc
             then forbidden -- if ?i is specified, then the failure of ?i is forbidden
@@ -445,7 +440,7 @@ instance (Ord i, Ord o) => TransitionSemantics q q (IOAct i o) () (SuspendedIF i
     takeTransition loc alph (Out Quiescence) m = LocationMove $ if hasQuiescence (Map.fromSet m alph) then forbidden else BM.ordReturn loc
     takeTransition _ _ act m = TransitionMove (fromSuspendedInputAttempt act, m $ fromSuspendedInputAttempt act)
 
-instance (Ord i, Ord o) => FiniteMenu (IOAct i o) (SuspendedIF i o) where
+instance FiniteMenu (IOAct i o) (SuspendedIF i o) where
     asActions t = [asSuspendedInputAttempt t]
     locationActions _ = [Out Quiescence]
 
@@ -476,22 +471,22 @@ instance StateSemantics a (IntrpState a) where
     asLoc (IntrpState l _) = l
 
 instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (GateValue g') where
-    asTransition interactions (GateValue g values) = do
+    asTransition interactions (GateValue g vals) = do
         let ts = Set.map interactionGate interactions
         ig' <- asTransition ts g
         case List.find (\(SymInteract ig _) -> ig == ig') (Set.toList interactions) of
             Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
-            Just i@(SymInteract g vars) ->
-                if List.length values /= List.length vars
+            Just i@(SymInteract _ vars) ->
+                if List.length vals /= List.length vars
                     then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
-                    else if List.all (\(var,val) -> varType var == constType val) (zip vars values)
+                    else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
-instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, TransitionMapping g g') => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
-    move (IntrpState l1 stateValuation) gv@(GateValue g gateVals) (Just (SymInteract g2 gateVars, STSLoc (guard,assign))) l2 =
+instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
+    move (IntrpState _l1 stateValuation) gv@(GateValue _ gateVals) (Just (SymInteract _ gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
             valuation = fromConstantsMap $ toConstantsMap stateValuation `Map.union` toConstantsMap gateValuation
@@ -502,9 +497,9 @@ instance (Completable (GateValue g'), Ord g, Ord loc, BoundedMonad m, Transition
         where
         assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
         -- the following case distinctino could be removed if constants were also typed
-        assignNewValue var@(Variable _ IntType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr Integer))
-        assignNewValue var@(Variable _ BoolType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr Bool))
-        assignNewValue var@(Variable _ StringType) oldVal valuation assign = maybe oldVal (evalVal valuation) (assignedExpr var assign :: Maybe (Expr String))
+        assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
+        assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
+        assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
@@ -540,12 +535,12 @@ hasSymbolicQuiescence smtRef stateVal m = do
 -- STS input-failure --
 -----------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
-    ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+    ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
-            Just interact@(SymInteract _ gateVars) ->
+            Just interact'@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
-                    mtdestloc = m interact
+                    mtdestloc = m interact'
                     guard = combineGuards $ tdestlocToGuard BM.<#> mtdestloc
                     guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
                 in return $ LocationMove $ if isSpecified mtdestloc && guardVal
@@ -565,12 +560,12 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
     ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
         qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
-    ioTakeTransition _ (IntrpState loc stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+    ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
-            Just interact@(SymInteract _ gateVars) ->
+            Just interact'@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
-                    mtdestloc = m interact
+                    mtdestloc = m interact'
                     guard = combineGuards $ tdestlocToGuard BM.<#> mtdestloc
                     guardVal = evaluateGuard $ substituteInGuard gateVal $ substituteInGuard stateVal guard
                 in return $ LocationMove $ if isSpecified mtdestloc && guardVal

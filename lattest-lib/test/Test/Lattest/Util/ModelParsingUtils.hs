@@ -25,7 +25,7 @@ testReadAutFile = TestCase $ do
         expectedInAlphabet = Set.fromList ["take_cup_i", "select_coffee_i", "coin_i"]
         expectedOutAlphabet = Set.fromList ["ready_o"]
         expectedStates = Set.fromList ["Idle", "Brewing", "CoinInserted", "Ready"]
-        expectedInitState = "Idle"
+
 
     (inputAlphabet, outputAlphabet, states, initialState, Just transitions) <- readAutFile filePath
 

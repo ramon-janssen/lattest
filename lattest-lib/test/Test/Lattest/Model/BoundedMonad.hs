@@ -9,7 +9,7 @@ where
 
 import Test.QuickCheck
 import qualified Lattest.Model.BoundedMonad as BM
-import qualified Lattest.Util.Utils as Utils
+
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Control.Monad as CM
@@ -44,21 +44,20 @@ instance (Arbitrary a, Ord a) => Arbitrary (LatticeOp a) where
             ]
             where
                 sub = arbitrary' (n - 1)
-                wrapInBind n a = Bind a <$> (arbitraryMapping n $ Set.toList $ freeVars a)
-                arbitraryMapping n vars = Map.fromList <$> sequence (arbitraryIdPlusLatticeOp n <$> vars)
-                arbitraryIdPlusLatticeOp n a = do
-                    l <- arbitrary' n
+                wrapInBind n' a = Bind a <$> (arbitraryMapping n' $ Set.toList $ freeVars a)
+                arbitraryMapping n' vars = Map.fromList <$> sequence (arbitraryIdPlusLatticeOp n' <$> vars)
+                arbitraryIdPlusLatticeOp n' a = do
+                    l <- arbitrary' n'
                     return (a, l)
     shrink Top = []
     shrink Bot = []
     shrink (Var _) = [Top, Bot]
     shrink (Join x y) = [Join x' y' | (x', y') <- shrink (x, y)] ++ shrink x ++ shrink y
     shrink (Meet x y) = [Meet x' y' | (x', y') <- shrink (x, y)] ++ shrink x ++ shrink y
-    shrink _ = []
     shrink (Bind l subs) = [let subs' = Map.restrictKeys subs (freeVars l') in if Map.null subs then l' else (Bind l' subs') | l' <- shrink l]
                             ++ [Bind l subs' | subs' <- simplifiedSubs]
         where
-        simplifiedSubs = [ Map.insert var sub subs | (var,sub) <- Map.toList subs, sub' <- shrink sub ]
+        simplifiedSubs = [ Map.insert var sub subs | (var,sub) <- Map.toList subs, _ <- shrink sub ]
 
 constructLattice :: (BM.BoundedConfiguration l, BM.JoinSemiLattice (l a), BM.MeetSemiLattice (l a), BM.OrdMonad l, Ord a) => LatticeOp a -> l a
 constructLattice Top = BM.underspecified
@@ -79,13 +78,13 @@ prop_latticeIsCNF l =
     in if outcome then True else Trace.trace message False
     where
     cnfToLattice :: BM.FreeLatticeCNF a -> BM.FreeLattice a
-    cnfToLattice (BM.FreeLatticeCNF l) = cnfToLattice' l
+    cnfToLattice (BM.FreeLatticeCNF ls) = cnfToLattice' ls
     cnfToLattice' = Set.foldr mergeConjunct BM.underspecified
     mergeConjunct :: Set.Set a -> BM.FreeLattice a -> BM.FreeLattice a
-    mergeConjunct conjunct l = conjunctToLattice conjunct BM./\ l
+    mergeConjunct conjunct l' = conjunctToLattice conjunct BM./\ l'
     conjunctToLattice = Set.foldr mergeDisjunct BM.forbidden
     mergeDisjunct :: a -> BM.FreeLattice a -> BM.FreeLattice a
-    mergeDisjunct a l = return a BM.\/ l
+    mergeDisjunct a l' = return a BM.\/ l'
 
 
 

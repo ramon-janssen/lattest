@@ -20,7 +20,7 @@ where
 
 import           Control.Concurrent
 import           Control.Exception   (onException)
-import           Control.Monad.State (get, gets, lift, modify)
+import           Control.Monad.State (get, gets, lift)
 import           Control.Monad (unless)
 
 import qualified Data.List           as List
@@ -34,7 +34,7 @@ import           System.IO
 import           System.Process
 
 --import           Constant
-import           Lattest.SMT.SMT2TXS
+
 import           Lattest.SMT.SMTAlex
 import           Lattest.SMT.SMTData
 import           Lattest.SMT.SMTHappy
@@ -270,7 +270,7 @@ putT :: Text -> SMT ()
 putT = put . T.unpack
 
 -- | Transform value expression to an SMT string.
-valExprToString :: (ConstType t, ConstToSMT t) => Expr t -> SMT Text
+valExprToString :: (ConstToSMT t) => Expr t -> SMT Text
 valExprToString v = do
 --  mapI <- gets envNames
   return $ valexprToSMT v

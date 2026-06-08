@@ -22,20 +22,19 @@ tryReadIO'
 where
 
 import Prelude hiding (read, map)
-import Control.Concurrent.STM(STM, orElse, retry)
+import Control.Concurrent.STM(STM, retry)
 import Control.Concurrent.STM.TQueue(TQueue, newTQueueIO, writeTQueue, readTQueue, isEmptyTQueue, unGetTQueue)
-import Control.Concurrent.STM.TMVar(TMVar, newTMVarIO, takeTMVar, isEmptyTMVar)
-import Control.Concurrent.STM.TVar(TVar, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.STM.TMVar(TMVar, takeTMVar, isEmptyTMVar)
+import Control.Concurrent.STM.TVar(newTVarIO, readTVar, writeTVar)
 import GHC.IO.Exception (ioe_location, ioe_errno)
 import Control.Exception(throwIO, Exception, catchJust)
 import Control.Monad (void)
 import Data.List(singleton)
-import Data.Maybe(isJust)
+
 import GHC.Conc (atomically, forkIO)
-import System.IO.Streams (InputStream, OutputStream, makeInputStream, makeOutputStream, connect)
-import qualified System.IO.Streams.Combinators as Streams (map)
-import qualified System.IO.Streams as Streams (read, write, writeTo)
-import Control.Monad.Extra((||^), (&&^))
+import System.IO.Streams (InputStream, OutputStream, makeOutputStream, connect)
+import qualified System.IO.Streams as Streams (write)
+import Control.Monad.Extra((||^))
 import Foreign.C.Error (eBADF, Errno (Errno))
 
 data TInputStream a = TInputStream {
@@ -217,10 +216,10 @@ consumeBufferedWith producer producerHasInput = do
             else return ()
     writeSeqTo [] _ = return True  -- TODO this is an OutputStream utils function, similar to Streams.write/writeTo, move to an appropriate module
     writeSeqTo (Nothing:_) writeToBuffer = do
-        writeToBuffer Nothing
+        _ <- writeToBuffer Nothing
         return False
     writeSeqTo (Just a:as) writeToBuffer = do
-        writeToBuffer (Just a)
+        _ <- writeToBuffer (Just a)
         writeSeqTo as writeToBuffer
     pickOneAndMergeRest buffer writeToBuffer = do
         bufferHasInput <- not <$> isEmptyTQueue buffer

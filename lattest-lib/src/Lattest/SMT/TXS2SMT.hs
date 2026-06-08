@@ -8,6 +8,7 @@ See LICENSE in the parent SMT folder.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 module Lattest.SMT.TXS2SMT
 
 -- ----------------------------------------------------------------------------------------- --
@@ -36,10 +37,7 @@ assertionsToSMT
 
 where
 
-import qualified Data.Map      as Map
-import           Data.Maybe
 import qualified Data.Set      as Set
-import qualified Data.List     as List
 import           Data.Text     (Text)
 import qualified Data.Text     as T
 
@@ -49,7 +47,7 @@ import           Lattest.Model.Symbolic.Internal.FreeMonoidX
 --import           FuncDef
 --import           FuncId
 --import           Lattest.SMT.RegexXSD2SMT
-import           Lattest.SMT.SMTData
+
 import           Lattest.SMT.SMTString
 --import           SortDef
 --import           SortId
@@ -211,7 +209,7 @@ valexprToSMT' :: ConstToSMT t => ExprView t -> Text
 --valexprToSMT' (view -> Viscstr cd arg)      = "(" <> toIsCstrName cd <> " " <> valexprToSMT' enames arg <> ")"
 --valexprToSMT' (view -> Vaccess cd _n p arg) = "(" <> toFieldName cd p <> " " <> valexprToSMT' enames arg <> ")"
 valexprToSMT' (Const c) = constToSMT c
-valexprToSMT' (Var (Variable varName _))  =  T.pack varName
+valexprToSMT' (Var (Variable vn _))  =  T.pack vn
 valexprToSMT' (Ite c expr1 expr2) = "(ite " <> valexprToSMT' c <> " "  <> valexprToSMT' expr1 <> " " <> valexprToSMT' expr2 <> ")"
 valexprToSMT' (Sum s) =
     let ol = toOccurListT s in
@@ -282,6 +280,6 @@ declarationsToSMT vs =
     T.intercalate "\n" (declarationToSMT <$> vs)
     where
         declarationToSMT :: Variable -> Text
-        declarationToSMT (Variable varName varType) = "(declare-fun " <> T.pack varName <> "() " <> justLookupType varType <> ")"
+        declarationToSMT (Variable vn vt) = "(declare-fun " <> T.pack vn <> "() " <> justLookupType vt <> ")"
 
 

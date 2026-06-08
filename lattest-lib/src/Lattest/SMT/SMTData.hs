@@ -31,12 +31,8 @@ module Lattest.SMT.SMTData
 where
 
 import           Control.Monad.State
-import           Data.Text           (Text)
-
 import           System.IO
 import           System.Process
-
-import qualified Data.Map            as Map
 import           Data.IORef
 {-
 import           CstrDef

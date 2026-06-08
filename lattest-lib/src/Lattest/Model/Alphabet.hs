@@ -41,7 +41,7 @@ fromSuspended,
 
     * [/Ramon Janssen/, Refinement and partiality for model-based testing (Doctoral dissertation), 2022, Chapter 3 and 4](https://repository.ubn.ru.nl/bitstream/handle/2066/285020/285020.pdf)
 -}
-IFAct(..),
+IFAct,
 InputAttempt(..),
 asInputAttempt,
 fromInputAttempt,
@@ -72,9 +72,7 @@ toIOGateValue
 )
 where
 
-import qualified Data.Map as Map (Map, fromList, toList, lookup, empty, insert)
-import qualified Data.List as List (intercalate)
-import Lattest.Model.Symbolic.Expr (Variable(..), VarModel, Valuation, Expr(..), Type(..), assign, Constant(..), constType)
+import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..))
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
@@ -178,7 +176,7 @@ instance TestChoice (Maybe i) (IOSuspAct i o) where
     choiceToActs (Just i) = asSuspended <$> choiceToActs i
     choiceToActs Nothing = []
     actToChoice (Out Quiescence) = Just Nothing
-    actToChoice (Out (OutSusp o)) = Nothing
+    actToChoice (Out (OutSusp _)) = Nothing
     actToChoice (In i) = Just $ Just i
 
 {- |
@@ -217,11 +215,11 @@ type IFAct i o = IOAct (InputAttempt i) o
 instance TestChoice i (IFAct i o) where
     choiceToActs i = inToInputAttempt <$> choiceToActs i
         where
-        inToInputAttempt(In i) = In (InputAttempt(i, True))
-        inToInputAttempt(Out o) = Out o 
+        inToInputAttempt(In i') = In (InputAttempt(i', True))
+        inToInputAttempt(Out o) = Out o
     actToChoice = actToChoice . attemptToIn
         where
-        attemptToIn (In (InputAttempt(i, _))) = In i
+        attemptToIn (In (InputAttempt(i', _))) = In i'
         attemptToIn (Out o) = Out o
 
 {- |
@@ -248,8 +246,8 @@ instance TestChoice (Maybe i) (SuspendedIF i o) where
     choiceToActs Nothing = []
     choiceToActs (Just i) = inToInputAttempt <$> choiceToActs i
         where
-        inToInputAttempt(In i) = In (InputAttempt(i, True))
-        inToInputAttempt(Out o) = Out o 
+        inToInputAttempt(In i') = In (InputAttempt(i', True))
+        inToInputAttempt(Out o) = Out o
     actToChoice other = actToChoice $ attemptToIn other
         where
         attemptToIn (In (InputAttempt(i, _))) = In i
@@ -275,10 +273,10 @@ data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
 type IOSymInteract i o = SymInteract (IOAct i o)
 
 interactionGate :: SymInteract g -> g
-interactionGate (SymInteract gate _) = gate
+interactionGate (SymInteract g' _) = g'
 
 instance (Show g) => Show (SymInteract g) where
-    show (SymInteract gate vars) = show gate ++ " " ++ show vars
+    show (SymInteract g' vars) = show g' ++ " " ++ show vars
 
 type SymGuard = Expr Bool
 
@@ -290,10 +288,10 @@ instance ToJSON a => ToJSON (GateValue a)
 type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where
-    show (GateValue gate vals) = show gate ++ if null vals then "" else "" ++ show vals
+    show (GateValue g' vals) = show g' ++ if null vals then "" else "" ++ show vals
 
 valueGate :: GateValue g -> g
-valueGate (GateValue gate _) = gate
+valueGate (GateValue g' _) = g'
 
 gateValueAsIOAct :: IOGateValue i o -> IOAct (GateValue i) (GateValue o)
 gateValueAsIOAct (GateValue (In i) vals) = In (GateValue i vals)
@@ -320,12 +318,12 @@ isInputInteract (SymInteract (In _) _) = False
 isInputInteract _ = True
 
 maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
-maybeFromInputInteraction (SymInteract gate vars) = case maybeFromInput gate of
+maybeFromInputInteraction (SymInteract g' vars) = case maybeFromInput g' of
     Just i -> Just $ SymInteract i vars
     Nothing -> Nothing
 
 maybeFromOutputInteraction :: IOSymInteract i o -> Maybe (SymInteract o)
-maybeFromOutputInteraction (SymInteract gate vars) = case maybeFromOutput gate of
+maybeFromOutputInteraction (SymInteract g' vars) = case maybeFromOutput g' of
     Just o -> Just $ SymInteract o vars
     Nothing -> Nothing
 
@@ -347,24 +345,24 @@ instance TestChoice (Maybe (GateValue i)) (IOSuspGateValue i o) where
     choiceToActs (Just i) = fmap asSuspended <$> choiceToActs i
     choiceToActs Nothing = []
     actToChoice (GateValue (Out Quiescence) _) = Just Nothing
-    actToChoice (GateValue (Out (OutSusp o)) _) = Nothing
-    actToChoice (GateValue (In i) values) = Just $ Just $ GateValue i values
+    actToChoice (GateValue (Out (OutSusp _)) _) = Nothing
+    actToChoice (GateValue (In i) vals) = Just $ Just $ GateValue i vals
 
 instance TestChoice (GateValue i) (IFGateValue i o) where
     choiceToActs i = fmap inToInputAttempt <$> choiceToActs i
         where
-        inToInputAttempt(In i) = In (InputAttempt(i, True))
-        inToInputAttempt(Out o) = Out o 
+        inToInputAttempt(In i') = In (InputAttempt(i', True))
+        inToInputAttempt(Out o) = Out o
     actToChoice = actToChoice . fmap attemptToIn
         where
-        attemptToIn (In (InputAttempt(i, _))) = In i
+        attemptToIn (In (InputAttempt(i', _))) = In i'
         attemptToIn (Out o) = Out o
 
 instance TestChoice (Maybe (GateValue i)) (SuspendedIFGateValue i o) where
     choiceToActs (Just i) = fmap inToInputAttempt <$> choiceToActs i
         where
-        inToInputAttempt(In i) = In (InputAttempt(i, True))
-        inToInputAttempt(Out o) = Out o 
+        inToInputAttempt(In i') = In (InputAttempt(i', True))
+        inToInputAttempt(Out o) = Out o
     choiceToActs Nothing = []
     actToChoice = actToChoice . fmap attemptToIn
         where

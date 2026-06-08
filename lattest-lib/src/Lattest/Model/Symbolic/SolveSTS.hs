@@ -15,14 +15,13 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), Constant(..), substConst, toConst)
-import Lattest.Model.Symbolic.Internal.ExprDefs(ExprView(..), Expr(..), eval)
-import Lattest.SMT.SMT(SMTRef,pop,getSolution,addAssertions,getSolvable,push,Solution,SolvableProblem(..),SMT)
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..))
+import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
 import Control.Arrow((&&&))
 import Control.Exception(throw)
-import Control.Monad(join)
+
 import Data.Foldable(toList)
 import qualified Data.Map as Map
 import GHC.Stack(callStack)
@@ -42,10 +41,10 @@ solveRandomInteraction intrpr subsetFunction r = do
     fmap (,r') $ solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
-    selectInteractionsAndGuards :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (Expr Bool), Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
-    selectInteractionsAndGuards intrpr subsetFunction =
-        let alph = toList $ alphabet $ syntacticAutomaton intrpr
-        in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction &&& interactToGuard intrpr)) $ alph
+    selectInteractionsAndGuards :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+    selectInteractionsAndGuards intrpr' subsetFunction' =
+        let alph = toList $ alphabet $ syntacticAutomaton intrpr'
+        in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction' &&& interactToGuard intrpr')) $ alph
 
 interactToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymInteract g -> SymGuard
 interactToGuard intrpr interaction = let
@@ -53,7 +52,7 @@ interactToGuard intrpr interaction = let
     in asDualExpr $ BM.ordJoin $ stateAndInteractToGuards aut interaction BM.<#> stateConf intrpr
 
 stateAndInteractToGuards :: (Ord g, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> IntrpState loc -> m SymGuard
-stateAndInteractToGuards aut interaction intrpr@(IntrpState l valuation) =
+stateAndInteractToGuards aut interaction (IntrpState l valuation) =
     case Map.lookup interaction (transRel aut l) of
         Nothing -> throw $ ActionOutsideAlphabet callStack
         Just mtdestloc -> BM.ordMap guardAndLocToGuard mtdestloc

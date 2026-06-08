@@ -14,15 +14,15 @@ import Test.HUnit hiding (Path, path)
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.Automaton(AutSyntax, automaton)
 import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..))
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), SuspendedIF)
 import Lattest.Model.BoundedMonad
-import qualified Data.Map as Map (insert, fromList)
+import qualified Data.Map as Map (Map, insert, fromList)
 import Data.Maybe (fromJust)
-import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter,acceptingInputs)
+import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter)
 
-import Lattest.Adapter.StandardAdapters(Adapter,pureAdapter,acceptingInputs)
-import System.Random(StdGen, uniformR, mkStdGen)
-import Lattest.Model.StandardAutomata(ConcreteAutIntrpr, interpretConcrete, interpretQuiescentInputAttemptConcrete, detConcTransFromRel, interpretQuiescentConcrete)
+import Lattest.Adapter.StandardAdapters(pureAdapter)
+import System.Random(StdGen, mkStdGen)
+import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete, detConcTransFromRel)
 import Lattest.Exec.StandardTestControllers
 
 
@@ -136,31 +136,41 @@ traceAdapter steps = pureMealyAdapter traceTrans traceOutput steps
     traceOutput (In _:_) Nothing = [Out Quiescence] -- the adapter is waiting for an input but doesn't receive one, so show a timeout.
     traceOutput (Out os:_) _ = [Out $ OutSusp os] -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
 
+testSelector :: TestController Det StateFDet StateFDet (IOAct IF OF) () (SuspendedIF IF OF) ((((StdGen, Int), [SuspendedIF IF OF]), Maybe (Det StateFDet)), Maybe (Det StateFDet)) (Maybe IF) (([SuspendedIF IF OF], Maybe (Det StateFDet)), Maybe (Det StateFDet))
 testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 50
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
 
 data IF = A deriving (Show, Eq, Ord)
 data OF = X | Y deriving (Show, Eq, Ord)
 data StateFDet = Q0fd deriving (Show, Eq, Ord)
+xf :: IOAct i OF
 xf = Out X
+yf :: IOAct i OF
 yf = Out Y
+af :: IOAct IF o
 af = In A
+q0f :: Det StateFDet
 q0f = pure Q0fd
+tWithX :: StateFDet -> Map.Map (IOAct IF OF) StateFDet
 tWithX Q0fd = Map.fromList [(af, Q0fd), (xf, Q0fd)]
+impWithX :: IO (Adapter (SuspendedIF IF OF) (Maybe IF))
 impWithX = pureAdapter (mkStdGen 123) 0.0 tWithX Q0fd
 
+menuWithY :: [IOAct IF OF]
 menuWithY = [af, yf]
+tWithY :: StateFDet -> Map.Map (IOAct IF OF) (Det ((), StateFDet))
 tWithY = fromJust $ detConcTransFromRel [(Q0fd, af, Q0fd), (Q0fd, yf, Q0fd)]
+specWithY :: AutSyntax Det StateFDet (IOAct IF OF) ()
 specWithY = automaton q0f menuWithY tWithY
 
 testOutputOutsideAlphabet :: Test
 testOutputOutsideAlphabet = TestCase $ do
     imp <- impWithX
     let model = interpretQuiescentInputAttemptConcrete specWithY
-    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
+    (verdict, ((_, _), _)) <- runTester model testSelector imp
     case verdict of
         Inconclusive _ -> return ()
-        v -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
+        _ -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
 
 
 

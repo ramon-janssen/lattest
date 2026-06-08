@@ -27,7 +27,7 @@ import Data.Foldable(toList)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
-import Data.List(sort, head, group)
+import Data.List(sort, group)
 import System.Random(RandomGen, uniformR)
 import Control.Monad.Extra((||^), (&&^))
 import Data.OrdMonad as OM
@@ -102,12 +102,12 @@ distributeMonadOverFoldable :: (OM.OrdFunctor f, Foldable f, Monad m, Ord x, Ord
 distributeMonadOverFoldable f xs = do
     let ascElems = Set.toAscList $ Set.fromList $ toList xs
     xToY <- sequence (f' <$> ascElems)
-    return $ lookup (Map.fromAscList xToY) OM.<#> xs
+    return $ lkup (Map.fromAscList xToY) OM.<#> xs
     where
     f' x = do
         y <- f x
         return (x,y)
-    lookup xToY x = case Map.lookup x xToY of
+    lkup xToY x = case Map.lookup x xToY of
         Nothing -> error "distributeMonadOverFoldable called on Foldable Functor which fmaps over an unfolded element"
         Just y -> y
 

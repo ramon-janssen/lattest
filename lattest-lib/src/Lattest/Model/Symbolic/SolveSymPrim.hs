@@ -9,7 +9,7 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), Constant(..))
+import Lattest.Model.Symbolic.Expr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs(eval)
 import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
 import Lattest.SMT.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
@@ -43,19 +43,19 @@ evaluateGuard guard = case eval guard of
 -}
 solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
 solveAnySequential [] = return Nothing
-solveAnySequential ((interact@(SymInteract _ vars),guard):alph) = do
+solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
     case maybeSolved of
         Nothing -> solveAnySequential alph
-        Just solved -> return $ Just $ valuationToGateValue interact solved
+        Just solved -> return $ Just $ valuationToGateValue interact' solved
 --data SymInteract g = SymInteract g [Variable]
 --data GateValue g = GateValue g [Constant]
 valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
-valuationToGateValue (SymInteract gate params) valuation =
-    GateValue gate $ fmap (getValueForVar $ E.toConstantsMap valuation) params
+valuationToGateValue (SymInteract g' params) valuation =
+    GateValue g' $ fmap (getValueForVar $ E.toConstantsMap valuation) params
     where
-        getValueForVar valuation var =
-            case Map.lookup var valuation of
+        getValueForVar val' var =
+            case Map.lookup var val' of
                 Just value -> value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
@@ -71,7 +71,6 @@ solveGuard vars guard = do
             return $ Just solution
         Unsat -> return Nothing
         Unknown -> return Nothing
-        _ -> return Nothing
         --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
     pop
     return mSolution

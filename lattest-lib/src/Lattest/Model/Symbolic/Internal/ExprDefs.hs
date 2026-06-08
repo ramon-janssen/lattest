@@ -5,6 +5,7 @@ See LICENSE in the parent Symbolic folder.
 -}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
@@ -29,8 +30,6 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , ExprType
 , typeOf
 , typeOf'
-, varName
-, varType
 , isConst
 , freeVars
 )
@@ -41,9 +40,7 @@ import           Data.Set         (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
-import           Data.Text        (Text)
-import qualified Data.Text as Text(length, pack, index, concat, unpack)
-import           GHC.Generics     (Generic)
+import qualified Data.Text as Text(pack, unpack)
 import           GHC.Integer (divInteger)
 
 import           Lattest.Model.Symbolic.Internal.FreeMonoidX
@@ -53,7 +50,7 @@ import           Lattest.Model.Symbolic.Internal.Sum
 
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
-import qualified Data.Aeson.Types as JSON
+
 import qualified Data.Scientific as DS
 
 data Type = IntType | BoolType | StringType deriving (Eq, Ord)
@@ -108,15 +105,15 @@ instance JSON.FromJSON Constant where
         | not $ JSON.member "value" m = fail "expected Constant with a value field"
         | not $ JSON.member "type" m = fail "expected Constant with a type field"
     parseJSON (JSON.Object m)
-        | JSON.lookup "type" m == Just "bool" = parseBool $ lookup "value" m
-        | JSON.lookup "type" m == Just "int" = parseInt $ lookup "value" m
-        | JSON.lookup "type" m == Just "string" = parseString $ lookup "value" m
+        | JSON.lookup "type" m == Just "bool" = parseBool $ lkup "value" m
+        | JSON.lookup "type" m == Just "int" = parseInt $ lkup "value" m
+        | JSON.lookup "type" m == Just "string" = parseString $ lkup "value" m
         where
-        lookup :: JSON.Key -> JSON.KeyMap v -> v
-        lookup k = Maybe.fromJust . JSON.lookup k
+        lkup :: JSON.Key -> JSON.KeyMap v -> v
+        lkup k = Maybe.fromJust . JSON.lookup k
         parseBool (JSON.Bool b) = return $ Cbool b
         parseBool _ = fail "type indicates bool, but value is not of type bool"
-        parseInt (JSON.Number (DS.floatingOrInteger -> Right i)) = return $ Cint i
+        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Cint i
         parseInt _ = fail "type indicates int, but value is not of type int"
         parseString (JSON.String s) = return $ Cstring $ Text.unpack s
         parseString _ = fail "type indicates string, but value is not of type string"
@@ -194,8 +191,8 @@ instance Show t => Show (ExprView t) where
     show (Var v) = varName v
     show (Const c) = show c
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
-    show (Divide e1 e2) = "(" ++ show e2 ++ ") / (" ++ show e2 ++ ")"
-    show (Modulo e1 e2) = "(" ++ show e2 ++ ") % (" ++ show e2 ++ ")"
+    show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
+    show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
     show (Sum es) | es == mempty = "∑∅"
     show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
         where
@@ -217,7 +214,7 @@ instance Show t => Show (ExprView t) where
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
-showFreeMonoid plusRepr multRepr m@(FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
+showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
     where
     showTerm (x, i) = multRepr i (show x)
 
@@ -238,7 +235,7 @@ eval = evalView . view
 
 evalView :: ExprView v -> Either String v
 evalView (reduce -> Const v) = Right v
-evalView x = Left $ "Value Expression is not a constant value"
+evalView _ = Left $ "Value Expression is not a constant value"
 
 isConst :: ExprView v -> Bool
 isConst (Const _) = True
@@ -251,7 +248,6 @@ reduce :: ExprView v -> ExprView v
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
 reduce (Var v) = Var v
 reduce (Const v) = Const v
-reduce (Product v) = Product v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
 reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es

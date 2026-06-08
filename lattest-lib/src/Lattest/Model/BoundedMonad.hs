@@ -75,7 +75,7 @@ module OM
 where
 
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr(Constant(Cbool))
+
 
 import Algebra.Lattice.Free (Free(..), lowerFree)
 import Algebra.Lattice.Levitated(Levitated(..))
@@ -220,7 +220,7 @@ instance Show a => Show (FreeLattice a) where
     show (FreeLattice Bottom) = "⊥"
     show (FreeLattice (Levitate a)) = show' a
         where
-        show' (Var a) = show a
+        show' (Var a') = show a'
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
@@ -318,6 +318,7 @@ class BoundedConfiguration m where
     isUnderspecified :: m t -> Bool -- ^ Is this state configuration underspecified?
 
 -- | Extract the current 'Specifiedness' from a bounded monad.
+specifiedness :: BoundedConfiguration m => m t -> Specifiedness
 specifiedness c
     | isForbidden c = Forbidden
     | isUnderspecified c = Underspecified
@@ -376,7 +377,7 @@ instance BooleanConfiguration FreeLattice where
     asExpr (FreeLattice Bottom) = E.sFalse
     asExpr (FreeLattice (Levitate a)) = asExpr' a
         where
-        asExpr' (Var a) = a
+        asExpr' (Var a') = a'
         asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
         asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 

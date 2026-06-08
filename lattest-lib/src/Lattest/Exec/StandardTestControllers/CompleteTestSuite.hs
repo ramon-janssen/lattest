@@ -15,7 +15,7 @@ import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended)
 import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax)
 import Lattest.Model.BoundedMonad(Det(..))
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr(..), accessSequences, interpretQuiescentConcrete)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
 import Control.Monad (forM)
 import qualified Data.Map as Map ((!))
@@ -25,7 +25,7 @@ import System.Random(StdGen)
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
 -}
-accessSeqSelector :: (Ord q, Eq i, Eq o, Show i, Show o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
+accessSeqSelector :: (Ord q, Eq i, Eq o) => ConcreteSuspAutIntrpr Det q i o -> q -> TestController Det q q (IOAct i o) () (IOSuspAct i o) [IOAct i o] (Maybe i) Bool
 accessSeqSelector aut targetState =
     let initState = case stateConf aut of
             Det q -> q
@@ -35,19 +35,19 @@ accessSeqSelector aut targetState =
         testControllerState = (Map.!) accSeqs targetState,
         selectTest = accSeqSelectTest,
         updateTestController = accSeqUpdateTest,
-        handleTestClose = \testState -> return $ case testState of [] ->  True; _ -> False
+        handleTestClose = \testState' -> return $ case testState' of [] ->  True; _ -> False
     }
     where
-    accSeqSelectTest [] specIntrpState _ = return $ Right True
-    accSeqSelectTest (l:ls) specIntrpState _ = return $ case l of
+    accSeqSelectTest [] _ _ = return $ Right True
+    accSeqSelectTest (l:ls) _ _ = return $ case l of
         In i -> Left (Just i, (l:ls))
         _ -> Left (Nothing, (l:ls))
-    accSeqUpdateTest [] specIntrpState label _ = return $ Right True
-    accSeqUpdateTest (l:ls) specIntrpState label _ = return $ if (asSuspended l) == label then Left ls else Right False
+    accSeqUpdateTest [] _ _ _ = return $ Right True
+    accSeqUpdateTest (l:ls) _ label _ = return $ if (asSuspended l) == label then Left ls else Right False
 
 {- | A TestController that selects inputs according to the adaptive distinguishing sequence of the given automaton
 -}
-adgTestSelector :: (Ord q, Ord l, Eq l, Show l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
+adgTestSelector :: (Ord q, Ord l) => ConcreteSuspAutIntrpr Det q l l -> l ->  TestController Det q q (IOAct l l) () (IOSuspAct l l) (Evidence l) (Maybe l) (Set.Set q)
 adgTestSelector aut delta =
     let adgaut = case adgAutFromAutomaton aut delta of
                     Just a -> a
@@ -57,16 +57,16 @@ adgTestSelector aut delta =
         testControllerState = adg,
         selectTest = adgSelectTest,
         updateTestController = adgUpdateTest,
-        handleTestClose = \testState -> return Set.empty
+        handleTestClose = \_ -> return Set.empty
     }
     where
-    adgSelectTest testState specIntrpState _ =
+    adgSelectTest testState _ _ =
         return $ case testState of
             Nil -> Right Set.empty
-            Prefix l next -> Left (Just l, testState)
+            Prefix l _ -> Left (Just l, testState)
             Plus _ -> Left (Nothing,testState)
 
-    adgUpdateTest testState specIntrpState ioact _ =
+    adgUpdateTest testState _ ioact _ =
        return $ case testState of
             Nil -> Right Set.empty
             Prefix l next -> if ioact == In l then Left next else error "Error: expected to have selected an input but seeing some ioact"
@@ -81,11 +81,11 @@ adgTestSelector aut delta =
                     Prefix l next -> if l == delta
                                         then if ioact == Out Quiescence then [next] else []
                                      else if ioact == Out (OutSusp l) then [next] else []
-                    Plus ls -> concat $ fmap getNextState ls
+                    Plus ls' -> concat $ fmap getNextState ls'
 
 {- | A TestController that yields tests that tries to take an access sequence to the targetState and then executes the adaptive distinguishing sequence
 -}
-nCompleteSingleState :: (Ord q, Ord l, Show l) => ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q
+nCompleteSingleState :: (Ord q, Ord l) => ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q
                                                     -> TestController Det q q (IOAct l l) () (IOSuspAct l l) (((), [IOSuspAct l l]), Maybe (Det q)) i20 ([IOSuspAct l l], Maybe (Det q))
                                                     -> IO (TestController Det q q (IOAct l l) () (IOSuspAct l l) (Either (Either [IOAct l l] StdGen, Int) (Evidence l), (((), [IOSuspAct l l]), Maybe (Det q))) (Maybe l) ([IOSuspAct l l], Maybe (Det q)))
 nCompleteSingleState model seed nrSteps delta targetState observer = do
