@@ -42,9 +42,12 @@ jobs:
         sudo apt-get update
         sudo apt-get -y install z3
         cd lattest-lib
-        stack update
         stack build lattest-lib:lib lattest-lib:test:lattest-test --only-dependencies
     - name: Build
-      run: stack build lattest-lib:lib lattest-lib:test:lattest-test
+      run: |
+        cd lattest-lib
+        stack build lattest-lib:lib lattest-lib:test:lattest-test
     - name: Run tests
-      run: stack test
+      run: |
+        cd lattest-lib
+        stack test
