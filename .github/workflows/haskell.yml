@@ -23,7 +23,6 @@ jobs:
         ghc-version: '9.8.4'
         enable-stack: true
         stack-version: 'latest'
-        stack-setup-ghc: true
 
     - name: Restore cached dependencies
       id: cache
@@ -31,7 +30,7 @@ jobs:
       env:
         cache-name: cache
       with:
-        path: ~/lattest-lib/.stack-work
+        path: lattest-lib/.stack-work
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
         restore-keys: |
           ${{ runner.os }}-build-${{ env.cache-name }}-
@@ -43,20 +42,20 @@ jobs:
         sudo apt-get update
         sudo apt-get -y install z3
         cd lattest-lib
-        stack build lattest-lib:lib lattest-lib:test:lattest-test --only-dependencies
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc --only-dependencies
 
     - name: Cache the dependencies
       uses: actions/cache/save@v4
       if: steps.cache.outputs.cache-hit != 'true'
       with:
-        path: ~/lattest-lib/.stack-work
+        path: lattest-lib/.stack-work
         key: ${{ steps.cache.outputs.cache-primary-key }}
 
     - name: Build
       run: |
         cd lattest-lib
-        stack build lattest-lib:lib lattest-lib:test:lattest-test
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc
     - name: Run tests
       run: |
         cd lattest-lib
-        stack test
+        stack test --system-ghc
