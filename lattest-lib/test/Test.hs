@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 import Test.Lattest.Adapter.StandardAdapters
 import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.NComplete
@@ -12,16 +10,13 @@ import Test.Lattest.Util.ModelParsingUtils
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
-
 import qualified Data.Maybe as M
-import Data.Functor(void)
-import System.Timeout(timeout)
 
 import Test.Tasty
-import Test.Tasty.HUnit
+import Test.Tasty.Runners as Tasty
+import Test.Tasty.Providers
 import Test.HUnit 
 import Test.Tasty.QuickCheck
-import Test.QuickCheck
 
 durationSeconds :: Int
 durationSeconds = 2
@@ -29,10 +24,12 @@ durationSeconds = 2
 main :: IO ()
 main = do
     hunitTests <- makeHUnitTests
-    defaultMain $ testGroup "Lattest-tests"
-      [ hunitTests
-      , quickCheckTests
-      ]
+    defaultMain $ 
+      localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run multiple times in parallel
+      testGroup "Lattest-tests"
+        [ hunitTests
+        , quickCheckTests
+        ]
     -- -- unit tests, for fully written out scenarios
     -- putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
     -- void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
@@ -61,8 +58,14 @@ makeHUnitTests :: IO TestTree
 makeHUnitTests = do
     smt <- createTestSMTRef
     return $ 
-      testGroup "unit tests" $ 
-      map (\(TestCase a) -> testCase "unitTest" a) $
+      localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run multiple times in parallel
+      singleTest "unit tests" $
+      -- TestCase $
+      -- propagateHUnitFailure $
+      -- runTestTT $
+      -- testGroup "unit tests" $ 
+      TestList $
+      -- map (\(TestCase a) -> testCase "unitTest" a) $
         [
         testAccSeq,
         testADG,
@@ -100,6 +103,13 @@ makeHUnitTests = do
         ++ testLatticeSTSQuiescence
         ++ evalTests
         ++ fmap ($ smt) solveTests
+
+instance IsTest Test where
+  run _ t _ = runTestTT t >>= \c ->
+    if errors c + failures c > 0
+      then return $ testFailed (show c)
+      else return $ testPassed (show c)
+  testOptions = pure []
 
 
 createTestSMTRef :: IO SMT.SMTRef
