@@ -45,6 +45,6 @@ jobs:
         stack update
         stack build lattest-lib:lib lattest-lib:test:lattest-test --only-dependencies
     - name: Build
-      run: stack build --enable-tests --enable-benchmarks all
+      run: stack build lattest-lib:lib lattest-lib:test:lattest-test
     - name: Run tests
       run: stack test
