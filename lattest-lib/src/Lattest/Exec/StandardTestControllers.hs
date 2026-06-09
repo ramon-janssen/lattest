@@ -69,7 +69,6 @@ import Lattest.Util.Utils(takeRandom, takeJusts, flipCoin)
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import qualified Lattest.Model.BoundedMonad as BM
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen)
-import qualified Debug.Trace
 
 
 
@@ -308,7 +307,7 @@ untilCondition controller condition = TestController {
     Note: since stop conditions only decide whether to stop testing after observing an action, the minimum number of actions to observe is 1.
 -}
 stopAfterSteps :: Int -> StopCondition m loc q t tdest act Int
-stopAfterSteps n = stopCondition n (\n' _ _ _ -> Debug.Trace.traceShow ("stopaftersteps",n,n') $ return $ if n' <= 1 then Nothing else Just (n'-1))
+stopAfterSteps n = stopCondition n (\n' _ _ _ -> return $ if n' <= 1 then Nothing else Just (n'-1))
 
 {- |
     'TestObserver's are only concerned with returning a result after testing. They do not select inputs or decide whether to continue testing.

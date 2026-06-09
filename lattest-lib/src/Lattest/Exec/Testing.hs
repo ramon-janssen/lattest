@@ -1,8 +1,8 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -45,8 +45,8 @@ offlineTester
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice, IOAct (..))
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
+import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, specifiedMenu, FiniteMenu)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef)
@@ -64,6 +64,8 @@ import Data.Maybe (catMaybes, mapMaybe)
 import Data.Tuple (swap)
 import Control.Exception.Base (try)
 import Data.List (intercalate)
+import Lattest.Util.Utils (takeJusts)
+import qualified Debug.Trace
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -224,7 +226,7 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
     Offline test generation: Instead of connecting to a system and running the tests live,
     generate a decision tree that can later be used to test a system.
 -}
-offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Enum o, Bounded o)
+offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Enum o, Bounded o, Foldable m, Ord i, FiniteMenu t (IOAct i o))
               => AutIntrpr m loc q t tdest (IOAct i o)
               -> TestController m loc q t tdest (IOAct i o) state i r
               -> IO (OfflineTree o i Verdict)
@@ -239,18 +241,19 @@ offlineTester spec testSelection = go (makeTester spec testSelection)
         )
 
       onNoOutput <- do
-        selectionOrErr <- try $ select controller (controllerState controller)
-        case selectionOrErr of
-          -- TODO: instead just test whether there is any input possible, same way that the place that throws this error does
-          Left (ErrorCall "random test selector found an empty menu")
-            -> return $ Leaf Fail
-          Right selection -> case selection of
+        if all isOutput $ specifiedMenu $ fst $ controllerState controller
+        then return Nothing
+        else Just <$> do
+          selection <- select controller (controllerState controller)
+          case selection of
             Left (i, state) -> do
               InputRequest i <$> handleUpdate (controller {controllerState = state}) (In i)
             Right result -> do
               return $ Leaf $ fst result
 
-      return $ CaseSplit (M.insert Nothing onNoOutput onOutput)
+      return $ CaseSplit $ case onNoOutput of
+        Just oNO -> M.insert Nothing oNO onOutput
+        Nothing -> onOutput
 
     handleUpdate controller aut = do
       foo <- update controller (controllerState controller) aut
@@ -282,7 +285,10 @@ instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
   show (InputRequest i ot) = "?" <> show i <> ": {" <> show ot <> "}"
   show (CaseSplit m) =
     "case <output> of ["
-    <> intercalate "; " (map (\(o,ot) -> "!" <> show o <> " -> (" <> show ot <> ")") (mapMaybe (fmap swap . sequence . swap) $ M.toList m))
-    <> "; !δ -> (" <> show (m M.! Nothing) <> ")"
+    <> intercalate "; " 
+         (map (\(o,ot) -> "!" <> show o <> " -> (" <> show ot <> ")") (mapMaybe (fmap swap . sequence . swap) $ M.toList m)
+         ++ (case m M.!? Nothing of
+               Just ot -> ["!δ -> (" <> show ot <> ")"]
+               Nothing -> []))
     <> "]"
 
