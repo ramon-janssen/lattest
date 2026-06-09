@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -39,21 +40,30 @@ makeSMTTester,
 runTester,
 runSMTTester,
 Verdict(..),
-InconclusiveReason(..)
+InconclusiveReason(..),
+offlineTester
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice)
+import Lattest.Model.Alphabet(TestChoice, IOAct (..))
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef)
 
 
-import Control.Exception(catch,evaluate)
+import Control.Exception(catch,evaluate, ErrorCall (ErrorCall))
 
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
+import Data.Map (Map)
+import qualified Data.Map as M
+import Extra (enumerate)
+import Control.Monad (forM)
+import Data.Maybe (catMaybes, mapMaybe)
+import Data.Tuple (swap)
+import Control.Exception.Base (try)
+import Data.List (intercalate)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -78,7 +88,7 @@ data InconclusiveReason = AutomatonException AutomatonException deriving (Ord, E
     /not/ need to return a verdict 'Pass' or 'Fail', this verdict is automatically inferred based on the specification model.
     Results can be used to record additional information that the tester is interested in, depending on the controller implementation.
     For example, the actions observed during a testing experiment, or whether certain coverage criteria were achieved during the experiment.
--} 
+-}
 data TestController m loc q t tdest act state i r = TestController {
     -- | Any state that the controller needs for its decision making duties.
     testControllerState :: state,
@@ -152,7 +162,7 @@ makeTester' ioState initSpec initTestController = ActionController {
         makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
-            return (pToVerd $ stateConf spec, r) 
+            return (pToVerd $ stateConf spec, r)
         pToVerd :: (BoundedConfiguration m) => (m x) -> Verdict
         pToVerd p | isForbidden p = Fail
                   | otherwise     = Pass
@@ -210,7 +220,69 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
 --runStepper spec controller = runExperiment controller (simulateSpec spec)
 
 
+{- |
+    Offline test generation: Instead of connecting to a system and running the tests live,
+    generate a decision tree that can later be used to test a system.
+-}
+offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Enum o, Bounded o)
+              => AutIntrpr m loc q t tdest (IOAct i o)
+              -> TestController m loc q t tdest (IOAct i o) state i r
+              -> IO (OfflineTree o i Verdict)
+offlineTester spec testSelection = go (makeTester spec testSelection)
+  where
+    outAlphabet = enumerate
 
+    go controller = do
+      onOutput <- M.fromList <$> forM outAlphabet (\o -> do
+          subTree <- handleUpdate controller (Out o)
+          return (Just o, subTree)
+        )
 
+      onNoOutput <- do
+        selectionOrErr <- try $ select controller (controllerState controller)
+        case selectionOrErr of
+          -- TODO: instead just test whether there is any input possible, same way that the place that throws this error does
+          Left (ErrorCall "random test selector found an empty menu")
+            -> return $ Leaf Fail
+          Right selection -> case selection of
+            Left (i, state) -> do
+              InputRequest i <$> handleUpdate (controller {controllerState = state}) (In i)
+            Right result -> do
+              return $ Leaf $ fst result
 
+      return $ CaseSplit (M.insert Nothing onNoOutput onOutput)
+
+    handleUpdate controller aut = do
+      foo <- update controller (controllerState controller) aut
+      case foo of
+        Left state -> do
+          go (controller { controllerState = state})
+        Right result -> do
+          return $ Leaf $ fst result
+
+-- |A tree representing an offline test case.
+-- Such a test makes concrete choices on the inputs
+-- it gives the SUT, while accomodating for all
+-- possible outputs the SUT can send.
+data OfflineTree o i r where
+  -- |The end of a possible test trace
+  Leaf :: r
+       -> OfflineTree o i r
+  -- |The test sends input to the SUT
+  InputRequest :: i
+               -> OfflineTree o i r
+               -> OfflineTree o i r
+  -- |The test tries to get an output from the SUT.
+  -- On quiescence, use `Nothing`.
+  CaseSplit :: Map (Maybe o) (OfflineTree o i r)
+            -> OfflineTree o i r
+
+instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
+  show (Leaf r) = show r
+  show (InputRequest i ot) = "?" <> show i <> ": {" <> show ot <> "}"
+  show (CaseSplit m) =
+    "case <output> of ["
+    <> intercalate "; " (map (\(o,ot) -> "!" <> show o <> " -> (" <> show ot <> ")") (mapMaybe (fmap swap . sequence . swap) $ M.toList m))
+    <> "; !δ -> (" <> show (m M.! Nothing) <> ")"
+    <> "]"
 

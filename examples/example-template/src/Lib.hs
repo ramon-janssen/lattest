@@ -5,7 +5,7 @@ module Lib
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass), offlineTester)
 import Lattest.Exec.StandardTestControllers
 --import Network.Socket(withSocketsDo)
 
@@ -31,6 +31,7 @@ spec = automaton initialConfiguration alphabet trans
 
 nrSteps = 50
 testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
+testSelectorOffline = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 5 `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 someFunc :: IO () -- FIXME give this function a sensible name
 someFunc = do
@@ -43,3 +44,10 @@ someFunc = do
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed
     putStrLn $ "final state: " ++ show maybeMq
+
+    putStrLn "Offline test gen:"
+    let model2 = interpretConcrete spec
+    tests <- offlineTester model2 testSelectorOffline
+    putStrLn "Tests:"
+    print tests
+
