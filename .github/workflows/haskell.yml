@@ -31,11 +31,10 @@ jobs:
         cache-name: cache
       with:
         path: lattest-lib/.stack-work
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        key: dependencies-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
+          dependencies-${{ env.cache-name }}-
+          dependencies
 
     - name: Install dependencies
       run: |
@@ -46,7 +45,7 @@ jobs:
 
     - name: Cache the dependencies
       uses: actions/cache/save@v4
-      # if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.cache.outputs.cache-hit != 'true'
       with:
         path: lattest-lib/.stack-work
         key: ${{ steps.cache.outputs.cache-primary-key }}
