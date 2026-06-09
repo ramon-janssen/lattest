@@ -65,12 +65,17 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , VarModel
 , Assignable
 , assign
+, varUnion
+, mapVars
+, mapVarExprs
 , Valuation
+, valuationToVarModel
 , toConstantsMap
 , fromConstantsMap
 , emptyValuation
 , assignValues
 , assignValue
+, varsToGuard
 , insertIntoValuation
 , substConst
 , subst
@@ -78,6 +83,7 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , assignment
 , noAssignment
 , (=:)
+, mapExpressionVars
 )
 where
 
@@ -530,6 +536,36 @@ valuationToVarModel vals = VarModel {
     stringVars = typedValuationToVarModel $ stringValuation vals
     }
 
+varUnion :: VarModel -> VarModel -> VarModel
+varUnion vars1 vars2 = VarModel {
+    intVars = intVars vars1 `Map.union` intVars vars2,
+    boolVars = boolVars vars1 `Map.union` boolVars vars2,
+    stringVars = stringVars vars1 `Map.union` stringVars vars2
+    }
+
+mapVars :: (Variable -> Variable) -> VarModel -> VarModel
+mapVars f vars = VarModel {
+    intVars = Map.mapKeys f $ intVars vars,
+    boolVars = Map.mapKeys f $ boolVars vars,
+    stringVars = Map.mapKeys f $ stringVars vars
+    }
+
+mapVarExprs :: (Variable -> Variable) -> VarModel -> VarModel
+mapVarExprs f vars = VarModel {
+    intVars = Map.map (mapExpressionVars f) $ intVars vars,
+    boolVars = Map.map (mapExpressionVars f) $ boolVars vars,
+    stringVars = Map.map (mapExpressionVars f) $ stringVars vars
+    }
+
+varsToGuard :: VarModel -> Expr Bool
+varsToGuard vars = sAnd $ Set.fromList $
+    typedVarsToBools (intVars vars) ++
+    typedVarsToBools (boolVars vars) ++
+    typedVarsToBools (stringVars vars)
+
+typedVarsToBools :: (VarExpr t, EqExpr t, ExprType t) => TypedVarModel t -> [Expr Bool]
+typedVarsToBools = fmap (\(var, val) -> sVar var .== val) . Map.toList
+
 insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
 insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
 insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
@@ -627,3 +663,26 @@ subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
 subst' ve (At s p)                      = (.@) (subst' ve s) (subst' ve p)
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
+
+mapExpressionVars :: (Variable -> Variable) -> Expr t -> Expr t
+mapExpressionVars f = Expr . mapExpressionVars' f . view
+
+mapExpressionVars' :: (Variable -> Variable) -> ExprView t -> ExprView t
+mapExpressionVars' f e@(Const _) = e
+mapExpressionVars' f (Var v) = Var $ f v -- this line is effectively the purpose of this function
+mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (Modulo t n)            = Modulo (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (Sum s)                 = Sum (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
+mapExpressionVars' f (Product p)             = Product (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
+mapExpressionVars' f (Length vexp)           = Length (mapExpressionVars' f vexp)
+
+mapExpressionVars' f (GezInt v)                = GezInt (mapExpressionVars' f v)
+mapExpressionVars' f (EqualInt vexp1 vexp2)    = EqualInt (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (EqualBool vexp1 vexp2)   = EqualBool (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (EqualString vexp1 vexp2) = EqualString (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (And vexps)               = And (Set.map (mapExpressionVars' f) vexps)
+mapExpressionVars' f (Not vexp)                = Not (mapExpressionVars' f vexp)
+
+mapExpressionVars' f (At s p)                  = At (mapExpressionVars' f s) (mapExpressionVars' f p)
+mapExpressionVars' f (Concat vexps)            = Concat (fmap (mapExpressionVars' f) vexps)

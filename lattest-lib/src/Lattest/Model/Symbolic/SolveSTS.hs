@@ -6,6 +6,7 @@
 
 module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
+interactsToGuard, -- FIXME maybe this doesn't need to be exposed but we want to test this
 )
 where
 
@@ -15,7 +16,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..))
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), assign, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -59,5 +60,57 @@ stateAndInteractToGuards aut interaction (IntrpState l valuation) =
     where
     guardAndLocToGuard (STSLoc (tguard,_), _) = substConst valuation tguard
 
+
+
+
+{-
+    FIXME replace `interactToGuard` and `stateAndInteractToGuards` by the code below entirely, since
+    a 1-step lookahead is just a specific version of the n-step lookahead.
+    !EXCEPT! that the code below adds "primes" (encoded as ..._0), which need to be stripped first.
+-}
+
+data PathNode loc = PathNode {
+    pathLength :: Int, -- needed for adding the right number of primes
+    pathLoc :: loc,
+    pathVars :: VarModel,
+    pathCondition :: SymGuard
+    } deriving (Eq, Ord)
+
+interactsToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
+interactsToGuard intrpr interactions = let
+        aut = syntacticAutomaton intrpr
+        initialNodes = BM.ordMap initializeNode $ stateConf intrpr
+    in asDualExpr $ BM.ordMap pathCondition $ initialNodes BM.>># chainOrdBind (pathStep aut <$> interactions)
+    where
+    initializeNode (IntrpState loc vals) = PathNode {
+            pathLength = 0,
+            pathLoc = loc,
+            pathVars = addVarPrimes 0 $ valuationToVarModel vals,
+            pathCondition = sTrue
+        }
+    chainOrdBind :: (BM.OrdMonad m, Ord a) => [a -> m a] -> (a -> m a)
+    chainOrdBind fs = foldr ordKleisliCompose BM.ordReturn fs
+    ordKleisliCompose :: (BM.OrdMonad m, Ord c) => (a -> m b) -> (b -> m c) -> (a -> m c)
+    ordKleisliCompose f g x = f x BM.>># g
+    pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> PathNode loc -> m (PathNode loc)
+    pathStep aut interaction pathNode =
+        case Map.lookup interaction (transRel aut $ pathLoc pathNode) of
+            Nothing -> throw $ ActionOutsideAlphabet callStack
+            Just mtdestloc -> BM.ordMap (addToPath pathNode) mtdestloc
+        where
+        addToPath (PathNode len _ vars pCond) (STSLoc (tguard, tassign), tloc) =
+            let primedAssign = addVarPrimes (len + 1) $ addValPrimes len tassign
+            in PathNode {
+                pathLength = len + 1,
+                pathLoc = tloc,
+                pathVars = vars `varUnion` primedAssign,
+                pathCondition = pCond .&& mapExpressionVars (varToPrime len) tguard .&& varsToGuard primedAssign -- TODO the varsToGuard could also be done with substitution, resulting in less intermediate variables
+            }
+    addVarPrimes :: Int -> VarModel -> VarModel
+    addVarPrimes n = mapVars $ varToPrime n
+    addValPrimes :: Int -> VarModel -> VarModel
+    addValPrimes n = mapVarExprs $ varToPrime n
+    varToPrime :: Int -> Variable -> Variable
+    varToPrime n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
 

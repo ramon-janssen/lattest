@@ -82,6 +82,7 @@ makeHUnitTests = do
         testSTSHappyFlow,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
+        testSTSPathCondition,
         testPrintSTS,
         testReadAutFile
         ]

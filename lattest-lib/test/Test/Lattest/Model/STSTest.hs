@@ -9,7 +9,8 @@ module Test.Lattest.Model.STSTest (
     testPrintSTS,
     testSTSTestSelection,
     testLatticeSTS,
-    testLatticeSTSQuiescence
+    testLatticeSTSQuiescence,
+    testSTSPathCondition
     )
 where
 
@@ -29,6 +30,7 @@ import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyP
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -44,13 +46,14 @@ xvar = (Variable "x" IntType)
 stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
+water = SymInteract (In "water") [pvar]
+ok = SymInteract (Out "ok") [pvar]
+coffee = SymInteract (Out "coffee") []
+
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
     let p = sVar pvar
         x = sVar xvar
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
-        coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
@@ -509,3 +512,9 @@ testLatticeSTSQuiescence = [
     testLatticeSTSUnimplementable "u1" True, -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
     testLatticeSTSUnimplementable "u2'" False -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
     ]
+
+testSTSPathCondition :: Test
+testSTSPathCondition = TestCase $ do
+    let pathCondition = interactsToGuard stsExampleIntrpr [water, ok, water, ok, coffee]
+    -- FIXME do an actual test here instead of printing
+    putStrLn $ "\n\npath condition: " ++ show pathCondition ++ "\n\n"
