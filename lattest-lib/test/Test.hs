@@ -14,8 +14,8 @@ import qualified Data.Maybe as M
 
 import Test.Tasty
 import Test.Tasty.Runners as Tasty
-import Test.Tasty.Providers
-import Test.HUnit 
+import Test.Tasty.Providers as Tasty
+import Test.HUnit as HUnit
 import Test.Tasty.QuickCheck
 
 durationSeconds :: Int
@@ -30,17 +30,10 @@ main = do
         [ hunitTests
         , quickCheckTests
         ]
-    -- -- unit tests, for fully written out scenarios
-    -- putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
-    -- void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
-    -- -- property tests
-    -- putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
-    -- void $ runQuickCheckTests
 
 quickCheckTests :: TestTree
 quickCheckTests = testGroup "Quickcheck"
   [ quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property) "jsonStream"
-  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
 --    smtRef <- createTestSMTRef
@@ -58,14 +51,9 @@ makeHUnitTests :: IO TestTree
 makeHUnitTests = do
     smt <- createTestSMTRef
     return $ 
-      localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run multiple times in parallel
+      localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run in parallel
       singleTest "unit tests" $
-      -- TestCase $
-      -- propagateHUnitFailure $
-      -- runTestTT $
-      -- testGroup "unit tests" $ 
       TestList $
-      -- map (\(TestCase a) -> testCase "unitTest" a) $
         [
         testAccSeq,
         testADG,
@@ -104,7 +92,13 @@ makeHUnitTests = do
         ++ evalTests
         ++ fmap ($ smt) solveTests
 
-instance IsTest Test where
+-- TODO: This wraps HUnit tests into a Tasty test.
+-- The reason we need this wrapper, is that plain HUnit
+-- does not set the exit code, making CI runs pass even
+-- when tests fail.
+-- Instead, we should migrate the HUnit tests to
+-- tasty-hunit, which exposes a very similar interface.
+instance Tasty.IsTest HUnit.Test where
   run _ t _ = runTestTT t >>= \c ->
     if errors c + failures c > 0
       then return $ testFailed (show c)
