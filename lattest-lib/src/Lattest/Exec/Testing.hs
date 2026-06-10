@@ -46,26 +46,20 @@ offlineTester
 where
 
 import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, specifiedMenu, FiniteMenu)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, allowedMenu)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef)
 
 
-import Control.Exception(catch,evaluate, ErrorCall (ErrorCall))
+import Control.Exception(catch,evaluate)
 
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
 import Data.Map (Map)
 import qualified Data.Map as M
-import Extra (enumerate)
 import Control.Monad (forM)
-import Data.Maybe (catMaybes, mapMaybe)
-import Data.Tuple (swap)
-import Control.Exception.Base (try)
-import Data.List (intercalate)
-import Lattest.Util.Utils (takeJusts)
-import qualified Debug.Trace
+import Data.Maybe (fromJust)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -225,22 +219,31 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
 {- |
     Offline test generation: Instead of connecting to a system and running the tests live,
     generate a decision tree that can later be used to test a system.
+    On 'Nothing', inputs are only generated from states with no outputs.
+    On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
 -}
 offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
               => AutIntrpr m loc q t tdest (IOAct i o)
               -> TestController m loc q t tdest (IOAct i o) state i r
+              -> Maybe o
               -> IO (OfflineTree o i Verdict)
-offlineTester spec testSelection = go (makeTester spec testSelection)
+offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
   where
     go controller = do
-      let outOptions = map (\(Out o) -> o) . filter isOutput $ specifiedMenu $ fst $ controllerState controller
+      let allowedAct = allowedMenu $ fst $ controllerState controller
+      let outOptions = filter ((/= quiescence) . Just) $ map (\(Out o) -> o) . filter isOutput $ allowedAct
       onOutput <- M.fromList <$> forM outOptions (\o -> do
           subTree <- handleUpdate controller (Out o)
-          return (Just o, subTree)
+          return (o, subTree)
         )
 
-      onNoOutput <- do
-        if all isOutput $ specifiedMenu $ fst $ controllerState controller
+      onInput <- do
+        -- skip inputs when:
+        -- - there are only outputs
+        -- - there are outputs, and none of them is quiescence (we don't want offline race conditions)
+        if all isOutput allowedAct
+          || (all ((/= (Out <$> quiescence)) . Just) (filter isOutput allowedAct)
+             && any isOutput allowedAct)
         then return Nothing
         else Just <$> do
           selection <- select controller (controllerState controller)
@@ -250,9 +253,12 @@ offlineTester spec testSelection = go (makeTester spec testSelection)
             Right result -> do
               return $ Leaf $ fst result
 
-      return $ CaseSplit $ case onNoOutput of
-        Just oNO -> M.insert Nothing oNO onOutput
-        Nothing -> onOutput
+      return $ case onInput of
+        Nothing -> CaseSplit onOutput -- no input, only output
+        Just oNO -> case outOptions of
+          [] -> oNO -- no output, only input
+          _ -> CaseSplit $ M.insert (fromJust quiescence) oNO onOutput
+               -- both inputs and outputs: this means that there is also quiescence (see the condition in onInput), and we choose to only input when observing quiescence
 
     handleUpdate controller aut = do
       foo <- update controller (controllerState controller) aut
@@ -275,19 +281,18 @@ data OfflineTree o i r where
                -> OfflineTree o i r
                -> OfflineTree o i r
   -- |The test tries to get an output from the SUT.
-  -- On quiescence, use `Nothing`.
-  CaseSplit :: Map (Maybe o) (OfflineTree o i r)
+  CaseSplit :: Map o (OfflineTree o i r)
             -> OfflineTree o i r
 
 instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
   show (Leaf r) = show r
-  show (InputRequest i ot) = "?" <> show i <> ": {" <> show ot <> "}"
+  show (InputRequest i ot) = "?" <> show i <> ": \n" <> indentOfflineTree 2 (show ot)
   show (CaseSplit m) =
-    "case <output> of ["
-    <> intercalate "; " 
-         (map (\(o,ot) -> "!" <> show o <> " -> (" <> show ot <> ")") (mapMaybe (fmap swap . sequence . swap) $ M.toList m)
-         ++ (case m M.!? Nothing of
-               Just ot -> ["!δ -> (" <> show ot <> ")"]
-               Nothing -> []))
-    <> "]"
+    "case <output> of\n"
+    <> indentOfflineTree 2 (unlines
+         (map (\(o,ot) -> "!" <> show o <> " -> \n" <> indentOfflineTree 2 (show ot)) $ M.toList m))
 
+-- uses init to get rid of the trailing newline
+-- crashes on empty input
+indentOfflineTree :: Int -> String -> String
+indentOfflineTree i = init . unlines . map (replicate i ' ' ++) . lines
