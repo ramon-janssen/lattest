@@ -1,7 +1,8 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -39,12 +40,14 @@ makeSMTTester,
 runTester,
 runSMTTester,
 Verdict(..),
-InconclusiveReason(..)
+InconclusiveReason(..),
+offlineTester,
+offlineTreeToTrace
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
+import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, allowedMenu)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef)
@@ -54,6 +57,11 @@ import Control.Exception(catch,evaluate)
 
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
+import Data.Map (Map)
+import qualified Data.Map as M
+import Control.Monad (forM)
+import Data.Maybe (fromJust)
+import Data.Bifunctor (first)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -78,7 +86,7 @@ data InconclusiveReason = AutomatonException AutomatonException deriving (Ord, E
     /not/ need to return a verdict 'Pass' or 'Fail', this verdict is automatically inferred based on the specification model.
     Results can be used to record additional information that the tester is interested in, depending on the controller implementation.
     For example, the actions observed during a testing experiment, or whether certain coverage criteria were achieved during the experiment.
--} 
+-}
 data TestController m loc q t tdest act state i r = TestController {
     -- | Any state that the controller needs for its decision making duties.
     testControllerState :: state,
@@ -152,7 +160,7 @@ makeTester' ioState initSpec initTestController = ActionController {
         makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
-            return (pToVerd $ stateConf spec, r) 
+            return (pToVerd $ stateConf spec, r)
         pToVerd :: (BoundedConfiguration m) => (m x) -> Verdict
         pToVerd p | isForbidden p = Fail
                   | otherwise     = Pass
@@ -210,7 +218,92 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
 --runStepper spec controller = runExperiment controller (simulateSpec spec)
 
 
+{- |
+    Offline test generation: Instead of connecting to a system and running the tests live,
+    generate a decision tree that can later be used to test a system.
+    On 'Nothing', inputs are only generated from states with no outputs.
+    On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
+-}
+offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
+              => AutIntrpr m loc q t tdest (IOAct i o)
+              -> TestController m loc q t tdest (IOAct i o) state i r
+              -> Maybe o
+              -> IO (OfflineTree o i Verdict)
+offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
+  where
+    go controller = do
+      let allowedAct = allowedMenu $ fst $ controllerState controller
+      let outOptions = filter ((/= quiescence) . Just) $ map (\(Out o) -> o) . filter isOutput $ allowedAct
+      onOutput <- M.fromList <$> forM outOptions (\o -> do
+          subTree <- handleUpdate controller (Out o)
+          return (o, subTree)
+        )
 
+      onInput <- do
+        -- skip inputs when:
+        -- - there are only outputs
+        -- - there are outputs, and none of them is quiescence (we don't want offline race conditions)
+        if all isOutput allowedAct
+          || (all ((/= (Out <$> quiescence)) . Just) (filter isOutput allowedAct)
+             && any isOutput allowedAct)
+        then return Nothing
+        else Just <$> do
+          selection <- select controller (controllerState controller)
+          case selection of
+            Left (i, state) -> do
+              InputRequest i <$> handleUpdate (controller {controllerState = state}) (In i)
+            Right result -> do
+              return $ Leaf $ fst result
 
+      return $ case onInput of
+        Nothing -> CaseSplit onOutput -- no input, only output
+        Just oNO -> case outOptions of
+          [] -> oNO -- no output, only input
+          _ -> CaseSplit $ M.insert (fromJust quiescence) oNO onOutput
+               -- both inputs and outputs: this means that there is also quiescence (see the condition in onInput), and we choose to only input when observing quiescence
 
+    handleUpdate controller aut = do
+      foo <- update controller (controllerState controller) aut
+      case foo of
+        Left state -> do
+          go (controller { controllerState = state})
+        Right result -> do
+          return $ Leaf $ fst result
+
+-- |A tree representing an offline test case.
+-- Such a test makes concrete choices on the inputs
+-- it gives the SUT, while accomodating for all
+-- possible outputs the SUT can send.
+data OfflineTree o i r where
+  -- |The end of a possible test trace
+  Leaf :: r
+       -> OfflineTree o i r
+  -- |The test sends input to the SUT
+  InputRequest :: i
+               -> OfflineTree o i r
+               -> OfflineTree o i r
+  -- |The test tries to get an output from the SUT.
+  CaseSplit :: Map o (OfflineTree o i r)
+            -> OfflineTree o i r
+
+instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
+  show (Leaf r) = show r
+  show (InputRequest i ot) = "?" <> show i <> ": \n" <> indentOfflineTree 2 (show ot)
+  show (CaseSplit m) =
+    "case <output> of\n"
+    <> indentOfflineTree 2 (unlines
+         (map (\(o,ot) -> "!" <> show o <> " -> \n" <> indentOfflineTree 2 (show ot)) $ M.toList m))
+
+-- uses init to get rid of the trailing newline
+-- crashes on empty input
+indentOfflineTree :: Int -> String -> String
+indentOfflineTree i = init . unlines . map (replicate i ' ' ++) . lines
+
+-- |If the tree has no branching, convert it to a trace
+offlineTreeToTrace :: OfflineTree o i r -> Maybe ([IOAct i o],r)
+offlineTreeToTrace (Leaf r) = Just ([],r)
+offlineTreeToTrace (InputRequest i ot) = first (In i:) <$> offlineTreeToTrace ot
+offlineTreeToTrace (CaseSplit m) = case M.toList m of
+  [(o,ot)] -> first (Out o:) <$> offlineTreeToTrace ot
+  _ -> Nothing
 

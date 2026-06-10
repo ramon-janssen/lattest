@@ -2,10 +2,10 @@ module Lib
     ( someFunc
     ) where
 
-import Lattest.Model.Alphabet(IOAct(..))
+import Lattest.Model.Alphabet(IOAct(..), Suspended (..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass), offlineTester)
 import Lattest.Exec.StandardTestControllers
 --import Network.Socket(withSocketsDo)
 
@@ -34,12 +34,19 @@ testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nr
 
 someFunc :: IO () -- FIXME give this function a sensible name
 someFunc = do
-    putStrLn $ "connecting..."
-    adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    imp <- withQuiescenceMillis 200 adap
-    let model = interpretQuiescentConcrete spec
-    putStrLn $ "starting test..."
-    (verdict, (observed, maybeMq)) <- runTester model testSelector imp
-    putStrLn $ "verdict: " ++ show verdict
-    putStrLn $ "observed: " ++ show observed
-    putStrLn $ "final state: " ++ show maybeMq
+    -- putStrLn $ "connecting..."
+    -- adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
+    -- imp <- withQuiescenceMillis 200 adap
+    -- let model = interpretQuiescentConcrete spec
+    -- putStrLn $ "starting test..."
+    -- (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+    -- putStrLn $ "verdict: " ++ show verdict
+    -- putStrLn $ "observed: " ++ show observed
+    -- putStrLn $ "final state: " ++ show maybeMq
+
+    putStrLn "Offline test gen:"
+    let model2 = interpretQuiescentConcrete spec
+    tests <- offlineTester model2 testSelector (Just Quiescence)
+    putStrLn "Tests:"
+    print tests
+
