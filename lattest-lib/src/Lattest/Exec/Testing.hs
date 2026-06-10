@@ -226,16 +226,15 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
     Offline test generation: Instead of connecting to a system and running the tests live,
     generate a decision tree that can later be used to test a system.
 -}
-offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Enum o, Bounded o, Foldable m, Ord i, FiniteMenu t (IOAct i o))
+offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
               => AutIntrpr m loc q t tdest (IOAct i o)
               -> TestController m loc q t tdest (IOAct i o) state i r
               -> IO (OfflineTree o i Verdict)
 offlineTester spec testSelection = go (makeTester spec testSelection)
   where
-    outAlphabet = enumerate
-
     go controller = do
-      onOutput <- M.fromList <$> forM outAlphabet (\o -> do
+      let outOptions = map (\(Out o) -> o) . filter isOutput $ specifiedMenu $ fst $ controllerState controller
+      onOutput <- M.fromList <$> forM outOptions (\o -> do
           subTree <- handleUpdate controller (Out o)
           return (Just o, subTree)
         )
