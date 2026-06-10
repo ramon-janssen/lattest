@@ -41,7 +41,8 @@ runTester,
 runSMTTester,
 Verdict(..),
 InconclusiveReason(..),
-offlineTester
+offlineTester,
+offlineTreeToTrace
 )
 where
 
@@ -60,6 +61,7 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Control.Monad (forM)
 import Data.Maybe (fromJust)
+import Data.Bifunctor (first)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -296,3 +298,12 @@ instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
 -- crashes on empty input
 indentOfflineTree :: Int -> String -> String
 indentOfflineTree i = init . unlines . map (replicate i ' ' ++) . lines
+
+-- |If the tree has no branching, convert it to a trace
+offlineTreeToTrace :: OfflineTree o i r -> Maybe ([IOAct i o],r)
+offlineTreeToTrace (Leaf r) = Just ([],r)
+offlineTreeToTrace (InputRequest i ot) = first (In i:) <$> offlineTreeToTrace ot
+offlineTreeToTrace (CaseSplit m) = case M.toList m of
+  [(o,ot)] -> first (Out o:) <$> offlineTreeToTrace ot
+  _ -> Nothing
+
