@@ -75,6 +75,8 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , emptyValuation
 , assignValues
 , assignValue
+, getVariables
+, identityVarModel
 , varsToGuard
 , insertIntoValuation
 , substConst
@@ -535,6 +537,20 @@ valuationToVarModel vals = VarModel {
     boolVars = typedValuationToVarModel $ boolValuation vals,
     stringVars = typedValuationToVarModel $ stringValuation vals
     }
+
+getVariables :: Valuation -> [Variable]
+getVariables vals =
+    (Map.keys $ intValuation vals) ++
+    (Map.keys $ boolValuation vals) ++
+    (Map.keys $ stringValuation vals)
+
+assignIdentity :: Variable -> VarModel -> VarModel
+assignIdentity v@(Variable _ IntType) = assign v (sVar v :: Expr Integer)
+assignIdentity v@(Variable _ BoolType) = assign v (sVar v :: Expr Bool)
+assignIdentity v@(Variable _ StringType) = assign v (sVar v :: Expr String)
+
+identityVarModel :: [Variable] -> VarModel
+identityVarModel vars = assignment $ assignIdentity <$> vars
 
 varUnion :: VarModel -> VarModel -> VarModel
 varUnion vars1 vars2 = VarModel {

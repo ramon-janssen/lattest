@@ -16,7 +16,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), assign, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard)
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), assign, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -25,6 +25,7 @@ import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import qualified Data.Map as Map
+import qualified Data.List as List
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
@@ -76,7 +77,7 @@ data PathNode loc = PathNode {
     pathCondition :: SymGuard
     } deriving (Eq, Ord)
 
-interactsToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
+interactsToGuard :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
 interactsToGuard intrpr interactions = let
         aut = syntacticAutomaton intrpr
         initialNodes = BM.ordMap initializeNode $ stateConf intrpr
@@ -88,6 +89,11 @@ interactsToGuard intrpr interactions = let
             pathVars = addVarPrimes 0 $ valuationToVarModel vals,
             pathCondition = sTrue
         }
+    stateVars =
+        let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
+        in case mArbitraryState of
+            Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
+            Nothing -> []
     pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> PathNode loc -> m (PathNode loc)
     pathStep aut interaction pathNode =
         case Map.lookup interaction (transRel aut $ pathLoc pathNode) of
@@ -95,7 +101,8 @@ interactsToGuard intrpr interactions = let
             Just mtdestloc -> BM.ordMap (addToPath pathNode) mtdestloc
         where
         addToPath (PathNode len _ vars pCond) (STSLoc (tguard, tassign), tloc) =
-            let primedAssign = addVarPrimes (len + 1) $ addValPrimes len tassign
+            let completeAssign = tassign `varUnion` identityVarModel stateVars 
+                primedAssign = addVarPrimes (len + 1) $ addValPrimes len completeAssign
             in PathNode {
                 pathDepth = len + 1,
                 pathLoc = tloc,
