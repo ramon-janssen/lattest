@@ -83,11 +83,13 @@ interactsToGuard intrpr interactions = let
         initialNodes = BM.ordMap initializeNode $ stateConf intrpr
     in asDualExpr $ BM.ordMap pathCondition $ initialNodes BM.>># BM.ordKleisliChain (pathStep aut <$> interactions)
     where
-    initializeNode (IntrpState loc vals) = PathNode {
+    initializeNode (IntrpState loc vals) = 
+        let initialVarModel = addVarPrimes 0 $ valuationToVarModel vals
+        in PathNode {
             pathDepth = 0,
             pathLoc = loc,
-            pathVars = addVarPrimes 0 $ valuationToVarModel vals,
-            pathCondition = sTrue
+            pathVars = initialVarModel,
+            pathCondition = varsToGuard initialVarModel
         }
     stateVars =
         let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
@@ -107,7 +109,7 @@ interactsToGuard intrpr interactions = let
                 pathDepth = len + 1,
                 pathLoc = tloc,
                 pathVars = vars `varUnion` primedAssign,
-                pathCondition = pCond .&& mapExpressionVars (varToPrime len) tguard .&& varsToGuard primedAssign -- TODO the varsToGuard could also be done with substitution, resulting in less intermediate variables
+                pathCondition = pCond .&& varsToGuard primedAssign .&& mapExpressionVars (varToPrime len) tguard -- TODO the varsToGuard could also be done with substitution, resulting in less intermediate variables
             }
     addVarPrimes :: Int -> VarModel -> VarModel
     addVarPrimes n = mapVars $ varToPrime n
