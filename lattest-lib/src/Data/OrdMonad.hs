@@ -15,6 +15,8 @@ ordMap,
 OrdMonad,
 ordBind,
 (>>#),
+(>#>),
+ordKleisliChain,
 ordReturn,
 ordJoin
 )
@@ -62,6 +64,15 @@ instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
 -- | Operator notation for `ordBind`, analogous to `>>=`
 (>>#) :: (OrdMonad m, Ord b) => m a -> (a -> m b) -> m b
 (>>#) = ordBind
+
+-- | Kleisli composion of two Kleisli maps (monadic maps)
+(>#>) :: (OrdMonad m, Ord c) => (a -> m b) -> (b -> m c) -> (a -> m c)
+(>#>) f g x = f x >># g
+
+-- | Kleisli composition of a sequence of Kleisli maps (monadic maps)
+ordKleisliChain :: (OrdMonad m, Ord a) => [a -> m a] -> (a -> m a)
+ordKleisliChain fs = foldr (>#>) ordReturn fs
+
 
 -- | Standard monadic 'join', but with an additional 'Ord' constraint.
 ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a

@@ -80,7 +80,7 @@ interactsToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord loc, Ord 
 interactsToGuard intrpr interactions = let
         aut = syntacticAutomaton intrpr
         initialNodes = BM.ordMap initializeNode $ stateConf intrpr
-    in asDualExpr $ BM.ordMap pathCondition $ initialNodes BM.>># chainOrdBind (pathStep aut <$> interactions)
+    in asDualExpr $ BM.ordMap pathCondition $ initialNodes BM.>># BM.ordKleisliChain (pathStep aut <$> interactions)
     where
     initializeNode (IntrpState loc vals) = PathNode {
             pathDepth = 0,
@@ -88,10 +88,6 @@ interactsToGuard intrpr interactions = let
             pathVars = addVarPrimes 0 $ valuationToVarModel vals,
             pathCondition = sTrue
         }
-    chainOrdBind :: (BM.OrdMonad m, Ord a) => [a -> m a] -> (a -> m a)
-    chainOrdBind fs = foldr ordKleisliCompose BM.ordReturn fs
-    ordKleisliCompose :: (BM.OrdMonad m, Ord c) => (a -> m b) -> (b -> m c) -> (a -> m c)
-    ordKleisliCompose f g x = f x BM.>># g
     pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> PathNode loc -> m (PathNode loc)
     pathStep aut interaction pathNode =
         case Map.lookup interaction (transRel aut $ pathLoc pathNode) of
