@@ -69,53 +69,60 @@ stateAndInteractToGuards aut interaction (IntrpState l valuation) =
     a 1-step lookahead is just a specific version of the n-step lookahead.
     !EXCEPT! that the code below adds "primes" (encoded as ..._0), which need to be stripped first.
 -}
-
-data PathNode loc = PathNode {
-    pathDepth :: Int, -- needed for adding the right number of primes
-    pathLoc :: loc,
-    pathVars :: VarModel,
-    pathCondition :: SymGuard
+data SymbExecTree g = SymbExecTree {
+    pathCondition :: SymGuard,
+    children :: Map.Map (SymInteract g) (SymbExecTree g)
     } deriving (Eq, Ord)
 
 interactsToGuard :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
-interactsToGuard intrpr interactions = let
-        aut = syntacticAutomaton intrpr
-        initialNodes = BM.ordMap initializeNode $ stateConf intrpr
-    in asDualExpr $ BM.ordMap pathCondition $ initialNodes BM.>># BM.ordKleisliChain (pathStep aut <$> interactions)
+interactsToGuard intrpr = interactsToGuard' (symbolicExecutionGraph intrpr)
     where
-    initializeNode (IntrpState loc vals) = 
+    interactsToGuard' seg [] = pathCondition seg
+    interactsToGuard' seg (i:is) =
+        case Map.lookup i (children seg) of
+            Nothing -> error "interaction not in seg" -- FIXME nicer error handling
+            Just seg' -> interactsToGuard' seg' is
+
+symbolicExecutionGraph :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymbExecTree g
+symbolicExecutionGraph intrpr = symbExecTree 0 $ BM.ordMap initializeExecState $ stateConf intrpr
+    where
+    initializeExecState (IntrpState loc vals) =
         let initialVarModel = addVarPrimes 0 $ valuationToVarModel vals
-        in PathNode {
-            pathDepth = 0,
-            pathLoc = loc,
-            pathVars = initialVarModel,
-            pathCondition = varsToGuard initialVarModel
-        }
+        in (varsToGuard initialVarModel, loc, initialVarModel)
+    --symbExecTree :: Int -> m (SymGuard, loc, VarModel) -> SymbExecTree g
+    symbExecTree depth execConf = 
+        let cond = asDualExpr $ BM.ordMap fst3 execConf
+        in SymbExecTree cond $ children depth execConf
+    --children :: Int -> m (SymGuard, loc, VarModel) -> Map.Map (SymInteract g) (SymbExecTree g)
+    children depth parentExecConf = Map.fromSet (pathStep depth parentExecConf) (alphabet $ syntacticAutomaton intrpr)
+    --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract g -> SymbExecTree g
+    pathStep depth parentExecConf interaction = symbExecTree (depth + 1) (parentExecConf BM.>># pathStep' depth interaction)
+    --pathStep' :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> SymInteract g -> (SymGuard, loc, VarModel) -> m (SymGuard, loc, VarModel)
+    pathStep' depth interaction (pCond, pLoc, pVars)  = 
+        case Map.lookup interaction (transRel (syntacticAutomaton intrpr) pLoc) of
+            Nothing -> throw $ ActionOutsideAlphabet callStack
+            Just mtdestloc -> BM.ordMap (addToPath depth pVars pCond) mtdestloc
+        where
+        addToPath depth pVars pCond (STSLoc (tguard, tassign), tloc) =
+            let completeAssign = tassign `varUnion` identityVarModel stateVars 
+                primedAssign = addVarPrimes (depth + 1) $ addValPrimes depth completeAssign
+                pathLoc = tloc
+                pathVars = pVars `varUnion` primedAssign
+                pathCondition = pCond .&& varsToGuard primedAssign .&& mapExpressionVars (varToPrime depth) tguard -- TODO the varsToGuard could also be done with substitution, resulting in less intermediate variables
+            in (pathCondition, pathLoc, pathVars)
     stateVars =
         let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
-    pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> PathNode loc -> m (PathNode loc)
-    pathStep aut interaction pathNode =
-        case Map.lookup interaction (transRel aut $ pathLoc pathNode) of
-            Nothing -> throw $ ActionOutsideAlphabet callStack
-            Just mtdestloc -> BM.ordMap (addToPath pathNode) mtdestloc
-        where
-        addToPath (PathNode len _ vars pCond) (STSLoc (tguard, tassign), tloc) =
-            let completeAssign = tassign `varUnion` identityVarModel stateVars 
-                primedAssign = addVarPrimes (len + 1) $ addValPrimes len completeAssign
-            in PathNode {
-                pathDepth = len + 1,
-                pathLoc = tloc,
-                pathVars = vars `varUnion` primedAssign,
-                pathCondition = pCond .&& varsToGuard primedAssign .&& mapExpressionVars (varToPrime len) tguard -- TODO the varsToGuard could also be done with substitution, resulting in less intermediate variables
-            }
     addVarPrimes :: Int -> VarModel -> VarModel
+    addVarPrimes 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     addVarPrimes n = mapVars $ varToPrime n
     addValPrimes :: Int -> VarModel -> VarModel
+    addValPrimes 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     addValPrimes n = mapVarExprs $ varToPrime n
     varToPrime :: Int -> Variable -> Variable
     varToPrime n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
+    fst3 (x,_,_) = x
 
 
