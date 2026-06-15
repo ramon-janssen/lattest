@@ -69,4 +69,4 @@ instance OrdFunctor Set.Set where
 -- | 'Set' is the the prototypical 'OrdMonad' instance, where @s \`'ordBind'\` f@ is the set \( \{ x \in s' \mid s' \in f[s] \} \).
 instance OrdMonad Set.Set where
     ordBind s f = Set.unions $ Set.map f s
-    ordReturn s = Set.singleton s
+    ordReturn = Set.singleton

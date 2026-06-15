@@ -49,7 +49,7 @@ ghc-options:
 - -Wincomplete-uni-patterns
 - -Wmissing-export-lists
 - -Wmissing-home-modules
-- -Wpartial-fields
+- -Wpartial-fields # TODO: we are defining partial fields in multiple files in Lattest/Model/Symbolic, is this flag an intention to refactor them?
 - -Wredundant-constraints
 
 library:

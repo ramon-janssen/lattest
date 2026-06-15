@@ -25,6 +25,7 @@ readAutFile path = do
     contents <- TIO.readFile path
     let linesT = T.lines contents
     case linesT of
+      [] -> error $ "Error: empty file: " <> path
       firstLine : restLines ->
         case parseInitialState firstLine of
           Nothing -> error "Error: Could not parse initial state from header."
