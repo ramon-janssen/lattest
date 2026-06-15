@@ -4,6 +4,7 @@
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testLatticeCoffeeSTS,
     testErrorThrowingGates,
     testSTSUnHappyFlow,
     testPrintSTS,
@@ -28,7 +29,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden, FreeLatticeCNF, atom)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -203,6 +204,42 @@ testSTSTestSelection = TestCase $ do
     where
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
+
+stsExample2 :: IOSTS FreeLatticeCNF Integer String String
+stsExample2 =
+    let p = sVar pvar
+        x = sVar xvar
+        water = SymInteract (In "water") [pvar]
+        ok = SymInteract (Out "ok") [pvar]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .<= p .&& p .<= 4
+        waterGuard1 = 4 .<= p .&& p .<= 10
+        waterAssign = assignment [xvar =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= 15
+        initConf = atom 0
+        switches = \q -> case q of
+            0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1) /\ atom (stsTLoc waterGuard1 waterAssign, 2) )]
+            1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+
+stsExampleIntrpr2 :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2 = interpretSTS stsExample2 stsExampleInitAssign
+
+getSTSIntrpState2 :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
+getSTSIntrpState2 loc val = atom (IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val))
+
+testLatticeCoffeeSTS :: Test
+testLatticeCoffeeSTS = TestCase $ do
+     assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2)
+     let intrp2 = after stsExampleIntrpr2 (GateValue (In "water") [Cint 3])
+     assertEqual "after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2)
+     let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 3])
+     assertEqual "after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3)
+     let intrp4 = after intrp3 (GateValue (In "water") [Cint 4])
+     assertEqual "after water 4: " (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7) (stateConf intrp4)
+
 
 {- specification:
                         end(p,q)    
