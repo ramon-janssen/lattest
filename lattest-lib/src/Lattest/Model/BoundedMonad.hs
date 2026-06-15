@@ -173,6 +173,55 @@ instance (Ord a) => JoinSemiLattice (NonDet a) where
     (\/) (NonDet q1) (NonDet q2) = NonDet (Set.union q1 q2)
     (\/) _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
+-- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
+data IocoNonDet q = IocoNonDet (Set.Set q) | UnderspecIocoNonDet
+
+iocoNonDet :: Ord q => [q] -> IocoNonDet q
+iocoNonDet = IocoNonDet . Set.fromList
+
+instance BoundedConfiguration IocoNonDet where
+    isForbidden (IocoNonDet s) = if Set.null s then True else False
+    isForbidden _ = False
+    isUnderspecified UnderspecIocoNonDet = True
+    isUnderspecified _ = False
+    forbidden = IocoNonDet Set.empty
+    underspecified = UnderspecIocoNonDet
+
+instance OM.OrdFunctor IocoNonDet where
+    ordMap f (IocoNonDet ss) = IocoNonDet $ OM.ordMap f ss
+    ordMap _ UnderspecIocoNonDet = UnderspecIocoNonDet
+    
+instance OM.OrdMonad IocoNonDet where
+    ordBind (IocoNonDet ss) f = foldr (##) (IocoNonDet Set.empty) $ Set.map f ss
+    ordBind UnderspecIocoNonDet _ = UnderspecIocoNonDet
+    ordReturn s = IocoNonDet $ Set.singleton s
+
+instance Foldable IocoNonDet where
+    foldr f q (IocoNonDet qs) = foldr f q qs
+    foldr _ q _ = q
+
+instance Show a => Show (IocoNonDet a) where
+    show (IocoNonDet a)
+        | Set.null a = "⊥"
+        | otherwise = show $ Set.toList a
+    show UnderspecIocoNonDet = "⊤"
+
+instance Ord a => Eq (IocoNonDet a) where
+    UnderspecIocoNonDet == UnderspecIocoNonDet = True
+    (IocoNonDet q1) == (IocoNonDet q2) = q1 == q2
+    _ == _ = False
+
+instance Ord a => Ord (IocoNonDet a) where
+    _ <= UnderspecIocoNonDet = True
+    UnderspecIocoNonDet <= _ = False
+    (IocoNonDet q1) <= (IocoNonDet q2) = q1 <= q2
+
+(##) :: (Ord a) => IocoNonDet a -> IocoNonDet a -> IocoNonDet a
+(##) (IocoNonDet q1) (IocoNonDet q2) = IocoNonDet (Set.union q1 q2)
+(##) (IocoNonDet q1) UnderspecIocoNonDet = (IocoNonDet q1) -- for ioco, underspecification does *not* act as top in a lattice:
+(##) UnderspecIocoNonDet (IocoNonDet q2) = (IocoNonDet q2) -- non-determinism absorbs underspecification, instead of vice versa
+(##) UnderspecIocoNonDet UnderspecIocoNonDet = UnderspecIocoNonDet
+
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
 
