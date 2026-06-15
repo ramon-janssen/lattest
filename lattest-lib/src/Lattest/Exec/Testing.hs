@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -46,8 +47,8 @@ offlineTreeToTrace
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, allowedMenu)
+import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, actToChoice)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, indefiniteMenu)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef)
@@ -60,7 +61,7 @@ import System.IO.Streams.Synchronized (Streamed(..))
 import Data.Map (Map)
 import qualified Data.Map as M
 import Control.Monad (forM)
-import Data.Maybe (fromJust)
+import Data.Maybe ( fromJust, mapMaybe )
 import Data.Bifunctor (first)
 
 -- | The controller of an experiment.
@@ -224,8 +225,9 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
     On 'Nothing', inputs are only generated from states with no outputs.
     On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
 -}
-offlineTester 
-  :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
+offlineTester
+  :: forall m loc q t tdest i o state r
+   . (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
   => AutIntrpr m loc q t tdest (IOAct i o)
   -> TestController m loc q t tdest (IOAct i o) state i r
   -> Maybe o
@@ -233,20 +235,21 @@ offlineTester
 offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
   where
     go controller = do
-      let allowedAct = allowedMenu $ fst $ controllerState controller
-      let outOptions = filter ((/= quiescence) . Just) $ map (\(Out o) -> o) . filter isOutput $ allowedAct
+      let indefiniteAct = indefiniteMenu $ fst $ controllerState controller
+      let outOptions = filter ((/= quiescence) . Just) $ map (\(Out o) -> o) . filter isOutput $ indefiniteAct
       onOutput <- M.fromList <$> forM outOptions (\o -> do
           subTree <- handleUpdate controller (Out o)
           return (o, subTree)
         )
 
       onInput <- do
+        let inIndefiniteAct = mapMaybe (actToChoice @i) indefiniteAct
         -- skip inputs when:
-        -- - there are only outputs
+        -- - there are no inputs
         -- - there are outputs, and none of them is quiescence (we don't want offline race conditions)
-        if all isOutput allowedAct
-          || (all ((/= (Out <$> quiescence)) . Just) (filter isOutput allowedAct)
-             && any isOutput allowedAct)
+        if null inIndefiniteAct
+          || (all ((/= (Out <$> quiescence)) . Just) (filter isOutput indefiniteAct)
+             && any isOutput indefiniteAct)
         then return Nothing
         else Just <$> do
           selection <- select controller (controllerState controller)
@@ -256,12 +259,20 @@ offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
             Right result -> do
               return $ Leaf result
 
-      return $ case onInput of
-        Nothing -> CaseSplit onOutput -- no input, only output
-        Just oNO -> case outOptions of
+      case onInput of
+        Nothing -> if null onOutput
+          -- TODO: should we explicitly handle this here?
+          -- runTester instead makes it the testcontroller's responsibility,
+          -- and random testers currently simply crash in terminal states
+          -- (minor note: it's not easy to write a StopCondition that matches on a terminal state,
+          -- as its condition is evaluated right before a state transition, not after)
+          then Leaf  <$> handleClose controller (controllerState controller) -- no input and no ouput: terminal state. 
+          else return $ CaseSplit onOutput -- no input, only output
+        Just oNO -> return $ case outOptions of
           [] -> oNO -- no output, only input
+          -- Both inputs and outputs: this means that there is also quiescence. 
+          -- We choose to only input after observing quiescence.
           _ -> CaseSplit $ M.insert (fromJust quiescence) oNO onOutput
-               -- both inputs and outputs: this means that there is also quiescence (see the condition in onInput), and we choose to only input when observing quiescence
 
     handleUpdate controller aut = do
       foo <- update controller (controllerState controller) aut
@@ -275,6 +286,8 @@ offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
 -- Such a test makes concrete choices on the inputs
 -- it gives the SUT, while accomodating for all
 -- possible outputs the SUT can send.
+-- Note: `o` can be `Suspended o'`, in which case `Quiescence`
+-- may occur in `CaseSplit`.
 data OfflineTree o i r where
   -- |The end of a possible test trace
   Leaf :: r
@@ -295,8 +308,9 @@ instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
     <> indentOfflineTree 2 (unlines
          (map (\(o,ot) -> "!" <> show o <> " -> \n" <> indentOfflineTree 2 (show ot)) $ M.toList m))
 
--- uses init to get rid of the trailing newline
--- crashes on empty input
+-- Indent a prettyprinted tree with `i` spaces.
+-- Uses init to get rid of the trailing newline.
+-- Crashes on empty input.
 indentOfflineTree :: Int -> String -> String
 indentOfflineTree i = init . unlines . map (replicate i ' ' ++) . lines
 

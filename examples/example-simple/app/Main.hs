@@ -3,15 +3,14 @@ module Main (main) where
 import Data.Set (Set)
 import Lattest.Adapter.Adapter (Adapter)
 import Lattest.Adapter.StandardAdapters (pureMealyAdapter)
-import Lattest.Exec.StandardTestControllers (andObserving, observingOnly, printActions, randomTestSelectorFromSeed, stateObserver, stopAfterSteps, traceObserver, untilCondition)
-import Lattest.Exec.Testing (runTester, TestController, offlineTester)
+import Lattest.Exec.StandardTestControllers (andObserving, observingOnly, randomTestSelectorFromSeed, stateObserver, stopAfterSteps, traceObserver, untilCondition)
+import Lattest.Exec.Testing (runTester, offlineTester, offlineTreeToTrace)
 import Lattest.Model.Alphabet (IOAct (..))
 import Lattest.Model.StandardAutomata (automaton, detConcTransFromRel, interpretConcrete, ioAlphabet)
 import Data.Maybe (fromJust)
 import Lattest.Model.BoundedMonad (Det)
 import Data.Map (Map)
 import Lattest.Model.Automaton (AutSyntax)
-import System.Random (StdGen)
 
 -- Machine that turns itself off
 
@@ -61,7 +60,9 @@ main = do
   putStrLn $ "final state: " ++ show maybeMq
 
   putStrLn "Offline test gen:"
-  tests <- offlineTester (interpretConcrete spec) testSelector
+  tests <- offlineTester (interpretConcrete spec) testSelector Nothing
   putStrLn "Tests:"
   print tests
+  putStrLn "Trace:"
+  print $ offlineTreeToTrace tests
 

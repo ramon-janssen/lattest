@@ -58,13 +58,13 @@ reachableFrom,
 prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp,
-allowedMenu
+indefiniteMenu
 )
 where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, isAllowed)
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, isAllowed, isIndefinite)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
@@ -355,9 +355,9 @@ specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -- | Menu of allowed actions that are semantically present in the automaton, i.e. actions that are neither forbidden nor underspecified
-allowedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
+indefiniteMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
     => AutIntrpr m loc q t tdest act -> [act]
-allowedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isAllowed $ stateConf $ aut `after` act]
+indefiniteMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isIndefinite $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
 -- special case where the semantic states and actions are directly represented syntactically --

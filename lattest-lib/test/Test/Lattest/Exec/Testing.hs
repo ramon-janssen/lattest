@@ -5,25 +5,23 @@ testTraceFailsBeforeLastOutput,
 testTraceIncompleteAtLastOutput,
 testTraceIncompleteBeforeLastOutput,
 testTraceFailsWithQuiescence,
-testOutputOutsideAlphabet
+testOutputOutsideAlphabet,
+testOfflineTrace
 )
 where
 
-import Test.HUnit hiding (Path, path)
-
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Model.Automaton(AutSyntax, automaton)
-import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), SuspendedIF)
-import Lattest.Model.BoundedMonad
-import qualified Data.Map as Map (Map, insert, fromList)
-import Data.Maybe (fromJust)
-import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter)
-
-import Lattest.Adapter.StandardAdapters(pureAdapter)
-import System.Random(StdGen, mkStdGen)
-import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete, detConcTransFromRel)
+import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter, pureAdapter)
 import Lattest.Exec.StandardTestControllers
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, offlineTester, offlineTreeToTrace)
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), SuspendedIF)
+import Lattest.Model.Automaton(AutSyntax, automaton)
+import Lattest.Model.BoundedMonad
+import Lattest.Model.StandardAutomata(interpretQuiescentConcrete, ioAlphabet, interpretConcrete, interpretQuiescentInputAttemptConcrete, detConcTransFromRel)
+
+import Data.Maybe (fromJust)
+import System.Random(StdGen, mkStdGen)
+import Test.HUnit hiding (Path, path)
+import qualified Data.Map as Map (Map, insert, fromList)
 
 
 testTraceHappy :: Test
@@ -40,7 +38,7 @@ testTraceFailsAtLastOutput = TestCase $ do
     let tspec = [Out 1, Out 2] :: [IOAct Integer Integer]
     adap <- traceAdapter t
     (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
-    assertEqual "testTraceFailsAtLastOutput should fail" Fail verdict 
+    assertEqual "testTraceFailsAtLastOutput should fail" Fail verdict
     assertEqual "testTraceFailsAtLastOutput should be complete" True finished
 
 testTraceFailsBeforeLastOutput :: Test
@@ -58,7 +56,7 @@ testTraceIncompleteAtLastOutput = TestCase $ do
     let tController = [Out 1, Out 1] :: [IOAct Integer Integer]
     adap <- traceAdapter t
     (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification t) (ioTraceTestController tController) adap
-    assertEqual "testTraceIncompleteAtLastOutput should pass" Pass verdict 
+    assertEqual "testTraceIncompleteAtLastOutput should pass" Pass verdict
     assertEqual "testTraceIncompleteAtLastOutput should be complete" True finished
 
 testTraceIncompleteBeforeLastOutput :: Test
@@ -173,4 +171,33 @@ testOutputOutsideAlphabet = TestCase $ do
         _ -> assertFailure $ "Output outside alphabet used, expected inconclusive verdict instead of " ++ show verdict
 
 
+data StateOT = OTA | OTB | OTC | OTD | OTE | OTF | OTG
+  deriving (Eq, Ord, Show)
+testOfflineTrace :: Test
+testOfflineTrace = TestCase $ do
+  let alphOT = ioAlphabet [1 :: Int, 2] [1 :: Int, 2]
+      transOT = fromJust $ detConcTransFromRel
+        [ (OTA, In 1, OTB)
+        , (OTB, Out 1, OTC)
+        , (OTC, In 2, OTD)
+        , (OTD, In 1, OTE)
+        , (OTE, Out 2, OTF)
+        , (OTF, Out 1, OTG)
+        ]
+      initialOT = pure OTA
+      specOT = automaton initialOT alphOT transOT
+      modelOT = interpretConcrete specOT
+      testSelectorOT =
+        randomTestSelectorFromSeed 123
+        `untilCondition` stopCondition
+          () -- stopping when we take the last transition, i.e. out of OTF
+          (\_ _ _ q -> return $ case q of
+            Det OTF -> Nothing
+            _ -> Just ())
+  r <- offlineTester modelOT testSelectorOT Nothing
+  let r2 = offlineTreeToTrace r
+  assertEqual
+    "trace through single-path automaton"
+    (Just ([In 1, Out 1, In 2, In 1, Out 2, Out 1], (Pass, ())))
+    r2
 
