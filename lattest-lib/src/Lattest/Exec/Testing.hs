@@ -224,11 +224,12 @@ runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester i
     On 'Nothing', inputs are only generated from states with no outputs.
     On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
 -}
-offlineTester :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
-              => AutIntrpr m loc q t tdest (IOAct i o)
-              -> TestController m loc q t tdest (IOAct i o) state i r
-              -> Maybe o
-              -> IO (OfflineTree o i Verdict)
+offlineTester 
+  :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
+  => AutIntrpr m loc q t tdest (IOAct i o)
+  -> TestController m loc q t tdest (IOAct i o) state i r
+  -> Maybe o
+  -> IO (OfflineTree o i (Verdict, r))
 offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
   where
     go controller = do
@@ -253,7 +254,7 @@ offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
             Left (i, state) -> do
               InputRequest i <$> handleUpdate (controller {controllerState = state}) (In i)
             Right result -> do
-              return $ Leaf $ fst result
+              return $ Leaf result
 
       return $ case onInput of
         Nothing -> CaseSplit onOutput -- no input, only output
@@ -268,7 +269,7 @@ offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
         Left state -> do
           go (controller { controllerState = state})
         Right result -> do
-          return $ Leaf $ fst result
+          return $ Leaf result
 
 -- |A tree representing an offline test case.
 -- Such a test makes concrete choices on the inputs
