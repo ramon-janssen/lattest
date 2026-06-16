@@ -1,0 +1,45 @@
+{
+    "initial_location": 0,
+    "locationVariables": {
+        "counter": { "type": "integer" },
+        "label":   { "type": "string"  },
+        "active":  { "type": "bool"    }
+    },
+    "parameters": {
+        "counter_p": { "type": "integer" },
+        "label_p": { "type": "string"  }
+    },
+    "initialValuation": {
+        "counter": 1,
+        "active": false
+    },
+    "locations": [0, 1, 2],
+    "inputGates": {
+        "I1": { "shortname": "register", "parameters": ["label_p"] },
+        "I2": { "shortname": "update", "parameters": ["counter_p"] }
+    },
+    "outputGates": {
+        "O1": { "parameters": [] },
+        "O2": { "shortname": "confirm",  "parameters": ["counter_p"] }
+    },
+    "guards": {
+        "G1": { "lhs": "counter", "op": "<",  "rhs": 5       },
+        "G2": { "lhs": "counter", "op": ">=", "rhs": 5       },
+        "G3": { "lhs": "active",  "op": "==", "rhs": true    },
+        "G4": { "lhs": "label",   "op": "==", "rhs": 123 }
+    },
+    "assignments": {
+        "A1": { "target": "counter", "expression": { "lhs": "counter", "op": "+", "rhs": "counter_p" } },
+        "A2": { "target": "active",  "expression": false     },
+        "A3": { "target": "active",  "expression": true      },
+        "A4": { "target": "label",   "expression": "label_p" },
+        "A5": { "target": "counter", "expression": { "lhs": "counter", "op": "+", "rhs": 1 } }       
+    },
+    "switches": {
+        "r_low":    { "init_loc": 0, "gate": "I2", "guard": "G1", "assignments": ["A1"], "end_loc": 1 },
+        "r_high":   { "init_loc": 0, "gate": "I2", "guard": "G2", "assignments": ["A2"], "end_loc": 2 },
+        "r_active": { "init_loc": 1, "gate": "I1", "guard": "G3", "assignments": ["A4"], "end_loc": 0 },
+        "r_name":   { "init_loc": 1, "gate": "I1", "guard": "G4", "assignments": ["A3","A5"], "end_loc": 0 },
+        "r_notify": { "init_loc": 2, "gate": "O1", "assignments": [],       "end_loc": 0 }
+    }
+}
