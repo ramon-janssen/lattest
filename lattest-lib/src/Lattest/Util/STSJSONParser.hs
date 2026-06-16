@@ -3,7 +3,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
 ) where
@@ -15,14 +14,11 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Maybe (fromMaybe)
-
 import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLatticeCNF, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
 import Lattest.Model.Symbolic.Expr
-import qualified Control.Applicative as JSON
-
 
 data UntypedExpr
     = UEBool Bool
@@ -110,10 +106,7 @@ toStrExpr varmap (UEStr name) =
 toStrExpr varmap (UEOp2 "++" e1 e2)  = (\a b -> sConcat [a, b]) <$> toStrExpr varmap e1 <*> toStrExpr varmap e2
 toStrExpr _   e                    = Left $ "not a string expression: " ++ show e
 
-
--- JSON data types and FromJSON instances
-
--- Location IDs can be integers or strings in JSON; both map to String in Haskell.
+-- Location IDs can be integers or strings in JSON; both are mapped to String for consistency.
 newtype LocationId = LocationId { locId :: String }
 
 instance JSON.FromJSON LocationId where
@@ -327,8 +320,6 @@ convertSTSJson json = do
         initCfg  = atom $ locId (stsJsonInitLoc json)
         sts      = automaton initCfg alphabet transRel
     return (sts, initVal)
-
--------------------------------------------------------------------------------
 
 {-| 
     Read a JSON file and parse an STS from it.
