@@ -1,3 +1,5 @@
+{-# LANGUAGE QuasiQuotes #-}
+
 module Test.Lattest.Util.STSJSONParserTest
     ( testSTSJSONParserNominal
     , testSTSJSONParserUnknownType
@@ -21,13 +23,11 @@ import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
 import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable(..), fromConstantsMap)
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
-import qualified Lattest.Util.IOUtils as QQ
-import qualified Control.Monad as QQ
 
 testDir :: FilePath
 testDir = "./test/Test/Lattest/Util/STSJSONExamples/"
 
--- Check that the error string contains the expected substring.
+-- | Check that the error string contains the expected substring.
 assertErrorContains :: String -> String -> Either String a -> Assertion
 assertErrorContains label errsubstr (Right _)  =
     assertFailure (label ++ ": expected an error containing '" ++ errsubstr ++ "', but parsing succeeded")
@@ -37,7 +37,7 @@ assertErrorContains label errsubstr (Left err) =
         (errsubstr `isInfixOf` err)
 
 
-{-
+{-|
 Evaluate nominal case with:
 - a variety of variable types (Int, String, Bool)
 - (some) shortnames for gates
@@ -70,55 +70,71 @@ testSTSJSONParserNominal = TestCase $ do
                 intrpsts = interpretSTS sts valuation
                 actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
                 failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-                expected = "lala"
-
+                expected = [QQ.r|
+current state configuration: ("0",{counter:=5,active:=False,label:=""})
+initial location configuration: "0"
+locations: "0", "1", "2"
+transitions:
+"0"  ――?"register" [label_p:String]⟶  ⊤
+"0"  ――?"update" [counter_p:Int]⟶  (((counter+-4)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5)) ≥ 0), {counter:=(counter+counter_p)},"1")
+"0"  ――!"O1" []⟶  ⊥
+"0"  ――!"confirm" [counter_p:Int]⟶  ⊥
+"1"  ――?"register" [label_p:String]⟶  ((label) = (label_p), {counter:=(counter+1), active:=True},"0") ∧ ((active) = (True), {label:=label_p},"0")
+"1"  ――?"update" [counter_p:Int]⟶  ⊤
+"1"  ――!"O1" []⟶  ⊥
+"1"  ――!"confirm" [counter_p:Int]⟶  ⊥
+"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"update" [counter_p:Int]⟶  ⊤
+"2"  ――!"O1" []⟶  (True, {},"0")
+"2"  ――!"confirm" [counter_p:Int]⟶  ⊥
+|]
 
 ----- Non-nominal cases -----
 
--- Variable type "dummyType" is not recognised as a type.
+-- | Variable type "dummyType" is not recognised as a type.
 testSTSJSONParserUnknownType :: Test
 testSTSJSONParserUnknownType = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unknown_type.json")
     assertErrorContains "unknown type" "unknown variable type: dummyType" result
 
--- Variable "label" has type String but the assignment expression is an integer literal.
+-- | Variable "label" has type String but the assignment expression is an integer literal.
 testSTSJSONParserAssignmentTypeMismatch :: Test
 testSTSJSONParserAssignmentTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "assignment_type_mismatch.json")
     assertErrorContains "Test assignment type mismatch" "not a string expression" result
 
--- Guard compares integer with string using ==
+-- | Guard compares integer with string using ==
 testSTSJSONParserGuardTypeMismatch :: Test
 testSTSJSONParserGuardTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "guard_type_mismatch.json")
     assertErrorContains "Test guard type mismatch" "not a string expression" result
 
--- Switch refers to an undefined gate
+-- | Switch refers to an undefined gate
 testSTSJSONParserGateIdDup :: Test
 testSTSJSONParserGateIdDup = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "gate_id_dup.json")
     assertErrorContains "Test gate id inconsistency" "unknown gate" result
 
--- Guard expression uses operator "??" which is not handled by toBoolExpr.
+-- | Guard expression uses operator "??" which is not handled by toBoolExpr.
 testSTSJSONParserUnsupportedGuardOperand :: Test
 testSTSJSONParserUnsupportedGuardOperand = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unsupported_guard_operand.json")
     assertErrorContains "Test unsupported guard operand" "not a boolean expression" result
 
--- Assignment expression uses an unsupported operator
+-- | Assignment expression uses an unsupported operator
 testSTSJSONParserUnsupportedAssignmentOperand :: Test
 testSTSJSONParserUnsupportedAssignmentOperand = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unsupported_assignment_operand.json")
     assertErrorContains "Test unsupported assignment operand" "not an integer expression" result
 
--- The mandatory "switches" field is absent from the JSON.
+-- | The mandatory "switches" field is absent from the JSON.
 testSTSJSONParserMissingSwitches :: Test
 testSTSJSONParserMissingSwitches = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "missing_switches.json")
     assertErrorContains "Test missing switches" "switches" result
     assertErrorContains "Test missing switches" "not found" result
 
--- A used input gate is absent from the JSON.
+-- | A used input gate is absent from the JSON.
 testSTSJSONParserMissingGates :: Test
 testSTSJSONParserMissingGates = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "missing_gates.json")

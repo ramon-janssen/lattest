@@ -24,7 +24,7 @@
     },
     "guards": {
         "G1": { "lhs": "counter", "op": "<",  "rhs": 5       },
-        "G2": { "lhs": "counter", "op": ">=", "rhs": 5       },
+        "G2": { "lhs": "counter", "op": ">=", "rhs": 4       },
         "G3": { "lhs": "active",  "op": "==", "rhs": true    },
         "G4": { "lhs": "label",   "op": "==", "rhs": "label_p" }
     },
