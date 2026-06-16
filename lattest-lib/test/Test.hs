@@ -9,6 +9,7 @@ import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
+import Test.Lattest.Util.STSJSONParserTest
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
@@ -83,7 +84,16 @@ makeHUnitTests = do
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testPrintSTS,
-        testReadAutFile
+        testReadAutFile,
+        testSTSJSONParserNominal,
+        testSTSJSONParserUnknownType,
+        testSTSJSONParserUnsupportedGuardOperand,
+        testSTSJSONParserUnsupportedAssignmentOperand,
+        testSTSJSONParserMissingSwitches,
+        testSTSJSONParserMissingGates,
+        testSTSJSONParserAssignmentTypeMismatch,
+        testSTSJSONParserGuardTypeMismatch,
+        testSTSJSONParserGateIdDup
         ]
         ++ testLatticeSTS
         ++ testLatticeSTSQuiescence
