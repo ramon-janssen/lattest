@@ -1,0 +1,78 @@
+name: Haskell CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  stack:
+    name: stack-lts-23.18
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: haskell-actions/setup@v2
+      id: setup
+      with:
+        ghc-version: '9.8.4'
+        enable-stack: true
+        stack-version: 'latest'
+
+    - name: Restore cached stackwork
+      id: cache1
+      uses: actions/cache/restore@v4
+      env:
+        cache-name: cache1
+      with:
+        path: lattest-lib/.stack-work
+        key: stackwork-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        restore-keys: |
+          stackwork-${{ env.cache-name }}-
+          stackwork  
+    - name: Restore cached stackdir
+      id: cache2
+      uses: actions/cache/restore@v4
+      env:
+        cache-name: cache2
+      with:
+        path: ~/.stack
+        key: stack-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        restore-keys: |
+          stack-${{ env.cache-name }}-
+          stack
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install z3
+        cd lattest-lib
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc --only-dependencies
+
+    - name: Cache stackwork
+      uses: actions/cache/save@v4
+      if: steps.cache1.outputs.cache-hit != 'true'
+      with:
+        path: lattest-lib/.stack-work
+        key: ${{ steps.cache1.outputs.cache-primary-key }}
+        
+    - name: Cache stack
+      uses: actions/cache/save@v4
+      if: steps.cache2.outputs.cache-hit != 'true'
+      with:
+        path: ~/.stack
+        key: ${{ steps.cache2.outputs.cache-primary-key }}
+
+    - name: Build
+      run: |
+        cd lattest-lib
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc
+    - name: Run tests
+      run: |
+        cd lattest-lib
+        stack test --system-ghc
