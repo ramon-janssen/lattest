@@ -1,16 +1,18 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Main (main) where
 
 import Data.Set (Set)
 import Lattest.Adapter.Adapter (Adapter)
 import Lattest.Adapter.StandardAdapters (pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers (andObserving, observingOnly, randomTestSelectorFromSeed, stateObserver, stopAfterSteps, traceObserver, untilCondition)
-import Lattest.Exec.Testing (runTester, offlineTester, offlineTreeToTrace)
-import Lattest.Model.Alphabet (IOAct (..))
-import Lattest.Model.StandardAutomata (automaton, detConcTransFromRel, interpretConcrete, ioAlphabet)
+import Lattest.Exec.Testing (runTester, offlineTester, offlineTreeToTrace, TestController)
+import Lattest.Model.Alphabet (IOAct (..), Suspended (..))
+import Lattest.Model.StandardAutomata (automaton, detConcTransFromRel, interpretConcrete, ioAlphabet, interpretQuiescentConcrete)
 import Data.Maybe (fromJust)
 import Lattest.Model.BoundedMonad (Det)
 import Data.Map (Map)
-import Lattest.Model.Automaton (AutSyntax)
+import Lattest.Model.Automaton (AutSyntax, TransitionSemantics, FiniteMenu)
+import System.Random (StdGen)
 
 -- Machine that turns itself off
 
@@ -49,7 +51,18 @@ sutPure = pureMealyAdapter step giveoutput ()
 nrSteps :: Int
 nrSteps = 5
 
-testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` traceObserver `andObserving` stateObserver
+-- Giving it this type lets it be used both with and without quiescence
+-- the alternative is just duplicating the code, because type inference
+-- isn't smart enough to infer this type
+testSelector :: ( TransitionSemantics State State (IOAct Input Output) () (IOAct Input o)
+                , FiniteMenu (IOAct Input Output) (IOAct Input o)
+                , Ord o
+                )
+             => TestController Det State State (IOAct Input Output) () (IOAct Input o) (((StdGen, Int), [IOAct Input o]), Maybe (Det State)) Input ([IOAct Input o], Maybe (Det State))
+testSelector = randomTestSelectorFromSeed 456
+  `untilCondition` stopAfterSteps nrSteps
+  `observingOnly` traceObserver
+  `andObserving` stateObserver
 
 main :: IO ()
 main = do
@@ -60,7 +73,7 @@ main = do
   putStrLn $ "final state: " ++ show maybeMq
 
   putStrLn "Offline test gen:"
-  tests <- offlineTester (interpretConcrete spec) testSelector Nothing
+  tests <- offlineTester (interpretQuiescentConcrete spec) testSelector (Just Quiescence)
   putStrLn "Tests:"
   print tests
   putStrLn "Trace:"
