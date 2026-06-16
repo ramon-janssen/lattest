@@ -1,7 +1,9 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -39,12 +41,14 @@ makeSMTTester,
 runTester,
 runSMTTester,
 Verdict(..),
-InconclusiveReason(..)
+InconclusiveReason(..),
+offlineTester,
+offlineTreeToTrace
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
+import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, indefiniteMenu)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef)
@@ -54,6 +58,10 @@ import Control.Exception(catch,evaluate)
 
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Control.Monad (forM)
+import Data.Bifunctor (first)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -210,7 +218,102 @@ runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState s
 --runStepper spec controller = runExperiment controller (simulateSpec spec)
 
 
+{- |
+    Offline test generation: Instead of connecting to a system and running the tests live,
+    generate a decision tree that can later be used to test a system.
+    On 'Nothing', inputs are only generated from states with no outputs.
+    On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
+-}
+offlineTester
+  :: forall m loc q t tdest i o state r
+   . (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
+  => AutIntrpr m loc q t tdest (IOAct i o)
+  -> TestController m loc q t tdest (IOAct i o) state i r
+  -> Maybe o
+  -> IO (OfflineTree o i (Verdict, r))
+offlineTester spec testSelection quiescence = go (makeTester spec testSelection)
+  where
+    go :: ActionController (IOAct i o) i (Verdict, r) ( AutIntrpr      m loc q t tdest (IOAct i o)
+                                                      , TestController m loc q t tdest (IOAct i o) state i r)
+       -> IO (OfflineTree o i (Verdict, r))
+    go controller = do
+      let indefiniteAct = indefiniteMenu $ fst $ controllerState controller
+      let outOptions = map fromOutput . filter isOutput $ indefiniteAct
+      case outOptions of
+        [] | null indefiniteAct
+           -> error "no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller"
 
+        -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
+        [q] | Just q == quiescence
+            , all isOutput indefiniteAct
+            -> CaseSplit . Map.singleton q . Leaf <$> do
+                res <- update controller (controllerState controller) (Out q)
+                case res of
+                  Left state -> handleClose controller state
+                  Right r -> return r
 
+        -- no outputs or only quiescence, so we perform an input request
+        [q] | Just q == quiescence
+            -> handleInput controller
+        []  -> handleInput controller
 
+        -- real output(s) possible, we choose not to make any input requests and just listen
+        _ -> CaseSplit . Map.fromList <$> forM outOptions
+              (\o -> (o,) <$> handleUpdate controller (Out o))
+
+    handleInput controller = do
+      selection <- select controller (controllerState controller)
+      case selection of
+        Left (i, state) -> do
+          InputRequest i <$> handleUpdate (controller {controllerState = state}) (In i)
+        Right result -> do
+          return $ Leaf result
+
+    handleUpdate controller aut = do
+      foo <- update controller (controllerState controller) aut
+      case foo of
+        Left state -> do
+          go (controller { controllerState = state})
+        Right result -> do
+          return $ Leaf result
+
+-- |A tree representing an offline test case.
+-- Such a test makes concrete choices on the inputs
+-- it gives the SUT, while accomodating for all
+-- possible outputs the SUT can send.
+-- Note: `o` can be `Suspended o'`, in which case `Quiescence`
+-- may occur in `CaseSplit`.
+data OfflineTree o i r where
+  -- |The end of a possible test trace
+  Leaf :: r
+       -> OfflineTree o i r
+  -- |The test sends input to the SUT
+  InputRequest :: i
+               -> OfflineTree o i r
+               -> OfflineTree o i r
+  -- |The test tries to get an output from the SUT.
+  CaseSplit :: Map o (OfflineTree o i r)
+            -> OfflineTree o i r
+
+instance (Show r, Show i, Show o, Ord o) => Show (OfflineTree o i r) where
+  show (Leaf r) = show r
+  show (InputRequest i ot) = "?" <> show i <> ": \n" <> indentOfflineTree 2 (show ot)
+  show (CaseSplit m) =
+    "case <output> of\n"
+    <> indentOfflineTree 2 (unlines
+         (map (\(o,ot) -> "!" <> show o <> " -> \n" <> indentOfflineTree 2 (show ot)) $ Map.toList m))
+
+-- Indent a prettyprinted tree with `i` spaces.
+-- Uses init to get rid of the trailing newline.
+-- Crashes on empty input.
+indentOfflineTree :: Int -> String -> String
+indentOfflineTree i = init . unlines . map (replicate i ' ' ++) . lines
+
+-- |If the tree has no branching, convert it to a trace
+offlineTreeToTrace :: OfflineTree o i r -> Maybe ([IOAct i o],r)
+offlineTreeToTrace (Leaf r) = Just ([],r)
+offlineTreeToTrace (InputRequest i ot) = first (In i:) <$> offlineTreeToTrace ot
+offlineTreeToTrace (CaseSplit m) = case Map.toList m of
+  [(o,ot)] -> first (Out o:) <$> offlineTreeToTrace ot
+  _ -> Nothing
 
