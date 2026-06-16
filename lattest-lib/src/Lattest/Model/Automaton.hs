@@ -1,7 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TupleSections #-}
---{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -261,7 +258,7 @@ afterInternal :: (StepSemantics m loc q t tdest act, Monad execM, Ord t, Ord q, 
     AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
 afterInternal internalTakeTransition fmapmq intrpr act' = do
     let aut = syntacticAutomaton intrpr
-        toNewStateConfig = afterInternal' internalTakeTransition (alphabet aut) (transRel $ aut) act'
+        toNewStateConfig = afterInternal' internalTakeTransition (alphabet aut) (transRel aut) act'
     stateConf' <- toNewStateConfig `fmapmq` stateConf intrpr
     return $ intrpr { stateConf = BM.ordJoin stateConf' }
 {-
@@ -317,7 +314,7 @@ afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
 -- | Exceptions that can occur when working with automata.
-data AutomatonException
+newtype AutomatonException
     -- | Thrown during a computation of `after` for an action outside the automaton alphabet.
     = ActionOutsideAlphabet CallStack
     deriving (Show)
@@ -372,14 +369,14 @@ instance TransitionMapping act act where
 instance (Ord act, Completable act) => TransitionSemantics q q act () act
 
 instance FiniteMenu act act where
-    asActions t = [t] 
+    asActions t = [t]
     locationActions _ = []
 
 instance StateSemantics q q where
     asLoc = id
 
 instance (TransitionSemantics q q t () act, BoundedMonad m) => StepSemantics m q q t () act where
-    move _ _ _ q = BM.ordReturn q
+    move _ _ _ = BM.ordReturn
 
 ----------------
 -- quiescence --
@@ -481,10 +478,10 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
         let ts = Set.map interactionGate interactions
         ig' <- asTransition ts g
         case List.find (\(SymInteract ig _) -> ig == ig') (Set.toList interactions) of
-            Nothing -> errorWithoutStackTrace $ "gate not in STS alphabet"
+            Nothing -> errorWithoutStackTrace "gate not in STS alphabet"
             Just i@(SymInteract _ vars) ->
                 if List.length vals /= List.length vars
-                    then errorWithoutStackTrace $ "nr of values unequal to nr of parameters"
+                    then errorWithoutStackTrace "nr of values unequal to nr of parameters"
                     else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
@@ -509,7 +506,7 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
-buildGateValuation gateVars gateVals = assignValues $ (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) <$> (zip gateVars gateVals)
+buildGateValuation gateVars gateVals = assignValues $ (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) <$> zip gateVars gateVals
 evalVal :: (ConstType t, Assignable t) => Valuation -> Expr t -> Constant
 evalVal valuation e = case eval $ substConst valuation e of
     Right v -> toConst v
@@ -533,7 +530,7 @@ hasSymbolicQuiescence smtRef stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
     -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> (runSMT smtRef $ solveAnySequential outputsAndCombinedGuards)
+    Maybe.isNothing <$> runSMT smtRef (solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 
@@ -542,7 +539,7 @@ hasSymbolicQuiescence smtRef stateVal m = do
 -----------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
     ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
-        case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
+        case asTransition alph (coerceIO (GateValue (In (InputAttempt (i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact'@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
@@ -567,7 +564,7 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
     ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
-        case asTransition alph (coerceIO (GateValue (In (InputAttempt(i, True))) gateVals) alph) of
+        case asTransition alph (coerceIO (GateValue (In (InputAttempt (i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact'@(SymInteract _ gateVars) ->
                 let gateVal = buildGateValuation gateVars gateVals
@@ -607,7 +604,7 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
         Nothing -> acc -- done, no more new states to explore
         Just (q, boundaryRem) -> -- explore the states reached by transitions from q
             let ts = transRel aut q
-                qs = Set.fromList $ concat $ fmap snd . Foldable.toList <$> Map.elems ts
+                qs = Set.fromList $ concatMap (fmap snd . Foldable.toList) $ Map.elems ts
                 new = qs `Set.difference` acc
                 acc' = acc `Set.union` new
                 boundary' = boundaryRem `Set.union` new
@@ -627,7 +624,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ "  ――" ++ show t ++ "⟶  " ++ show mt
-    
+
 prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc q t tdest act -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
     where

@@ -15,18 +15,15 @@ where
 
 import Prelude hiding (map)
 
---import Lattest.Util.ReadynessInputStream (ReadynessInputStream(..), duplicate, forkEagerInputStream)
-
+import Control.Monad.STM(atomically)
 import Data.Attoparsec.ByteString(Parser)
 import Data.ByteString(ByteString)
-import Control.Monad.STM(atomically)
-import qualified System.IO.Streams as Streams (write)
-import qualified System.IO.Streams.Synchronized as Streams (read)
 import System.IO.Streams (OutputStream)
-import System.IO.Streams.Synchronized(TInputStream, tryReadIO, tryReadIO', Streamed)
-import qualified System.IO.Streams.Synchronized as Streams (map)
-import System.IO.Streams.Synchronized.Attoparsec (parserToInputStream)
 import System.IO.Streams.Combinators(contramap)
+import System.IO.Streams.Synchronized(TInputStream, tryReadIO, tryReadIO', Streamed)
+import System.IO.Streams.Synchronized.Attoparsec (parserToInputStream)
+import qualified System.IO.Streams as Streams (write)
+import qualified System.IO.Streams.Synchronized as Streams (map,read)
 
 -- | An adapter to a (usually external) system. Uses two channels for interaction: one to send input commands, and one to receive outputs.
 data Adapter act i = Adapter {
