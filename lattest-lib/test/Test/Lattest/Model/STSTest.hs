@@ -221,7 +221,7 @@ stsExample2 =
         switches = \q -> case q of
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1) /\ atom (stsTLoc waterGuard1 waterAssign, 2) )]
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
-            2 -> Map.empty
+            2 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
         initConf2 = atom 0 /\ atom 2
         switches2 = \q -> case q of
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1))]
@@ -247,19 +247,25 @@ testLatticeCoffeeSTS = TestCase $ do
      assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2a)
      assertEqual "\ninitial state " (getSTSIntrpState2 0 0 /\ getSTSIntrpState2 2 0) (stateConf stsExampleIntrpr2b)
      let intrp2a = after stsExampleIntrpr2a (GateValue (In "water") [Cint 3])
-     assertEqual "after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2a)
+     assertEqual "2a after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2a)
      let intrp2b = after stsExampleIntrpr2b (GateValue (In "water") [Cint 3])
-     assertEqual "after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2b)
+     assertEqual "2b after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2b)
      let intrp3a = after intrp2a (GateValue (Out "ok") [Cint 3])
-     assertEqual "after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3a)
+     assertEqual "2a after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3a)
      let intrp3b = after intrp2b (GateValue (Out "ok") [Cint 3])
-     assertEqual "after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3b)
-
-    -- start from initial state again
-     let intrp0a = after stsExampleIntrpr2a (GateValue (In "water") [Cint 4])
-     assertEqual "after water 4: " (getSTSIntrpState2 1 4 /\ getSTSIntrpState2 2 4) (stateConf intrp0a)
-     let intrp0b = after stsExampleIntrpr2b (GateValue (In "water") [Cint 4])
-     assertEqual "after water 4: " (getSTSIntrpState2 1 4 /\ getSTSIntrpState2 3 4) (stateConf intrp0b)
+     assertEqual "2b after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3b)
+     let intrp4a = after intrp3a (GateValue (In "water") [Cint 4])
+     assertEqual "2a after water 4: " (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7) (stateConf intrp4a)
+     let intrp4b = after intrp3b (GateValue (In "water") [Cint 4])
+     assertEqual "2b after water 4: "  (getSTSIntrpState2 1 7) (stateConf intrp4b)
+     let intrp5a = after intrp4a (GateValue (Out "ok") [Cint 7])
+     assertEqual "2a after ok 7: " (getSTSIntrpState2 0 7) (stateConf intrp5a)
+     let intrp5b = after intrp4b (GateValue (Out "ok") [Cint 7])
+     assertEqual "2b after ok 7: " (getSTSIntrpState2 0 7) (stateConf intrp5b)
+     let intrp6a = after intrp5a (GateValue (In "water") [Cint 5])
+     assertEqual "2a after water 5: " (getSTSIntrpState2 2 12) (stateConf intrp6a)
+     let intrp6b = after intrp5b (GateValue (In "water") [Cint 5])
+     assertEqual "2b after water 5: " underspecified (stateConf intrp6b)
 
 
 {- specification:
