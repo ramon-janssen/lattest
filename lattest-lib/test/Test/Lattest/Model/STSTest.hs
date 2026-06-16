@@ -205,7 +205,7 @@ testSTSTestSelection = TestCase $ do
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
 
-stsExample2 :: IOSTS FreeLatticeCNF Integer String String
+stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
 stsExample2 =
     let p = sVar pvar
         x = sVar xvar
@@ -222,23 +222,44 @@ stsExample2 =
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1) /\ atom (stsTLoc waterGuard1 waterAssign, 2) )]
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
-    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+        initConf2 = atom 0 /\ atom 2
+        switches2 = \q -> case q of
+            0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1))]
+            1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.fromList [(water, atom (stsTLoc waterGuard1 waterAssign, 3))]
+            3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
+    in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
 
-stsExampleIntrpr2 :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
-stsExampleIntrpr2 = interpretSTS stsExample2 stsExampleInitAssign
+stsExampleIntrpr2a :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
+
+stsExampleIntrpr2b :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
+
+getSTSValuation :: Integer -> Valuation
+getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
-getSTSIntrpState2 loc val = atom (IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val))
+getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
 
 testLatticeCoffeeSTS :: Test
 testLatticeCoffeeSTS = TestCase $ do
-     assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2)
-     let intrp2 = after stsExampleIntrpr2 (GateValue (In "water") [Cint 3])
-     assertEqual "after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2)
-     let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 3])
-     assertEqual "after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3)
-     let intrp4 = after intrp3 (GateValue (In "water") [Cint 4])
-     assertEqual "after water 4: " (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7) (stateConf intrp4)
+     assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2a)
+     assertEqual "\ninitial state " (getSTSIntrpState2 0 0 /\ getSTSIntrpState2 2 0) (stateConf stsExampleIntrpr2b)
+     let intrp2a = after stsExampleIntrpr2a (GateValue (In "water") [Cint 3])
+     assertEqual "after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2a)
+     let intrp2b = after stsExampleIntrpr2b (GateValue (In "water") [Cint 3])
+     assertEqual "after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2b)
+     let intrp3a = after intrp2a (GateValue (Out "ok") [Cint 3])
+     assertEqual "after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3a)
+     let intrp3b = after intrp2b (GateValue (Out "ok") [Cint 3])
+     assertEqual "after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3b)
+
+    -- start from initial state again
+     let intrp0a = after stsExampleIntrpr2a (GateValue (In "water") [Cint 4])
+     assertEqual "after water 4: " (getSTSIntrpState2 1 4 /\ getSTSIntrpState2 2 4) (stateConf intrp0a)
+     let intrp0b = after stsExampleIntrpr2b (GateValue (In "water") [Cint 4])
+     assertEqual "after water 4: " (getSTSIntrpState2 1 4 /\ getSTSIntrpState2 3 4) (stateConf intrp0b)
 
 
 {- specification:
