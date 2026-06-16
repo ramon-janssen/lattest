@@ -1,8 +1,8 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
@@ -101,7 +101,7 @@ selector state sel upd = TestController {
 -}
 randomTestSelector :: (After m loc q t tdest act, FiniteMenu t act, Foldable m, TestChoice i act, Ord act, Ord q, Ord (m q))
     => IO (TestSelector m loc q t tdest act StdGen i)
-randomTestSelector = initStdGen >>= return . randomTestSelectorFromGen
+randomTestSelector = randomTestSelectorFromGen <$> initStdGen
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
@@ -130,9 +130,7 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 -}
 randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
     => SMTRef -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i))
-randomDataTestSelector smt = do
-    r <- initStdGen
-    return $ randomDataTestSelectorFromGen smt r
+randomDataTestSelector smt = randomDataTestSelectorFromGen smt <$> initStdGen
 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
@@ -176,7 +174,7 @@ randomDataOrWaitForOutputTestSelector smt pWait = do
 -}
 randomDataOrWaitForOutputTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
     => SMTRef -> Int -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (StdGen,SMTRef) (Maybe (GateValue i))
-randomDataOrWaitForOutputTestSelectorFromSeed smt i pWait = randomDataOrWaitForOutputTestSelectorFromGen smt (mkStdGen i) pWait
+randomDataOrWaitForOutputTestSelectorFromSeed smt i = randomDataOrWaitForOutputTestSelectorFromGen smt (mkStdGen i)
 
 {- |
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
@@ -203,7 +201,7 @@ solveRandomInput :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m SymGua
     => (r,SMTRef) -> (SymInteract g -> Maybe (SymInteract i)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> IO (Maybe (GateValue i), (r,SMTRef))
 solveRandomInput (g,smtRef) f intrpr = do
     (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr f g
-    return $ (maybeGateValue, (g', smtRef)) -- append the new state to the solved value, if any
+    return (maybeGateValue, (g', smtRef)) -- append the new state to the solved value, if any
 {-        maybeFromIFInteraction' (SymInteract gate vars) = case maybeFromInput gate of
             Just i -> Just $ SymInteract i vars
             Nothing -> Nothing
@@ -217,10 +215,10 @@ solveRandomInput (g,smtRef) f intrpr = do
 andThen :: (TestChoice i act) => TestController m loc q t tdest act state1 i r1 -> TestController m loc q t tdest act state2 i r2 -> TestController m loc q t tdest act (Either state1 state2) i r2
 andThen tester1 tester2 =
     TestController {
-        testControllerState = (Left $ testControllerState tester1),
+        testControllerState = Left $ testControllerState tester1,
         selectTest = andThenSelect,
         updateTestController = andThenUpdate,
-        handleTestClose = \state -> case state of
+        handleTestClose = \case
             (Left _) -> handleTestClose tester2 (testControllerState tester2)
             (Right s) -> handleTestClose tester2 s
     }
@@ -294,11 +292,11 @@ untilCondition controller condition = TestController {
                 Just condState -> return $ Left (state, condState)
                 Nothing -> Right <$> handleTestClose controller state
             Right result -> return $ Right result,
-    handleTestClose = \s -> handleTestClose controller (fst s)
+    handleTestClose = handleTestClose controller . fst
     }
     where
     updateStopCondition :: TestController m loc q t tdest act state i r -> state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Maybe state)
-    updateStopCondition condition' state aut act q = updateTestController condition' state aut act q >>= return . leftToMaybe
+    updateStopCondition condition' state aut act q = leftToMaybe <$> updateTestController condition' state aut act q
 
 
 {- |
@@ -405,7 +403,7 @@ type TestSideEffect m loc q t tdest act s = TestController m loc q t tdest act s
     Apply a side effect: Use the (former) test controller, but also perform the side effect of the (latter) observer.
 -}
 withSideEffect :: TestController m loc q t tdest act state1 i1 r1 -> TestController m loc q t tdest act state2 i2 r2 -> TestController m loc q t tdest act (state1,state2) i1 r1
-withSideEffect controller sideEffect = andObservingWith controller const sideEffect
+withSideEffect controller = andObservingWith controller const
 
 
 {- |
@@ -418,10 +416,10 @@ testSideEffect s f = observer s f (const $ pure ())
     Print observed to stdin actions during testing.
 -}
 printActions :: Show act => TestSideEffect m loc q t tdest act ()
-printActions = testSideEffect () (\_ _ act _ -> putStrLn $ show act)
+printActions = testSideEffect () (\_ _ act _ -> print act)
 
 {- |
     Print the state configuration of the specification during testing.
 -}
 printState :: Show (m q) => TestSideEffect m loc q t tdest act ()
-printState = testSideEffect () (\_ _ _ mq -> putStrLn $ show mq)
+printState = testSideEffect () (\_ _ _ mq -> print mq)

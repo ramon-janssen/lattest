@@ -3,10 +3,7 @@ This is a modified version of:
 TorXakis - Model Based Testing
 See LICENSE in the parent Symbolic folder.
 -}
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeApplications   #-}
-{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}

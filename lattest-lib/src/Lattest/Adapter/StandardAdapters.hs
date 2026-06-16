@@ -52,52 +52,46 @@ connectJSONSocketAdapterSTSwithQuiescence
 )
 where
 
-import Lattest.Adapter.Adapter(Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut)
-import qualified Lattest.Adapter.Adapter as Adap(map)
-import Lattest.Model.Alphabet(IOAct, IOSuspAct, asSuspended, IOSuspGateValue, GateValue(..))
-import Lattest.Util.IOUtils(ifM_, waitUntil)
-import Control.Monad(forever,void)
-import Control.Monad.Extra ((||^), (&&^))
-import Control.Concurrent.STM.TMVar(newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar)
+import Lattest.Adapter.Adapter as Adap (Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut, map)
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), Suspended(..), IOSuspAct, asSuspended, IOSuspGateValue, GateValue(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
+import Lattest.Util.IOUtils(statefulIO', doAfter, ifM_, waitUntil)
+import Lattest.Util.Utils(flipCoin, takeRandom)
+
+import Control.Concurrent.STM.TMVar(newEmptyTMVarIO, tryReadTMVar, writeTMVar, readTMVar, isEmptyTMVar, putTMVar)
 import Control.Concurrent.STM.TQueue(newTQueueIO, readTQueue, writeTQueue, isEmptyTQueue)
 import Control.Concurrent.Thread.Delay(delay)
-import Data.Aeson(FromJSON,ToJSON)
-import Data.ByteString (ByteString)
-import Data.Time.Clock(getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,secondsToNominalDiffTime,nominalDiffTimeToSeconds)
-import GHC.Conc(forkIO, newTVarIO, TVar, retry, atomically, writeTVar, readTVar)
-import Network.Socket(HostName, PortNumber)
-import qualified Network.Socket as Socket(gracefulClose)
-import Network.Utils (niceSocketsDo, connectTCP)
-import System.IO.Streams (makeOutputStream)
-import qualified System.IO.Streams as Streams (write)
-import System.IO.Streams.Network(socketToStreams)
-import System.IO.Streams.Synchronized(fromInputStreamBuffered,makeTInputStream,hasInput)
-import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
+import Control.Exception(handle,PatternMatchFail)
+import Control.Monad(forever,void)
+import Control.Monad.Extra ((||^), (&&^))
 
-import Data.Aeson(fromJSON,encode,Result(Error, Success))
+import Data.Aeson(fromJSON,encode,Result(Error, Success), FromJSON, ToJSON)
 import Data.Aeson.Parser(jsonNoDup)
-import qualified Data.Attoparsec.ByteString.Char8 as Parse
 import Data.Bits.Utils(c2w8)
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy(toStrict,snoc)
+import Data.List(singleton)
+import Data.Time.Clock(getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,secondsToNominalDiffTime,nominalDiffTimeToSeconds)
 
-import Data.Text.Encoding.Error(lenientDecode)
-import qualified Data.Text.Encoding as Encoding(decodeUtf8With, encodeUtf8)
-import qualified Data.Text as Text(pack, unpack)
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), Suspended(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
-import System.IO.Streams (OutputStream)
-import System.IO.Streams.Synchronized(TInputStream, duplicate, fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll)
-import qualified System.IO.Streams as Streams (writeTo)
-import GHC.Conc (STM, orElse)
-import qualified Data.Map as Map (Map, filterWithKey, null, lookup, toList)
-import Control.Exception(handle,PatternMatchFail)
-import System.Random(RandomGen)
-import Control.Concurrent.STM.TMVar(putTMVar)
-import Lattest.Util.Utils(flipCoin, takeRandom)
-import Lattest.Util.IOUtils(statefulIO', doAfter)
-import Data.List(singleton)
+import GHC.Conc(forkIO, newTVarIO, TVar, retry, atomically, writeTVar, readTVar, STM, orElse)
+
+import Network.Socket(HostName, PortNumber)
+import Network.Utils (niceSocketsDo, connectTCP)
+
+import System.IO.Streams as Streams (makeOutputStream, OutputStream, write, writeTo)
 import System.IO.Streams.Combinators(contramap)
+import System.IO.Streams.Network(socketToStreams)
+import System.IO.Streams.Synchronized(TInputStream, duplicate, fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, fromInputStreamBuffered, makeTInputStream, hasInput)
+import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
+import System.Random(RandomGen)
+
+import qualified Data.Attoparsec.ByteString.Char8 as Parse
+import qualified Data.Map as Map (Map, filterWithKey, null, lookup, toList)
+import qualified Data.Text as Text (pack, unpack)
+import qualified Data.Text.Encoding as Encoding (decodeUtf8With, encodeUtf8)
+import qualified Data.Text.Encoding.Error as Encoding (lenientDecode)
+import qualified Network.Socket as Socket(gracefulClose)
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends 'String's encoded in utf-8.
 encodeUtf8 :: Adapter act ByteString -> IO (Adapter act String)
@@ -105,14 +99,14 @@ encodeUtf8 = mapTestChoices $ Encoding.encodeUtf8 . Text.pack
 
 -- | Take an adapter that receives raw 'ByteString's, and transform it to an adapter that receives 'String's decoded from utf-8.
 decodeUtf8 :: Adapter ByteString i -> IO (Adapter String i)
-decodeUtf8 = mapActionsFromSut $ Text.unpack . Encoding.decodeUtf8With lenientDecode
+decodeUtf8 = mapActionsFromSut $ Text.unpack . Encoding.decodeUtf8With Encoding.lenientDecode
 
 -- | Take an adapter that sends and receives raw 'ByteString's, and transform it to an adapter that sends and receives 'String's, encoded in utf-8 and decoded from utf-8.
 endecodeUtf8 :: Adapter ByteString ByteString -> IO (Adapter String String)
-endecodeUtf8 = Adap.map (Encoding.encodeUtf8 . Text.pack) (Text.unpack . Encoding.decodeUtf8With lenientDecode)
+endecodeUtf8 = Adap.map (Encoding.encodeUtf8 . Text.pack) (Text.unpack . Encoding.decodeUtf8With Encoding.lenientDecode)
 
 encodeJSON :: (ToJSON i) => i -> ByteString
-encodeJSON = toStrict . (flip snoc $ c2w8 '\n') . encode -- encode as strict ByteString and append a newline as separator
+encodeJSON = toStrict . flip snoc (c2w8 '\n') . encode -- encode as strict ByteString and append a newline as separator
 
 -- | Take an adapter that sends raw 'ByteString's, and transform it to an adapter that sends any type encoded in JSON.
 encodeJSONTestChoices :: (ToJSON i) => Adapter act ByteString -> IO (Adapter act i)
@@ -148,17 +142,17 @@ loopbackAdapter ::
     -> IO (Adapter (IOAct i o) ic)
 loopbackAdapter adap fduplicate fmerge = do
     loopbackBuffer <- newEmptyTMVarIO
-    
+
     loopbackActionOS <- makeOutputStream $ atomically . putTMVar loopbackBuffer
     loopbackInputOS <- actionToInputOS loopbackActionOS -- map type i to type IOAct i o
     let adapInputOS = inputCommandsToSut adap
     combinedInputOS <- fduplicate loopbackInputOS adapInputOS
-    
+
     loopbackActionIS <- fromTMVar loopbackBuffer
     let adapActionIS = outputToActionIS adap -- map type o to IOAct i o
     -- loopback first: in case of a quick response to an input, the merging thread may see the input and output at the same time.
     combinedActionIS <- fmerge loopbackActionIS adapActionIS -- the merge buffer lives in here implicitly
-     
+
     return $ Adapter {
         inputCommandsToSut = combinedInputOS,
         actionsFromSut = combinedActionIS,
@@ -174,7 +168,7 @@ streamSequence :: OutputStream a -> IO (OutputStream [a])
 streamSequence s = makeOutputStream $ doMaybeSequenceCmd $ Streams.writeTo s
 doMaybeSequenceCmd :: (Maybe a -> IO ()) -> Maybe [a] -> IO ()
 doMaybeSequenceCmd writeMaybeAct Nothing = writeMaybeAct Nothing
-doMaybeSequenceCmd writeMaybeAct (Just xs) = sequence_ $ writeMaybeAct . Just <$> xs
+doMaybeSequenceCmd writeMaybeAct (Just xs) = mapM_ (writeMaybeAct . Just) xs
 
 {- |
     Transform a given Adapter to accept all inputs. In other words, every selected input command directly becomes an observed input action.
@@ -223,7 +217,7 @@ acceptingInputsWithIncompletenessAsFailures adap = do
             Just i -> do
                 atomically $ writeTVar isAdapOutputBlocked True
                 inputSucceeded <- attemptInputToAdap adapInputOS i
-                let mInputAction = Just $ InputAttempt(i,inputSucceeded)
+                let mInputAction = Just $ InputAttempt (i,inputSucceeded)
                 Streams.write mInputAction loopbackInputOS
                 atomically $ writeTVar isAdapOutputBlocked False
     attemptInputToAdap :: OutputStream i -> i -> IO Bool
@@ -245,7 +239,7 @@ pureMealyAdapter transitionFunction outputFunction initialState = do
                 atomically $ writeTQueue outputQueue Nothing
             Just i -> do
                 os <- transduce stateVar i
-                atomically $ sequence_ (writeTQueue outputQueue . Just <$> os)
+                atomically $ mapM_ (writeTQueue outputQueue . Just) os
     return $ Adapter {
         inputCommandsToSut = os,
         actionsFromSut = is,
@@ -264,9 +258,9 @@ pureMealyAdapter transitionFunction outputFunction initialState = do
 pureAdapter :: (Ord i, Ord o, RandomGen g) => g -> Double -> (state -> Map.Map (IOAct i o) state) -> state -> IO (Adapter (SuspendedIF i o) (Maybe i))
 pureAdapter g p transitionFunction initialState = do
     let ((g',q), outs) = randomOutputTransitions transitionFunction g initialState False -- immediately take some outputs at the start
-    statefulAdapter <- (statefulIO' (processInput transitionFunction) (g', q))
+    statefulAdapter <- statefulIO' (processInput transitionFunction) (g', q)
     queue <- newTQueueIO
-    atomically $ sequence_ (writeTQueue queue . Just <$> outs)
+    atomically $ mapM_ (writeTQueue queue . Just) outs
     inputStream <- fromBuffer queue
     outputStream <- makeOutputStream $ \mi -> do
         case mi of
@@ -274,18 +268,18 @@ pureAdapter g p transitionFunction initialState = do
                 atomically $ writeTQueue queue Nothing
             Just i -> do
                 os <- statefulAdapter i
-                atomically $ sequence_ (writeTQueue queue . Just <$> os)
+                atomically $ mapM_ (writeTQueue queue . Just) os
     return $ Adapter {
         inputCommandsToSut = outputStream,
         actionsFromSut = inputStream,
         close = return ()
     }
-    where 
+    where
         --processInput :: (Ord i, Ord o, RandomGen g) => (q -> Map.Map (IOAct i o) q) -> (g, q) -> Maybe i -> ((g, q), [Suspended o])
         processInput t (g', q) Nothing = randomOutputTransitions t g' q True
         processInput t (g', q) (Just i) = case Map.lookup (In i) (t q) of
-            Just q' -> prependInput (InputAttempt(i, True)) $ randomOutputTransitions t g' q' False
-            Nothing -> ((g', q), [In $ InputAttempt(i, False)])
+            Just q' -> prependInput (InputAttempt (i, True)) $ randomOutputTransitions t g' q' False
+            Nothing -> ((g', q), [In $ InputAttempt (i, False)])
         --randomOutputTransitions :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> Bool -> ((g, q), [Suspended o])
         randomOutputTransitions t g'' q isAfterNoInput = let (g', q', outs) = randomOutputTransitions' t g'' q [] isAfterNoInput in ((g', q'), reverse outs)
         --randomOutputTransitions' :: RandomGen g => (q -> Map.Map (IOAct i o) q) -> g -> q -> [Suspended o] -> Bool -> (g, q, [Suspended o])
@@ -298,7 +292,7 @@ pureAdapter g p transitionFunction initialState = do
                         then (g', q, outs)
                         else -- pick a random output, and continue randomly picking more outputs
                             let ((o, q'), g'') = takeRandom  g' $ Map.toList ts
-                            in randomOutputTransitions' t g'' q' ((Out $ OutSusp $ fromOutput o) : outs) False
+                            in randomOutputTransitions' t g'' q' (Out (OutSusp $ fromOutput o) : outs) False
         prependInput i (q, acts) = (q, In i:acts)
 
 -- |  Transform the given Adapter by introducing quiescence (timeout observations). See 'withQuiescence', where the waiting time given in milliseconds.
@@ -326,17 +320,17 @@ withQuiescence timeoutDiff adap = do
             ifM_ isEmpty $ do
                 currentTime <- getCurrentTime
                 atomically $ writeTMVar lastObservationTime currentTime
-        updateObservationTime = \currentTime -> do -- if the current time is past the stored observation time, then update that observation time to now
+        updateObservationTime currentTime = do -- if the current time is past the stored observation time, then update that observation time to now
             mLastTime <- tryReadTMVar lastObservationTime
             case mLastTime of
                 Nothing -> writeTMVar lastObservationTime currentTime
                 Just lastTime -> ifM_ (lastTime < currentTime) $ writeTMVar lastObservationTime currentTime
-        getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
+        getWaitTimeMicros currentTime = do -- the number of microseconds until the target timeout is reached
             lastTime <- readTMVar lastObservationTime -- blocking, in case of Nothing
             let targetTime = addUTCTime timeoutDiff lastTime
                 currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
                                                         -- currentTime, in particular when blocking on reading lastObservationTime
-            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
+            return $ ceiling $ 1000000 * nominalDiffTimeToSeconds (diffUTCTime targetTime currentTime')
         waitUntilQuiescence = do -- wait until the target timeout. Blocks if there is no target timeout yet.
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
@@ -348,7 +342,7 @@ withQuiescence timeoutDiff adap = do
             --quiIsSet <- atomically $ do
             atomically $ do
                 additionalWaitTime <- getWaitTimeMicros currentTime
-                let quiescent = additionalWaitTime <= 0
+                let quiescent = additionalWaitTime <= (0 :: Int)
                 ifM_ quiescent $ do
                     writeTQueue observedQueue (Just $ Out Quiescence)
                     updateObservationTime currentTime
@@ -402,18 +396,18 @@ withInputDelay timeDelayDiff adap = do
     inputBlocked <- newTVarIO True
     discardInput <- newTVarIO False
     updateLastObservationTime <- newTVarIO False
-    let updateObservationTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
+    let updateObservationTime currentTime = do -- if the current time is past the stored input time, then update that observation time to now
             writeTVar inputBlocked True
             mLastTime <- tryReadTMVar lastObservationTime
             case mLastTime of
                 Nothing -> writeTMVar lastObservationTime currentTime
                 Just lastTime -> ifM_ (lastTime < currentTime) $ writeTMVar lastObservationTime currentTime
-        getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
+        getWaitTimeMicros currentTime = do -- the number of microseconds until the target timeout is reached
             lastTime <- readTMVar lastObservationTime -- should never be nothing, the unblocker ensures this
             let targetTime = addUTCTime timeDelayDiff lastTime
                 currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
                                                         -- currentTime, in particular when blocking on reading lastObservationTime
-            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
+            return $ ceiling $ 1000000 * nominalDiffTimeToSeconds (diffUTCTime targetTime currentTime')
         waitUntilDelay = do
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime
@@ -488,17 +482,17 @@ withSuccessiveInputDelay timeDelayDiff adap = do
     -- FIXME loads of code duplication with withInputDelay, deduplicate this
     lastInputTime <- newEmptyTMVarIO
     observationBlocked <- newTVarIO False
-    let updateInputTime = \currentTime -> do -- if the current time is past the stored input time, then update that observation time to now
+    let updateInputTime currentTime = do -- if the current time is past the stored input time, then update that observation time to now
             mLastTime <- tryReadTMVar lastInputTime
             case mLastTime of
                 Nothing -> writeTMVar lastInputTime currentTime
                 Just lastTime -> ifM_ (lastTime < currentTime) $ writeTMVar lastInputTime currentTime
-        getWaitTimeMicros = \currentTime -> do -- the number of microseconds until the target timeout is reached
+        getWaitTimeMicros currentTime = do -- the number of microseconds until the target timeout is reached
             lastTime <- readTMVar lastInputTime -- should never be nothing, the unblocker ensures this
             let targetTime = addUTCTime timeDelayDiff lastTime
                 currentTime' = max currentTime lastTime -- lastTime > currentTime can occur if the caller waited too long after retrieving the
                                                         -- currentTime, in particular when blocking on reading lastObservationTime
-            return $ ceiling $ 1000000 * (nominalDiffTimeToSeconds $ diffUTCTime targetTime currentTime')
+            return $ ceiling $ 1000000 * nominalDiffTimeToSeconds (diffUTCTime targetTime currentTime')
         waitUntilDelay = do
             currentTime <- getCurrentTime
             waitTimeMicros <- atomically $ getWaitTimeMicros currentTime

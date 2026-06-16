@@ -71,14 +71,14 @@ data ActionController act i r state = ActionController {
 data Verdict = Pass | Fail | Inconclusive InconclusiveReason deriving (Ord, Eq, Show)
 
 -- | In case of an inconclusive verdict, details on why the test is inconclusive
-data InconclusiveReason = AutomatonException AutomatonException deriving (Ord, Eq, Show)
+newtype InconclusiveReason = AutomatonException AutomatonException deriving (Ord, Eq, Show)
 
 {- |
     The controller of a testing experiment. The tester may return a result at the end of a testing experiment. Note that it does
     /not/ need to return a verdict 'Pass' or 'Fail', this verdict is automatically inferred based on the specification model.
     Results can be used to record additional information that the tester is interested in, depending on the controller implementation.
     For example, the actions observed during a testing experiment, or whether certain coverage criteria were achieved during the experiment.
--} 
+-}
 data TestController m loc q t tdest act state i r = TestController {
     -- | Any state that the controller needs for its decision making duties.
     testControllerState :: state,
@@ -152,13 +152,13 @@ makeTester' ioState initSpec initTestController = ActionController {
         makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
-            return (pToVerd $ stateConf spec, r) 
-        pToVerd :: (BoundedConfiguration m) => (m x) -> Verdict
+            return (pToVerd $ stateConf spec, r)
+        pToVerd :: (BoundedConfiguration m) => m x -> Verdict
         pToVerd p | isForbidden p = Fail
                   | otherwise     = Pass
 
 catchAutomatonException :: a -> IO (Either a AutomatonException)
-catchAutomatonException a = (Left <$> evaluate a) `catch` (\e -> return $ Right e)
+catchAutomatonException a = (Left <$> evaluate a) `catch` (return . Right)
 
 {- |
     Run an experiment by interacting with the given adapter, controlled by the given action controller. The experiment
@@ -175,9 +175,9 @@ runExperiment controller adapter = do
         Left state -> runExperiment (controller { controllerState = state }) adapter
         Right result -> return result
     where
-    handleUpdate act = (update controller) (controllerState controller) act
+    handleUpdate = update controller (controllerState controller)
     handleSelect = do
-        selection <- (select controller) (controllerState controller)
+        selection <- select controller (controllerState controller)
         case selection of
             Left (inputCmd, state) -> do
                  -- TODO if an action is ready *after computing the input command* (because race condition between the adapter and controller), maybe don't send the input command.
@@ -200,11 +200,11 @@ runExperiment controller adapter = do
 -}
 runTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
-runTester spec testSelection adapter = runExperiment (makeTester spec testSelection) adapter
+runTester spec testSelection = runExperiment (makeTester spec testSelection)
 
 runSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act) =>
     SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
-runSMTTester ioState spec testSelection adapter = runExperiment (makeSMTTester ioState spec testSelection) adapter
+runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState spec testSelection)
 
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
 --runStepper spec controller = runExperiment controller (simulateSpec spec)

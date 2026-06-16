@@ -129,6 +129,7 @@ isOutput _ = False
 -}
 fromInput :: IOAct i o -> i
 fromInput (In i) = i
+fromInput (Out _) = error "fromInput called on Out action"
 
 {- |
     Unpacks an input.
@@ -142,6 +143,7 @@ maybeFromInput _ = Nothing
 -}
 fromOutput :: IOAct i o -> o
 fromOutput (Out o) = o
+fromOutput (In _) = error "fromOutput called in In action"
 
 {- |
     Unpacks an output.
@@ -192,6 +194,7 @@ asSuspended (Out o) = Out (OutSusp o)
 fromSuspended :: IOSuspAct i o -> IOAct i o
 fromSuspended (In i) = In i
 fromSuspended (Out (OutSusp o)) = Out o
+fromSuspended (Out Quiescence) = error "fromSuspended called on Quiescence"
 
 -- (i, True) represents a succesful i, (i, False) represents a failed attempt at i
 newtype InputAttempt i = InputAttempt (i, Bool) deriving (Eq, Ord)
@@ -235,6 +238,7 @@ asInputAttempt(Out o) = Out o
 fromInputAttempt :: IFAct i o -> IOAct i o
 fromInputAttempt(In (InputAttempt(i, True))) = In i
 fromInputAttempt(Out o) = Out o
+fromInputAttempt _ = error "Failed fromInputAttempt"
 
 -- ideally, this could just be defined by stacking IFAct and IOSuspAct to avoid all the boilerplate below, but that is a bit of a hassle
 {- |
@@ -266,6 +270,7 @@ asSuspendedInputAttempt(Out o) = Out (OutSusp o)
 fromSuspendedInputAttempt :: SuspendedIF i o -> IOAct i o
 fromSuspendedInputAttempt(In (InputAttempt(i, True))) = In i
 fromSuspendedInputAttempt(Out (OutSusp o)) = Out o
+fromSuspendedInputAttempt _ = error "failed fromSuspendedInputAttempt"
 
 
 -- STS data types
@@ -288,7 +293,7 @@ instance ToJSON a => ToJSON (GateValue a)
 type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where
-    show (GateValue g' vals) = show g' ++ if null vals then "" else "" ++ show vals
+    show (GateValue g' vals) = show g' ++ (if null vals then "" else "") ++ show vals
 
 valueGate :: GateValue g -> g
 valueGate (GateValue g' _) = g'
