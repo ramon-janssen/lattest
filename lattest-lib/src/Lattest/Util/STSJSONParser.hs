@@ -12,13 +12,13 @@ import qualified Data.Aeson as JSON
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Text as T
+import Data.Text (unpack)
 import Data.Maybe (fromMaybe)
 import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLatticeCNF, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), fromConstantsMap, Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
 
 data UntypedExpr
     = UEBool Bool
@@ -35,7 +35,7 @@ instance JSON.FromJSON UntypedExpr where
     --     -- TODO: Left  f -> pure (UEFloat f)
     --     Right i -> pure (UEInt i)
     parseJSON (JSON.Number n) = pure (UEInt (round n))
-    parseJSON (JSON.String s) = pure (UEStr (T.unpack s))
+    parseJSON (JSON.String s) = pure (UEStr (unpack s))
     parseJSON (JSON.Object o) = do
         (op :: String) <- o JSON..: "op"
         case op of
@@ -111,15 +111,16 @@ newtype LocationId = LocationId { locId :: String }
 
 instance JSON.FromJSON LocationId where
     parseJSON v = case v of
-        JSON.String s -> pure $ LocationId (T.unpack s)
+        JSON.String s -> pure $ LocationId (unpack s)
         JSON.Number n -> pure $ LocationId (show (round n :: Integer))
         _             -> fail $ "expected string or number for LocationId, got: " ++ show v
 
 newtype GateId = GateId { unGateId :: String }
 
+-- Gate IDs can be integers or strings in JSON; both are mapped to String for consistency.
 instance JSON.FromJSON GateId where
     parseJSON v = case v of
-        JSON.String s -> pure $ GateId (T.unpack s)
+        JSON.String s -> pure $ GateId (unpack s)
         JSON.Number n -> pure $ GateId (show (round n :: Integer))
         _             -> fail $ "expected string or number for GateId, got: " ++ show v
 
@@ -277,6 +278,7 @@ buildSwitchList gateMap guardMap assignMap switchDefs =
             endLoc  = locId (switchJsonEndLoc  def)
         return (initLoc, gate, guard', varModel, endLoc)
 
+-- NOTE: transitions from the same location with matching gates are combined with /\
 buildTransitionRel
     :: [(String, SymInteract (IOAct String String), Expr Bool, VarModel, String)]
     -> String
@@ -288,17 +290,18 @@ buildTransitionRel switchList loc =
         , initLoc == loc
         ]
 
--- TODO: for now give a default valuation if not present in the json, we can leave it blank and define this by test in the future
 buildValuation :: Map.Map String Variable -> Map.Map String JSON.Value -> Either String Valuation
 buildValuation locVarCtx initVal =
     fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, var) ->
         case (varType var, Map.lookup name initVal) of
             (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (Cint (round n)))
             (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (Cbool b))
-            (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (Cstring (T.unpack s)))
+            (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (Cstring (unpack s)))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
             (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
+        -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
+        -- this by test in the future
         defaultConst IntType    = Cint 0
         defaultConst BoolType   = Cbool False
         defaultConst StringType = Cstring ""
