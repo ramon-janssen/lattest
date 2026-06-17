@@ -3,7 +3,8 @@ combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
-solveGuard
+solveGuard,
+valuationToGateValue,
 ) where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)

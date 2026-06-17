@@ -4,7 +4,7 @@ module Lib
 
 import qualified Lattest.Model.Automaton as Aut
 import qualified Lattest.Model.Alphabet as Alph
-import           Lattest.Model.Alphabet(IOAct(In, Out))
+import           Lattest.Model.Alphabet(IOAct(In, Out), Suspended (Quiescence))
 import           Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
@@ -13,8 +13,9 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.StandardAutomata
-import           Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
+import           Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass), offlineTester, offlineSMTTester)
 import           Lattest.Exec.StandardTestControllers
+import Lattest.Model.Automaton (prettyPrint)
 --import           Network.Socket(withSocketsDo)
 
 
@@ -52,12 +53,12 @@ run = do
     putStrLn $ "starting SMT solver..."
     smtRef <- SMT.createSMTRef smtProc smtLog
 
-    putStrLn $ "connecting to SUT..."
+    -- putStrLn $ "connecting to SUT..."
     let quiesenceMillis = 300
     let delayMillis = 100
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
-    adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelayMillis delayMillis >>= asSymbolicSuspAdapter
-                 :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
+    -- adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelayMillis delayMillis >>= asSymbolicSuspAdapter
+    --              :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
     
     putStrLn $ "starting test..."
     let nrSteps = 50
@@ -65,8 +66,11 @@ run = do
         randomSeed = 456
         testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    (verdict, (observed, maybeMq)) <- runTester model testSelector adap
-    
-    putStrLn $ "verdict: " ++ show verdict
-    putStrLn $ "observed: " ++ show observed
-    putStrLn $ "final state: " ++ show maybeMq
+    -- putStrLn $ prettyPrint stsExample
+    t <- offlineSMTTester smtRef model testSelector (Just Quiescence)
+    print t
+    -- (verdict, (observed, maybeMq)) <- runTester model testSelector adap
+    --
+    -- putStrLn $ "verdict: " ++ show verdict
+    -- putStrLn $ "observed: " ++ show observed
+    -- putStrLn $ "final state: " ++ show maybeMq

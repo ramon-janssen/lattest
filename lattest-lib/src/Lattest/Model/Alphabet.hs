@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 {-|
@@ -274,7 +274,7 @@ fromSuspendedInputAttempt _ = error "failed fromSuspendedInputAttempt"
 
 
 -- STS data types
-data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
+data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor, Foldable, Traversable)
 type IOSymInteract i o = SymInteract (IOAct i o)
 
 interactionGate :: SymInteract g -> g

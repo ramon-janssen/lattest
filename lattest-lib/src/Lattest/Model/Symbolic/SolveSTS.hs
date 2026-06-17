@@ -6,12 +6,14 @@
 
 module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
+selectInteractionsAndGuards,
+selectInteractionsAndGuardsOut,
 )
 where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
-import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
+import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr, asExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
@@ -39,17 +41,31 @@ solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
     fmap (,r') $ solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
-    where
-    -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
-    selectInteractionsAndGuards :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
-    selectInteractionsAndGuards intrpr' subsetFunction' =
-        let alph = toList $ alphabet $ syntacticAutomaton intrpr'
-        in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction' &&& interactToGuard intrpr')) $ alph
+
+-- |Select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
+selectInteractionsAndGuards :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+selectInteractionsAndGuards intrpr' subsetFunction' =
+    let alph = toList $ alphabet $ syntacticAutomaton intrpr'
+    in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction' &&& interactToGuard intrpr')) $ alph
+
+-- |Select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
+-- Use this version for outputs
+selectInteractionsAndGuardsOut :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+selectInteractionsAndGuardsOut intrpr' subsetFunction' =
+    let alph = toList $ alphabet $ syntacticAutomaton intrpr'
+    in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction' &&& interactToGuardOut intrpr')) $ alph
 
 interactToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymInteract g -> SymGuard
 interactToGuard intrpr interaction = let
         aut = syntacticAutomaton intrpr
     in asDualExpr $ BM.ordJoin $ stateAndInteractToGuards aut interaction BM.<#> stateConf intrpr
+
+-- Just like interactToGuard, but then for outputs instead of for inputs
+-- only difference is not dualizing at the end
+interactToGuardOut :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymInteract g -> SymGuard
+interactToGuardOut intrpr interaction = let
+        aut = syntacticAutomaton intrpr
+    in asExpr $ BM.ordJoin $ stateAndInteractToGuards aut interaction BM.<#> stateConf intrpr
 
 stateAndInteractToGuards :: (Ord g, BM.OrdFunctor m) => STS m loc g -> SymInteract g -> IntrpState loc -> m SymGuard
 stateAndInteractToGuards aut interaction (IntrpState l valuation) =

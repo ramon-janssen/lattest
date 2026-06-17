@@ -189,11 +189,6 @@ testOfflineTrace = TestCase $ do
       modelOT = interpretConcrete specOT
       testSelectorOT =
         randomTestSelectorFromSeed 123
-        `untilCondition` stopCondition
-          () -- stopping when we take the last transition, i.e. out of OTF
-          (\_ _ _ q -> return $ case q of
-            Det OTF -> Nothing
-            _ -> Just ())
   r <- offlineTester modelOT testSelectorOT Nothing
   let r2 = offlineTreeToTrace r
   assertEqual
