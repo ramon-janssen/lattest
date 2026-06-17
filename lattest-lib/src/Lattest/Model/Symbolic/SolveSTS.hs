@@ -122,6 +122,7 @@ symbolicExecutionGraph intrpr = symbExecTree 0 $ BM.ordMap initializeExecState $
     addValPrimes 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     addValPrimes n = mapVarExprs $ varToPrime n
     varToPrime :: Int -> Variable -> Variable
+    varToPrime 0 v = v
     varToPrime n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
     fst3 (x,_,_) = x
 
