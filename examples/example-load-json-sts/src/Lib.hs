@@ -37,6 +37,7 @@ run = do
                 >>= asSymbolicSuspAdapter
                     :: IO (Adapter (IOSuspGateValue String String) (Maybe (GateValue String)))
 
+    -- NOTE: These tests are expected to fail; the spec was constructed to depict how overlapping guards work
     putStrLn "starting test..."
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0

@@ -45,7 +45,8 @@
             "op": "&&",
             "rhs": { "lhs": "waterlevel_p", "op": "<=", "rhs": 10 }
         },
-        "G3": { "lhs": "waterlevel", "op": ">=", "rhs": 15 }
+        "G3": { "lhs": "waterlevel", "op": ">=", "rhs": 15 },
+        "G4": { "lhs": "waterlevel_p", "op": "==", "rhs": 1 }
     },
     "assignments": {
         "A1": {
@@ -76,6 +77,13 @@
             "init_loc": 1,
             "gate": "Out1",
             "guard": "G1",
+            "assignments": [],
+            "end_loc": 0
+        },
+        "r_4": {
+            "init_loc": 0,
+            "gate": "In1",
+            "guard": "G4",
             "assignments": [],
             "end_loc": 0
         }
