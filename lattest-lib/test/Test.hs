@@ -85,7 +85,8 @@ makeHUnitTests = do
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testPrintSTS,
-        testReadAutFile
+        testReadAutFile,
+        testLatticeCoffeeSTS
         ]
         ++ testLatticeSTS
         ++ testLatticeSTSQuiescence
