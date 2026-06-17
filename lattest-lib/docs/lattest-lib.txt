@@ -884,6 +884,7 @@ instance GHC.Base.Applicative Lattest.Model.BoundedMonad.Det
 instance GHC.Base.Applicative Lattest.Model.BoundedMonad.FreeLattice
 instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.Det
 instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.FreeLattice
+instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.FreeLatticeCNF
 instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.NonDet
 instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.Det
 instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.FreeLattice
