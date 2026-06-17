@@ -20,7 +20,7 @@ See LICENSE in the parent SMT folder.
 </span><span id="line-20"></span><span>
 </span><span id="line-21"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Concurrent</span></span><span>
 </span><span id="line-22"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span>   </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">onException</span></span><span class="hs-special">)</span><span>
-</span><span id="line-23"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">get</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">gets</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">lift</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">modify</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">get</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">gets</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">lift</span></span><span class="hs-special">)</span><span>
 </span><span id="line-24"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">unless</span></span><span class="hs-special">)</span><span>
 </span><span id="line-25"></span><span>
 </span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span>           </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">List</span></span><span>
@@ -34,10 +34,10 @@ See LICENSE in the parent SMT folder.
 </span><span id="line-34"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
 </span><span id="line-35"></span><span>
 </span><span id="line-36"></span><span class="hs-comment">--import           Constant</span><span>
-</span><span id="line-37"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SMT2TXS.html"><span class="hs-identifier">Lattest.SMT.SMT2TXS</span></a></span><span>
-</span><span id="line-38"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTAlex</span></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SMTAlex.html"><span class="hs-identifier">Lattest.SMT.SMTAlex</span></a></span><span>
 </span><span id="line-39"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SMTData.html"><span class="hs-identifier">Lattest.SMT.SMTData</span></a></span><span>
-</span><span id="line-40"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTHappy</span></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SMTHappy.html"><span class="hs-identifier">Lattest.SMT.SMTHappy</span></a></span><span>
 </span><span id="line-41"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.SolveDefs.html"><span class="hs-identifier">Lattest.SMT.SolveDefs</span></a></span><span>
 </span><span id="line-42"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.SMT.TXS2SMT.html"><span class="hs-identifier">Lattest.SMT.TXS2SMT</span></a></span><span>
 </span><span id="line-43"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Lattest.Model.Symbolic.Expr.html"><span class="hs-identifier">Lattest.Model.Symbolic.Expr</span></a></span><span>
@@ -51,12 +51,12 @@ See LICENSE in the parent SMT folder.
 </span><span id="line-51"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#openSolver"><span class="hs-identifier hs-type">openSolver</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
 </span><span id="line-52"></span><span id="openSolver"><span class="annot"><span class="annottext">openSolver :: SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#openSolver"><span class="hs-identifier hs-var hs-var">openSolver</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-53"></span><span>    </span><span id="local-6989586621679349523"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349523"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
+</span><span id="line-53"></span><span>    </span><span id="local-6989586621679222845"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222845"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getInfo"><span class="hs-identifier hs-var">getInfo</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;name&quot;</span></span><span>
-</span><span id="line-54"></span><span>    </span><span id="local-6989586621679349525"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349525"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
+</span><span id="line-54"></span><span>    </span><span id="local-6989586621679222847"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222847"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getInfo"><span class="hs-identifier hs-var">getInfo</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;version&quot;</span></span><span>
 </span><span id="line-55"></span><span>    </span><span class="annot"><span class="annottext">SMT ()
@@ -69,13 +69,13 @@ forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; SMT [Char]) -&gt; [Char] -&gt; SMT [Char]
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349523"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222845"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot; [&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349525"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222847"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;]&quot;</span></span><span>
@@ -89,20 +89,20 @@ forall a. [a] -&gt; [a] -&gt; [a]
 </span><span id="line-64"></span><span>    </span><span class="annot"><span class="annottext">[Char] -&gt; SMT ()
 </span><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier hs-var">put</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;(exit)&quot;</span></span><span>
-</span><span id="line-65"></span><span>    </span><span id="local-6989586621679349530"><span class="annot"><span class="annottext">SmtEnv
-</span><a href="#local-6989586621679349530"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">StateT SmtEnv IO SmtEnv
+</span><span id="line-65"></span><span>    </span><span id="local-6989586621679222852"><span class="annot"><span class="annottext">SmtEnv
+</span><a href="#local-6989586621679222852"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">StateT SmtEnv IO SmtEnv
 forall s (m :: * -&gt; *). MonadState s m =&gt; m s
 </span><span class="hs-identifier hs-var">get</span></span><span>
 </span><span id="line-66"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; Maybe Handle
 </span><a href="Lattest.SMT.SMTData.html#logFileHandle"><span class="hs-identifier hs-var">logFileHandle</span></a></span><span> </span><span class="annot"><span class="annottext">SmtEnv
-</span><a href="#local-6989586621679349530"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><a href="#local-6989586621679222852"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="hs-keyword">of</span><span>
 </span><span id="line-67"></span><span>        </span><span class="annot"><span class="annottext">Maybe Handle
 </span><span class="hs-identifier hs-var">Nothing</span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">() -&gt; SMT ()
 forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
-</span><span id="line-68"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349532"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349532"><span class="hs-identifier hs-var">lfh</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; SMT ()
+</span><span id="line-68"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222854"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222854"><span class="hs-identifier hs-var">lfh</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; SMT ()
 forall (m :: * -&gt; *) a. Monad m =&gt; m a -&gt; StateT SmtEnv m a
 forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
 (MonadTrans t, Monad m) =&gt;
@@ -111,9 +111,9 @@ m a -&gt; t m a
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO ()
 </span><span class="hs-identifier hs-var">hClose</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349532"><span class="hs-identifier hs-var">lfh</span></a></span><span>
-</span><span id="line-69"></span><span>    </span><span id="local-6989586621679349534"><span class="annot"><span class="annottext">ExitCode
-</span><a href="#local-6989586621679349534"><span class="hs-identifier hs-var">ec</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO ExitCode -&gt; StateT SmtEnv IO ExitCode
+</span><a href="#local-6989586621679222854"><span class="hs-identifier hs-var">lfh</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span id="local-6989586621679222856"><span class="annot"><span class="annottext">ExitCode
+</span><a href="#local-6989586621679222856"><span class="hs-identifier hs-var">ec</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO ExitCode -&gt; StateT SmtEnv IO ExitCode
 forall (m :: * -&gt; *) a. Monad m =&gt; m a -&gt; StateT SmtEnv m a
 forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
 (MonadTrans t, Monad m) =&gt;
@@ -124,16 +124,16 @@ forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ProcessHandle -&gt; IO ExitCode
 </span><span class="hs-identifier hs-var">waitForProcess</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SmtEnv -&gt; ProcessHandle
 </span><a href="Lattest.SMT.SMTData.html#smtProcessHandle"><span class="hs-identifier hs-var">smtProcessHandle</span></a></span><span> </span><span class="annot"><span class="annottext">SmtEnv
-</span><a href="#local-6989586621679349530"><span class="hs-identifier hs-var">st</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222852"><span class="hs-identifier hs-var">st</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-70"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">ExitCode
-</span><a href="#local-6989586621679349534"><span class="hs-identifier hs-var">ec</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><a href="#local-6989586621679222856"><span class="hs-identifier hs-var">ec</span></a></span><span> </span><span class="hs-keyword">of</span><span>
 </span><span id="line-71"></span><span>        </span><span class="annot"><span class="annottext">ExitCode
 </span><span class="hs-identifier hs-var">ExitSuccess</span></span><span>   </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">() -&gt; SMT ()
 forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
-</span><span id="line-72"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">ExitFailure</span></span><span> </span><span id="local-6989586621679349539"><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679349539"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT ()
+</span><span id="line-72"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">ExitFailure</span></span><span> </span><span id="local-6989586621679222861"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679222861"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT ()
 forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;Smt Solver exited with error code &quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
@@ -141,7 +141,7 @@ forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Char]
 forall a. Show a =&gt; a -&gt; [Char]
 </span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">Int
-</span><a href="#local-6989586621679349539"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222861"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-73"></span><span>
 </span><span id="line-74"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
 </span><span id="line-75"></span><span class="hs-comment">-- push</span><span>
@@ -167,12 +167,12 @@ forall a. Show a =&gt; a -&gt; [Char]
 </span><span id="line-89"></span><span>
 </span><span id="line-90"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#createSMTRef"><span class="hs-identifier hs-type">createSMTRef</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CreateProcess</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMTRef"><span class="hs-identifier hs-type">SMTRef</span></a></span><span>
 </span><span id="line-91"></span><span id="createSMTRef"><span class="annot"><span class="annottext">createSMTRef :: CreateProcess -&gt; Bool -&gt; IO SMTRef
-</span><a href="Lattest.SMT.SMTInternal.html#createSMTRef"><span class="hs-identifier hs-var hs-var">createSMTRef</span></a></span></span><span> </span><span id="local-6989586621679349544"><span class="annot"><span class="annottext">CreateProcess
-</span><a href="#local-6989586621679349544"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679349545"><span class="annot"><span class="annottext">Bool
-</span><a href="#local-6989586621679349545"><span class="hs-identifier hs-var">lgFlag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CreateProcess -&gt; Bool -&gt; IO SmtEnv
+</span><a href="Lattest.SMT.SMTInternal.html#createSMTRef"><span class="hs-identifier hs-var hs-var">createSMTRef</span></a></span></span><span> </span><span id="local-6989586621679222866"><span class="annot"><span class="annottext">CreateProcess
+</span><a href="#local-6989586621679222866"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679222867"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679222867"><span class="hs-identifier hs-var">lgFlag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CreateProcess -&gt; Bool -&gt; IO SmtEnv
 </span><a href="Lattest.SMT.SMTInternal.html#createSMTEnv"><span class="hs-identifier hs-var">createSMTEnv</span></a></span><span> </span><span class="annot"><span class="annottext">CreateProcess
-</span><a href="#local-6989586621679349544"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
-</span><a href="#local-6989586621679349545"><span class="hs-identifier hs-var">lgFlag</span></a></span><span> </span><span class="annot"><span class="annottext">IO SmtEnv -&gt; (SmtEnv -&gt; IO SMTRef) -&gt; IO SMTRef
+</span><a href="#local-6989586621679222866"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679222867"><span class="hs-identifier hs-var">lgFlag</span></a></span><span> </span><span class="annot"><span class="annottext">IO SmtEnv -&gt; (SmtEnv -&gt; IO SMTRef) -&gt; IO SMTRef
 forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
 forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
 </span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; IO SMTRef
@@ -180,59 +180,59 @@ forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
 </span><span id="line-92"></span><span>
 </span><span id="line-93"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#createSMTEnv"><span class="hs-identifier hs-type">createSMTEnv</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CreateProcess</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-type">SmtEnv</span></a></span><span>
 </span><span id="line-94"></span><span id="createSMTEnv"><span class="annot"><span class="annottext">createSMTEnv :: CreateProcess -&gt; Bool -&gt; IO SmtEnv
-</span><a href="Lattest.SMT.SMTInternal.html#createSMTEnv"><span class="hs-identifier hs-var hs-var">createSMTEnv</span></a></span></span><span> </span><span id="local-6989586621679349548"><span class="annot"><span class="annottext">CreateProcess
-</span><a href="#local-6989586621679349548"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679349549"><span class="annot"><span class="annottext">Bool
-</span><a href="#local-6989586621679349549"><span class="hs-identifier hs-var">lgFlag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
-</span><span id="line-95"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349550"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349550"><span class="hs-identifier hs-var">hin</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349551"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349551"><span class="hs-identifier hs-var">hout</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349552"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349552"><span class="hs-identifier hs-var">herr</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679349553"><span class="annot"><span class="annottext">ProcessHandle
-</span><a href="#local-6989586621679349553"><span class="hs-identifier hs-var">ph</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">CreateProcess
+</span><a href="Lattest.SMT.SMTInternal.html#createSMTEnv"><span class="hs-identifier hs-var hs-var">createSMTEnv</span></a></span></span><span> </span><span id="local-6989586621679222870"><span class="annot"><span class="annottext">CreateProcess
+</span><a href="#local-6989586621679222870"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679222871"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679222871"><span class="hs-identifier hs-var">lgFlag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-95"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222872"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222872"><span class="hs-identifier hs-var">hin</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222873"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222873"><span class="hs-identifier hs-var">hout</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222874"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222874"><span class="hs-identifier hs-var">herr</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679222875"><span class="annot"><span class="annottext">ProcessHandle
+</span><a href="#local-6989586621679222875"><span class="hs-identifier hs-var">ph</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">CreateProcess
 -&gt; IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 </span><span class="hs-identifier hs-var">createProcess</span></span><span> </span><span class="annot"><span class="annottext">CreateProcess
-</span><a href="#local-6989586621679349548"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><a href="#local-6989586621679222870"><span class="hs-identifier hs-var">cmd</span></a></span><span>
 </span><span id="line-96"></span><span>                                                           </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="hs-identifier hs-var">std_out</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CreatePipe</span></span><span>
 </span><span id="line-97"></span><span>                                                           </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-var">std_in</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CreatePipe</span></span><span>
 </span><span id="line-98"></span><span>                                                           </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-var">std_err</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CreatePipe</span></span><span>
 </span><span id="line-99"></span><span>                                                           </span><span class="hs-special">}</span><span>
 </span><span id="line-100"></span><span>    </span><span class="annot"><span class="annottext">Handle -&gt; BufferMode -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetBuffering</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349550"><span class="hs-identifier hs-var">hin</span></a></span><span>  </span><span class="annot"><span class="annottext">BufferMode
+</span><a href="#local-6989586621679222872"><span class="hs-identifier hs-var">hin</span></a></span><span>  </span><span class="annot"><span class="annottext">BufferMode
 </span><span class="hs-identifier hs-var">NoBuffering</span></span><span>         </span><span class="hs-comment">-- alternative: LineBuffering</span><span>
 </span><span id="line-101"></span><span>    </span><span class="annot"><span class="annottext">Handle -&gt; BufferMode -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetBuffering</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349551"><span class="hs-identifier hs-var">hout</span></a></span><span> </span><span class="annot"><span class="annottext">BufferMode
+</span><a href="#local-6989586621679222873"><span class="hs-identifier hs-var">hout</span></a></span><span> </span><span class="annot"><span class="annottext">BufferMode
 </span><span class="hs-identifier hs-var">NoBuffering</span></span><span>
 </span><span id="line-102"></span><span>    </span><span class="annot"><span class="annottext">Handle -&gt; BufferMode -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetBuffering</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349552"><span class="hs-identifier hs-var">herr</span></a></span><span> </span><span class="annot"><span class="annottext">BufferMode
+</span><a href="#local-6989586621679222874"><span class="hs-identifier hs-var">herr</span></a></span><span> </span><span class="annot"><span class="annottext">BufferMode
 </span><span class="hs-identifier hs-var">NoBuffering</span></span><span>
 </span><span id="line-103"></span><span>
 </span><span id="line-104"></span><span>    </span><span class="annot"><span class="annottext">Handle -&gt; TextEncoding -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetEncoding</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349550"><span class="hs-identifier hs-var">hin</span></a></span><span>  </span><span class="annot"><span class="annottext">TextEncoding
+</span><a href="#local-6989586621679222872"><span class="hs-identifier hs-var">hin</span></a></span><span>  </span><span class="annot"><span class="annottext">TextEncoding
 </span><span class="hs-identifier hs-var">latin1</span></span><span>
 </span><span id="line-105"></span><span>    </span><span class="annot"><span class="annottext">Handle -&gt; TextEncoding -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetEncoding</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349551"><span class="hs-identifier hs-var">hout</span></a></span><span> </span><span class="annot"><span class="annottext">TextEncoding
+</span><a href="#local-6989586621679222873"><span class="hs-identifier hs-var">hout</span></a></span><span> </span><span class="annot"><span class="annottext">TextEncoding
 </span><span class="hs-identifier hs-var">latin1</span></span><span>
 </span><span id="line-106"></span><span>    </span><span class="annot"><span class="annottext">Handle -&gt; TextEncoding -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetEncoding</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349552"><span class="hs-identifier hs-var">herr</span></a></span><span> </span><span class="annot"><span class="annottext">TextEncoding
+</span><a href="#local-6989586621679222874"><span class="hs-identifier hs-var">herr</span></a></span><span> </span><span class="annot"><span class="annottext">TextEncoding
 </span><span class="hs-identifier hs-var">latin1</span></span><span>
 </span><span id="line-107"></span><span>
 </span><span id="line-108"></span><span>    </span><span class="hs-comment">-- open SMT logging file</span><span>
-</span><span id="line-109"></span><span>    </span><span id="local-6989586621679349563"><span class="annot"><span class="annottext">Maybe Handle
-</span><a href="#local-6989586621679349563"><span class="hs-identifier hs-var">lg</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
-</span><a href="#local-6989586621679349549"><span class="hs-identifier hs-var">lgFlag</span></a></span><span>
-</span><span id="line-110"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679349564"><span class="annot"><span class="annottext">TimeZone
-</span><a href="#local-6989586621679349564"><span class="hs-identifier hs-var">timeZone</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO TimeZone
+</span><span id="line-109"></span><span>    </span><span id="local-6989586621679222885"><span class="annot"><span class="annottext">Maybe Handle
+</span><a href="#local-6989586621679222885"><span class="hs-identifier hs-var">lg</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679222871"><span class="hs-identifier hs-var">lgFlag</span></a></span><span>
+</span><span id="line-110"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679222886"><span class="annot"><span class="annottext">TimeZone
+</span><a href="#local-6989586621679222886"><span class="hs-identifier hs-var">timeZone</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO TimeZone
 </span><span class="hs-identifier hs-var">getCurrentTimeZone</span></span><span>
-</span><span id="line-111"></span><span>                    </span><span id="local-6989586621679349566"><span class="annot"><span class="annottext">UTCTime
-</span><a href="#local-6989586621679349566"><span class="hs-identifier hs-var">startTime</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO UTCTime
+</span><span id="line-111"></span><span>                    </span><span id="local-6989586621679222888"><span class="annot"><span class="annottext">UTCTime
+</span><a href="#local-6989586621679222888"><span class="hs-identifier hs-var">startTime</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO UTCTime
 </span><span class="hs-identifier hs-var">getCurrentTime</span></span><span>
-</span><span id="line-112"></span><span>                    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349575"><span class="annot"><span class="annottext">timeString :: [Char]
-</span><a href="#local-6989586621679349575"><span class="hs-identifier hs-var hs-var">timeString</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char] -&gt; [Char]
+</span><span id="line-112"></span><span>                    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222897"><span class="annot"><span class="annottext">timeString :: [Char]
+</span><a href="#local-6989586621679222897"><span class="hs-identifier hs-var hs-var">timeString</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char] -&gt; [Char]
 forall a. Eq a =&gt; [a] -&gt; [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-identifier hs-var">replace</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;:&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char]
@@ -250,26 +250,26 @@ forall a b. (a -&gt; b) -&gt; a -&gt; b
 forall a. Show a =&gt; a -&gt; [Char]
 </span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TimeZone -&gt; UTCTime -&gt; LocalTime
 </span><span class="hs-identifier hs-var">utcToLocalTime</span></span><span> </span><span class="annot"><span class="annottext">TimeZone
-</span><a href="#local-6989586621679349564"><span class="hs-identifier hs-var">timeZone</span></a></span><span> </span><span class="annot"><span class="annottext">UTCTime
-</span><a href="#local-6989586621679349566"><span class="hs-identifier hs-var">startTime</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-115"></span><span>                        </span><span id="local-6989586621679349577"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349577"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IOMode -&gt; IO Handle
+</span><a href="#local-6989586621679222886"><span class="hs-identifier hs-var">timeZone</span></a></span><span> </span><span class="annot"><span class="annottext">UTCTime
+</span><a href="#local-6989586621679222888"><span class="hs-identifier hs-var">startTime</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-115"></span><span>                        </span><span id="local-6989586621679222899"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222899"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IOMode -&gt; IO Handle
 </span><span class="hs-identifier hs-var">openFile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;logSMT.&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349575"><span class="hs-identifier hs-var">timeString</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222897"><span class="hs-identifier hs-var">timeString</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;.smt2&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">IOMode
 </span><span class="hs-identifier hs-var">WriteMode</span></span><span>
 </span><span id="line-116"></span><span>                        </span><span class="annot"><span class="annottext">Handle -&gt; BufferMode -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetBuffering</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349577"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">BufferMode
+</span><a href="#local-6989586621679222899"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">BufferMode
 </span><span class="hs-identifier hs-var">NoBuffering</span></span><span>
 </span><span id="line-117"></span><span>                        </span><span class="annot"><span class="annottext">Handle -&gt; TextEncoding -&gt; IO ()
 </span><span class="hs-identifier hs-var">hSetEncoding</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349577"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">TextEncoding
+</span><a href="#local-6989586621679222899"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">TextEncoding
 </span><span class="hs-identifier hs-var">latin1</span></span><span>
 </span><span id="line-118"></span><span>                        </span><span class="annot"><span class="annottext">Maybe Handle -&gt; IO (Maybe Handle)
 forall a. a -&gt; IO a
@@ -280,7 +280,7 @@ forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; Maybe Handle
 forall a. a -&gt; Maybe a
 </span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349577"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><a href="#local-6989586621679222899"><span class="hs-identifier hs-var">h</span></a></span><span>
 </span><span id="line-119"></span><span>            </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Maybe Handle -&gt; IO (Maybe Handle)
 forall a. a -&gt; IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
@@ -305,7 +305,7 @@ forall a. Maybe a
 </span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">&lt;-</span><span>  </span><span class="annot"><span class="annottext">IO () -&gt; IO ThreadId
 </span><span class="hs-identifier hs-var">forkIO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
 </span><a href="Lattest.SMT.SMTInternal.html#showErrors"><span class="hs-identifier hs-var">showErrors</span></a></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349552"><span class="hs-identifier hs-var">herr</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222874"><span class="hs-identifier hs-var">herr</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;SMT WARN &gt;&gt; &quot;</span></span><span class="hs-special">)</span><span>
 </span><span id="line-135"></span><span>    </span><span>
 </span><span id="line-136"></span><span>    </span><span class="annot"><span class="annottext">SmtEnv -&gt; IO SmtEnv
@@ -313,13 +313,13 @@ forall a. a -&gt; IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Handle -&gt; Handle -&gt; ProcessHandle -&gt; Maybe Handle -&gt; SmtEnv
 </span><a href="Lattest.SMT.SMTData.html#SmtEnv"><span class="hs-identifier hs-var">SmtEnv</span></a></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349550"><span class="hs-identifier hs-var">hin</span></a></span><span>
+</span><a href="#local-6989586621679222872"><span class="hs-identifier hs-var">hin</span></a></span><span>
 </span><span id="line-137"></span><span>                   </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349551"><span class="hs-identifier hs-var">hout</span></a></span><span>
+</span><a href="#local-6989586621679222873"><span class="hs-identifier hs-var">hout</span></a></span><span>
 </span><span id="line-138"></span><span>                   </span><span class="annot"><span class="annottext">ProcessHandle
-</span><a href="#local-6989586621679349553"><span class="hs-identifier hs-var">ph</span></a></span><span>
+</span><a href="#local-6989586621679222875"><span class="hs-identifier hs-var">ph</span></a></span><span>
 </span><span id="line-139"></span><span>                   </span><span class="annot"><span class="annottext">Maybe Handle
-</span><a href="#local-6989586621679349563"><span class="hs-identifier hs-var">lg</span></a></span><span>
+</span><a href="#local-6989586621679222885"><span class="hs-identifier hs-var">lg</span></a></span><span>
 </span><span id="line-140"></span><span>                   </span><span class="hs-comment">--initialEnvNames</span><span>
 </span><span id="line-141"></span><span>                   </span><span class="hs-comment">--(EnvDefs Map.empty Map.empty Map.empty)</span><span>
 </span><span id="line-142"></span><span>            </span><span class="hs-special">)</span><span>
@@ -367,24 +367,24 @@ addDefinitions edefs =  do
 forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
-</span><span id="line-183"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addDeclarations"><span class="hs-identifier hs-var">addDeclarations</span></a></span><span> </span><span id="local-6989586621679349584"><span class="annot"><span class="annottext">[Variable]
-</span><a href="#local-6989586621679349584"><span class="hs-identifier hs-var">vs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; SMT ()
+</span><span id="line-183"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addDeclarations"><span class="hs-identifier hs-var">addDeclarations</span></a></span><span> </span><span id="local-6989586621679222906"><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679222906"><span class="hs-identifier hs-var">vs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; SMT ()
 </span><a href="Lattest.SMT.SMTInternal.html#putT"><span class="hs-identifier hs-var">putT</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Variable] -&gt; Text
 </span><a href="Lattest.SMT.TXS2SMT.html#declarationsToSMT"><span class="hs-identifier hs-var">declarationsToSMT</span></a></span><span> </span><span class="annot"><span class="annottext">[Variable]
-</span><a href="#local-6989586621679349584"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222906"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-184"></span><span>
 </span><span id="line-185"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
 </span><span id="line-186"></span><span class="hs-comment">-- addAssertions</span><span>
 </span><span id="line-187"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
 </span><span id="line-188"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#addAssertions"><span class="hs-identifier hs-type">addAssertions</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Expr"><span class="hs-identifier hs-type">Expr</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
 </span><span id="line-189"></span><span id="addAssertions"><span class="annot"><span class="annottext">addAssertions :: [Expr Bool] -&gt; SMT ()
-</span><a href="Lattest.SMT.SMTInternal.html#addAssertions"><span class="hs-identifier hs-var hs-var">addAssertions</span></a></span></span><span> </span><span id="local-6989586621679349588"><span class="annot"><span class="annottext">[Expr Bool]
-</span><a href="#local-6989586621679349588"><span class="hs-identifier hs-var">vexps</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><a href="Lattest.SMT.SMTInternal.html#addAssertions"><span class="hs-identifier hs-var hs-var">addAssertions</span></a></span></span><span> </span><span id="local-6989586621679222910"><span class="annot"><span class="annottext">[Expr Bool]
+</span><a href="#local-6989586621679222910"><span class="hs-identifier hs-var">vexps</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
 </span><span id="line-190"></span><span>    </span><span class="hs-comment">--mapI &lt;- gets envNames</span><span>
 </span><span id="line-191"></span><span>    </span><span class="annot"><span class="annottext">Text -&gt; SMT ()
 </span><a href="Lattest.SMT.SMTInternal.html#putT"><span class="hs-identifier hs-var">putT</span></a></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">[Expr Bool] -&gt; Text
 </span><a href="Lattest.SMT.TXS2SMT.html#assertionsToSMT"><span class="hs-identifier hs-var">assertionsToSMT</span></a></span><span> </span><span class="annot"><span class="annottext">[Expr Bool]
-</span><a href="#local-6989586621679349588"><span class="hs-identifier hs-var">vexps</span></a></span><span> </span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222910"><span class="hs-identifier hs-var">vexps</span></a></span><span> </span><span class="hs-special">)</span><span>
 </span><span id="line-192"></span><span>
 </span><span id="line-193"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
 </span><span id="line-194"></span><span class="hs-comment">-- getSolvable</span><span>
@@ -395,8 +395,8 @@ forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span id="line-198"></span><span>    </span><span class="annot"><span class="annottext">[Char] -&gt; SMT ()
 </span><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier hs-var">put</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;(check-sat)&quot;</span></span><span>
-</span><span id="line-199"></span><span>    </span><span id="local-6989586621679349591"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349591"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT [Char]
+</span><span id="line-199"></span><span>    </span><span id="local-6989586621679222913"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222913"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getSMTresponse"><span class="hs-identifier hs-var">getSMTresponse</span></a></span><span>
 </span><span id="line-200"></span><span>    </span><span class="annot"><span class="annottext">SolvableProblem -&gt; SMT SolvableProblem
 forall a. a -&gt; StateT SmtEnv IO a
@@ -405,7 +405,7 @@ forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 -&gt; SolvableProblem -&gt; SMT SolvableProblem
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349591"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><a href="#local-6989586621679222913"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">of</span><span>
 </span><span id="line-201"></span><span>               </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;sat&quot;</span></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">SolvableProblem
 </span><a href="Lattest.SMT.SolveDefs.html#Sat"><span class="hs-identifier hs-var">Sat</span></a></span><span>
@@ -422,7 +422,7 @@ forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span class="hs-string">&quot;SMT checkSat: Unexpected result '&quot;</span></span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349591"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222913"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;'&quot;</span></span><span class="hs-special">)</span><span>
@@ -438,8 +438,8 @@ forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Valuation
 </span><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#emptyValuation"><span class="hs-identifier hs-var">emptyValuation</span></a></span><span>
-</span><span id="line-212"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSolution"><span class="hs-identifier hs-var">getSolution</span></a></span><span> </span><span id="local-6989586621679349598"><span class="annot"><span class="annottext">[Variable]
-</span><a href="#local-6989586621679349598"><span class="hs-identifier hs-var">vs</span></a></span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-212"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSolution"><span class="hs-identifier hs-var">getSolution</span></a></span><span> </span><span id="local-6989586621679222920"><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679222920"><span class="hs-identifier hs-var">vs</span></a></span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
 </span><span id="line-213"></span><span>    </span><span class="annot"><span class="annottext">Text -&gt; SMT ()
 </span><a href="Lattest.SMT.SMTInternal.html#putT"><span class="hs-identifier hs-var">putT</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text
 </span><span class="hs-string">&quot;(get-value (&quot;</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Text
@@ -453,47 +453,54 @@ forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Variable -&gt; [Char]
 </span><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#varName"><span class="hs-identifier hs-var">varName</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Variable]
-</span><a href="#local-6989586621679349598"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Text
+</span><a href="#local-6989586621679222920"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Text
 forall a. Semigroup a =&gt; a -&gt; a -&gt; a
 </span><span class="hs-operator hs-var">&lt;&gt;</span></span><span class="annot"><span class="annottext">Text
 </span><span class="hs-string">&quot;))&quot;</span></span><span class="hs-special">)</span><span>
-</span><span id="line-214"></span><span>    </span><span id="local-6989586621679349603"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349603"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT [Char]
+</span><span id="line-214"></span><span>    </span><span id="local-6989586621679222925"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222925"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getSMTresponse"><span class="hs-identifier hs-var">getSMTresponse</span></a></span><span>
-</span><span id="line-215"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349604"><span class="annot"><span class="annottext">vnameConstMap :: Map [Char] Constant
-</span><a href="#local-6989586621679349604"><span class="hs-identifier hs-var hs-var">vnameConstMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Token] -&gt; Map [Char] Constant
-</span><span class="hs-identifier hs-var">smtParser</span></span><span> </span><span class="annot"><span class="annottext">([Token] -&gt; Map [Char] Constant)
+</span><span id="line-215"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222926"><span class="annot"><span class="annottext">vnameConstMap :: Map [Char] Constant
+</span><a href="#local-6989586621679222926"><span class="hs-identifier hs-var hs-var">vnameConstMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Token] -&gt; Map [Char] Constant
+</span><a href="Lattest.SMT.SMTHappy.html#smtParser"><span class="hs-identifier hs-var">smtParser</span></a></span><span> </span><span class="annot"><span class="annottext">([Token] -&gt; Map [Char] Constant)
 -&gt; ([Char] -&gt; [Token]) -&gt; [Char] -&gt; Map [Char] Constant
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Token]
-</span><span class="hs-identifier hs-var">smtLexer</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; Map [Char] Constant) -&gt; [Char] -&gt; Map [Char] Constant
+</span><a href="Lattest.SMT.SMTAlex.html#smtLexer"><span class="hs-identifier hs-var">smtLexer</span></a></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; Map [Char] Constant) -&gt; [Char] -&gt; Map [Char] Constant
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349603"><span class="hs-identifier hs-var">s</span></a></span><span>
-</span><span id="line-216"></span><span>        </span><span id="local-6989586621679349611"><span class="annot"><span class="annottext">varsToMaybeConstants :: [(Variable, Maybe Constant)]
-</span><a href="#local-6989586621679349611"><span class="hs-identifier hs-var hs-var">varsToMaybeConstants</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Variable
-</span><a href="#local-6989586621679349612"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Map [Char] Constant -&gt; Maybe Constant
+</span><a href="#local-6989586621679222925"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-216"></span><span>        </span><span id="local-6989586621679222933"><span class="annot"><span class="annottext">varsToMaybeConstants :: [(Variable, Maybe Constant)]
+</span><a href="#local-6989586621679222933"><span class="hs-identifier hs-var hs-var">varsToMaybeConstants</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Variable
+</span><a href="#local-6989586621679222934"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Map [Char] Constant -&gt; Maybe Constant
 forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
 </span><span class="hs-identifier hs-var">Map.lookup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Variable -&gt; [Char]
 </span><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#varName"><span class="hs-identifier hs-var">varName</span></a></span><span> </span><span class="annot"><span class="annottext">Variable
-</span><a href="#local-6989586621679349612"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map [Char] Constant
-</span><a href="#local-6989586621679349604"><span class="hs-identifier hs-var">vnameConstMap</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span id="local-6989586621679349612"><span class="annot"><span class="annottext">Variable
-</span><a href="#local-6989586621679349612"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Variable]
-</span><a href="#local-6989586621679349598"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">]</span><span>
+</span><a href="#local-6989586621679222934"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map [Char] Constant
+</span><a href="#local-6989586621679222926"><span class="hs-identifier hs-var">vnameConstMap</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span id="local-6989586621679222934"><span class="annot"><span class="annottext">Variable
+</span><a href="#local-6989586621679222934"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Variable]
+</span><a href="#local-6989586621679222920"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">]</span><span>
 </span><span id="line-217"></span><span class="hs-comment">--    edefs &lt;- gets envDefs</span><span>
 </span><span id="line-218"></span><span>    </span><span class="annot"><span class="annottext">Valuation -&gt; SMT Valuation
 forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Valuation -&gt; SMT Valuation) -&gt; Valuation -&gt; SMT Valuation
 forall a b. (a -&gt; b) -&gt; a -&gt; b
-</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Valuation
-forall a. HasCallStack =&gt; a
-</span><span class="hs-identifier hs-var">undefined</span></span><span> </span><span class="hs-comment">-- assignValues $ insertMaybeIntoValuation &lt;$&gt; varsToMaybeConstants</span><span>
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Valuation -&gt; Valuation] -&gt; Valuation
+</span><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#assignValues"><span class="hs-identifier hs-var">assignValues</span></a></span><span> </span><span class="annot"><span class="annottext">([Valuation -&gt; Valuation] -&gt; Valuation)
+-&gt; [Valuation -&gt; Valuation] -&gt; Valuation
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Variable, Maybe Constant) -&gt; Valuation -&gt; Valuation
+</span><a href="#local-6989586621679222937"><span class="hs-identifier hs-var">insertMaybeIntoValuation</span></a></span><span> </span><span class="annot"><span class="annottext">((Variable, Maybe Constant) -&gt; Valuation -&gt; Valuation)
+-&gt; [(Variable, Maybe Constant)] -&gt; [Valuation -&gt; Valuation]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">[(Variable, Maybe Constant)]
+</span><a href="#local-6989586621679222933"><span class="hs-identifier hs-var">varsToMaybeConstants</span></a></span><span>
 </span><span id="line-219"></span><span>    </span><span class="hs-keyword">where</span><span>
-</span><span id="line-220"></span><span>        </span><span class="annot"><a href="#local-6989586621679349615"><span class="hs-identifier hs-type">insertMaybeIntoValuation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier hs-type">Constant</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span>
-</span><span id="line-221"></span><span>        </span><span id="local-6989586621679349615"><span class="annot"><span class="annottext">insertMaybeIntoValuation :: (Variable, Maybe Constant) -&gt; Valuation -&gt; Valuation
-</span><a href="#local-6989586621679349615"><span class="hs-identifier hs-var hs-var">insertMaybeIntoValuation</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span id="local-6989586621679349617"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349617"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="annot"><span class="annottext">Type
+</span><span id="line-220"></span><span>        </span><span class="annot"><a href="#local-6989586621679222937"><span class="hs-identifier hs-type">insertMaybeIntoValuation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier hs-type">Constant</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#Valuation"><span class="hs-identifier hs-type">Valuation</span></a></span><span>
+</span><span id="line-221"></span><span>        </span><span id="local-6989586621679222937"><span class="annot"><span class="annottext">insertMaybeIntoValuation :: (Variable, Maybe Constant) -&gt; Valuation -&gt; Valuation
+</span><a href="#local-6989586621679222937"><span class="hs-identifier hs-var hs-var">insertMaybeIntoValuation</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Variable"><span class="hs-identifier hs-type">Variable</span></a></span><span> </span><span id="local-6989586621679222940"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222940"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="annot"><span class="annottext">Type
 </span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe Constant
 </span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Valuation -&gt; Valuation
 forall a. HasCallStack =&gt; [Char] -&gt; a
@@ -504,50 +511,50 @@ forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-string">&quot;SMT solution contained no valuation for variable &quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349617"><span class="hs-identifier hs-var">name</span></a></span><span>
-</span><span id="line-222"></span><span>        </span><span class="annot"><a href="#local-6989586621679349615"><span class="hs-identifier hs-var">insertMaybeIntoValuation</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679349618"><span class="annot"><span class="annottext">Variable
-</span><a href="#local-6989586621679349618"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349619"><span class="annot"><span class="annottext">Constant
-</span><a href="#local-6989586621679349619"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Variable -&gt; Constant -&gt; Valuation -&gt; Valuation
+</span><a href="#local-6989586621679222940"><span class="hs-identifier hs-var">name</span></a></span><span>
+</span><span id="line-222"></span><span>        </span><span class="annot"><a href="#local-6989586621679222937"><span class="hs-identifier hs-var">insertMaybeIntoValuation</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679222941"><span class="annot"><span class="annottext">Variable
+</span><a href="#local-6989586621679222941"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222942"><span class="annot"><span class="annottext">Constant
+</span><a href="#local-6989586621679222942"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Variable -&gt; Constant -&gt; Valuation -&gt; Valuation
 </span><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#insertIntoValuation"><span class="hs-identifier hs-var">insertIntoValuation</span></a></span><span> </span><span class="annot"><span class="annottext">Variable
-</span><a href="#local-6989586621679349618"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">Constant
-</span><a href="#local-6989586621679349619"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><a href="#local-6989586621679222941"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">Constant
+</span><a href="#local-6989586621679222942"><span class="hs-identifier hs-var">c</span></a></span><span>
 </span><span id="line-223"></span><span>
 </span><span id="line-224"></span><span class="hs-comment">-- ------------------------------------------</span><span>
 </span><span id="line-225"></span><span class="hs-comment">-- get SMT info</span><span>
 </span><span id="line-226"></span><span class="hs-comment">-- ------------------------------------------</span><span>
 </span><span id="line-227"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getInfo"><span class="hs-identifier hs-type">getInfo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
 </span><span id="line-228"></span><span id="getInfo"><span class="annot"><span class="annottext">getInfo :: [Char] -&gt; SMT [Char]
-</span><a href="Lattest.SMT.SMTInternal.html#getInfo"><span class="hs-identifier hs-var hs-var">getInfo</span></a></span></span><span> </span><span id="local-6989586621679349621"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349621"><span class="hs-identifier hs-var">info</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><a href="Lattest.SMT.SMTInternal.html#getInfo"><span class="hs-identifier hs-var hs-var">getInfo</span></a></span></span><span> </span><span id="local-6989586621679222944"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222944"><span class="hs-identifier hs-var">info</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
 </span><span id="line-229"></span><span>    </span><span class="annot"><span class="annottext">[Char] -&gt; SMT ()
 </span><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier hs-var">put</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;(get-info :&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349621"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222944"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;)&quot;</span></span><span class="hs-special">)</span><span>
-</span><span id="line-230"></span><span>    </span><span id="local-6989586621679349622"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349622"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT [Char]
+</span><span id="line-230"></span><span>    </span><span id="local-6989586621679222945"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222945"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getSMTresponse"><span class="hs-identifier hs-var">getSMTresponse</span></a></span><span>
-</span><span id="line-231"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349623"><span class="annot"><span class="annottext">list :: [Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var hs-var">list</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+</span><span id="line-231"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222946"><span class="annot"><span class="annottext">list :: [Char]
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var hs-var">list</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
 </span><span class="hs-identifier hs-var">strip</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349622"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><a href="#local-6989586621679222945"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">in</span><span>
 </span><span id="line-232"></span><span>        </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
 forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
 </span><span class="hs-identifier hs-var">startswith</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;(&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var">list</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var">list</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
 </span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
 forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
 </span><span class="hs-identifier hs-var">endswith</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;)&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var">list</span></a></span><span>
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var">list</span></a></span><span>
 </span><span id="line-233"></span><span>        </span><span class="hs-keyword">then</span><span>
-</span><span id="line-234"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349629"><span class="annot"><span class="annottext">tuple :: [Char]
-</span><a href="#local-6989586621679349629"><span class="hs-identifier hs-var hs-var">tuple</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+</span><span id="line-234"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222952"><span class="annot"><span class="annottext">tuple :: [Char]
+</span><a href="#local-6989586621679222952"><span class="hs-identifier hs-var hs-var">tuple</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
 </span><span class="hs-identifier hs-var">strip</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
 forall a. HasCallStack =&gt; [a] -&gt; [a]
 </span><span class="hs-identifier hs-var">List.init</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; ([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
@@ -557,30 +564,30 @@ forall a. HasCallStack =&gt; [a] -&gt; [a]
 </span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">in</span><span>
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">in</span><span>
 </span><span id="line-235"></span><span>                </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Maybe [Char]
 forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Maybe [a]
 </span><span class="hs-identifier hs-var">List.stripPrefix</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;:&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349621"><span class="hs-identifier hs-var">info</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349629"><span class="hs-identifier hs-var">tuple</span></a></span><span> </span><span class="hs-keyword">of</span><span>
-</span><span id="line-236"></span><span>                   </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349633"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349633"><span class="hs-identifier hs-var">res</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349634"><span class="annot"><span class="annottext">str :: [Char]
-</span><a href="#local-6989586621679349634"><span class="hs-identifier hs-var hs-var">str</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+</span><a href="#local-6989586621679222944"><span class="hs-identifier hs-var">info</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222952"><span class="hs-identifier hs-var">tuple</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-236"></span><span>                   </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222956"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222956"><span class="hs-identifier hs-var">res</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222957"><span class="annot"><span class="annottext">str :: [Char]
+</span><a href="#local-6989586621679222957"><span class="hs-identifier hs-var hs-var">str</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
 </span><span class="hs-identifier hs-var">strip</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349633"><span class="hs-identifier hs-var">res</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><a href="#local-6989586621679222956"><span class="hs-identifier hs-var">res</span></a></span><span> </span><span class="hs-keyword">in</span><span>
 </span><span id="line-237"></span><span>                               </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
 forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
 </span><span class="hs-identifier hs-var">startswith</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;\&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349634"><span class="hs-identifier hs-var">str</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><a href="#local-6989586621679222957"><span class="hs-identifier hs-var">str</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
 </span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; Bool
 forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
 </span><span class="hs-identifier hs-var">endswith</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;\&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349634"><span class="hs-identifier hs-var">str</span></a></span><span>
+</span><a href="#local-6989586621679222957"><span class="hs-identifier hs-var">str</span></a></span><span>
 </span><span id="line-238"></span><span>                               </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
 forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
@@ -595,20 +602,20 @@ forall a. HasCallStack =&gt; [a] -&gt; [a]
 </span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349634"><span class="hs-identifier hs-var">str</span></a></span><span>
+</span><a href="#local-6989586621679222957"><span class="hs-identifier hs-var">str</span></a></span><span>
 </span><span id="line-239"></span><span>                               </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
 forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot;SMT response violates quotes in pattern.\nExpected (:&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349621"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222944"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot; \&quot;&lt;name&gt;\&quot;)\nActual &quot;</span></span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-240"></span><span>                   </span><span class="annot"><span class="annottext">Maybe [Char]
 </span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
 forall a. HasCallStack =&gt; [Char] -&gt; a
@@ -616,13 +623,13 @@ forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span class="hs-string">&quot;SMT response violates info in pattern.\nExpected (:&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349621"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222944"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot; \&quot;&lt;name&gt;\&quot;)\nActual &quot;</span></span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-241"></span><span>        </span><span class="hs-keyword">else</span><span>
 </span><span id="line-242"></span><span>            </span><span class="annot"><span class="annottext">[Char] -&gt; SMT [Char]
 forall a. HasCallStack =&gt; [Char] -&gt; a
@@ -630,13 +637,13 @@ forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span class="hs-string">&quot;SMT response violates brackets in pattern.\nExpected (:&quot;</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349621"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222944"><span class="hs-identifier hs-var">info</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
 </span><span class="hs-string">&quot; \&quot;&lt;name&gt;\&quot;)\nActual &quot;</span></span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349623"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222946"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-243"></span><span>
 </span><span id="line-244"></span><span>
 </span><span id="line-245"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
@@ -664,30 +671,30 @@ forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span id="line-257"></span><span class="annot"><span class="hs-comment">-- | execute the SMT command given as a string</span></span><span>
 </span><span id="line-258"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier hs-type">put</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
 </span><span id="line-259"></span><span id="put"><span class="annot"><span class="annottext">put :: [Char] -&gt; SMT ()
-</span><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier hs-var hs-var">put</span></a></span></span><span> </span><span id="local-6989586621679349635"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349635"><span class="hs-identifier hs-var">cmd</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-260"></span><span>    </span><span id="local-6989586621679349636"><span class="annot"><span class="annottext">SmtEnv
-</span><a href="#local-6989586621679349636"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">StateT SmtEnv IO SmtEnv
+</span><a href="Lattest.SMT.SMTInternal.html#put"><span class="hs-identifier hs-var hs-var">put</span></a></span></span><span> </span><span id="local-6989586621679222958"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222958"><span class="hs-identifier hs-var">cmd</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-260"></span><span>    </span><span id="local-6989586621679222959"><span class="annot"><span class="annottext">SmtEnv
+</span><a href="#local-6989586621679222959"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">StateT SmtEnv IO SmtEnv
 forall s (m :: * -&gt; *). MonadState s m =&gt; m s
 </span><span class="hs-identifier hs-var">get</span></span><span>
-</span><span id="line-261"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349637"><span class="annot"><span class="annottext">lg :: Maybe Handle
-</span><a href="#local-6989586621679349637"><span class="hs-identifier hs-var hs-var">lg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; Maybe Handle
+</span><span id="line-261"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222960"><span class="annot"><span class="annottext">lg :: Maybe Handle
+</span><a href="#local-6989586621679222960"><span class="hs-identifier hs-var hs-var">lg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; Maybe Handle
 </span><a href="Lattest.SMT.SMTData.html#logFileHandle"><span class="hs-identifier hs-var">logFileHandle</span></a></span><span> </span><span class="annot"><span class="annottext">SmtEnv
-</span><a href="#local-6989586621679349636"><span class="hs-identifier hs-var">st</span></a></span><span>
-</span><span id="line-262"></span><span>        </span><span id="local-6989586621679349638"><span class="annot"><span class="annottext">hin :: Handle
-</span><a href="#local-6989586621679349638"><span class="hs-identifier hs-var hs-var">hin</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; Handle
+</span><a href="#local-6989586621679222959"><span class="hs-identifier hs-var">st</span></a></span><span>
+</span><span id="line-262"></span><span>        </span><span id="local-6989586621679222961"><span class="annot"><span class="annottext">hin :: Handle
+</span><a href="#local-6989586621679222961"><span class="hs-identifier hs-var hs-var">hin</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; Handle
 </span><a href="Lattest.SMT.SMTData.html#inHandle"><span class="hs-identifier hs-var">inHandle</span></a></span><span> </span><span class="annot"><span class="annottext">SmtEnv
-</span><a href="#local-6989586621679349636"><span class="hs-identifier hs-var">st</span></a></span><span>
+</span><a href="#local-6989586621679222959"><span class="hs-identifier hs-var">st</span></a></span><span>
 </span><span id="line-263"></span><span>      </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">do</span><span>
 </span><span id="line-264"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe Handle
-</span><a href="#local-6989586621679349637"><span class="hs-identifier hs-var">lg</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><a href="#local-6989586621679222960"><span class="hs-identifier hs-var">lg</span></a></span><span> </span><span class="hs-keyword">of</span><span>
 </span><span id="line-265"></span><span>            </span><span class="annot"><span class="annottext">Maybe Handle
 </span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">() -&gt; SMT ()
 forall a. a -&gt; StateT SmtEnv IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
-</span><span id="line-266"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679349640"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349640"><span class="hs-identifier hs-var">h</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; SMT ()
+</span><span id="line-266"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679222963"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222963"><span class="hs-identifier hs-var">h</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; SMT ()
 forall (m :: * -&gt; *) a. Monad m =&gt; m a -&gt; StateT SmtEnv m a
 forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
 (MonadTrans t, Monad m) =&gt;
@@ -696,8 +703,8 @@ m a -&gt; t m a
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
 </span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349640"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349635"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><a href="#local-6989586621679222963"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222958"><span class="hs-identifier hs-var">cmd</span></a></span><span>
 </span><span id="line-267"></span><span>        </span><span class="annot"><span class="annottext">IO () -&gt; SMT ()
 forall (m :: * -&gt; *) a. Monad m =&gt; m a -&gt; StateT SmtEnv m a
 forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
@@ -707,8 +714,8 @@ m a -&gt; t m a
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
 </span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349638"><span class="hs-identifier hs-var">hin</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349635"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><a href="#local-6989586621679222961"><span class="hs-identifier hs-var">hin</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222958"><span class="hs-identifier hs-var">cmd</span></a></span><span>
 </span><span id="line-268"></span><span>
 </span><span id="line-269"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#putT"><span class="hs-identifier hs-type">putT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
 </span><span id="line-270"></span><span id="putT"><span class="annot"><span class="annottext">putT :: Text -&gt; SMT ()
@@ -719,10 +726,10 @@ forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-identifier hs-var">T.unpack</span></span><span>
 </span><span id="line-271"></span><span>
 </span><span id="line-272"></span><span class="annot"><span class="hs-comment">-- | Transform value expression to an SMT string.</span></span><span>
-</span><span id="line-273"></span><span id="local-6989586621679349340"><span class="annot"><a href="Lattest.SMT.SMTInternal.html#valExprToString"><span class="hs-identifier hs-type">valExprToString</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#ConstType"><span class="hs-identifier hs-type">ConstType</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679349340"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.SMT.TXS2SMT.html#ConstToSMT"><span class="hs-identifier hs-type">ConstToSMT</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679349340"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Expr"><span class="hs-identifier hs-type">Expr</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679349340"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span></span><span>
-</span><span id="line-274"></span><span id="valExprToString"><span class="annot"><span class="annottext">valExprToString :: forall t. (ConstType t, ConstToSMT t) =&gt; Expr t -&gt; SMT Text
-</span><a href="Lattest.SMT.SMTInternal.html#valExprToString"><span class="hs-identifier hs-var hs-var">valExprToString</span></a></span></span><span> </span><span id="local-6989586621679349648"><span class="annot"><span class="annottext">Expr t
-</span><a href="#local-6989586621679349648"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-273"></span><span id="local-6989586621679222664"><span class="annot"><a href="Lattest.SMT.SMTInternal.html#valExprToString"><span class="hs-identifier hs-type">valExprToString</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.TXS2SMT.html#ConstToSMT"><span class="hs-identifier hs-type">ConstToSMT</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679222664"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Expr"><span class="hs-identifier hs-type">Expr</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679222664"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span></span><span>
+</span><span id="line-274"></span><span id="valExprToString"><span class="annot"><span class="annottext">valExprToString :: forall t. ConstToSMT t =&gt; Expr t -&gt; SMT Text
+</span><a href="Lattest.SMT.SMTInternal.html#valExprToString"><span class="hs-identifier hs-var hs-var">valExprToString</span></a></span></span><span> </span><span id="local-6989586621679222970"><span class="annot"><span class="annottext">Expr t
+</span><a href="#local-6989586621679222970"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
 </span><span id="line-275"></span><span class="hs-comment">--  mapI &lt;- gets envNames</span><span>
 </span><span id="line-276"></span><span>  </span><span class="annot"><span class="annottext">Text -&gt; SMT Text
 forall a. a -&gt; StateT SmtEnv IO a
@@ -732,98 +739,98 @@ forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Expr t -&gt; Text
 forall t. ConstToSMT t =&gt; Expr t -&gt; Text
 </span><a href="Lattest.SMT.TXS2SMT.html#valexprToSMT"><span class="hs-identifier hs-var">valexprToSMT</span></a></span><span> </span><span class="annot"><span class="annottext">Expr t
-</span><a href="#local-6989586621679349648"><span class="hs-identifier hs-var">v</span></a></span><span>
+</span><a href="#local-6989586621679222970"><span class="hs-identifier hs-var">v</span></a></span><span>
 </span><span id="line-277"></span><span>
 </span><span id="line-278"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
 </span><span id="line-279"></span><span class="hs-comment">--  return error messages if any are present</span><span>
 </span><span id="line-280"></span><span class="hs-comment">--  where the given prefix is prepended to every line</span><span>
 </span><span id="line-281"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#showErrors"><span class="hs-identifier hs-type">showErrors</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
 </span><span id="line-282"></span><span id="showErrors"><span class="annot"><span class="annottext">showErrors :: Handle -&gt; [Char] -&gt; IO ()
-</span><a href="Lattest.SMT.SMTInternal.html#showErrors"><span class="hs-identifier hs-var hs-var">showErrors</span></a></span></span><span> </span><span id="local-6989586621679349650"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349650"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span id="local-6989586621679349651"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349651"><span class="hs-identifier hs-var">prefix</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-283"></span><span>    </span><span id="local-6989586621679349652"><span class="annot"><span class="annottext">Bool
-</span><a href="#local-6989586621679349652"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO Bool
+</span><a href="Lattest.SMT.SMTInternal.html#showErrors"><span class="hs-identifier hs-var hs-var">showErrors</span></a></span></span><span> </span><span id="local-6989586621679222972"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222972"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span id="local-6989586621679222973"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222973"><span class="hs-identifier hs-var">prefix</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-283"></span><span>    </span><span id="local-6989586621679222974"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679222974"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO Bool
 </span><span class="hs-identifier hs-var">hIsEOF</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349650"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><a href="#local-6989586621679222972"><span class="hs-identifier hs-var">h</span></a></span><span>
 </span><span id="line-284"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; IO () -&gt; IO ()
 forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
 </span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="annot"><span class="annottext">Bool
-</span><a href="#local-6989586621679349652"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
+</span><a href="#local-6989586621679222974"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-285"></span><span>                    </span><span id="local-6989586621679349654"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349654"><span class="hs-identifier hs-var">msg</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO [Char]
+</span><span id="line-285"></span><span>                    </span><span id="local-6989586621679222976"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222976"><span class="hs-identifier hs-var">msg</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO [Char]
 </span><span class="hs-identifier hs-var">hGetLine</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349650"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><a href="#local-6989586621679222972"><span class="hs-identifier hs-var">h</span></a></span><span>
 </span><span id="line-286"></span><span>                    </span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
 </span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
 </span><span class="hs-identifier hs-var">stderr</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349651"><span class="hs-identifier hs-var">prefix</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222973"><span class="hs-identifier hs-var">prefix</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349654"><span class="hs-identifier hs-var">msg</span></a></span><span class="hs-special">)</span><span>
+</span><a href="#local-6989586621679222976"><span class="hs-identifier hs-var">msg</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-287"></span><span>                    </span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
 </span><a href="Lattest.SMT.SMTInternal.html#showErrors"><span class="hs-identifier hs-var">showErrors</span></a></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349650"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349651"><span class="hs-identifier hs-var">prefix</span></a></span><span>
+</span><a href="#local-6989586621679222972"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222973"><span class="hs-identifier hs-var">prefix</span></a></span><span>
 </span><span id="line-288"></span><span>
 </span><span id="line-289"></span><span class="hs-comment">-- ----------------------------------------------------------------------------------------- --</span><span>
 </span><span id="line-290"></span><span class="hs-comment">-- read the response (as lines) from the handle</span><span>
 </span><span id="line-291"></span><span class="hs-comment">-- this operation is blocking until some data can be read</span><span>
 </span><span id="line-292"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getResponse"><span class="hs-identifier hs-type">getResponse</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
 </span><span id="line-293"></span><span id="getResponse"><span class="annot"><span class="annottext">getResponse :: Handle -&gt; Integer -&gt; IO [Char]
-</span><a href="Lattest.SMT.SMTInternal.html#getResponse"><span class="hs-identifier hs-var hs-var">getResponse</span></a></span></span><span> </span><span id="local-6989586621679349658"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349658"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span id="local-6989586621679349659"><span class="annot"><span class="annottext">Integer
-</span><a href="#local-6989586621679349659"><span class="hs-identifier hs-var">count</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-294"></span><span>    </span><span id="local-6989586621679349660"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349660"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO [Char]
+</span><a href="Lattest.SMT.SMTInternal.html#getResponse"><span class="hs-identifier hs-var hs-var">getResponse</span></a></span></span><span> </span><span id="local-6989586621679222980"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222980"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span id="local-6989586621679222981"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679222981"><span class="hs-identifier hs-var">count</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-294"></span><span>    </span><span id="local-6989586621679222982"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222982"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO [Char]
 </span><span class="hs-identifier hs-var">hGetLine</span></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349658"><span class="hs-identifier hs-var">h</span></a></span><span>
-</span><span id="line-295"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679349662"><span class="annot"><span class="annottext">newCount :: Integer
-</span><a href="#local-6989586621679349662"><span class="hs-identifier hs-var hs-var">newCount</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
-</span><a href="#local-6989586621679349659"><span class="hs-identifier hs-var">count</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
+</span><a href="#local-6989586621679222980"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-295"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679222984"><span class="annot"><span class="annottext">newCount :: Integer
+</span><a href="#local-6989586621679222984"><span class="hs-identifier hs-var hs-var">newCount</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679222981"><span class="hs-identifier hs-var">count</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
 forall a. Num a =&gt; a -&gt; a -&gt; a
 </span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349660"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><a href="#local-6989586621679222982"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">in</span><span>
 </span><span id="line-296"></span><span>        </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Integer
 </span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Bool
 forall a. Eq a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Integer
-</span><a href="#local-6989586621679349662"><span class="hs-identifier hs-var">newCount</span></a></span><span>
+</span><a href="#local-6989586621679222984"><span class="hs-identifier hs-var">newCount</span></a></span><span>
 </span><span id="line-297"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IO [Char]
 forall a. a -&gt; IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349660"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><a href="#local-6989586621679222982"><span class="hs-identifier hs-var">s</span></a></span><span>
 </span><span id="line-298"></span><span>            </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-299"></span><span>                    </span><span id="local-6989586621679349665"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349665"><span class="hs-identifier hs-var">tl</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; Integer -&gt; IO [Char]
+</span><span id="line-299"></span><span>                    </span><span id="local-6989586621679222987"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222987"><span class="hs-identifier hs-var">tl</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Handle -&gt; Integer -&gt; IO [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getResponse"><span class="hs-identifier hs-var">getResponse</span></a></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349658"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
-</span><a href="#local-6989586621679349662"><span class="hs-identifier hs-var">newCount</span></a></span><span>
+</span><a href="#local-6989586621679222980"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679222984"><span class="hs-identifier hs-var">newCount</span></a></span><span>
 </span><span id="line-300"></span><span>                    </span><span class="annot"><span class="annottext">[Char] -&gt; IO [Char]
 forall a. a -&gt; IO a
 forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
 </span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; IO [Char]) -&gt; [Char] -&gt; IO [Char]
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349660"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
+</span><a href="#local-6989586621679222982"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char] -&gt; [Char]
 forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349665"><span class="hs-identifier hs-var">tl</span></a></span><span>
+</span><a href="#local-6989586621679222987"><span class="hs-identifier hs-var">tl</span></a></span><span>
 </span><span id="line-301"></span><span>
 </span><span id="line-302"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#getSMTresponse"><span class="hs-identifier hs-type">getSMTresponse</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTData.html#SMT"><span class="hs-identifier hs-type">SMT</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
 </span><span id="line-303"></span><span id="getSMTresponse"><span class="annot"><span class="annottext">getSMTresponse :: SMT [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getSMTresponse"><span class="hs-identifier hs-var hs-var">getSMTresponse</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-304"></span><span>    </span><span id="local-6989586621679349666"><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349666"><span class="hs-identifier hs-var">hout</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(SmtEnv -&gt; Handle) -&gt; StateT SmtEnv IO Handle
+</span><span id="line-304"></span><span>    </span><span id="local-6989586621679222988"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679222988"><span class="hs-identifier hs-var">hout</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(SmtEnv -&gt; Handle) -&gt; StateT SmtEnv IO Handle
 forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
 </span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; Handle
 </span><a href="Lattest.SMT.SMTData.html#outHandle"><span class="hs-identifier hs-var">outHandle</span></a></span><span>
-</span><span id="line-305"></span><span>    </span><span id="local-6989586621679349668"><span class="annot"><span class="annottext">ProcessHandle
-</span><a href="#local-6989586621679349668"><span class="hs-identifier hs-var">ph</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(SmtEnv -&gt; ProcessHandle) -&gt; StateT SmtEnv IO ProcessHandle
+</span><span id="line-305"></span><span>    </span><span id="local-6989586621679222990"><span class="annot"><span class="annottext">ProcessHandle
+</span><a href="#local-6989586621679222990"><span class="hs-identifier hs-var">ph</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(SmtEnv -&gt; ProcessHandle) -&gt; StateT SmtEnv IO ProcessHandle
 forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
 </span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">SmtEnv -&gt; ProcessHandle
 </span><a href="Lattest.SMT.SMTData.html#smtProcessHandle"><span class="hs-identifier hs-var">smtProcessHandle</span></a></span><span>
@@ -836,21 +843,21 @@ m a -&gt; t m a
 forall a b. (a -&gt; b) -&gt; a -&gt; b
 </span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; Integer -&gt; IO [Char]
 </span><a href="Lattest.SMT.SMTInternal.html#getResponse"><span class="hs-identifier hs-var">getResponse</span></a></span><span> </span><span class="annot"><span class="annottext">Handle
-</span><a href="#local-6989586621679349666"><span class="hs-identifier hs-var">hout</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679222988"><span class="hs-identifier hs-var">hout</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
 </span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">IO [Char] -&gt; IO () -&gt; IO [Char]
 forall a b. IO a -&gt; IO b -&gt; IO a
 </span><span class="hs-operator hs-var">`onException`</span></span><span> </span><span class="annot"><span class="annottext">ProcessHandle -&gt; IO ()
-</span><a href="#local-6989586621679349669"><span class="hs-identifier hs-var">exitWithError</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessHandle
-</span><a href="#local-6989586621679349668"><span class="hs-identifier hs-var">ph</span></a></span><span>
+</span><a href="#local-6989586621679222991"><span class="hs-identifier hs-var">exitWithError</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessHandle
+</span><a href="#local-6989586621679222990"><span class="hs-identifier hs-var">ph</span></a></span><span>
 </span><span id="line-307"></span><span>    </span><span class="hs-keyword">where</span><span>
-</span><span id="line-308"></span><span>      </span><span class="annot"><a href="#local-6989586621679349669"><span class="hs-identifier hs-type">exitWithError</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessHandle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
-</span><span id="line-309"></span><span>      </span><span id="local-6989586621679349669"><span class="annot"><span class="annottext">exitWithError :: ProcessHandle -&gt; IO ()
-</span><a href="#local-6989586621679349669"><span class="hs-identifier hs-var hs-var">exitWithError</span></a></span></span><span> </span><span id="local-6989586621679349670"><span class="annot"><span class="annottext">ProcessHandle
-</span><a href="#local-6989586621679349670"><span class="hs-identifier hs-var">procHandle</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><span id="line-310"></span><span>        </span><span id="local-6989586621679349671"><span class="annot"><span class="annottext">Maybe ExitCode
-</span><a href="#local-6989586621679349671"><span class="hs-identifier hs-var">ec</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ProcessHandle -&gt; IO (Maybe ExitCode)
+</span><span id="line-308"></span><span>      </span><span class="annot"><a href="#local-6989586621679222991"><span class="hs-identifier hs-type">exitWithError</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessHandle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-309"></span><span>      </span><span id="local-6989586621679222991"><span class="annot"><span class="annottext">exitWithError :: ProcessHandle -&gt; IO ()
+</span><a href="#local-6989586621679222991"><span class="hs-identifier hs-var hs-var">exitWithError</span></a></span></span><span> </span><span id="local-6989586621679222992"><span class="annot"><span class="annottext">ProcessHandle
+</span><a href="#local-6989586621679222992"><span class="hs-identifier hs-var">procHandle</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-310"></span><span>        </span><span id="local-6989586621679222993"><span class="annot"><span class="annottext">Maybe ExitCode
+</span><a href="#local-6989586621679222993"><span class="hs-identifier hs-var">ec</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ProcessHandle -&gt; IO (Maybe ExitCode)
 </span><span class="hs-identifier hs-var">getProcessExitCode</span></span><span> </span><span class="annot"><span class="annottext">ProcessHandle
-</span><a href="#local-6989586621679349670"><span class="hs-identifier hs-var">procHandle</span></a></span><span>
+</span><a href="#local-6989586621679222992"><span class="hs-identifier hs-var">procHandle</span></a></span><span>
 </span><span id="line-311"></span><span>        </span><span class="hs-comment">-- The output and error handles of the SMT process are closed when this</span><span>
 </span><span id="line-312"></span><span>        </span><span class="hs-comment">-- error occurs (maybe because they're pipes?) so no information can be</span><span>
 </span><span id="line-313"></span><span>        </span><span class="hs-comment">-- given to the user, other than this.</span><span>
@@ -863,7 +870,7 @@ forall a. [a] -&gt; [a] -&gt; [a]
 </span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">Maybe ExitCode -&gt; [Char]
 forall a. Show a =&gt; a -&gt; [Char]
 </span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">Maybe ExitCode
-</span><a href="#local-6989586621679349671"><span class="hs-identifier hs-var">ec</span></a></span><span>
+</span><a href="#local-6989586621679222993"><span class="hs-identifier hs-var">ec</span></a></span><span>
 </span><span id="line-315"></span><span>        </span><span class="annot"><span class="annottext">[Char] -&gt; IO ()
 forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">[Char]
@@ -872,31 +879,31 @@ forall a. HasCallStack =&gt; [Char] -&gt; a
 </span><span id="line-317"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-type">countBracket</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span>
 </span><span id="line-318"></span><span id="countBracket"><span class="annot"><span class="annottext">countBracket :: [Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var hs-var">countBracket</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
-</span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349674"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349674"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
+</span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679222996"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222996"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var">skipCountInsideString</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349674"><span class="hs-identifier hs-var">xs</span></a></span><span>          </span><span class="hs-comment">-- ignore brackets inside strings</span><span>
+</span><a href="#local-6989586621679222996"><span class="hs-identifier hs-var">xs</span></a></span><span>          </span><span class="hs-comment">-- ignore brackets inside strings</span><span>
 </span><span id="line-319"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
-</span><span class="hs-char">'('</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349676"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349676"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-char">'('</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679222998"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222998"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
 </span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
 forall a. Num a =&gt; a -&gt; a -&gt; a
 </span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349676"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><a href="#local-6989586621679222998"><span class="hs-identifier hs-var">xs</span></a></span><span>
 </span><span id="line-320"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
-</span><span class="hs-char">')'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349677"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349677"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-char">')'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679222999"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679222999"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Integer
 </span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer
 forall a. Num a =&gt; a -&gt; a -&gt; a
 </span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349677"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><a href="#local-6989586621679222999"><span class="hs-identifier hs-var">xs</span></a></span><span>
 </span><span id="line-321"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
-</span><span class="hs-identifier">_</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349678"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349678"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
+</span><span class="hs-identifier">_</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679223000"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679223000"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349678"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><a href="#local-6989586621679223000"><span class="hs-identifier hs-var">xs</span></a></span><span>
 </span><span id="line-322"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>       </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
 </span><span class="hs-number">0</span></span><span>
 </span><span id="line-323"></span><span>
@@ -904,20 +911,20 @@ forall a. Num a =&gt; a -&gt; a -&gt; a
 </span><span id="line-325"></span><span id="skipCountInsideString"><span class="annot"><span class="annottext">skipCountInsideString :: [Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var hs-var">skipCountInsideString</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
 </span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">Char
-</span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349679"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349679"><span class="hs-identifier hs-var">xxs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
+</span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679223001"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679223001"><span class="hs-identifier hs-var">xxs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var">skipCountInsideString</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349679"><span class="hs-identifier hs-var">xxs</span></a></span><span>       </span><span class="hs-comment">-- escape quote, stay in string</span><span>
+</span><a href="#local-6989586621679223001"><span class="hs-identifier hs-var">xxs</span></a></span><span>       </span><span class="hs-comment">-- escape quote, stay in string</span><span>
 </span><span id="line-326"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var">skipCountInsideString</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
-</span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349680"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349680"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
+</span><span class="hs-char">'&quot;'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679223002"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679223002"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#countBracket"><span class="hs-identifier hs-var">countBracket</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349680"><span class="hs-identifier hs-var">xs</span></a></span><span>            </span><span class="hs-comment">-- outside string</span><span>
+</span><a href="#local-6989586621679223002"><span class="hs-identifier hs-var">xs</span></a></span><span>            </span><span class="hs-comment">-- outside string</span><span>
 </span><span id="line-327"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var">skipCountInsideString</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
-</span><span class="hs-identifier">_</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679349681"><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349681"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>        </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
+</span><span class="hs-identifier">_</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679223003"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679223003"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>        </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Integer
 </span><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var">skipCountInsideString</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
-</span><a href="#local-6989586621679349681"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><a href="#local-6989586621679223003"><span class="hs-identifier hs-var">xs</span></a></span><span>
 </span><span id="line-328"></span><span class="annot"><a href="Lattest.SMT.SMTInternal.html#skipCountInsideString"><span class="hs-identifier hs-var">skipCountInsideString</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>            </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
 </span><span class="hs-number">0</span></span><span>
 </span><span id="line-329"></span></pre></body></html>
