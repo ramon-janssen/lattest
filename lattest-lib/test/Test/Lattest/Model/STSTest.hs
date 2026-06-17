@@ -4,6 +4,7 @@
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testLatticeCoffeeSTS,
     testErrorThrowingGates,
     testSTSUnHappyFlow,
     testPrintSTS,
@@ -28,7 +29,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden, FreeLatticeCNF, atom)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -203,6 +204,69 @@ testSTSTestSelection = TestCase $ do
     where
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
+
+stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
+stsExample2 =
+    let p = sVar pvar
+        x = sVar xvar
+        water = SymInteract (In "water") [pvar]
+        ok = SymInteract (Out "ok") [pvar]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .<= p .&& p .<= 4
+        waterGuard1 = 4 .<= p .&& p .<= 10
+        waterAssign = assignment [xvar =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= 15
+        initConf = atom 0
+        switches = \q -> case q of
+            0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1) /\ atom (stsTLoc waterGuard1 waterAssign, 2) )]
+            1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
+        initConf2 = atom 0 /\ atom 2
+        switches2 = \q -> case q of
+            0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1))]
+            1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.fromList [(water, atom (stsTLoc waterGuard1 waterAssign, 3))]
+            3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
+    in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
+
+stsExampleIntrpr2a :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
+
+stsExampleIntrpr2b :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
+
+getSTSValuation :: Integer -> Valuation
+getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+
+getSTSIntrpState2 :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
+getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
+
+testLatticeCoffeeSTS :: Test
+testLatticeCoffeeSTS = TestCase $ do
+     assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2a)
+     assertEqual "\ninitial state " (getSTSIntrpState2 0 0 /\ getSTSIntrpState2 2 0) (stateConf stsExampleIntrpr2b)
+     let intrp2a = after stsExampleIntrpr2a (GateValue (In "water") [Cint 3])
+     assertEqual "2a after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2a)
+     let intrp2b = after stsExampleIntrpr2b (GateValue (In "water") [Cint 3])
+     assertEqual "2b after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2b)
+     let intrp3a = after intrp2a (GateValue (Out "ok") [Cint 3])
+     assertEqual "2a after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3a)
+     let intrp3b = after intrp2b (GateValue (Out "ok") [Cint 3])
+     assertEqual "2b after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3b)
+     let intrp4a = after intrp3a (GateValue (In "water") [Cint 4])
+     assertEqual "2a after water 4: " (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7) (stateConf intrp4a)
+     let intrp4b = after intrp3b (GateValue (In "water") [Cint 4])
+     assertEqual "2b after water 4: "  (getSTSIntrpState2 1 7) (stateConf intrp4b)
+     let intrp5a = after intrp4a (GateValue (Out "ok") [Cint 7])
+     assertEqual "2a after ok 7: " (getSTSIntrpState2 0 7) (stateConf intrp5a)
+     let intrp5b = after intrp4b (GateValue (Out "ok") [Cint 7])
+     assertEqual "2b after ok 7: " (getSTSIntrpState2 0 7) (stateConf intrp5b)
+     let intrp6a = after intrp5a (GateValue (In "water") [Cint 5])
+     assertEqual "2a after water 5: " (getSTSIntrpState2 2 12) (stateConf intrp6a)
+     let intrp6b = after intrp5b (GateValue (In "water") [Cint 5])
+     assertEqual "2b after water 5: " underspecified (stateConf intrp6b)
+
 
 {- specification:
                         end(p,q)    
