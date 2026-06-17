@@ -8,7 +8,7 @@ import qualified Data.Maybe as Maybe
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.Alphabet (IOSuspGateValue, GateValue)
 import           Lattest.Model.StandardAutomata
-import           Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
+import           Lattest.Exec.Testing(runTester)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Util.STSJSONParser (stsFromJSONFile)
 
