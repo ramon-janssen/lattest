@@ -27,7 +27,7 @@ nonDetConcTransFromMRel,
 nonDetConcTransFromListRel,
 -- *** Alternating state configurations
 -- | Re-exports, so that test scripts don't need to import BoundedMonad separately
-FreeLattice,
+FreeLatticeCNF,
 atom,
 top,
 bot,
@@ -62,7 +62,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
-import Lattest.Model.BoundedMonad (Det(..), NonDet(..), FreeLattice, BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
+import Lattest.Model.BoundedMonad (Det(..), NonDet(..), BoundedMonad, FreeLatticeCNF, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 

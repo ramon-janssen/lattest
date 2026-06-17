@@ -11,7 +11,7 @@
     model the difference between internal and observable state, we define automata as having a type of internal state, say q, and
     an observable state configuration over q.
     
-    In this module, we define three such state configurations:
+    In this module, we define two such state configurations:
     
     * deterministic state configurations, where every behaviour leads to a single state,
     * non-deterministic state configurations, where given observable behaviour may lead to a set of states, and
@@ -37,13 +37,11 @@ Det(..),
 -- ** Non-deterministic
 NonDet(..),
 nonDet,
--- ** Distributive lattice
-FreeLattice,
+-- ** Distributive lattice in CNF
+FreeLatticeCNF(FreeLatticeCNF),
 atom,
 top,
 bot,
--- ** Distributive lattice in CNF
-FreeLatticeCNF(FreeLatticeCNF),
 -- * Specifiednesss
 Specifiedness(..),
 BoundedConfiguration,
@@ -173,66 +171,9 @@ instance (Ord a) => JoinSemiLattice (NonDet a) where
     (\/) (NonDet q1) (NonDet q2) = NonDet (Set.union q1 q2)
     (\/) _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
 
-{-|
-    Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
-
-    __Warning__: this implementation is functionally correct, but not very efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', since no reductions are performed.
--}
-newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
-
-deriving instance Ord a => Ord (FreeLattice a)
-deriving instance Ord a => Ord (Free a)
-
-{-
--- Conjunction and disjunction on free distributive lattices.
--- note: this is already imlpemented by the JoinSemiLattice instance
-(\/) :: FreeLattice a -> FreeLattice a -> FreeLattice a
-(\/) = (L.\/)
-
--- | Conjunction on free distributive lattices.
-(/\) :: FreeLattice a -> FreeLattice a -> FreeLattice a
-(/\) = (L./\)
--}
 
 {-|
-    An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
-    where state configurations top and bottom, or true and false, indicate underspecified and forbidden configurations, respectively.
--}
-instance BoundedConfiguration FreeLattice where
-    isForbidden (FreeLattice Bottom) = True
-    isForbidden _ = False
-    isUnderspecified (FreeLattice Top) = True
-    isUnderspecified _ = False
-    forbidden = FreeLattice Bottom
-    underspecified = FreeLattice Top
-
-instance Applicative FreeLattice where
-    pure = FreeLattice . Levitate . Var
-    (<*>) = ap
-
-instance Monad FreeLattice where
-    (FreeLattice Bottom) >>= _ = FreeLattice Bottom
-    (FreeLattice Top) >>= _ = FreeLattice Top
-    (FreeLattice (Levitate x)) >>= f = lowerFree f x
-
-instance Show a => Show (FreeLattice a) where
-    show (FreeLattice Top) = "⊤"
-    show (FreeLattice Bottom) = "⊥"
-    show (FreeLattice (Levitate a)) = show' a
-        where
-        show' (Var a') = show a'
-        show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
-        show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
-
-instance JoinSemiLattice (FreeLattice a) where
-    (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
-
-instance MeetSemiLattice (FreeLattice a) where
-    (/\) = (L./\) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
-
-{-|
-    Free distributive lattice, or a positive boolean formula, in CNF-format. Behaviourally, this is equivalent to the standard `FreeLattice`, but the size is bounded by the normal form.
-    This makes it potentially more efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>=', but also potentially slightly /less/ efficient for small lattices.
+    Free distributive lattice, or a positive boolean formula, in CNF-format. 
 -}
 newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
 
@@ -371,15 +312,6 @@ instance BooleanConfiguration Det where
 instance BooleanConfiguration NonDet where
     asExpr (NonDet qs) = E.sOr qs
     asExpr UnderspecNonDet = E.sTrue
-
-instance BooleanConfiguration FreeLattice where
-    asExpr (FreeLattice Top) = E.sTrue
-    asExpr (FreeLattice Bottom) = E.sFalse
-    asExpr (FreeLattice (Levitate a)) = asExpr' a
-        where
-        asExpr' (Var a') = a'
-        asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
-        asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 
 instance BooleanConfiguration FreeLatticeCNF where
     asExpr (FreeLatticeCNF x) = Set.foldr (E..&&) E.sTrue $ Set.map (Set.foldr (E..||) E.sFalse) x
