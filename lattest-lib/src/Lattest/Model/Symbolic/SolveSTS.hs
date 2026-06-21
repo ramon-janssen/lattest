@@ -68,48 +68,53 @@ stateAndInteractToGuards aut interaction (IntrpState l valuation) =
     FIXME replace `interactToGuard` and `stateAndInteractToGuards` by the code below entirely, since
     a 1-step lookahead is just a specific version of the n-step lookahead.
 -}
-data SymbExecTree g = SymbExecTree {
-    pathCondition :: SymGuard,
-    children :: Map.Map (SymInteract g) (SymbExecTree g)
+data SolverTree g = SolverTree {
+    traceCondition :: SymGuard,
+    traceChildren :: Map.Map (SymInteract g) (SolverTree g)
     } deriving (Eq, Ord)
 
-data MonadSymExecNode loc = MonadSymExecNode {
+data SymExecNodeElem loc = SymExecNodeElem {
     loc :: loc,
     symAssign :: VarModel,
-    pathCondition' :: SymGuard
-}
+    pathCondition :: SymGuard
+} deriving (Eq, Ord)
 
-data MonadSymExecTree m loc g = MonadSymExecTree {
-    node :: m (MonadSymExecNode loc),
+data SymExecTree m loc g = SymExecTree {
+    node :: m (SymExecNodeElem loc),
     depth :: Int,
-    mChildren :: Map.Map (SymInteract g) (MonadSymExecTree m loc g)
+    pathChildren :: Map.Map (SymInteract g) (SymExecTree m loc g)
 }
 
 interactsToGuard :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
-interactsToGuard intrpr = interactsToGuard' (symbolicExecutionTree intrpr)
+interactsToGuard intrpr = interactsToGuard' $ toSolveTree $ symbolicExecutionTree intrpr
     where
-    interactsToGuard' seg [] = pathCondition seg
+    interactsToGuard' seg [] = traceCondition seg
     interactsToGuard' seg (i:is) =
-        case Map.lookup i (children seg) of
+        case Map.lookup i (traceChildren seg) of
             Nothing -> error "interaction not in seg" -- FIXME nicer error handling
             Just seg' -> interactsToGuard' seg' is
 
-symbolicExecutionTree :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymbExecTree g
+
+toSolveTree :: (BooleanConfiguration m, BM.OrdMonad m) => SymExecTree m loc g -> SolverTree g
+toSolveTree tree =
+    let cond = asDualExpr $ BM.ordMap pathCondition $ node tree
+        children = Map.map toSolveTree $ pathChildren tree
+    in SolverTree cond children
+
+symbolicExecutionTree :: (BM.OrdMonad m, Foldable m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymExecTree m loc g
 symbolicExecutionTree intrpr = symbExecTree 0 $ BM.ordMap initializeExecNodeElem $ stateConf intrpr
     where
     initializeExecNodeElem (IntrpState loc vals) =
         let initialVarModel = indexLeft 0 $ valuationToVarModel vals
-        in (varsToGuard initialVarModel, loc, initialVarModel)
+        in SymExecNodeElem loc initialVarModel $ varsToGuard initialVarModel
     --symbExecTree :: Int -> m (SymGuard, loc, VarModel) -> SymbExecTree g
-    symbExecTree pDepth execConf = 
-        let cond = asDualExpr $ BM.ordMap fst3 execConf
-        in SymbExecTree cond $ children pDepth execConf
+    symbExecTree pDepth execConf = SymExecTree execConf pDepth $ children pDepth execConf
     --children :: Int -> m (SymGuard, loc, VarModel) -> Map.Map (SymInteract g) (SymbExecTree g)
     children pDepth parentExecConf = Map.fromSet (pathStep pDepth parentExecConf) (alphabet $ syntacticAutomaton intrpr)
     --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract g -> SymbExecTree g
     pathStep pDepth parentExecConf interaction = symbExecTree (pDepth + 1) (parentExecConf BM.>># pathStep' pDepth interaction)
     --pathStep' :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> SymInteract g -> (SymGuard, loc, VarModel) -> m (SymGuard, loc, VarModel)
-    pathStep' pDepth interaction (pCond, pLoc, pVars)  = 
+    pathStep' pDepth interaction (SymExecNodeElem pLoc pVars pCond)  = 
         case Map.lookup interaction (transRel (syntacticAutomaton intrpr) pLoc) of
             Nothing -> throw $ ActionOutsideAlphabet callStack
             Just mtdestloc -> BM.ordMap (addToPath pDepth pVars pCond) mtdestloc
@@ -120,7 +125,7 @@ symbolicExecutionTree intrpr = symbExecTree 0 $ BM.ordMap initializeExecNodeElem
                 pathLoc = tloc
                 pathAssign = pVars `varUnion` indexedAssign
                 pathCondition = pCond .&& varsToGuard indexedAssign .&& indexExpr pDepth tguard -- TODO the assigment could also be added via substitution, resulting in less intermediate variables
-            in (pathCondition, pathLoc, pathAssign)
+            in SymExecNodeElem pathLoc pathAssign pathCondition
     locVarSet =
         let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
         in case mArbitraryState of
