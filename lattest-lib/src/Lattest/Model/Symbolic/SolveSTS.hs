@@ -75,7 +75,7 @@ data SymbExecTree g = SymbExecTree {
     } deriving (Eq, Ord)
 
 interactsToGuard :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
-interactsToGuard intrpr = interactsToGuard' (symbolicExecutionGraph intrpr)
+interactsToGuard intrpr = interactsToGuard' (symbolicExecutionTree intrpr)
     where
     interactsToGuard' seg [] = pathCondition seg
     interactsToGuard' seg (i:is) =
@@ -83,47 +83,49 @@ interactsToGuard intrpr = interactsToGuard' (symbolicExecutionGraph intrpr)
             Nothing -> error "interaction not in seg" -- FIXME nicer error handling
             Just seg' -> interactsToGuard' seg' is
 
-symbolicExecutionGraph :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymbExecTree g
-symbolicExecutionGraph intrpr = symbExecTree 0 $ BM.ordMap initializeExecState $ stateConf intrpr
+symbolicExecutionTree :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymbExecTree g
+symbolicExecutionTree intrpr = symbExecTree 0 $ BM.ordMap initializeExecNodeElem $ stateConf intrpr
     where
-    initializeExecState (IntrpState loc vals) =
-        let initialVarModel = addVarPrimes 0 $ valuationToVarModel vals
+    initializeExecNodeElem (IntrpState loc vals) =
+        let initialVarModel = indexLeft 0 $ valuationToVarModel vals
         in (varsToGuard initialVarModel, loc, initialVarModel)
     --symbExecTree :: Int -> m (SymGuard, loc, VarModel) -> SymbExecTree g
-    symbExecTree depth execConf = 
+    symbExecTree pDepth execConf = 
         let cond = asDualExpr $ BM.ordMap fst3 execConf
-        in SymbExecTree cond $ children depth execConf
+        in SymbExecTree cond $ children pDepth execConf
     --children :: Int -> m (SymGuard, loc, VarModel) -> Map.Map (SymInteract g) (SymbExecTree g)
-    children depth parentExecConf = Map.fromSet (pathStep depth parentExecConf) (alphabet $ syntacticAutomaton intrpr)
+    children pDepth parentExecConf = Map.fromSet (pathStep pDepth parentExecConf) (alphabet $ syntacticAutomaton intrpr)
     --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract g -> SymbExecTree g
-    pathStep depth parentExecConf interaction = symbExecTree (depth + 1) (parentExecConf BM.>># pathStep' depth interaction)
+    pathStep pDepth parentExecConf interaction = symbExecTree (pDepth + 1) (parentExecConf BM.>># pathStep' pDepth interaction)
     --pathStep' :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> SymInteract g -> (SymGuard, loc, VarModel) -> m (SymGuard, loc, VarModel)
-    pathStep' depth interaction (pCond, pLoc, pVars)  = 
+    pathStep' pDepth interaction (pCond, pLoc, pVars)  = 
         case Map.lookup interaction (transRel (syntacticAutomaton intrpr) pLoc) of
             Nothing -> throw $ ActionOutsideAlphabet callStack
-            Just mtdestloc -> BM.ordMap (addToPath depth pVars pCond) mtdestloc
+            Just mtdestloc -> BM.ordMap (addToPath pDepth pVars pCond) mtdestloc
         where
-        addToPath depth pVars pCond (STSLoc (tguard, tassign), tloc) =
-            let completeAssign = tassign `varUnion` identityVarModel stateVars 
-                primedAssign = addVarPrimes (depth + 1) $ addValPrimes depth completeAssign
+        addToPath pDepth pVars pCond (STSLoc (tguard, tassign), tloc) =
+            let completedAssign = tassign `varUnion` identityVarModel locVarSet
+                indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
                 pathLoc = tloc
-                pathVars = pVars `varUnion` primedAssign
-                pathCondition = pCond .&& varsToGuard primedAssign .&& mapExpressionVars (varToPrime depth) tguard -- TODO the varsToGuard could also be done with substitution, resulting in less intermediate variables
-            in (pathCondition, pathLoc, pathVars)
-    stateVars =
+                pathAssign = pVars `varUnion` indexedAssign
+                pathCondition = pCond .&& varsToGuard indexedAssign .&& indexExpr pDepth tguard -- TODO the assigment could also be added via substitution, resulting in less intermediate variables
+            in (pathCondition, pathLoc, pathAssign)
+    locVarSet =
         let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
-    addVarPrimes :: Int -> VarModel -> VarModel
-    addVarPrimes 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
-    addVarPrimes n = mapVars $ varToPrime n
-    addValPrimes :: Int -> VarModel -> VarModel
-    addValPrimes 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
-    addValPrimes n = mapVarExprs $ varToPrime n
-    varToPrime :: Int -> Variable -> Variable
-    varToPrime 0 v = v
-    varToPrime n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
+    indexLeft :: Int -> VarModel -> VarModel
+    indexLeft 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
+    indexLeft n = mapVars $ indexVar n
+    indexRight :: Int -> VarModel -> VarModel
+    indexRight 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
+    indexRight n = mapVarExprs $ indexVar n
+    indexExpr :: Int -> Expr t -> Expr t
+    indexExpr n e = mapExpressionVars (indexVar n) e
+    indexVar :: Int -> Variable -> Variable
+    indexVar 0 v = v
+    indexVar n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
     fst3 (x,_,_) = x
 
 
