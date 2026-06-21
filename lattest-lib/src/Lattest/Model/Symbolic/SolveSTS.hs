@@ -67,7 +67,6 @@ stateAndInteractToGuards aut interaction (IntrpState l valuation) =
 {-
     FIXME replace `interactToGuard` and `stateAndInteractToGuards` by the code below entirely, since
     a 1-step lookahead is just a specific version of the n-step lookahead.
-    !EXCEPT! that the code below adds "primes" (encoded as ..._0), which need to be stripped first.
 -}
 data SymbExecTree g = SymbExecTree {
     pathCondition :: SymGuard,
