@@ -74,6 +74,18 @@ data SymbExecTree g = SymbExecTree {
     children :: Map.Map (SymInteract g) (SymbExecTree g)
     } deriving (Eq, Ord)
 
+data MonadSymExecNode loc = MonadSymExecNode {
+    loc :: loc,
+    symAssign :: VarModel,
+    pathCondition' :: SymGuard
+}
+
+data MonadSymExecTree m loc g = MonadSymExecTree {
+    node :: m (MonadSymExecNode loc),
+    depth :: Int,
+    mChildren :: Map.Map (SymInteract g) (MonadSymExecTree m loc g)
+}
+
 interactsToGuard :: (BM.OrdMonad m, Foldable m, BooleanConfiguration m, Ord g, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> [SymInteract g] -> SymGuard
 interactsToGuard intrpr = interactsToGuard' (symbolicExecutionTree intrpr)
     where
