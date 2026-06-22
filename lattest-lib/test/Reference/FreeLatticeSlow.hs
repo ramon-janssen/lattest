@@ -2,8 +2,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
-module Reference.FreeLattice (
-FreeLattice,
+module Reference.FreeLatticeSlow (
+FreeLatticeSlow,
 )
 
 where
@@ -24,9 +24,9 @@ import Lattest.Model.BoundedMonad (BoundedConfiguration (..), JoinSemiLattice (.
     Behaviourally, this is equivalent to `FreeLatticeCNF`, but the size is not bounded by the normal form.
     This makes it less efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>='.
 -}
-newtype FreeLattice a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
+newtype FreeLatticeSlow a = FreeLattice (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
 
-deriving instance Ord a => Ord (FreeLattice a)
+deriving instance Ord a => Ord (FreeLatticeSlow a)
 deriving instance Ord a => Ord (Free a)
 
 {-
@@ -44,7 +44,7 @@ deriving instance Ord a => Ord (Free a)
     An FreeLattice as a state configuration means an automaton is in a state configuration of disjunctions (non-determinism) and conjunctions over states,
     where state configurations top and bottom, or true and false, indicate underspecified and forbidden configurations, respectively.
 -}
-instance BoundedConfiguration FreeLattice where
+instance BoundedConfiguration FreeLatticeSlow where
     isForbidden (FreeLattice Bottom) = True
     isForbidden _ = False
     isUnderspecified (FreeLattice Top) = True
@@ -52,16 +52,16 @@ instance BoundedConfiguration FreeLattice where
     forbidden = FreeLattice Bottom
     underspecified = FreeLattice Top
 
-instance Applicative FreeLattice where
+instance Applicative FreeLatticeSlow where
     pure = FreeLattice . Levitate . Var
     (<*>) = ap
 
-instance Monad FreeLattice where
+instance Monad FreeLatticeSlow where
     (FreeLattice Bottom) >>= _ = FreeLattice Bottom
     (FreeLattice Top) >>= _ = FreeLattice Top
     (FreeLattice (Levitate x)) >>= f = lowerFree f x
 
-instance Show a => Show (FreeLattice a) where
+instance Show a => Show (FreeLatticeSlow a) where
     show (FreeLattice Top) = "⊤"
     show (FreeLattice Bottom) = "⊥"
     show (FreeLattice (Levitate a)) = show' a
@@ -70,13 +70,13 @@ instance Show a => Show (FreeLattice a) where
         show' (x :\/: y) = "(" ++ show' x ++ " ∨ " ++ show' y ++ ")"
         show' (x :/\: y) = "(" ++ show' x ++ " ∧ " ++ show' y ++ ")"
 
-instance JoinSemiLattice (FreeLattice a) where
+instance JoinSemiLattice (FreeLatticeSlow a) where
     (\/) = (L.\/) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
 
-instance MeetSemiLattice (FreeLattice a) where
+instance MeetSemiLattice (FreeLatticeSlow a) where
     (/\) = (L./\) -- it should be possible to generalize this to arbitrary instances, see remark below the JoinSemiLattice class itself
 
-instance BooleanConfiguration FreeLattice where
+instance BooleanConfiguration FreeLatticeSlow where
     asExpr (FreeLattice Top) = E.sTrue
     asExpr (FreeLattice Bottom) = E.sFalse
     asExpr (FreeLattice (Levitate a)) = asExpr' a

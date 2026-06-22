@@ -28,7 +28,6 @@ import Lattest.Model.BoundedMonad((/\), (\/), atom, top, bot)
 import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF)
 import qualified Data.Map as Map (Map)
 import qualified Data.Set as Set
-import Lattest.Model.Internal.NonDeterministic(NonDet(..))
 
 data IF = A | B deriving (Show, Eq, Ord)
 data OF = X | Y deriving (Show, Eq, Ord)

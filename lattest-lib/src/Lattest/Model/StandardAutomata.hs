@@ -24,7 +24,6 @@ detConcTransFromMaybeRel,
 -- ** Non-Deterministic Transition Relations
 nonDetConcTransFromRel,
 nonDetConcTransFromMRel,
-nonDetConcTransFromListRel,
 -- *** Alternating state configurations
 -- | Re-exports, so that test scripts don't need to import BoundedMonad separately
 FreeLatticeCNF,
@@ -63,7 +62,6 @@ where
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLatticeCNF, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
-import Lattest.Model.Internal.NonDeterministic(NonDet(..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 
@@ -130,17 +128,6 @@ nonDetConcTransFromRel = fromJust <$> transFromRelWith combineNonDet vacuousTran
 -}
 nonDetConcTransFromMRel :: (Ord loc, Ord t, BM.OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> (loc -> Map t (m ((), loc)))
 nonDetConcTransFromMRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans (\ndl () _ -> BM.ordMap vacuousLoc ndl)
-
-{- |
-    Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as lists of locations,
-    where the empty list is mapped to either `forbidden` or `underspecified`, depending on the transition label.
-    Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
--}
-nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> (loc -> Map t (NonDet ((), loc)))
-nonDetConcTransFromListRel = fromJust <$> transFromRelWith combineNonDet vacuousTrans listToNonDet
-    where
-    listToNonDet (list@(_:_)) () _ = vacuousLoc <#> NonDet (Set.fromList list)
-    listToNonDet [] () t = implicitDestination t
 
 combineNonDet :: JoinSemiLattice a => a -> a -> Maybe a
 combineNonDet x y = Just $ x \/ y

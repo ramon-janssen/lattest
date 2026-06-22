@@ -30,13 +30,12 @@ import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyP
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
 import Lattest.Model.BoundedMonad((/\), (\/), underspecified,forbidden, FreeLatticeCNF, atom)
-import Reference.FreeLattice(FreeLattice)
+import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
-import Lattest.Model.Internal.NonDeterministic (NonDet(..), nonDet)
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
@@ -285,7 +284,7 @@ testLatticeCoffeeSTS = TestCase $ do
   * the type of branching from the second state (conjunction or disjunction)
   * whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> IOSTS FreeLattice Integer String String
+specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> IOSTS FreeLatticeSlow Integer String String
 specParameterized startType endType comp splitFirst =
     let p = sVar pvar
         q = sVar qvar
@@ -293,7 +292,7 @@ specParameterized startType endType comp splitFirst =
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         done = SymInteract (Out "done") []
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
         guardEnd2 = p .- q .== x
@@ -332,7 +331,7 @@ impParameterized startType endType p1 p2 q2 = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
-testLatticeSTSParameterized' :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
+testLatticeSTSParameterized' :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
 testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expectedNonConformalTrace = TestCase $ do
     let (startType, endType, startType', endType') =
             if inputThenOut
@@ -370,7 +369,7 @@ inpf g vals = GateValue (In (InputAttempt(g, False))) vals
 out :: o -> [Constant] -> GateValue (IOAct i (Suspended o))
 out g vals = GateValue (Out (OutSusp g)) vals
 
-testLatticeSTSParameterized :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
+testLatticeSTSParameterized :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
     testLatticeSTSParameterized' testName inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
     testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True p1 p2 q2 expectedNonConformalTrace
@@ -409,14 +408,14 @@ testLatticeSTS = concat [
                                        
     note, the guard of the second transition is not satisfiable so the second state is quiescent
 -}
-specQ :: IOSTS FreeLattice Integer String String
+specQ :: IOSTS FreeLatticeSlow Integer String String
 specQ =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd = p .+ q .== p .+ q .+ x
         assignX = assignment [xvar =: p]
@@ -517,14 +516,14 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
                                        
   parameterized by whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-specUnimplementableParameterized :: Bool -> IOSTS FreeLattice Integer String String
+specUnimplementableParameterized :: Bool -> IOSTS FreeLatticeSlow Integer String String
 specUnimplementableParameterized splitFirst =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
         guardEnd2 = p .+ q .== x

@@ -9,7 +9,7 @@ where
 
 import Test.QuickCheck
 import qualified Lattest.Model.BoundedMonad as BM
-import qualified Reference.FreeLattice as FL
+import qualified Reference.FreeLatticeSlow as FL
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -78,13 +78,13 @@ prop_latticeIsCNF l =
         message = "CNF:\n" ++ show cnf ++ "\n\nstandard:\n" ++ show standard ++ "\n\n"
     in if outcome then True else Trace.trace message False
     where
-    cnfToLattice :: BM.FreeLatticeCNF a -> FL.FreeLattice a
+    cnfToLattice :: BM.FreeLatticeCNF a -> FL.FreeLatticeSlow a
     cnfToLattice (BM.FreeLatticeCNF ls) = cnfToLattice' ls
     cnfToLattice' = Set.foldr mergeConjunct BM.underspecified
-    mergeConjunct :: Set.Set a -> FL.FreeLattice a -> FL.FreeLattice a
+    mergeConjunct :: Set.Set a -> FL.FreeLatticeSlow a -> FL.FreeLatticeSlow a
     mergeConjunct conjunct l' = conjunctToLattice conjunct BM./\ l'
     conjunctToLattice = Set.foldr mergeDisjunct BM.forbidden
-    mergeDisjunct :: a -> FL.FreeLattice a -> FL.FreeLattice a
+    mergeDisjunct :: a -> FL.FreeLatticeSlow a -> FL.FreeLatticeSlow a
     mergeDisjunct a l' = return a BM.\/ l'
 
 

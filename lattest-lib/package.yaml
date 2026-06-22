@@ -59,7 +59,7 @@ ghc-options:
 
 library:
   source-dirs: src
-  other-modules: []
+  other-modules: Lattest.Model.Internal.NonDeterministic.hs
   build-tools:
   - happy
   - alex
