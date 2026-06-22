@@ -21,7 +21,6 @@ import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
 import qualified Text.RawString.QQ as QQ
-
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
@@ -29,14 +28,13 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), underspecified,forbidden, FreeLatticeCNF, atom)
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLatticeCNF, atom)
 import Reference.FreeLattice(FreeLattice)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
-import Lattest.Model.Internal.NonDeterministic (NonDet(..), nonDet)
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
@@ -47,7 +45,7 @@ xvar = (Variable "x" IntType)
 stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
-stsExample :: IOSTS NonDet Integer String String
+stsExample :: IOSTS Det Integer String String
 stsExample =
     let p = sVar pvar
         x = sVar xvar
@@ -58,18 +56,18 @@ stsExample =
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
-        initConf = nonDet [0] :: NonDet Integer
+        initConf = return 0
         switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
-                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
-            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
+            0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
-stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
+stsExampleIntrpr :: STSIntrp Det Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
-getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
-getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
+getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
+getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
@@ -122,19 +120,19 @@ testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no a
     actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
     -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
     expected = [QQ.r|
-current state configuration: [(0,{x:=0})]
-initial location configuration: [0]
+current state configuration: (0,{x:=0})
+initial location configuration: 0
 locations: 0, 1, 2
 transitions:
-0  ――?"water" [p:Int]⟶  [((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)]
-0  ――!"coffee" []⟶  [(((x+-15)) ≥ 0, {},2)]
-0  ――!"ok" [p:Int]⟶  ⊥
-1  ――?"water" [p:Int]⟶  ⊤
-1  ――!"coffee" []⟶  ⊥
-1  ――!"ok" [p:Int]⟶  [((x) = (p), {},0)]
-2  ――?"water" [p:Int]⟶  ⊤
-2  ――!"coffee" []⟶  ⊥
-2  ――!"ok" [p:Int]⟶  ⊥
+0  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)
+0  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},2)
+0  ――!"ok" [p:Int]⟶  -forbidden-
+1  ――?"water" [p:Int]⟶  -underspecified-
+1  ――!"coffee" []⟶  -forbidden-
+1  ――!"ok" [p:Int]⟶  ((x) = (p), {},0)
+2  ――?"water" [p:Int]⟶  -underspecified-
+2  ――!"coffee" []⟶  -forbidden-
+2  ――!"ok" [p:Int]⟶  -forbidden-
 |]
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
