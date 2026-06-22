@@ -78,8 +78,8 @@ prop_latticeIsCNF l =
         message = "CNF:\n" ++ show cnf ++ "\n\nstandard:\n" ++ show standard ++ "\n\n"
     in if outcome then True else Trace.trace message False
     where
-    cnfToLattice :: BM.FreeLatticeCNF a -> FL.FreeLatticeSlow a
-    cnfToLattice (BM.FreeLatticeCNF ls) = cnfToLattice' ls
+    cnfToLattice :: BM.FreeLattice a -> FL.FreeLatticeSlow a
+    cnfToLattice (BM.FreeLattice ls) = cnfToLattice' ls
     cnfToLattice' = Set.foldr mergeConjunct BM.underspecified
     mergeConjunct :: Set.Set a -> FL.FreeLatticeSlow a -> FL.FreeLatticeSlow a
     mergeConjunct conjunct l' = conjunctToLattice conjunct BM./\ l'

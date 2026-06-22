@@ -25,7 +25,7 @@ import Lattest.Model.Automaton(AutSyntax, after, afters, stateConf, automaton, p
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), asSuspended, δ)
 import Lattest.Model.BoundedMonad((/\), (\/), atom, top, bot)
-import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF(..), joins)
+import qualified Lattest.Model.BoundedMonad as BM (FreeLattice(..), joins)
 import qualified Data.Map as Map (Map)
 import qualified Data.Set as Set
 
@@ -40,15 +40,15 @@ af :: IOAct IF o
 af = In A
 bf :: IOAct IF o
 bf = In B
-q0f :: BM.FreeLatticeCNF StateF
+q0f :: BM.FreeLattice StateF
 q0f = atom Q0f
-q1f :: BM.FreeLatticeCNF StateF
+q1f :: BM.FreeLattice StateF
 q1f = atom Q1f
-q2f :: BM.FreeLatticeCNF StateF
+q2f :: BM.FreeLattice StateF
 q2f = atom Q2f
 menuf :: [IOAct IF OF]
 menuf = [af, bf, x, y]
-tf :: StateF -> Map.Map (IOAct IF OF) (BM.FreeLatticeCNF ((), StateF))
+tf :: StateF -> Map.Map (IOAct IF OF) (BM.FreeLattice ((), StateF))
 tf = nonDetConcTransFromMRel
     [(Q0f, af, q0f /\ (q1f \/ q2f))
     ,(Q0f, x, q0f)
@@ -57,7 +57,7 @@ tf = nonDetConcTransFromMRel
     ,(Q2f, bf, q0f)
     ,(Q2f, y, q2f)
     ]
-sf :: AutSyntax BM.FreeLatticeCNF StateF (IOAct IF OF) ()
+sf :: AutSyntax BM.FreeLattice StateF (IOAct IF OF) ()
 sf = automaton q0f menuf tf
 
 testSpecF :: Test
@@ -115,30 +115,30 @@ take = In Take
 menug :: [IOAct IG OG]
 menug = [c, t, cm, tm, ag, bg, on, take]
 
-q0g :: BM.FreeLatticeCNF StateG
+q0g :: BM.FreeLattice StateG
 q0g = atom Q0g
-q1g :: BM.FreeLatticeCNF StateG
+q1g :: BM.FreeLattice StateG
 q1g = atom Q1g
-q2g :: BM.FreeLatticeCNF StateG
+q2g :: BM.FreeLattice StateG
 q2g = atom Q2g
-q3g :: BM.FreeLatticeCNF StateG
+q3g :: BM.FreeLattice StateG
 q3g = atom Q3g
-q4g :: BM.FreeLatticeCNF StateG
+q4g :: BM.FreeLattice StateG
 q4g = atom Q4g
-q5g :: BM.FreeLatticeCNF StateG
+q5g :: BM.FreeLattice StateG
 q5g = atom Q5g
-q6g :: BM.FreeLatticeCNF StateG
+q6g :: BM.FreeLattice StateG
 q6g = atom Q6g
-q7g :: BM.FreeLatticeCNF StateG
+q7g :: BM.FreeLattice StateG
 q7g = atom Q7g
-q8g :: BM.FreeLatticeCNF StateG
+q8g :: BM.FreeLattice StateG
 q8g = atom Q8g
-q9g :: BM.FreeLatticeCNF StateG
+q9g :: BM.FreeLattice StateG
 q9g = atom Q9g
-q10g :: BM.FreeLatticeCNF StateG
+q10g :: BM.FreeLattice StateG
 q10g = atom Q10g
 
-tg :: StateG -> Map.Map (IOAct IG OG) (BM.FreeLatticeCNF ((), StateG))
+tg :: StateG -> Map.Map (IOAct IG OG) (BM.FreeLattice ((), StateG))
 tg = nonDetConcTransFromMRel
     [(Q0g, on, q1g /\ q3g /\ q5g /\ q8g)
     ,(Q1g, ag, q2g)
@@ -157,7 +157,7 @@ tg = nonDetConcTransFromMRel
     ,(Q9g, tm, q10g)
     ,(Q10g, take, q1g /\ q3g /\ q5g /\ q8g)
     ]
-sg :: AutSyntax BM.FreeLatticeCNF StateG (IOAct IG OG) ()
+sg :: AutSyntax BM.FreeLattice StateG (IOAct IG OG) ()
 sg = automaton q0g menug tg
 
 testSpecG :: Test
@@ -174,21 +174,21 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 
-sDoubleState :: BM.FreeLatticeCNF Integer
+sDoubleState :: BM.FreeLattice Integer
 sDoubleState = BM.joins [0 :: Integer, 1]
-tDoubleRecursion :: Integer -> Map.Map String (BM.FreeLatticeCNF ((), Integer))
+tDoubleRecursion :: Integer -> Map.Map String (BM.FreeLattice ((), Integer))
 tDoubleRecursion = nonDetConcTransFromMRel
     [(0, "act", sDoubleState)
     ,(1, "act", sDoubleState)
     ]
-sDoubleRecursion :: AutSyntax BM.FreeLatticeCNF Integer String ()
+sDoubleRecursion :: AutSyntax BM.FreeLattice Integer String ()
 sDoubleRecursion = automaton sDoubleState ["act"] tDoubleRecursion
 
 testExponentialNonDeterminism :: Test
 testExponentialNonDeterminism = TestCase $ do
     -- take 1000 steps, each 'duplicating' the state configuration. With deduplication, the state configuration should still have size 2
     let doubleRecursion = interpretConcrete sDoubleRecursion
-        BM.FreeLatticeCNF conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
+        BM.FreeLattice conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
         nrStatesAfterBlowup = Set.size . Set.unions $ conf
     assertEqual ("only 2 states in automaton but found " ++ show nrStatesAfterBlowup ++ " in state configuration") 2 nrStatesAfterBlowup
 

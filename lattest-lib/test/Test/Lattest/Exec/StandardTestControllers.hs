@@ -14,7 +14,7 @@ import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),StateF,sf)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.BoundedMonad(isConclusive, isForbidden)
-import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF)
+import qualified Lattest.Model.BoundedMonad as BM (FreeLattice)
 import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, InputAttempt(..))
 import Lattest.Adapter.Adapter(Adapter(..))
@@ -24,7 +24,7 @@ import Lattest.Adapter.StandardAdapters(pureAdapter)
 
 nrSteps :: Int
 nrSteps = 50
-testSelector :: TestController BM.FreeLatticeCNF StateF StateF (IOAct IF OF) () (SuspendedIF IF OF) ((((StdGen, Int), [SuspendedIF IF OF]), Maybe (BM.FreeLatticeCNF StateF)), Maybe (BM.FreeLatticeCNF StateF)) (Maybe IF) (([SuspendedIF IF OF], Maybe (BM.FreeLatticeCNF StateF)), Maybe (BM.FreeLatticeCNF StateF))
+testSelector :: TestController BM.FreeLattice StateF StateF (IOAct IF OF) () (SuspendedIF IF OF) ((((StdGen, Int), [SuspendedIF IF OF]), Maybe (BM.FreeLattice StateF)), Maybe (BM.FreeLattice StateF)) (Maybe IF) (([SuspendedIF IF OF], Maybe (BM.FreeLattice StateF)), Maybe (BM.FreeLattice StateF))
 testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
 

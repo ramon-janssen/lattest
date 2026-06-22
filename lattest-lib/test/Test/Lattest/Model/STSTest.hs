@@ -28,7 +28,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLatticeCNF, atom)
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLattice, atom)
 import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -205,7 +205,7 @@ testSTSTestSelection = TestCase $ do
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
 
-stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
+stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =
     let p = sVar pvar
         x = sVar xvar
@@ -230,16 +230,16 @@ stsExample2 =
             3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
     in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
 
-stsExampleIntrpr2a :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2a :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
 
-stsExampleIntrpr2b :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
 getSTSValuation :: Integer -> Valuation
 getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
-getSTSIntrpState2 :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
+getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
 
 testLatticeCoffeeSTS :: Test

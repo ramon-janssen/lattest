@@ -34,7 +34,7 @@ module Lattest.Model.BoundedMonad (
 -- ** Deterministic
 Det(..),
 -- ** Distributive lattice in CNF
-FreeLatticeCNF(FreeLatticeCNF),
+FreeLattice(FreeLattice),
 atom,
 top,
 bot,
@@ -118,39 +118,39 @@ instance Show a => Show (Det a) where
 {-|
     Free distributive lattice, or a positive boolean formula, in CNF-format. 
 -}
-newtype FreeLatticeCNF a = FreeLatticeCNF (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
+newtype FreeLattice a = FreeLattice (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
 
 -- | A single state embedded in a free distributive lattice.
-atom :: a -> FreeLatticeCNF a
+atom :: a -> FreeLattice a
 atom = ordReturn
 
 -- | The free distributive lattice element ⊥, or false.
-bot :: FreeLatticeCNF a
+bot :: FreeLattice a
 bot = forbidden
 
 -- | The free distributive lattice element ⊤, or true.
-top :: FreeLatticeCNF a
+top :: FreeLattice a
 top = underspecified
 
 -- TODO: document me
-meets :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
+meets :: (Foldable f, Ord a) => f a -> FreeLattice a
 meets = foldr ((/\) . atom) top
 
 -- TODO: document me
-joins :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
+joins :: (Foldable f, Ord a) => f a -> FreeLattice a
 joins = foldr ((\/) . atom) bot
 
-instance BoundedConfiguration FreeLatticeCNF where
-    isForbidden (FreeLatticeCNF x) = any Set.null x
-    isUnderspecified (FreeLatticeCNF x) = Set.null x
-    forbidden = FreeLatticeCNF $ Set.singleton Set.empty
-    underspecified = FreeLatticeCNF Set.empty
+instance BoundedConfiguration FreeLattice where
+    isForbidden (FreeLattice x) = any Set.null x
+    isUnderspecified (FreeLattice x) = Set.null x
+    forbidden = FreeLattice $ Set.singleton Set.empty
+    underspecified = FreeLattice Set.empty
 
-instance OM.OrdMonad FreeLatticeCNF where
-    ordBind (FreeLatticeCNF x) f = FreeLatticeCNF $ cnfJoin $ Set.map (Set.map f1) x
+instance OM.OrdMonad FreeLattice where
+    ordBind (FreeLattice x) f = FreeLattice $ cnfJoin $ Set.map (Set.map f1) x
         where
-            f1 y = let FreeLatticeCNF z = f y in z
-    ordReturn x = FreeLatticeCNF  $ Set.singleton $ Set.singleton x
+            f1 y = let FreeLattice z = f y in z
+    ordReturn x = FreeLattice  $ Set.singleton $ Set.singleton x
 
 cnfJoin :: (Ord a) => Set.Set (Set.Set (Set.Set (Set.Set a))) -> Set.Set (Set.Set a)
 cnfJoin = reduceAll . Set.map Set.unions . Set.unions . Set.map nAryCartesianProduct
@@ -167,23 +167,23 @@ isProperSupersetOfAny sets a = any (isProperSupersetOf a) (Set.toList sets)
     isProperSupersetOf :: Ord a => Set.Set a -> Set.Set a -> Bool
     isProperSupersetOf set potentialSubset = (potentialSubset `Set.isSubsetOf` set) && not (set `Set.isSubsetOf` potentialSubset)
 
-instance OM.OrdFunctor FreeLatticeCNF where
-    ordMap f (FreeLatticeCNF x) = FreeLatticeCNF $ Set.map (Set.map f) x
+instance OM.OrdFunctor FreeLattice where
+    ordMap f (FreeLattice x) = FreeLattice $ Set.map (Set.map f) x
 
-instance Ord a => JoinSemiLattice (FreeLatticeCNF a) where
-    (FreeLatticeCNF x) \/ (FreeLatticeCNF y) = FreeLatticeCNF $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]
+instance Ord a => JoinSemiLattice (FreeLattice a) where
+    (FreeLattice x) \/ (FreeLattice y) = FreeLattice $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]
 
-instance Ord a => MeetSemiLattice (FreeLatticeCNF a) where
-    (FreeLatticeCNF x) /\ (FreeLatticeCNF y) =
+instance Ord a => MeetSemiLattice (FreeLattice a) where
+    (FreeLattice x) /\ (FreeLattice y) =
         let x' = Set.filter (not . isProperSupersetOfAny y) x
             y' = Set.filter (not . isProperSupersetOfAny x) y
-        in FreeLatticeCNF (x' `Set.union` y')
+        in FreeLattice (x' `Set.union` y')
 
-instance Show a => Show (FreeLatticeCNF a) where
+instance Show a => Show (FreeLattice a) where
     show l
         | isForbidden l = "⊥"
         | isUnderspecified l = "⊤"
-    show (FreeLatticeCNF x) = case Set.toList x of
+    show (FreeLattice x) = case Set.toList x of
             [conjunct] -> List.intercalate " ∨ " $ show <$> Set.toList conjunct
             conjuncts -> List.intercalate " ∧ " $ showDisjunct <$> conjuncts
         where
@@ -258,8 +258,8 @@ instance BooleanConfiguration Det where
     asExpr ForbiddenDet = E.sFalse
     asExpr UnderspecDet = E.sTrue
 
-instance BooleanConfiguration FreeLatticeCNF where
-    asExpr (FreeLatticeCNF x) = Set.foldr (E..&&) E.sTrue $ Set.map (Set.foldr (E..||) E.sFalse) x
+instance BooleanConfiguration FreeLattice where
+    asExpr (FreeLattice x) = Set.foldr (E..&&) E.sTrue $ Set.map (Set.foldr (E..||) E.sFalse) x
 
 asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
 asDualExpr m = E.sNot $ asExpr $ E.sNot OM.<#> m

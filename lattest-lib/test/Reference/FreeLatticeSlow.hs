@@ -22,7 +22,7 @@ import Lattest.Model.BoundedMonad (BoundedConfiguration (..), JoinSemiLattice (.
 
 {-|
     Free distributive lattice, or a positive boolean formula, i.e., a boolean formula with conjunctions and disjunctions over atomic propositions. The two elements 'top' and 'bot' can be interpreted as true and false.
-    Behaviourally, this is equivalent to `FreeLatticeCNF`, but the size is not bounded by the normal form.
+    Behaviourally, this is equivalent to `FreeLattice`, but the size is not bounded by the normal form.
     This makes it less efficient when repeatedly applying operators, especially 'fmap' and monadic bind '>>='.
 -}
 newtype FreeLatticeSlow a = FreeLatticeSlow (Levitated (Free a)) deriving (Eq, Functor, Foldable, Lattice)
