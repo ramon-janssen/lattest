@@ -14,7 +14,6 @@
     In this module, we define two such state configurations:
     
     * deterministic state configurations, where every behaviour leads to a single state,
-    * non-deterministic state configurations, where given observable behaviour may lead to a set of states, and
     * distributive lattices, or positive boolean formulas, where the observable behaviour is expressed as a logical expression over states.
     
     Here, 'observed behaviour' is formally a trace or sequence of observable actions. Thus, after a trace, the system is

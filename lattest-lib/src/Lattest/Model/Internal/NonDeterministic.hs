@@ -1,3 +1,8 @@
+{- |
+   Non-deterministic model definitions, where observable behaviour may lead to a set of states.
+   These are equivalent to using Lattices with only `(\/)`, and defined in this separate module
+   because `(/\)` is more often the intended meaning.
+-}
 module Lattest.Model.Internal.NonDeterministic (
   NonDet(..),
   nonDet
