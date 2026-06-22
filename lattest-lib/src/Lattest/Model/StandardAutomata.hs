@@ -62,7 +62,8 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue)
 import Lattest.Model.Automaton (AutSyntax, automaton, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
-import Lattest.Model.BoundedMonad (Det(..), NonDet(..), BoundedMonad, FreeLatticeCNF, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
+import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLatticeCNF, atom, top, bot, (\/), (/\), JoinSemiLattice, (<#>))
+import Lattest.Model.Internal.NonDeterministic(NonDet(..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 

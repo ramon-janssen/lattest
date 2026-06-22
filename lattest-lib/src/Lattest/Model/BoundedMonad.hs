@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveFunctor #-}
+
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
+
 
 {- |
     A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
@@ -34,9 +34,6 @@ module Lattest.Model.BoundedMonad (
 -- * State configurations
 -- ** Deterministic
 Det(..),
--- ** Non-deterministic
-NonDet(..),
-nonDet,
 -- ** Distributive lattice in CNF
 FreeLatticeCNF(FreeLatticeCNF),
 atom,
@@ -68,21 +65,17 @@ BooleanConfiguration,
 asExpr,
 asDualExpr,
 -- ** 'Data.OrdMonad' re-export, for convenience.
-module OM
+module OM,
+joins,
+meets
 )
 where
 
 import qualified Lattest.Model.Symbolic.Expr as E
 
-
-import Algebra.Lattice.Free (Free(..), lowerFree)
-import Algebra.Lattice.Levitated(Levitated(..))
-import Algebra.Lattice(Lattice)
-import qualified Algebra.Lattice as L ((/\), (\/))
 import qualified Data.List as List
 import qualified Data.Set as Set
 import Data.OrdMonad as OM
-import Control.Monad(ap)
 
 
 -- | Deterministic state configuration. This means that an automaton is either in a single state, or in an explicit forbidden configuration, or in an explicit underspecified configuration.
@@ -100,15 +93,15 @@ instance Functor Det where
     fmap f (Det s) = Det (f s)
     fmap _ UnderspecDet = UnderspecDet
     fmap _ ForbiddenDet = ForbiddenDet
-    
+
 instance Applicative Det where
-    pure q = Det q
     Det f <*> (Det s) = Det (f s)
     ForbiddenDet <*> _ = ForbiddenDet
     UnderspecDet <*> _ = UnderspecDet
     _ <*> ForbiddenDet = ForbiddenDet
     _ <*> UnderspecDet = UnderspecDet
-    
+    pure = Det
+
 instance Monad Det where
     Det s >>= f = f s
     ForbiddenDet >>= _ = ForbiddenDet
@@ -122,55 +115,6 @@ instance Show a => Show (Det a) where
     show (Det a) = show a
     show ForbiddenDet = "-forbidden-"
     show UnderspecDet = "-underspecified-"
-
-
--- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.
-data NonDet q = NonDet (Set.Set q) | UnderspecNonDet
-
-nonDet :: Ord q => [q] -> NonDet q
-nonDet = NonDet . Set.fromList
-
-instance BoundedConfiguration NonDet where
-    isForbidden (NonDet s) = if Set.null s then True else False
-    isForbidden _ = False
-    isUnderspecified UnderspecNonDet = True
-    isUnderspecified _ = False
-    forbidden = NonDet Set.empty
-    underspecified = UnderspecNonDet
-
-instance OM.OrdFunctor NonDet where
-    ordMap f (NonDet ss) = NonDet $ OM.ordMap f ss
-    ordMap _ UnderspecNonDet = UnderspecNonDet
-    
-instance OM.OrdMonad NonDet where
-    ordBind (NonDet ss) f = foldr (\/) (NonDet Set.empty) $ Set.map f ss
-    ordBind UnderspecNonDet _ = UnderspecNonDet
-    ordReturn s = NonDet $ Set.singleton s
-
-instance Foldable NonDet where
-    foldr f q (NonDet qs) = foldr f q qs
-    foldr _ q _ = q
-
-instance Show a => Show (NonDet a) where
-    show (NonDet a)
-        | Set.null a = "⊥"
-        | otherwise = show $ Set.toList a
-    show UnderspecNonDet = "⊤"
-
-instance Ord a => Eq (NonDet a) where
-    UnderspecNonDet == UnderspecNonDet = True
-    (NonDet q1) == (NonDet q2) = q1 == q2
-    _ == _ = False
-
-instance Ord a => Ord (NonDet a) where
-    _ <= UnderspecNonDet = True
-    UnderspecNonDet <= _ = False
-    (NonDet q1) <= (NonDet q2) = q1 <= q2
-
-instance (Ord a) => JoinSemiLattice (NonDet a) where
-    (\/) (NonDet q1) (NonDet q2) = NonDet (Set.union q1 q2)
-    (\/) _ _ = UnderspecNonDet -- underspecification acts as top, so is absorbing w.r.t. join
-
 
 {-|
     Free distributive lattice, or a positive boolean formula, in CNF-format. 
@@ -189,11 +133,19 @@ bot = forbidden
 top :: FreeLatticeCNF a
 top = underspecified
 
+-- TODO: document me
+meets :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
+meets = foldr ((/\) . atom) top
+
+-- TODO: document me
+joins :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
+joins = foldr ((\/) . atom) bot
+
 instance BoundedConfiguration FreeLatticeCNF where
     isForbidden (FreeLatticeCNF x) = any Set.null x
     isUnderspecified (FreeLatticeCNF x) = Set.null x
     forbidden = FreeLatticeCNF $ Set.singleton Set.empty
-    underspecified = FreeLatticeCNF $ Set.empty
+    underspecified = FreeLatticeCNF Set.empty
 
 instance OM.OrdMonad FreeLatticeCNF where
     ordBind (FreeLatticeCNF x) f = FreeLatticeCNF $ cnfJoin $ Set.map (Set.map f1) x
@@ -239,7 +191,7 @@ instance Show a => Show (FreeLatticeCNF a) where
         showDisjunct :: Show a => Set.Set a -> String
         showDisjunct y = case Set.toList y of
             [e] -> show e
-            disjuncts -> "(" ++ List.intercalate " ∨ " (show <$> disjuncts) ++ ")" 
+            disjuncts -> "(" ++ List.intercalate " ∨ " (show <$> disjuncts) ++ ")"
 
 {-|
     Specifiednesss describe wether behaviour (a sequence of actions) is allowed a stateful specification model. 'Forbidden' describes that
@@ -295,8 +247,6 @@ class JoinSemiLattice a where
 class MeetSemiLattice a where
     (/\) :: a -> a -> a
 
-
-
 --this would be very sensible but it confuses the compiler greatly. Maybe the UndecidableInstances and Overlapping language extensions don't like each other?
 --instance Lattice a => JoinSemiLattice a where
 --    join = (L.\/)
@@ -308,10 +258,6 @@ instance BooleanConfiguration Det where
     asExpr (Det q) = q
     asExpr ForbiddenDet = E.sFalse
     asExpr UnderspecDet = E.sTrue
-
-instance BooleanConfiguration NonDet where
-    asExpr (NonDet qs) = E.sOr qs
-    asExpr UnderspecNonDet = E.sTrue
 
 instance BooleanConfiguration FreeLatticeCNF where
     asExpr (FreeLatticeCNF x) = Set.foldr (E..&&) E.sTrue $ Set.map (Set.foldr (E..||) E.sFalse) x
