@@ -25,7 +25,7 @@ import Lattest.Model.Automaton(AutSyntax, after, afters, stateConf, automaton, p
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), asSuspended, δ)
 import Lattest.Model.BoundedMonad((/\), (\/), atom, top, bot)
-import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF)
+import qualified Lattest.Model.BoundedMonad as BM (FreeLatticeCNF(..), joins)
 import qualified Data.Map as Map (Map)
 import qualified Data.Set as Set
 
@@ -174,21 +174,21 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B !TM" q10g (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, asSuspended tm])
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 
-sDoubleState :: NonDet Integer
-sDoubleState = NonDet $ Set.fromList [0 :: Integer, 1]
-tDoubleRecursion :: Integer -> Map.Map String (NonDet ((), Integer))
-tDoubleRecursion = nonDetConcTransFromMRel 
+sDoubleState :: BM.FreeLatticeCNF Integer
+sDoubleState = BM.joins [0 :: Integer, 1]
+tDoubleRecursion :: Integer -> Map.Map String (BM.FreeLatticeCNF ((), Integer))
+tDoubleRecursion = nonDetConcTransFromMRel
     [(0, "act", sDoubleState)
     ,(1, "act", sDoubleState)
     ]
-sDoubleRecursion :: AutSyntax NonDet Integer String ()
+sDoubleRecursion :: AutSyntax BM.FreeLatticeCNF Integer String ()
 sDoubleRecursion = automaton sDoubleState ["act"] tDoubleRecursion
 
 testExponentialNonDeterminism :: Test
 testExponentialNonDeterminism = TestCase $ do
     -- take 1000 steps, each 'duplicating' the state configuration. With deduplication, the state configuration should still have size 2
     let doubleRecursion = interpretConcrete sDoubleRecursion
-        NonDet conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
-        nrStatesAfterBlowup = length $ conf 
+        BM.FreeLatticeCNF conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
+        nrStatesAfterBlowup = Set.size . Set.unions $ conf
     assertEqual ("only 2 states in automaton but found " ++ show nrStatesAfterBlowup ++ " in state configuration") 2 nrStatesAfterBlowup
 

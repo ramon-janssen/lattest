@@ -15,13 +15,12 @@ import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.StandardAutomata
 import           Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import           Lattest.Exec.StandardTestControllers
---import           Network.Socket(withSocketsDo)
-
+import           Lattest.Model.BoundedMonad(Det)
 
 pvar = (Variable "p" IntType)
 xvar = (Variable "x" IntType)
 
-stsExample :: IOSTS FreeLattice Integer String String
+stsExample :: IOSTS Det Integer String String
 stsExample =
     let p = sVar pvar
         x = sVar xvar
