@@ -21,7 +21,6 @@ import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
 import qualified Text.RawString.QQ as QQ
-
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
@@ -29,7 +28,8 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden, FreeLatticeCNF, atom)
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLattice, atom)
+import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -45,7 +45,7 @@ xvar = (Variable "x" IntType)
 stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
-stsExample :: IOSTS NonDet Integer String String
+stsExample :: IOSTS Det Integer String String
 stsExample =
     let p = sVar pvar
         x = sVar xvar
@@ -56,18 +56,18 @@ stsExample =
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
-        initConf = nonDet [0] :: NonDet Integer
+        initConf = return 0
         switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
-                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
-            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
+            0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
-stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
+stsExampleIntrpr :: STSIntrp Det Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
-getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
-getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
+getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
+getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
@@ -120,19 +120,19 @@ testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no a
     actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
     -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
     expected = [QQ.r|
-current state configuration: [(0,{x:=0})]
-initial location configuration: [0]
+current state configuration: (0,{x:=0})
+initial location configuration: 0
 locations: 0, 1, 2
 transitions:
-0  ――?"water" [p:Int]⟶  [((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)]
-0  ――!"coffee" []⟶  [(((x+-15)) ≥ 0, {},2)]
-0  ――!"ok" [p:Int]⟶  ⊥
-1  ――?"water" [p:Int]⟶  ⊤
-1  ――!"coffee" []⟶  ⊥
-1  ――!"ok" [p:Int]⟶  [((x) = (p), {},0)]
-2  ――?"water" [p:Int]⟶  ⊤
-2  ――!"coffee" []⟶  ⊥
-2  ――!"ok" [p:Int]⟶  ⊥
+0  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)
+0  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},2)
+0  ――!"ok" [p:Int]⟶  -forbidden-
+1  ――?"water" [p:Int]⟶  -underspecified-
+1  ――!"coffee" []⟶  -forbidden-
+1  ――!"ok" [p:Int]⟶  ((x) = (p), {},0)
+2  ――?"water" [p:Int]⟶  -underspecified-
+2  ――!"coffee" []⟶  -forbidden-
+2  ――!"ok" [p:Int]⟶  -forbidden-
 |]
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
@@ -205,7 +205,7 @@ testSTSTestSelection = TestCase $ do
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
 
-stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
+stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =
     let p = sVar pvar
         x = sVar xvar
@@ -230,16 +230,16 @@ stsExample2 =
             3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
     in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
 
-stsExampleIntrpr2a :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2a :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
 
-stsExampleIntrpr2b :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
 getSTSValuation :: Integer -> Valuation
 getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
-getSTSIntrpState2 :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
+getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
 
 testLatticeCoffeeSTS :: Test
@@ -283,7 +283,7 @@ testLatticeCoffeeSTS = TestCase $ do
   * the type of branching from the second state (conjunction or disjunction)
   * whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> IOSTS FreeLattice Integer String String
+specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> IOSTS FreeLatticeSlow Integer String String
 specParameterized startType endType comp splitFirst =
     let p = sVar pvar
         q = sVar qvar
@@ -291,7 +291,7 @@ specParameterized startType endType comp splitFirst =
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         done = SymInteract (Out "done") []
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
         guardEnd2 = p .- q .== x
@@ -330,7 +330,7 @@ impParameterized startType endType p1 p2 q2 = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
-testLatticeSTSParameterized' :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
+testLatticeSTSParameterized' :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
 testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expectedNonConformalTrace = TestCase $ do
     let (startType, endType, startType', endType') =
             if inputThenOut
@@ -368,7 +368,7 @@ inpf g vals = GateValue (In (InputAttempt(g, False))) vals
 out :: o -> [Constant] -> GateValue (IOAct i (Suspended o))
 out g vals = GateValue (Out (OutSusp g)) vals
 
-testLatticeSTSParameterized :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
+testLatticeSTSParameterized :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
     testLatticeSTSParameterized' testName inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
     testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True p1 p2 q2 expectedNonConformalTrace
@@ -407,14 +407,14 @@ testLatticeSTS = concat [
                                        
     note, the guard of the second transition is not satisfiable so the second state is quiescent
 -}
-specQ :: IOSTS FreeLattice Integer String String
+specQ :: IOSTS FreeLatticeSlow Integer String String
 specQ =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd = p .+ q .== p .+ q .+ x
         assignX = assignment [xvar =: p]
@@ -515,14 +515,14 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
                                        
   parameterized by whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-specUnimplementableParameterized :: Bool -> IOSTS FreeLattice Integer String String
+specUnimplementableParameterized :: Bool -> IOSTS FreeLatticeSlow Integer String String
 specUnimplementableParameterized splitFirst =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
         guardEnd2 = p .+ q .== x

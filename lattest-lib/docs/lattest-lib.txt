@@ -743,13 +743,11 @@ freeVars :: Expr t -> Set Variable
 --   we define automata as having a type of internal state, say q, and an
 --   observable state configuration over q.
 --   
---   In this module, we define three such state configurations:
+--   In this module, we define two such state configurations:
 --   
 --   <ul>
 --   <li>deterministic state configurations, where every behaviour leads to
 --   a single state,</li>
---   <li>non-deterministic state configurations, where given observable
---   behaviour may lead to a set of states, and</li>
 --   <li>distributive lattices, or positive boolean formulas, where the
 --   observable behaviour is expressed as a logical expression over
 --   states.</li>
@@ -784,25 +782,10 @@ Det :: q -> Det q
 ForbiddenDet :: Det q
 UnderspecDet :: Det q
 
--- | Non-deterministic state configuration. This means that an automaton
---   non-deterministically in a number of states, where zero states
---   indicates the forbidden configuration, or in an explicit
---   underspecified configuration.
-data NonDet q
-NonDet :: Set q -> NonDet q
-UnderspecNonDet :: NonDet q
-nonDet :: Ord q => [q] -> NonDet q
-
--- | Free distributive lattice, or a positive boolean formula, i.e., a
---   boolean formula with conjunctions and disjunctions over atomic
---   propositions. The two elements <a>top</a> and <a>bot</a> can be
---   interpreted as true and false.
---   
---   <b>Warning</b>: this implementation is functionally correct, but not
---   very efficient when repeatedly applying operators, especially
---   <a>fmap</a> and monadic bind <a>&gt;&gt;=</a>, since no reductions are
---   performed.
-data FreeLattice a
+-- | Free distributive lattice, or a positive boolean formula, in
+--   CNF-format.
+newtype FreeLatticeCNF a
+FreeLatticeCNF :: Set (Set a) -> FreeLatticeCNF a
 
 -- | A single state embedded in a free distributive lattice.
 atom :: a -> FreeLatticeCNF a
@@ -812,16 +795,6 @@ top :: FreeLatticeCNF a
 
 -- | The free distributive lattice element ⊥, or false.
 bot :: FreeLatticeCNF a
-
--- | Free distributive lattice, or a positive boolean formula, in
---   CNF-format. Behaviourally, this is equivalent to the standard
---   <a>FreeLattice</a>, but the size is bounded by the normal form. This
---   makes it potentially more efficient when repeatedly applying
---   operators, especially <a>fmap</a> and monadic bind <a>&gt;&gt;=</a>,
---   but also potentially slightly <i>less</i> efficient for small
---   lattices.
-newtype FreeLatticeCNF a
-FreeLatticeCNF :: Set (Set a) -> FreeLatticeCNF a
 
 -- | Specifiednesss describe wether behaviour (a sequence of actions) is
 --   allowed a stateful specification model. <a>Forbidden</a> describes
@@ -880,51 +853,56 @@ class MeetSemiLattice a
 class BooleanConfiguration (m :: Type -> Type)
 asExpr :: BooleanConfiguration m => m (Expr Bool) -> Expr Bool
 asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (Expr Bool) -> Expr Bool
+joins :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
+meets :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
 instance GHC.Base.Applicative Lattest.Model.BoundedMonad.Det
-instance GHC.Base.Applicative Lattest.Model.BoundedMonad.FreeLattice
 instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.Det
-instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.FreeLattice
 instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.FreeLatticeCNF
-instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.NonDet
 instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.Det
-instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.FreeLattice
 instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.FreeLatticeCNF
-instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.NonDet
 instance GHC.Classes.Eq q => GHC.Classes.Eq (Lattest.Model.BoundedMonad.Det q)
-instance GHC.Classes.Ord a => GHC.Classes.Eq (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
-instance GHC.Classes.Ord a => GHC.Classes.Eq (Lattest.Model.BoundedMonad.NonDet a)
 instance GHC.Classes.Eq Lattest.Model.BoundedMonad.Specifiedness
 instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.Det
-instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.FreeLattice
 instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.FreeLatticeCNF
-instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.NonDet
 instance GHC.Base.Functor Lattest.Model.BoundedMonad.Det
-instance GHC.Base.Functor Lattest.Model.BoundedMonad.FreeLattice
-instance Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
-instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.BoundedMonad.NonDet a)
-instance Algebra.Lattice.Lattice (Lattest.Model.BoundedMonad.FreeLattice a)
-instance Lattest.Model.BoundedMonad.MeetSemiLattice (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.MeetSemiLattice (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
 instance GHC.Base.Monad Lattest.Model.BoundedMonad.Det
-instance GHC.Base.Monad Lattest.Model.BoundedMonad.FreeLattice
 instance Data.OrdMonad.OrdFunctor Lattest.Model.BoundedMonad.FreeLatticeCNF
-instance Data.OrdMonad.OrdFunctor Lattest.Model.BoundedMonad.NonDet
 instance Data.OrdMonad.OrdMonad Lattest.Model.BoundedMonad.FreeLatticeCNF
-instance Data.OrdMonad.OrdMonad Lattest.Model.BoundedMonad.NonDet
 instance GHC.Classes.Ord q => GHC.Classes.Ord (Lattest.Model.BoundedMonad.Det q)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Algebra.Lattice.Free.Free a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.BoundedMonad.NonDet a)
 instance GHC.Classes.Ord Lattest.Model.BoundedMonad.Specifiedness
 instance GHC.Read.Read Lattest.Model.BoundedMonad.Specifiedness
 instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.Det a)
-instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
-instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.NonDet a)
 instance GHC.Show.Show Lattest.Model.BoundedMonad.Specifiedness
+
+
+-- | Non-deterministic model definitions, where observable behaviour may
+--   lead to a set of states. These are equivalent to using Lattices with
+--   only <a>(\/)</a>, and defined in this separate module because
+--   <tt>(/\)</tt> is more often the intended meaning.
+module Lattest.Model.Internal.NonDeterministic
+
+-- | Non-deterministic state configuration. This means that an automaton
+--   non-deterministically in a number of states, where zero states
+--   indicates the forbidden configuration, or in an explicit
+--   underspecified configuration.
+data NonDet q
+NonDet :: Set q -> NonDet q
+UnderspecNonDet :: NonDet q
+nonDet :: Ord q => [q] -> NonDet q
+instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.Internal.NonDeterministic.NonDet
+instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.Internal.NonDeterministic.NonDet
+instance GHC.Classes.Ord a => GHC.Classes.Eq (Lattest.Model.Internal.NonDeterministic.NonDet a)
+instance Data.Foldable.Foldable Lattest.Model.Internal.NonDeterministic.NonDet
+instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.Internal.NonDeterministic.NonDet a)
+instance Data.OrdMonad.OrdFunctor Lattest.Model.Internal.NonDeterministic.NonDet
+instance Data.OrdMonad.OrdMonad Lattest.Model.Internal.NonDeterministic.NonDet
+instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.Internal.NonDeterministic.NonDet a)
+instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.Internal.NonDeterministic.NonDet a)
 
 
 -- | This module contains the definitions and semantics of different forms
@@ -1714,16 +1692,9 @@ nonDetConcTransFromMRel :: (Ord loc, Ord t, OrdMonad m, JoinSemiLattice (m ((), 
 --   interpreted as non-deterministic choice between the destinations.
 nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> loc -> Map t (NonDet ((), loc))
 
--- | Free distributive lattice, or a positive boolean formula, i.e., a
---   boolean formula with conjunctions and disjunctions over atomic
---   propositions. The two elements <a>top</a> and <a>bot</a> can be
---   interpreted as true and false.
---   
---   <b>Warning</b>: this implementation is functionally correct, but not
---   very efficient when repeatedly applying operators, especially
---   <a>fmap</a> and monadic bind <a>&gt;&gt;=</a>, since no reductions are
---   performed.
-data FreeLattice a
+-- | Free distributive lattice, or a positive boolean formula, in
+--   CNF-format.
+data FreeLatticeCNF a
 
 -- | A single state embedded in a free distributive lattice.
 atom :: a -> FreeLatticeCNF a

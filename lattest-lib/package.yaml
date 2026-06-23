@@ -36,7 +36,6 @@ dependencies:
   - extra >= 1.7.14
   - unbounded-delays >= 0.1.1.1
   - either >= 5.0.2
-  - lattices >= 2.0.0
   - stm >= 2.5.1.0
   - filepath == 1.4.301.0
   - process >= 1.6.25.0
@@ -60,7 +59,8 @@ ghc-options:
 
 library:
   source-dirs: src
-  other-modules: []
+  other-modules:
+  - Lattest.Model.Internal.NonDeterministic
   build-tools:
   - happy
   - alex
@@ -83,6 +83,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - lattest-lib
+    - lattices >= 2.0.0
     - HUnit >= 1.6.2.0
     - QuickCheck < 2.15
     - tasty >= 1.5.3
