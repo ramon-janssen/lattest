@@ -20,7 +20,7 @@ import Test.HUnit as HUnit
 import Test.Tasty.QuickCheck
 
 durationSeconds :: Int
-durationSeconds = 2
+durationSeconds = 3
 
 main :: IO ()
 main = do

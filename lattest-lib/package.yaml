@@ -32,7 +32,6 @@ dependencies:
     - extra >= 1.7.16 && < 1.9
     - filepath >=1.4.301.0 && < 1.6
     - io-streams >= 1.5.2 && < 1.6
-    - lattices >= 2.2.1 && < 2.3
     - list-shuffle >= 1.0.0 && < 1.1
     - mtl >= 2.3.1 && < 2.4
     - network >= 3.2.7.0 && < 3.3
@@ -59,7 +58,8 @@ ghc-options:
 
 library:
   source-dirs: src
-  other-modules: []
+  other-modules:
+  - Lattest.Model.Internal.NonDeterministic
   build-tools:
   - happy
   - alex
@@ -82,6 +82,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - lattest-lib
+    - lattices >= 2.2.1 && < 2.3
     - HUnit >= 1.6.2.0
     - QuickCheck >= 2.15.0.1
     - tasty >= 1.5.3
