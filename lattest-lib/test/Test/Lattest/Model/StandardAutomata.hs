@@ -25,7 +25,7 @@ import Lattest.Model.Automaton(AutSyntax, after, afters, stateConf, automaton, p
 import Lattest.Model.StandardAutomata(interpretConcrete, interpretQuiescentConcrete, nonDetConcTransFromMRel)
 import Lattest.Model.Alphabet(IOAct(..), asSuspended, δ)
 import Lattest.Model.BoundedMonad((/\), (\/), atom, top, bot)
-import qualified Lattest.Model.BoundedMonad as BM (FreeLattice(..), joins)
+import qualified Lattest.Model.BoundedMonad as BM (FreeLattice(..), disjunction)
 import qualified Data.Map as Map (Map)
 import qualified Data.Set as Set
 
@@ -175,7 +175,7 @@ testSpecGQuiescent = TestCase $ do
     assertEqual "Δ(sg) after δ ?On δ ?B δ" bot (stateConf $ rg `afters` [δ, asSuspended on, δ, asSuspended bg, δ])
 
 sDoubleState :: BM.FreeLattice Integer
-sDoubleState = BM.joins [0 :: Integer, 1]
+sDoubleState = BM.disjunction [0 :: Integer, 1]
 tDoubleRecursion :: Integer -> Map.Map String (BM.FreeLattice ((), Integer))
 tDoubleRecursion = nonDetConcTransFromMRel
     [(0, "act", sDoubleState)
