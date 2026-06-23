@@ -161,49 +161,65 @@ testSTSTestSelection = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, _), _)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    assertEqual "expected conformal trace" [-- FIXME this test case assumes the SMT solver to return 1, but any solution in (1,10) is correct
-        inp "water" [Cint 1],
-        out "ok" [Cint 1],
-        inp "water" [Cint 1],
-        out "ok" [Cint 2],
-        GateValue δ [],
-        inp "water" [Cint 1],
-        out "ok" [Cint 3],
-        inp "water" [Cint 1],
-        outL "ok" [Cint 4],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 5],
-        GateValue δ [],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 6],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 7],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 8],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 9],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 10],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 11],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 12],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 13],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 14],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 15],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 16],
-        outL "coffee" [],
-        GateValue δ [],
-        GateValue δ []
-        ] observed
+    let checkObserved = go 0 0 observed
+    let exampleObserved = [
+          inp "water" [Cint 1],
+          out "ok" [Cint 1],
+          inp "water" [Cint 1],
+          out "ok" [Cint 2],
+          GateValue δ [],
+          inp "water" [Cint 1],
+          out "ok" [Cint 3],
+          inp "water" [Cint 1],
+          outL "ok" [Cint 4],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 5],
+          GateValue δ [],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 6],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 7],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 8],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 9],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 10],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 11],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 12],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 13],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 14],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 15],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 16],
+          outL "coffee" [],
+          GateValue δ [],
+          GateValue δ []
+          ]
+    let checkExample = go 0 0 exampleObserved
+    assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
+    go ds waterlevel [] = (ds, waterlevel)
+    go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
+    go ds waterlevel gv@(GateValue x y:os)
+      | x == In (InputAttempt ("water", True))
+      , [Cint w] <- y = go ds (waterlevel+w) os
+      | x == Out (OutSusp "ok")
+      , [Cint w] <- y
+      , w == waterlevel = go ds waterlevel os
+      | x == Out (OutSusp "coffee")
+      , [] <- y
+      , waterlevel > 15 = go ds waterlevel os
+      | otherwise = error $ "wrong gatevalue: " <> show gv
+
 
 stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =

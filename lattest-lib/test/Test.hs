@@ -45,7 +45,10 @@ quickCheckTests = testGroup "Quickcheck"
 
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
+    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> 
+      within (durationSeconds * 1000000) $ withMaxSize 20 $
+      -- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
+      noShrinking $ prop testparam
 
 
 makeHUnitTests :: IO TestTree

@@ -11,7 +11,10 @@ permissions:
 
 jobs:
   stack:
-    name: stack-lts-23.18
+    strategy:
+      matrix:
+        ghcversion: [9.8.4, 9.10.3, 9.12.4]
+    name: testsuite
 
     runs-on: ubuntu-latest
 
@@ -20,7 +23,7 @@ jobs:
     - uses: haskell-actions/setup@v2
       id: setup
       with:
-        ghc-version: '9.8.4'
+        ghc-version: ${{ matrix.ghcversion }}
         enable-stack: true
         stack-version: 'latest'
 
@@ -31,10 +34,9 @@ jobs:
         cache-name: cache1
       with:
         path: lattest-lib/.stack-work
-        key: stackwork-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        key: stackwork-${{ matrix.ghcversion }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
         restore-keys: |
-          stackwork-${{ env.cache-name }}-
-          stackwork  
+          stackwork-${{ matrix.ghcversion }}-{{ env.cache-name }}-
     - name: Restore cached stackdir
       id: cache2
       uses: actions/cache/restore@v4
@@ -42,17 +44,16 @@ jobs:
         cache-name: cache2
       with:
         path: ~/.stack
-        key: stack-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        key: stack-${{ matrix.ghcversion }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
         restore-keys: |
-          stack-${{ env.cache-name }}-
-          stack
+          stack-${{ matrix.ghcversion }}-${{ env.cache-name }}-
 
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get -y install z3
         cd lattest-lib
-        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc --only-dependencies
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc --only-dependencies --stack-yaml "stack-${{ matrix.ghcversion }}.yaml"
 
     - name: Cache stackwork
       uses: actions/cache/save@v4
@@ -71,8 +72,8 @@ jobs:
     - name: Build
       run: |
         cd lattest-lib
-        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --no-run-tests --system-ghc --stack-yaml "stack-${{ matrix.ghcversion }}.yaml"
     - name: Run tests
       run: |
         cd lattest-lib
-        stack test --system-ghc
+        stack test --system-ghc --stack-yaml "stack-${{ matrix.ghcversion }}.yaml"
