@@ -83,7 +83,7 @@ tests:
     dependencies:
     - lattest-lib
     - HUnit >= 1.6.2.0
-    - QuickCheck
+    - QuickCheck >= 2.15.0.1
     - tasty >= 1.5.3
     - tasty-quickcheck
     - utf8-string >= 1.0.2

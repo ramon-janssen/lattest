@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 import Test.Lattest.Adapter.StandardAdapters
 import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.NComplete
@@ -47,15 +45,10 @@ quickCheckTests = testGroup "Quickcheck"
 
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> within (durationSeconds * 1000000) $
-#if MIN_VERSION_QuickCheck(2,15,0)
--- This option doesn't exist in quickcheck-2.14.3 and lower, and for some reason,
--- in versions where it does exist the test 'consumeBufferedWith' gets large enough
--- that even a 10 second timeout doesn't cut it.
-     withMaxSize 20 $
-#endif
--- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
-     noShrinking $ prop testparam
+    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> 
+      within (durationSeconds * 1000000) $ withMaxSize 20 $
+      -- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
+      noShrinking $ prop testparam
 
 
 makeHUnitTests :: IO TestTree
