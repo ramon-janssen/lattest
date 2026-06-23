@@ -66,7 +66,11 @@ asDualExpr,
 -- ** 'Data.OrdMonad' re-export, for convenience.
 module OM,
 joins,
-meets
+meets,
+disjunction,
+(\$/),
+conjunction,
+(/$\)
 )
 where
 
@@ -132,13 +136,29 @@ bot = forbidden
 top :: FreeLattice a
 top = underspecified
 
--- TODO: document me
-meets :: (Foldable f, Ord a) => f a -> FreeLattice a
-meets = foldr ((/\) . atom) top
+-- | Combine a collection of FreeLattices using '(/\)'
+meets :: (Foldable f, Ord a) => f (FreeLattice a) -> FreeLattice a
+meets = foldr (/\) top
 
--- TODO: document me
-joins :: (Foldable f, Ord a) => f a -> FreeLattice a
-joins = foldr ((\/) . atom) bot
+-- | Combine a collection of FreeLattices using '(\/)'
+joins :: (Foldable f, Ord a) => f (FreeLattice a) -> FreeLattice a
+joins = foldr (\/) bot
+
+-- | Combine a collection of states using '(/\)'
+conjunction :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+conjunction = meets . fmap atom
+
+-- | Synonym for 'conjunction'
+(/$\) :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+(/$\) = conjunction
+
+-- | Combine a collection of states using '(\/)'
+disjunction :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+disjunction = joins . fmap atom
+
+-- | Synonym for 'disjunction'
+(\$/) :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+(\$/) = disjunction
 
 instance BoundedConfiguration FreeLattice where
     isForbidden (FreeLattice x) = any Set.null x
