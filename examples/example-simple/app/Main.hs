@@ -5,7 +5,7 @@ import Data.Set (Set)
 import Lattest.Adapter.Adapter (Adapter)
 import Lattest.Adapter.StandardAdapters (pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers (andObserving, observingOnly, randomTestSelectorFromSeed, stateObserver, stopAfterSteps, traceObserver, untilCondition)
-import Lattest.Exec.Testing (runTester, offlineTester, offlineTreeToTrace, TestController)
+import Lattest.Exec.Testing (runTester, offlineTester, offlineTreeToTrace, TestController, Eagerness(..))
 import Lattest.Model.Alphabet (IOAct (..), Suspended (..))
 import Lattest.Model.StandardAutomata (automaton, detConcTransFromRel, interpretConcrete, ioAlphabet, interpretQuiescentConcrete)
 import Data.Maybe (fromJust)
@@ -73,7 +73,7 @@ main = do
   putStrLn $ "final state: " ++ show maybeMq
 
   putStrLn "Offline test gen:"
-  tests <- offlineTester (interpretQuiescentConcrete spec) testSelector
+  tests <- offlineTester OutputEager (interpretQuiescentConcrete spec) testSelector
   putStrLn "Tests:"
   print tests
   putStrLn "Trace:"

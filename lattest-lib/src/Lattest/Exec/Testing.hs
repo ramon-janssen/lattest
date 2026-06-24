@@ -50,11 +50,12 @@ offlineTester,
 offlineSMTTester,
 offlineTreeToTrace,
 OfflineTree(..),
-offlineTreeSTSToTrace
+offlineTreeSTSToTrace,
+Eagerness(..)
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput, GateValue (..), SymInteract (SymInteract), maybeFromInput, maybeFromOutput, Suspended(..), IOGateValue)
+import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput, GateValue (..), SymInteract (SymInteract), maybeFromInput, maybeFromOutput, Suspended(..), IOGateValue, isInput, fromInput)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr (..), After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu(..), indefiniteMenu, STStdest, IntrpState)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden, BooleanConfiguration)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
@@ -240,36 +241,44 @@ runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState s
 offlineTester
   :: forall m loc q t tdest i o state r
    . (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
-  => AutIntrpr m loc q t tdest (IOAct i o)
+  => Eagerness
+  -> AutIntrpr m loc q t tdest (IOAct i o)
   -> TestController m loc q t tdest (IOAct i o) state i r
   -> IO (OfflineTree o i (Verdict, r))
-offlineTester spec testSelection = go (makeTester spec testSelection)
+offlineTester eagerness spec testSelection = go (makeTester spec testSelection)
   where
     go controller = do
       let indefiniteAct = indefiniteMenu $ fst $ controllerState controller
       let outOptions = map fromOutput . filter isOutput $ indefiniteAct
-      case outOptions of
-        [] | null indefiniteAct
-           -- -> error "no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller"
-           -> Leaf <$> handleClose controller (controllerState controller)
+      let inOptions  = map fromInput  . filter isInput  $ indefiniteAct
+      handleInputOutput controller inOptions outOptions
 
-        -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
-        [q] | Just q == quiescence (syntacticAutomaton $ fst $ controllerState controller)
-            , all isOutput indefiniteAct
-            -> CaseSplit . Map.singleton q . Leaf <$> do
-                res <- update controller (controllerState controller) (Out q)
-                case res of
-                  Left state -> handleClose controller state
-                  Right r -> return r
+    handleInputOutput controller input output = case (input, output) of
+      ([], [])
+          -- -> error "no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller"
+          -> Leaf <$> handleClose controller (controllerState controller)
 
-        -- no outputs or only quiescence, so we perform an input request
-        [q] | Just q == quiescence (syntacticAutomaton $ fst $ controllerState controller)
-            -> handleInput controller
-        []  -> handleInput controller
+      -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
+      ([], [q])
+          | Just q == quiescence (syntacticAutomaton $ fst $ controllerState controller)
+          -> CaseSplit . Map.singleton q . Leaf <$> do
+              res <- update controller (controllerState controller) (Out q)
+              case res of
+                Left state -> handleClose controller state
+                Right r -> return r
 
-        -- real output(s) possible, we choose not to make any input requests and just listen
-        _ -> CaseSplit . Map.fromList <$> forM outOptions
-              (\o -> (o,) <$> handleUpdate controller (Out o))
+      -- no outputs or only quiescence, so we perform an input request
+      (_,[q]) | Just q == quiescence (syntacticAutomaton $ fst $ controllerState controller)
+              -> handleInput controller
+      (_, []) -> handleInput controller
+
+      -- only output(s) possible
+      ([], _) -> CaseSplit . Map.fromList <$> forM output
+            (\o -> (o,) <$> handleUpdate controller (Out o))
+
+      _ -> case eagerness of
+        InputEager  -> handleInputOutput controller input []
+        OutputEager -> handleInputOutput controller [] output
 
     handleInput controller = do
       selection <- select controller (controllerState controller)
@@ -343,10 +352,11 @@ offlineSMTTester
   :: forall m loc i o o' state r
    . (SameOrSuspended o o', StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o, IOAfter m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) SMTRef, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o')))
   => SMTRef
+  -> Eagerness
   -> AutIntrpr m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
   -> TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r
   -> IO (OfflineTreeSTS o' i (Verdict, r))
-offlineSMTTester smtRef spec testSelection = go (makeSMTTester smtRef spec testSelection)
+offlineSMTTester smtRef eagerness spec testSelection = go (makeSMTTester smtRef spec testSelection)
   where
     go controller = do
       let inputIsAndGs = selectInteractionsAndGuards (fst $ controllerState controller) (mapM maybeFromInput)
@@ -359,51 +369,56 @@ offlineSMTTester smtRef spec testSelection = go (makeSMTTester smtRef spec testS
             (\(interact'@(SymInteract _ vars),guard) -> fmap (valuationToGateValue interact') <$> solveGuard vars guard)
             outputIsAndGs
       outputs <- catMaybes <$> mapM (runSMT smtRef) outputSMTs
-      case (outputs,inputs) of
-        ([],[]) -> case sameOrSuspended @o @o' of
-          Left Refl ->
-            -- no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller
-            Leaf' <$> handleClose controller (controllerState controller)
-          Right Refl ->
-            -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
-            CaseSplit' . Map.singleton (OnlyValidAssignment $ GateValue Quiescence []). Leaf' <$> do
-              res <- update controller (controllerState controller) (GateValue (Out Quiescence) [])
-              case res of
-                Left state -> handleClose controller state
-                Right r -> return r
+      handleInputsOutputs controller inputs outputs
 
-        -- no outputs or only quiescence, so we perform an input request
-        ([],_) -> handleInput controller
+    handleInputsOutputs controller inputs outputs = case (outputs, inputs) of
+      ([],[]) -> case sameOrSuspended @o @o' of
+        Left Refl ->
+          -- no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller
+          Leaf' <$> handleClose controller (controllerState controller)
+        Right Refl ->
+          -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
+          CaseSplit' . Map.singleton (OnlyValidAssignment $ GateValue Quiescence []). Leaf' <$> do
+            res <- update controller (controllerState controller) (GateValue (Out Quiescence) [])
+            case res of
+              Left state -> handleClose controller state
+              Right r -> return r
 
-        -- real output(s) possible, we choose not to make any input requests and just listen
-        _ -> CaseSplit' . Map.fromList <$> forM outputs (\o -> do
-          let (interact'@(SymInteract _ vars), guard) = case selectInteractionsAndGuardsOut (fst $ controllerState controller) $ \case
-                            x@(SymInteract (Out o') _)
-                              | GateValue o'' _ <- o
-                              , o' == o'' -> Just x
-                            _ -> Nothing of
-                        [x] -> x
-                        _ -> error "output stopped existing or multiplied itself"
-              otherValueGuard
-                | GateValue _ consts <- o
-                = if null consts
-                  then Expr $ Const False
-                  else Expr . And . Set.fromList $ view guard : zipWith
-                    (\v -> \case
-                      Cbool   c -> Not $ EqualBool   (Const c) (Var v)
-                      Cint    c -> Not $ EqualInt    (Const c) (Var v)
-                      Cstring c -> Not $ EqualString (Const c) (Var v)
-                      Ccstr _ _ -> error "cstr encountered in unexpected place"
-                      )
-                    vars
-                    consts
-              otherValueSMT = fmap (valuationToGateValue interact') <$> solveGuard vars otherValueGuard
-          otherValue <- runSMT smtRef otherValueSMT
-          ot <- handleUpdate controller (Out . oToO' <$> o)
-          return $ case otherValue of
-            Nothing -> (OnlyValidAssignment $ oToO' <$> o, ot)
-            Just _ ->  (OtherInconclusive   $ oToO' <$> o, ot)
-          )
+      -- no outputs or only quiescence, so we perform an input request
+      ([],_) -> handleInput controller
+
+      -- only output(s) possible
+      (_,[]) -> CaseSplit' . Map.fromList <$> forM outputs (\o -> do
+        let (interact'@(SymInteract _ vars), guard) = case selectInteractionsAndGuardsOut (fst $ controllerState controller) $ \case
+                          x@(SymInteract (Out o') _)
+                            | GateValue o'' _ <- o
+                            , o' == o'' -> Just x
+                          _ -> Nothing of
+                      [x] -> x
+                      _ -> error "output stopped existing or multiplied itself"
+            otherValueGuard
+              | GateValue _ consts <- o
+              = if null consts
+                then Expr $ Const False
+                else Expr . And . Set.fromList $ view guard : zipWith
+                  (\v -> \case
+                    Cbool   c -> Not $ EqualBool   (Const c) (Var v)
+                    Cint    c -> Not $ EqualInt    (Const c) (Var v)
+                    Cstring c -> Not $ EqualString (Const c) (Var v)
+                    Ccstr _ _ -> error "cstr encountered in unexpected place"
+                    )
+                  vars
+                  consts
+            otherValueSMT = fmap (valuationToGateValue interact') <$> solveGuard vars otherValueGuard
+        otherValue <- runSMT smtRef otherValueSMT
+        ot <- handleUpdate controller (Out . oToO' <$> o)
+        return $ case otherValue of
+          Nothing -> (OnlyValidAssignment $ oToO' <$> o, ot)
+          Just _ ->  (OtherInconclusive   $ oToO' <$> o, ot)
+        )
+      _ -> case eagerness of
+        InputEager  -> handleInputsOutputs controller inputs []
+        OutputEager -> handleInputsOutputs controller [] outputs
 
     handleInput controller = do
       selection <- select controller (controllerState controller)
@@ -440,6 +455,7 @@ data OfflineTreeSTS o i r where
   CaseSplit' :: Map (CaseSplitComplete o) (OfflineTreeSTS o i r)
              -> OfflineTreeSTS o i r
 
+data Eagerness = InputEager | OutputEager
 data CaseSplitComplete o = OnlyValidAssignment (GateValue o) | OtherInconclusive (GateValue o)
   deriving (Eq, Ord)
 
