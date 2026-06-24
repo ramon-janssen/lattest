@@ -497,6 +497,7 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
         assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
         assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
         assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
+        assignNewValue var@(Variable _ FloatType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Double))
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
