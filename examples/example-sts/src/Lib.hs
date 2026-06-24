@@ -16,7 +16,6 @@ import           Lattest.Model.StandardAutomata
 import           Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass), offlineTester, offlineSMTTester)
 import           Lattest.Exec.StandardTestControllers
 import Lattest.Model.Automaton (prettyPrint)
-import Data.Type.Equality ((:~:)(..))
 --import           Network.Socket(withSocketsDo)
 
 
@@ -68,7 +67,7 @@ run = do
         testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     -- putStrLn $ prettyPrint stsExample
-    t <- offlineSMTTester smtRef model testSelector (Right Refl)
+    t <- offlineSMTTester smtRef model testSelector
     print t
     -- (verdict, (observed, maybeMq)) <- runTester model testSelector adap
     --

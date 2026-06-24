@@ -73,7 +73,7 @@ main = do
   putStrLn $ "final state: " ++ show maybeMq
 
   putStrLn "Offline test gen:"
-  tests <- offlineTester (interpretQuiescentConcrete spec) testSelector (Just Quiescence)
+  tests <- offlineTester (interpretQuiescentConcrete spec) testSelector
   putStrLn "Tests:"
   print tests
   putStrLn "Trace:"

@@ -6,6 +6,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -52,7 +54,7 @@ OfflineTree(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput, GateValue (..), SymInteract (SymInteract), maybeFromInput, maybeFromOutput, Suspended(..))
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr (..), After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, indefiniteMenu, STStdest, IntrpState)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr (..), After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu(..), indefiniteMenu, STStdest, IntrpState)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden, BooleanConfiguration)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Lattest.SMT.SMTData(SMTRef, runSMT)
@@ -236,11 +238,10 @@ runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState s
     On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
 -}
 offlineSMTTester
-  :: (StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o, IOAfter m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) SMTRef, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o')))
+  :: (SameOrSuspended o o', StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o, IOAfter m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) SMTRef, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o')))
   => SMTRef
   -> AutIntrpr m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
   -> TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r
-  -> Either (o :~: o') (Suspended o :~: o')
   -> IO (OfflineTreeSTS o' i (Verdict, r))
 offlineSMTTester ioState spec testSelection = offlineTester'' ioState (makeSMTTester ioState spec testSelection)
 
@@ -254,17 +255,16 @@ offlineTester
   :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
   => AutIntrpr m loc q t tdest (IOAct i o)
   -> TestController m loc q t tdest (IOAct i o) state i r
-  -> Maybe o
   -> IO (OfflineTree o i (Verdict, r))
 offlineTester spec testSelection = offlineTester' (makeTester spec testSelection)
 
 offlineTester'
-  :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
+  :: forall m loc q t tdest i o state r
+   . (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
   => ActionController (IOAct i o) i (Verdict, r) ( AutIntrpr      m loc q t tdest (IOAct i o)
                                                  , TestController m loc q t tdest (IOAct i o) state i r)
-  -> Maybe o
   -> IO (OfflineTree o i (Verdict, r))
-offlineTester' ctrl quiescence = go ctrl
+offlineTester' = go
   where
     go controller = do
       let indefiniteAct = indefiniteMenu $ fst $ controllerState controller
@@ -275,7 +275,7 @@ offlineTester' ctrl quiescence = go ctrl
            -> Leaf <$> handleClose controller (controllerState controller)
 
         -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
-        [q] | Just q == quiescence
+        [q] | Just q == quiescence (syntacticAutomaton $ fst $ controllerState controller)
             , all isOutput indefiniteAct
             -> CaseSplit . Map.singleton q . Leaf <$> do
                 res <- update controller (controllerState controller) (Out q)
@@ -284,7 +284,7 @@ offlineTester' ctrl quiescence = go ctrl
                   Right r -> return r
 
         -- no outputs or only quiescence, so we perform an input request
-        [q] | Just q == quiescence
+        [q] | Just q == quiescence (syntacticAutomaton $ fst $ controllerState controller)
             -> handleInput controller
         []  -> handleInput controller
 
@@ -307,6 +307,11 @@ offlineTester' ctrl quiescence = go ctrl
           go (controller { controllerState = state})
         Right result -> do
           return $ Leaf result
+
+    quiescence aut = case locationActions @t @(IOAct i o) aut of
+      [] -> Nothing
+      [Out q] -> Just q
+      _ -> error "expected 0 or 1 elements"
 
 -- |A tree representing an offline test case.
 -- Such a test makes concrete choices on the inputs
@@ -356,13 +361,12 @@ offlineTreeToTrace (CaseSplit m) = case Map.toList m of
 -- though that feels ugly somehow; probably because I'm not sure what the purpose of that function is
 offlineTester''
   :: forall m loc i o o' state r
-   . (StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o)
+   . (SameOrSuspended o o', StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o)
   => SMTRef
   -> ActionController (GateValue (IOAct i o')) (Maybe (GateValue i)) (Verdict, r) ( AutIntrpr      m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
                                                                                   , TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r)
-  -> Either (o :~: o') (Suspended o :~: o')
   -> IO (OfflineTreeSTS o' i (Verdict, r))
-offlineTester'' ref ctrl useQuiescence = go ctrl
+offlineTester'' ref = go
   where
     go controller = do
       let inputIsAndGs = selectInteractionsAndGuards (fst $ controllerState controller) (mapM maybeFromInput)
@@ -376,7 +380,7 @@ offlineTester'' ref ctrl useQuiescence = go ctrl
             outputIsAndGs
       outputs <- catMaybes <$> mapM (runSMT ref) outputSMTs
       case (outputs,inputs) of
-        ([],[]) -> case useQuiescence of
+        ([],[]) -> case sameOrSuspended @o @o' of
           Left Refl ->
             -- no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller
             Leaf' <$> handleClose controller (controllerState controller)
@@ -402,8 +406,8 @@ offlineTester'' ref ctrl useQuiescence = go ctrl
                         _ -> error "output stopped existing or multiplied itself"
               otherValueGuard
                 | GateValue _ consts <- o
-                = if null consts 
-                  then Expr $ Const False 
+                = if null consts
+                  then Expr $ Const False
                   else Expr . And . Set.fromList $ view guard : zipWith
                     (\v -> \case
                       Cbool   c -> Not $ EqualBool   (Const c) (Var v)
@@ -440,7 +444,7 @@ offlineTester'' ref ctrl useQuiescence = go ctrl
           return $ Leaf' result
 
     oToO' :: o -> o'
-    oToO' = case useQuiescence of
+    oToO' = case sameOrSuspended @o @o' of
       Left  Refl -> id
       Right Refl -> OutSusp
 
@@ -474,4 +478,18 @@ instance (Show o, Show i, Show r) => Show (OfflineTreeSTS o i r) where
                                      <> "!" <> show (GateValue o'' [Cstring "_"]) <> " -> Inconclusive")
             (Map.toList m)
           ))
+
+
+
+
+-- | Proof that either 'o' and 'suspo' are the same type,
+-- or 'Suspended o' and 'suspo' are the same type.
+class SameOrSuspended o suspo where
+  sameOrSuspended :: Either (o :~: suspo) (Suspended o :~: suspo)
+
+instance SameOrSuspended o o where
+  sameOrSuspended = Left Refl
+
+instance SameOrSuspended o (Suspended o) where
+  sameOrSuspended = Right Refl
 

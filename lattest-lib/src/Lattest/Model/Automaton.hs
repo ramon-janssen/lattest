@@ -43,7 +43,7 @@ ioAfter,
 -- ** Exceptions
 AutomatonException(..),
 -- ** Finite Transition Labels
-FiniteMenu,
+FiniteMenu(..),
 specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
