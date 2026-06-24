@@ -63,8 +63,8 @@ instance TermWrapper SumTerm where
     wrap = SumTerm
     unwrap = summand
 
-instance Integral a => IntMultipliable (SumTerm a) where
-    n <.> SumTerm x = SumTerm (fromInteger $ toInteger x * toInteger n)
+instance Num a => IntMultipliable (SumTerm a) where
+    n <.> SumTerm x = SumTerm (fromInteger (toInteger n) * x)
 
 instance Foldable SumTerm where
     --foldr :: (a -> b -> b) -> b -> t a -> b 

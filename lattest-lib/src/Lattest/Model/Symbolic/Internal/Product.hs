@@ -75,7 +75,7 @@ instance TermWrapper ProductTerm where
     wrap = ProductTerm
     unwrap = factor
 
-instance Integral a => IntMultipliable (ProductTerm a) where
+instance Num a => IntMultipliable (ProductTerm a) where
     n <.> pt = (^ toInteger n) <$> pt
 
 instance Foldable ProductTerm where
