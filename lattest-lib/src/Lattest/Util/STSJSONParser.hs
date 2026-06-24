@@ -2,6 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -11,6 +13,7 @@ import Control.Monad (forM)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map.Strict as Map
+import Data.Scientific (floatingOrInteger, toRealFloat)
 import qualified Data.Set as Set
 import Data.Text (unpack)
 import Data.Maybe (fromMaybe)
@@ -18,23 +21,22 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLatticeCNF, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), fromConstantsMap, Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), fromConstantsMap, Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
 
 data UntypedExpr
     = UEBool Bool
     | UEInt  Integer
     | UEStr  String
-    -- TODO: | UEFloat Double
+    | UEFloat Double
     | UEOp1  String UntypedExpr
     | UEOp2  String UntypedExpr UntypedExpr
     deriving (Show, Eq)
 
 instance JSON.FromJSON UntypedExpr where
     parseJSON (JSON.Bool b)   = pure (UEBool b)
-    -- parseJSON (JSON.Number n) = case floatingOrInteger n of
-    --     -- TODO: Left  f -> pure (UEFloat f)
-    --     Right i -> pure (UEInt i)
-    parseJSON (JSON.Number n) = pure (UEInt (round n))
+    parseJSON (JSON.Number n) = case floatingOrInteger @Double n of
+        Left  f -> pure (UEFloat f)
+        Right i -> pure (UEInt i)
     parseJSON (JSON.String s) = pure (UEStr (unpack s))
     parseJSON (JSON.Object o) = do
         (op :: String) <- o JSON..: "op"
@@ -52,18 +54,24 @@ lookupVar varmap name expected mk = case Map.lookup name varmap of
     Just (Variable _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected " ++ show expected
     Nothing             -> Left $ "unknown variable: " ++ name
 
--- For equality, the result is defined based on the type of lhs and rhs
-inferEqOperandType :: VarMap -> UntypedExpr -> UntypedExpr -> Either String Type
-inferEqOperandType varmap lhs rhs =
-    case (operandType lhs, operandType rhs) of
+-- Used for equality and ordering comparisons, where the result is defined based on the type of lhs and rhs.
+-- A variable's declared type always takes priority over a literal's type
+inferOperandType :: VarMap -> UntypedExpr -> UntypedExpr -> Either String Type
+inferOperandType varmap lhs rhs =
+    case (varOperandType lhs, varOperandType rhs) of
         (Just t, _) -> Right t
         (_, Just t) -> Right t
-        _           -> Left "cannot determine operand type for equality operator"
+        _ -> case (literalOperandType lhs, literalOperandType rhs) of
+            (Just t, _) -> Right t
+            (_, Just t) -> Right t
+            _           -> Left "cannot determine operand type for operator"
     where
-        operandType (UEBool _)   = Just BoolType
-        operandType (UEInt  _)   = Just IntType
-        operandType (UEStr name) = fmap varType (Map.lookup name varmap)
-        operandType _            = Nothing
+        varOperandType (UEStr name) = fmap varType (Map.lookup name varmap)
+        varOperandType _            = Nothing
+        literalOperandType (UEBool _)  = Just BoolType
+        literalOperandType (UEInt  _)  = Just IntType
+        literalOperandType (UEFloat _) = Just FloatType
+        literalOperandType _           = Nothing
 
 toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)
 toBoolExpr _   (UEBool b)          = Right (sConst b)
@@ -72,18 +80,27 @@ toBoolExpr varmap (UEOp1 "not" e)    = sNot  <$> toBoolExpr varmap e
 toBoolExpr varmap (UEOp2 "&&" e1 e2) = (.&&) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
 toBoolExpr varmap (UEOp2 "||" e1 e2) = (.||) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
 toBoolExpr varmap (UEOp2 "==" e1 e2) = do
-    t <- inferEqOperandType varmap e1 e2
+    t <- inferOperandType varmap e1 e2
     case t of
-        IntType    -> (.==) <$> toIntExpr  varmap e1 <*> toIntExpr  varmap e2
-        BoolType   -> (.==) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
-        StringType -> (.==) <$> toStrExpr  varmap e1 <*> toStrExpr  varmap e2
-        -- TODO: FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        IntType    -> (.==) <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
+        BoolType   -> (.==) <$> toBoolExpr  varmap e1 <*> toBoolExpr  varmap e2
+        StringType -> (.==) <$> toStrExpr   varmap e1 <*> toStrExpr   varmap e2
+        FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
 toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toBoolExpr varmap (UEOp2 "==" e1 e2)
-toBoolExpr varmap (UEOp2 "<"  e1 e2) = (.<)  <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toBoolExpr varmap (UEOp2 "<=" e1 e2) = (.<=) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toBoolExpr varmap (UEOp2 ">"  e1 e2) = (.>)  <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toBoolExpr varmap (UEOp2 ">=" e1 e2) = (.>=) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
+toBoolExpr varmap (UEOp2 "<"  e1 e2) = toComparisonExpr (.<)  varmap e1 e2
+toBoolExpr varmap (UEOp2 "<=" e1 e2) = toComparisonExpr (.<=) varmap e1 e2
+toBoolExpr varmap (UEOp2 ">"  e1 e2) = toComparisonExpr (.>)  varmap e1 e2
+toBoolExpr varmap (UEOp2 ">=" e1 e2) = toComparisonExpr (.>=) varmap e1 e2
 toBoolExpr _   e                   = Left $ "not a boolean expression: " ++ show e
+
+-- Numeric ordering comparisons are defined for both Integer and Float operands, but never mixed.
+toComparisonExpr :: (forall t. ExprNum t => Expr t -> Expr t -> Expr Bool) -> VarMap -> UntypedExpr -> UntypedExpr -> Either String (Expr Bool)
+toComparisonExpr cmp varmap e1 e2 = do
+    t <- inferOperandType varmap e1 e2
+    case t of
+        IntType   -> cmp <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
+        FloatType -> cmp <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        _         -> Left $ "comparison operator is not defined for type " ++ show t
 
 toIntExpr :: VarMap -> UntypedExpr -> Either String (Expr Integer)
 toIntExpr _   (UEInt n)            = Right (sConst n)
@@ -95,6 +112,19 @@ toIntExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toIntExpr varmap e1 <*> toIntExp
 toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
+
+toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
+toFloatExpr _   (UEFloat f)          = Right (sConst f)
+-- A JSON literal such as 1.0 or 10.0 is indistinguishable from an integer literal once parsed
+-- so an integral literal is also accepted in a float context.
+toFloatExpr _   (UEInt n)            = Right (sConst (fromInteger n))
+toFloatExpr varmap (UEStr name)         = lookupVar varmap name FloatType sVar
+toFloatExpr varmap (UEOp1 "neg" e)     = sNeg <$> toFloatExpr varmap e
+toFloatExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+toFloatExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+toFloatExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+toFloatExpr _   e                    = Left $ "not a real expression: " ++ show e
 
 -- unknown strings are treated as string literals.
 toStrExpr :: VarMap -> UntypedExpr -> Either String (Expr String)
@@ -198,7 +228,7 @@ instance JSON.FromJSON STSJsonFormat where
 parseVarType :: String -> Either String Type
 parseVarType "integer" = Right IntType
 parseVarType "int"     = Right IntType
--- parseVarType "float"   = Right Double
+parseVarType "float"   = Right FloatType
 parseVarType "bool"    = Right BoolType
 parseVarType "boolean" = Right BoolType
 parseVarType "string"  = Right StringType
@@ -233,9 +263,10 @@ buildAssignment varMap name def = do
         Nothing -> Left $ "unknown variable '" ++ assignmentJsonVar def ++ "' in assignment '" ++ name ++ "'"
     let expr = assignmentJsonExpr def
     case varType var of
-        IntType    -> (var =:) <$> toIntExpr  varMap expr
-        BoolType   -> (var =:) <$> toBoolExpr varMap expr
-        StringType -> (var =:) <$> toStrExpr  varMap expr
+        IntType    -> (var =:) <$> toIntExpr   varMap expr
+        BoolType   -> (var =:) <$> toBoolExpr  varMap expr
+        StringType -> (var =:) <$> toStrExpr   varMap expr
+        FloatType  -> (var =:) <$> toFloatExpr varMap expr
 
 buildAssignmentMap
     :: VarMap
@@ -297,6 +328,7 @@ buildValuation locVarCtx initVal =
             (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (Cint (round n)))
             (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (Cbool b))
             (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (Cstring (unpack s)))
+            (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (Cfloat (toRealFloat n)))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
             (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
@@ -305,6 +337,7 @@ buildValuation locVarCtx initVal =
         defaultConst IntType    = Cint 0
         defaultConst BoolType   = Cbool False
         defaultConst StringType = Cstring ""
+        defaultConst FloatType  = Cfloat 0.0
 
 convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLatticeCNF String String String, Valuation)
 convertSTSJson json = do
