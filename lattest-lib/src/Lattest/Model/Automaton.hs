@@ -56,7 +56,8 @@ reachableFrom,
 prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp,
-indefiniteMenu
+indefiniteMenu,
+allowedMenu
 )
 where
 
@@ -352,7 +353,12 @@ specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t
     => AutIntrpr m loc q t tdest act -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
--- | Menu of allowed actions that are semantically present in the automaton, i.e. actions that are neither forbidden nor underspecified
+-- | Menu of allowed actions that are semantically present in the automaton, i.e. actions that are not forbidden.
+allowedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
+    => AutIntrpr m loc q t tdest act -> [act]
+allowedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isAllowed $ stateConf $ aut `after` act]
+
+-- | Menu of indefinite actions that are semantically present in the automaton, i.e. actions that are neither forbidden nor underspecified
 indefiniteMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
     => AutIntrpr m loc q t tdest act -> [act]
 indefiniteMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isIndefinite $ stateConf $ aut `after` act]

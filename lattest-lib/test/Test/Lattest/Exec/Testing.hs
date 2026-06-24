@@ -22,6 +22,7 @@ import Data.Maybe (fromJust)
 import System.Random(StdGen, mkStdGen)
 import Test.HUnit hiding (Path, path)
 import qualified Data.Map as Map (Map, insert, fromList)
+import Lattest.Exec.Testing (Eagerness(..))
 
 
 testTraceHappy :: Test
@@ -189,7 +190,7 @@ testOfflineTrace = TestCase $ do
       modelOT = interpretConcrete specOT
       testSelectorOT =
         randomTestSelectorFromSeed 123
-  r <- offlineTester modelOT testSelectorOT
+  r <- offlineTester OutputEager modelOT testSelectorOT
   let r2 = offlineTreeToTrace r
   assertEqual
     "trace through single-path automaton"
