@@ -52,10 +52,10 @@ OfflineTree(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput, GateValue (..), SymInteract (SymInteract), maybeFromInput, maybeFromOutput, Suspended(..))
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr (..), After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, indefiniteMenu, TransitionSemantics, IntrpState (IntrpState), STStdest, after, TransitionMapping, AutSyntax (..))
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr (..), After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu, indefiniteMenu, STStdest, IntrpState)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden, BooleanConfiguration)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
-import Lattest.SMT.SMTData(SMTRef, SmtEnv, runSMT)
+import Lattest.SMT.SMTData(SMTRef, runSMT)
 
 
 import Control.Exception(catch,evaluate)
@@ -66,14 +66,13 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad (forM)
 import Data.Bifunctor (first)
-import GHC.IORef (IORef)
-import Lattest.Model.Symbolic.SolveSTS (solveRandomInteraction, selectInteractionsAndGuards, selectInteractionsAndGuardsOut)
-import Data.Set (Set)
+import Lattest.Model.Symbolic.SolveSTS (selectInteractionsAndGuards, selectInteractionsAndGuardsOut)
 import qualified Data.Set as Set
 import Lattest.Model.Symbolic.Expr (Expr)
-import System.Random (mkStdGen)
 import Lattest.Model.Symbolic.SolveSymPrim (solveGuard, valuationToGateValue)
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (catMaybes)
+import Data.Type.Equality ((:~:)(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (Constant(..), ExprView (..), Expr (..))
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -236,13 +235,13 @@ runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState s
     On 'Nothing', inputs are only generated from states with no outputs.
     On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
 -}
--- offlineSMTTester
---   :: (g ~ IOAct i o, q ~ IntrpState loc, t ~ SymInteract g, tdest ~ STStdest, StepSemantics m loc q t tdest (GateValue (IOAct i o)), IOAfter m loc q t tdest (GateValue (IOAct i o)) SMTRef, Ord o, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o)), BooleanConfiguration m, Ord g, Ord (m (Expr Bool)), Show g, Show o, Show i, Ord i, TransitionMapping (IOAct i o) (IOAct i o), Ord loc, Ord (m (IntrpState loc)), Functor m, Show (m (Map (SymInteract (IOAct i o)) (m (STStdest, loc)))), Show (m (Map (SymInteract (IOAct i o)) (m (STStdest, loc)))))
---   => SMTRef
---   -> AutIntrpr m loc q t tdest (GateValue (IOAct i o))
---   -> TestController m loc q t tdest (GateValue (IOAct i o)) state (Maybe (GateValue i)) r
---   -> Maybe o
---   -> IO (OfflineTreeSTS o i (Verdict, r))
+offlineSMTTester
+  :: (StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o, IOAfter m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) SMTRef, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o')))
+  => SMTRef
+  -> AutIntrpr m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
+  -> TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r
+  -> Either (o :~: o') (Suspended o :~: o')
+  -> IO (OfflineTreeSTS o' i (Verdict, r))
 offlineSMTTester ioState spec testSelection = offlineTester'' ioState (makeSMTTester ioState spec testSelection)
 
 {- |
@@ -351,17 +350,19 @@ offlineTreeToTrace (CaseSplit m) = case Map.toList m of
 
 
 -- The STS version
--- TODO: once this works, abstract the commonalities into a typeclass
+-- TODO: once this works, abstract the commonalities with non-sts version into a typeclass or helper function
+-- the Either be handled by a typeclass
+-- technically, the Maybe can also be replaced by calling locationActions from FiniteMenu, which gives [Quiescence] or []
+-- though that feels ugly somehow; probably because I'm not sure what the purpose of that function is
 offlineTester''
-  :: forall m loc i o state r
-   . (Ord o, StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Show i, TransitionMapping (IOAct i o) (IOAct i o), Ord loc, Ord (m (IntrpState loc)), Functor m, Show (m (Map (SymInteract (IOAct i o)) (m (STStdest, loc)))), Show o)
+  :: forall m loc i o o' state r
+   . (StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o)
   => SMTRef
-  -- -> AutIntrpr m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i (Suspended o)))
-  -> ActionController (GateValue (IOAct i (Suspended o))) (Maybe (GateValue i)) (Verdict, r) ( AutIntrpr      m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i (Suspended o)))
-                                                                                 , TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i (Suspended o))) state (Maybe (GateValue i)) r)
-  -> Maybe (Suspended o)
-  -> IO (OfflineTreeSTS (Suspended o) i (Verdict, r))
-offlineTester'' ref ctrl quiescence = go ctrl
+  -> ActionController (GateValue (IOAct i o')) (Maybe (GateValue i)) (Verdict, r) ( AutIntrpr      m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
+                                                                                  , TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r)
+  -> Either (o :~: o') (Suspended o :~: o')
+  -> IO (OfflineTreeSTS o' i (Verdict, r))
+offlineTester'' ref ctrl useQuiescence = go ctrl
   where
     go controller = do
       let inputIsAndGs = selectInteractionsAndGuards (fst $ controllerState controller) (mapM maybeFromInput)
@@ -375,26 +376,50 @@ offlineTester'' ref ctrl quiescence = go ctrl
             outputIsAndGs
       outputs <- catMaybes <$> mapM (runSMT ref) outputSMTs
       case (outputs,inputs) of
-        ([],[]) -> Leaf' <$> handleClose controller (controllerState controller)
-         -- error "no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller"
-
-        -- TODO: 'q' is currently a GateValue o, not GateValue (Suspended o)
-        -- -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
-        -- ([q],[]) | Just (gate q) == quiescence
-        --     -> CaseSplit' . Map.singleton q . Set.singleton . (error "always true",) . Leaf' <$> do
-        --         res <- update controller (controllerState controller) (Out <$> q)
-        --         case res of
-        --           Left state -> handleClose controller state
-        --           Right r -> return r
+        ([],[]) -> case useQuiescence of
+          Left Refl ->
+            -- no inputs and no outputs, continuing (like runTester does) would crash in the testcontroller
+            Leaf' <$> handleClose controller (controllerState controller)
+          Right Refl ->
+            -- no inputs and only quiescent output, we observe it once and terminate this branch of the tree
+            CaseSplit' . Map.singleton (OnlyValidAssignment $ GateValue Quiescence []). Leaf' <$> do
+              res <- update controller (controllerState controller) (GateValue (Out Quiescence) [])
+              case res of
+                Left state -> handleClose controller state
+                Right r -> return r
 
         -- no outputs or only quiescence, so we perform an input request
-        -- ([q],_) | Just (gate q) == quiescence
-        --         -> handleInput controller
-        ([ ],_) -> handleInput controller
+        ([],_) -> handleInput controller
 
         -- real output(s) possible, we choose not to make any input requests and just listen
-        _ -> CaseSplit' . Map.fromList <$> forM outputs
-              (\o -> (OutSusp <$> o,) <$> handleUpdate controller (Out . OutSusp <$> o))
+        _ -> CaseSplit' . Map.fromList <$> forM outputs (\o -> do
+          let (interact'@(SymInteract _ vars), guard) = case selectInteractionsAndGuardsOut (fst $ controllerState controller) $ \case
+                            x@(SymInteract (Out o') _)
+                              | GateValue o'' _ <- o
+                              , o' == o'' -> Just x
+                            _ -> Nothing of
+                        [x] -> x
+                        _ -> error "output stopped existing or multiplied itself"
+              otherValueGuard
+                | GateValue _ consts <- o
+                = if null consts 
+                  then Expr $ Const False 
+                  else Expr . And . Set.fromList $ view guard : zipWith
+                    (\v -> \case
+                      Cbool   c -> Not $ EqualBool   (Const c) (Var v)
+                      Cint    c -> Not $ EqualInt    (Const c) (Var v)
+                      Cstring c -> Not $ EqualString (Const c) (Var v)
+                      Ccstr _ _ -> error "cstr encountered in unexpected place"
+                      )
+                    vars
+                    consts
+              otherValueSMT = fmap (valuationToGateValue interact') <$> solveGuard vars otherValueGuard
+          otherValue <- runSMT ref otherValueSMT
+          ot <- handleUpdate controller (Out . oToO' <$> o)
+          return $ case otherValue of
+            Nothing -> (OnlyValidAssignment $ oToO' <$> o, ot)
+            Just _ ->  (OtherInconclusive   $ oToO' <$> o, ot)
+          )
 
     handleInput controller = do
       selection <- select controller (controllerState controller)
@@ -414,6 +439,11 @@ offlineTester'' ref ctrl quiescence = go ctrl
         Right result -> do
           return $ Leaf' result
 
+    oToO' :: o -> o'
+    oToO' = case useQuiescence of
+      Left  Refl -> id
+      Right Refl -> OutSusp
+
 data OfflineTreeSTS o i r where
   -- |The end of a possible test trace
   Leaf' :: r
@@ -423,8 +453,11 @@ data OfflineTreeSTS o i r where
                 -> OfflineTreeSTS o i r
                 -> OfflineTreeSTS o i r
   -- |The test tries to get an output from the SUT.
-  CaseSplit' :: Map (GateValue o) (OfflineTreeSTS o i r)
+  CaseSplit' :: Map (CaseSplitComplete o) (OfflineTreeSTS o i r)
              -> OfflineTreeSTS o i r
+
+data CaseSplitComplete o = OnlyValidAssignment (GateValue o) | OtherInconclusive (GateValue o)
+  deriving (Eq, Ord)
 
 instance (Show o, Show i, Show r) => Show (OfflineTreeSTS o i r) where
   show = \case
@@ -433,8 +466,12 @@ instance (Show o, Show i, Show r) => Show (OfflineTreeSTS o i r) where
     CaseSplit' m ->
       "case <output> of\n"
       <> indentOfflineTree 2 (unlines
-          (map 
-            (\(o,ot) -> "!" <> show o <> " -> \n" <> indentOfflineTree 2 (show ot))
+          (map
+            (\(o,ot) -> case o of
+              OnlyValidAssignment o' -> "!" <> show o' <> " -> \n" <> indentOfflineTree 2 (show ot)
+              OtherInconclusive   o'@(GateValue o'' _)
+                                     -> "!" <> show o' <> " -> \n" <> indentOfflineTree 2 (show ot) <> "\n"
+                                     <> "!" <> show (GateValue o'' [Cstring "_"]) <> " -> Inconclusive")
             (Map.toList m)
           ))
 
