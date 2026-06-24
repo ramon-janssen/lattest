@@ -30,7 +30,8 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sNot
   -- *** And
 , sAnd
-  -- ** Integer Operators to create Value Expressions
+  -- ** Numeric Operators to create Value Expressions
+, ExprNum
   -- *** Sum
 , sSum
   -- *** Product
@@ -170,6 +171,10 @@ instance VarExpr String where
     sVar v@(Variable _ StringType) = sVar' v
     sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
 
+instance VarExpr Double where
+    sVar v@(Variable _ FloatType) = sVar' v
+    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Real, received " ++ show t
+
 sVar' :: Variable -> Expr t
 sVar' = Expr . Var
 
@@ -193,6 +198,9 @@ instance EqExpr Bool where
 
 instance EqExpr String where
     (.==) (view -> x) (view -> y) = Expr $ EqualString x y
+
+instance EqExpr Double where
+    (.==) (view -> x) (view -> y) = Expr $ EqualFloat x y
 
 infix 4 .==
 
@@ -306,8 +314,8 @@ getSum :: ExprView Integer -> FreeSum (ExprView Integer)
 getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
-sSum :: FreeSum (Expr Integer) -> Expr Integer
-sSum = Expr . cstrSum . FMX.mapTerms (SumTerm . view . summand)
+sSumInt :: FreeSum (Expr Integer) -> Expr Integer
+sSumInt = Expr . cstrSum . FMX.mapTerms (SumTerm . view . summand)
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
@@ -341,7 +349,38 @@ cstrSum' ms =
 getConst :: ExprView e -> e
 getConst (Const c) = c
 
+isSumF :: ExprView Double -> Bool
+isSumF (SumFloat _) = True
+isSumF _ = False
 
+getSumF :: ExprView Double -> FreeSum (ExprView Double)
+getSumF (SumFloat s) = s
+getSumF _ = error "ExprImpls.hs - getSumF - Unexpected Expr "
+
+sSumFloat :: FreeSum (Expr Double) -> Expr Double
+sSumFloat = Expr . cstrSumF . FMX.mapTerms (SumTerm . view . summand)
+
+-- | Apply operator sum on the provided sum of floating-point values.
+cstrSumF :: FreeSum (ExprView Double) -> ExprView Double
+cstrSumF ms = cstrSumF' $ nonadds <> FMX.flatten sumOfAdds
+    where
+      (adds, nonadds) = FMX.partitionT isSumF ms
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView Double)))
+      sumOfAdds = FMX.mapTerms (getSumF . summand) adds
+
+cstrSumF' :: FreeSum (ExprView Double) -> ExprView Double
+cstrSumF' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
+        sumVals = summand $ FMX.foldFMX valueSum
+        retMS = case sumVals of
+                    0.0 -> nonvals                                   -- 0.0 + x == x
+                    _   -> Sum.add (Const sumVals) nonvals
+    in
+        case FMX.toOccurList retMS of
+            []         -> Const 0.0 -- sum of nothing equals zero
+            [(term,1)] -> summand term
+            _          -> SumFloat retMS
 
 -- Product
 
@@ -354,8 +393,8 @@ getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
 getProduct (Product p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
-sProduct :: FreeProduct (Expr Integer) -> Expr Integer
-sProduct = Expr . cstrPrd . FMX.mapTerms (ProductTerm . view . factor)
+sProductInt :: FreeProduct (Expr Integer) -> Expr Integer
+sProductInt = Expr . cstrPrd . FMX.mapTerms (ProductTerm . view . factor)
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
@@ -396,15 +435,67 @@ cstrPrd' ms =
         isZero :: ExprView Integer -> Bool
         isZero (Const 0) = True
         isZero _         = False
+
+-- Product of floating-point values
+isProductF :: ExprView Double -> Bool
+isProductF (ProductFloat _) = True
+isProductF _ = False
+
+getProductF :: ExprView Double -> FreeProduct (ExprView Double)
+getProductF (ProductFloat p) = p
+getProductF _ = error "ExprImpls.hs - getProductF - Unexpected Expr "
+
+sProductFloat :: FreeProduct (Expr Double) -> Expr Double
+sProductFloat = Expr . cstrPrdF . FMX.mapTerms (ProductTerm . view . factor)
+
+-- | Apply operator product on the provided product of floating-point values.
+cstrPrdF :: FreeProduct (ExprView Double) -> ExprView Double
+cstrPrdF ms =
+    cstrPrdF' $ noprods <> FMX.flatten prodOfProds
+    where
+      (prods, noprods) = FMX.partitionT isProductF ms
+      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView Double)))
+      prodOfProds = FMX.mapTerms (getProductF . factor) prods
+
+-- Product doesn't contain elements of type ProductFloat
+cstrPrdF' :: FreeProduct (ExprView Double) -> ExprView Double
+cstrPrdF' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        (zeros, _) = FMX.partitionT isZeroF vals
+    in
+        case FMX.nrofDistinctTerms zeros of
+            0   ->  let floatProducts = FMX.mapTerms (getConst <$>) vals
+                        productVals = factor (FMX.foldFMX floatProducts)
+                        withConst = if productVals == 1.0           -- 1.0 * x == x
+                                        then nonvals
+                                        else Product.multiply (Const productVals) nonvals
+                    in
+                        case FMX.toDistinctAscOccurListT withConst of
+                            []          ->  Const productVals
+                            [(term, 1)] ->  term
+                            _           ->  ProductFloat withConst
+            _   ->  let (_, n) = Product.fraction zeros in
+                        case FMX.nrofDistinctTerms n of
+                            0   ->  Const 0.0      -- 0.0 * x == 0.0
+                            _   ->  error "Error in model: Division by Zero in Product (via negative power)"
+    where
+        isZeroF :: ExprView Double -> Bool
+        isZeroF (Const 0.0) = True
+        isZeroF _           = False
+
 -- Divide
 
--- | Apply operator Divide on the provided value expressions.
+-- | Apply operator Divide on the provided integer value expressions.
 -- Preconditions are /not/ checked.
-(./) :: Expr Integer -> Expr Integer -> Expr Integer
-(./) (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t `Boute.div` n) -- leave error case (division by zero) unevaluated
-(./) (view -> vet)         (view -> ven) = Expr (Divide vet ven)
+divideInt :: Expr Integer -> Expr Integer -> Expr Integer
+divideInt (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t `Boute.div` n) -- leave error case (division by zero) unevaluated
+divideInt (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
-infixl 7 ./
+-- | Apply operator Divide on the provided floating-point value expressions.
+-- Preconditions are /not/ checked.
+divideFloat :: Expr Double -> Expr Double -> Expr Double
+divideFloat (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t / n) -- leave error case (division by zero) unevaluated
+divideFloat (view -> vet)         (view -> ven) = Expr (DivideFloat vet ven)
 
 -- Modulo
 
@@ -416,14 +507,39 @@ infixl 7 ./
 
 infixl 7 .%
 
--- | Apply operator GEZ (Greater Equal Zero) on the provided value expression.
+-- | Apply operator GEZ (Greater Equal Zero) on the provided integer value expression.
 -- Preconditions are /not/ checked.
-sIsNonNegative :: Expr Integer -> Expr Bool
+sIsNonNegativeInt :: Expr Integer -> Expr Bool
 -- Simplification Values
-sIsNonNegative (view -> Const v) = sConst (0 <= v)
-sIsNonNegative (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
-sIsNonNegative (view -> ve)         = Expr (GezInt ve)
+sIsNonNegativeInt (view -> Const v) = sConst (0 <= v)
+sIsNonNegativeInt (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
+sIsNonNegativeInt (view -> ve)         = Expr (GezInt ve)
 
+-- | Apply operator GEZ (Greater Equal Zero) on the provided floating-point value expression.
+-- Preconditions are /not/ checked.
+sIsNonNegativeFloat :: Expr Double -> Expr Bool
+sIsNonNegativeFloat (view -> Const v) = sConst (0 <= v)
+sIsNonNegativeFloat (view -> ve)      = Expr (GezFloat ve)
+
+class Ord t => ExprNum t where
+    sSum :: FreeSum (Expr t) -> Expr t
+    sProduct :: FreeProduct (Expr t) -> Expr t
+    sIsNonNegative :: Expr t -> Expr Bool
+    (./) :: Expr t -> Expr t -> Expr t
+
+infixl 7 ./
+
+instance ExprNum Integer where
+    sSum = sSumInt
+    sProduct = sProductInt
+    sIsNonNegative = sIsNonNegativeInt
+    (./) = divideInt
+
+instance ExprNum Double where
+    sSum = sSumFloat
+    sProduct = sProductFloat
+    sIsNonNegative = sIsNonNegativeFloat
+    (./) = divideFloat
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
@@ -484,12 +600,13 @@ type TypedValuation t = Map.Map Variable t
 data Valuation = Valuation {
     intValuation :: TypedValuation Integer,
     boolValuation :: TypedValuation Bool,
-    stringValuation :: TypedValuation String
+    stringValuation :: TypedValuation String,
+    floatValuation :: TypedValuation Double
     }
     deriving (Eq, Ord)
 
 instance Show Valuation where
-    show (Valuation i b s) = "{" ++ (List.intercalate "," $ printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
+    show (Valuation i b s f) = "{" ++ (List.intercalate "," $ printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s ++ printAsAssignments f) ++ "}"
         where
         printAsAssignments :: Show t => Map.Map Variable t -> [String]
         printAsAssignments m = printAsAssignment <$> Map.toList m
@@ -499,6 +616,7 @@ toConstantsMap :: Valuation -> Map.Map Variable Constant
 toConstantsMap valuation = Map.map Cint (intValuation valuation)
                             `Map.union` Map.map Cbool (boolValuation valuation)
                             `Map.union` Map.map Cstring (stringValuation valuation)
+                            `Map.union` Map.map Cfloat (floatValuation valuation)
 
 fromConstantsMap :: Map.Map Variable Constant -> Valuation
 fromConstantsMap = assignValues . fmap (uncurry insertIntoValuation) . Map.toList
@@ -507,13 +625,14 @@ assignValues :: [Valuation -> Valuation] -> Valuation
 assignValues fs = foldr ($) emptyValuation fs
 
 emptyValuation :: Valuation
-emptyValuation = Valuation Map.empty Map.empty Map.empty
+emptyValuation = Valuation Map.empty Map.empty Map.empty Map.empty
 
 type TypedVarModel t = Map.Map Variable (Expr t)
 data VarModel = VarModel {
     intVars :: TypedVarModel Integer,
     boolVars :: TypedVarModel Bool,
-    stringVars :: TypedVarModel String
+    stringVars :: TypedVarModel String,
+    floatVars :: TypedVarModel Double
     }
     deriving (Eq, Ord)
 
@@ -527,13 +646,15 @@ valuationToVarModel :: Valuation -> VarModel
 valuationToVarModel vals = VarModel {
     intVars = typedValuationToVarModel $ intValuation vals,
     boolVars = typedValuationToVarModel $ boolValuation vals,
-    stringVars = typedValuationToVarModel $ stringValuation vals
+    stringVars = typedValuationToVarModel $ stringValuation vals,
+    floatVars = typedValuationToVarModel $ floatValuation vals
     }
 
 insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
 insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
 insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
 insertIntoValuation v@(Variable name StringType) c = assignValue v (fromConst' c name StringType :: String)
+insertIntoValuation v@(Variable name FloatType) c = assignValue v (fromConst' c name FloatType :: Double)
 fromConst' :: (ConstType a, Show b) => Constant -> String -> b -> a
 fromConst' smtValue name t = case fromConst smtValue of
     Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
@@ -554,9 +675,9 @@ instance Assignable Integer where
     assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
     assignValue v@(Variable _ IntType) val m = m {intValuation = Map.insert v val (intValuation m)}
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignedExpr v@(Variable _ IntType) (VarModel ints _bools _strings) = Map.lookup v ints
+    assignedExpr v@(Variable _ IntType) (VarModel ints _bools _strings _floats) = Map.lookup v ints
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
-    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints _bools _strings) = Map.findWithDefault (sVar v) v ints
+    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints _bools _strings _floats) = Map.findWithDefault (sVar v) v ints
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
 
 instance Assignable Bool where
@@ -564,9 +685,9 @@ instance Assignable Bool where
     assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
     assignValue v@(Variable _ BoolType) val m = m {boolValuation = Map.insert v val (boolValuation m)}
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignedExpr v@(Variable _ BoolType) (VarModel _ints bools _strings) = Map.lookup v bools
+    assignedExpr v@(Variable _ BoolType) (VarModel _ints bools _strings _floats) = Map.lookup v bools
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
-    assignedExprWithDefault v@(Variable _ BoolType) (VarModel _ints bools _strings) = Map.findWithDefault (sVar v) v bools
+    assignedExprWithDefault v@(Variable _ BoolType) (VarModel _ints bools _strings _floats) = Map.findWithDefault (sVar v) v bools
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
 
 instance Assignable String where
@@ -574,16 +695,26 @@ instance Assignable String where
     assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
     assignValue v@(Variable _ StringType) val m = m {stringValuation = Map.insert v val (stringValuation m)}
     assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignedExpr v@(Variable _ StringType) (VarModel _ints _bools strings) = Map.lookup v strings
+    assignedExpr v@(Variable _ StringType) (VarModel _ints _bools strings _floats) = Map.lookup v strings
     assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
-    assignedExprWithDefault v@(Variable _ StringType) (VarModel _ints _bools strings) = Map.findWithDefault (sVar v) v strings
+    assignedExprWithDefault v@(Variable _ StringType) (VarModel _ints _bools strings _floats) = Map.findWithDefault (sVar v) v strings
     assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
 
+instance Assignable Double where
+    assign v@(Variable _ FloatType) e m = m {floatVars = Map.insert v e (floatVars m)}
+    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
+    assignValue v@(Variable _ FloatType) val m = m {floatValuation = Map.insert v val (floatValuation m)}
+    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
+    assignedExpr v@(Variable _ FloatType) (VarModel _ints _bools _strings floats) = Map.lookup v floats
+    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
+    assignedExprWithDefault v@(Variable _ FloatType) (VarModel _ints _bools _strings floats) = Map.findWithDefault (sVar v) v floats
+    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
+
 noAssignment :: VarModel
-noAssignment = VarModel Map.empty Map.empty Map.empty
+noAssignment = VarModel Map.empty Map.empty Map.empty Map.empty
 
 instance Show VarModel where
-    show (VarModel ints bools strings) = showMapList $ showList' ints ++ showList' bools ++ showList' strings
+    show (VarModel ints bools strings floats) = showMapList $ showList' ints ++ showList' bools ++ showList' strings ++ showList' floats
         where
         showMapList m' = "{" ++ (List.intercalate ", " m') ++ "}"
         showList' m' = showAssign <$> Map.toList m'
@@ -614,14 +745,19 @@ subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = sIfThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
+subst' ve (DivideFloat t n)       = (./) (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
+subst' ve (SumFloat s)            = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
+subst' ve (ProductFloat p)        = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = sLength (subst' ve vexp)
 
 subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
+subst' ve (GezFloat v)              = sIsNonNegative (subst' ve v)
 subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (EqualFloat vexp1 vexp2)  = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
