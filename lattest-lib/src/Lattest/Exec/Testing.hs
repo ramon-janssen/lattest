@@ -49,11 +49,12 @@ InconclusiveReason(..),
 offlineTester,
 offlineSMTTester,
 offlineTreeToTrace,
-OfflineTree(..)
+OfflineTree(..),
+offlineTreeSTSToTrace
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput, GateValue (..), SymInteract (SymInteract), maybeFromInput, maybeFromOutput, Suspended(..))
+import Lattest.Model.Alphabet(TestChoice, IOAct (..), isOutput, fromOutput, GateValue (..), SymInteract (SymInteract), maybeFromInput, maybeFromOutput, Suspended(..), IOGateValue)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr (..), After, IOAfter, ioAfter, stateConf, AutomatonException, FiniteMenu(..), indefiniteMenu, STStdest, IntrpState)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden, BooleanConfiguration)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
@@ -230,21 +231,6 @@ runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState s
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
 --runStepper spec controller = runExperiment controller (simulateSpec spec)
 
-
-{- |
-    Offline test generation: Instead of connecting to a system and running the tests live,
-    generate a decision tree that can later be used to test a system.
-    On 'Nothing', inputs are only generated from states with no outputs.
-    On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
--}
-offlineSMTTester
-  :: (SameOrSuspended o o', StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o, IOAfter m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) SMTRef, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o')))
-  => SMTRef
-  -> AutIntrpr m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
-  -> TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r
-  -> IO (OfflineTreeSTS o' i (Verdict, r))
-offlineSMTTester ioState spec testSelection = offlineTester'' ioState (makeSMTTester ioState spec testSelection)
-
 {- |
     Offline test generation: Instead of connecting to a system and running the tests live,
     generate a decision tree that can later be used to test a system.
@@ -252,19 +238,12 @@ offlineSMTTester ioState spec testSelection = offlineTester'' ioState (makeSMTTe
     On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
 -}
 offlineTester
-  :: (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
+  :: forall m loc q t tdest i o state r
+   . (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
   => AutIntrpr m loc q t tdest (IOAct i o)
   -> TestController m loc q t tdest (IOAct i o) state i r
   -> IO (OfflineTree o i (Verdict, r))
-offlineTester spec testSelection = offlineTester' (makeTester spec testSelection)
-
-offlineTester'
-  :: forall m loc q t tdest i o state r
-   . (After m loc q t tdest (IOAct i o), Ord o, Ord q, Ord (m q), Foldable m, Ord i, FiniteMenu t (IOAct i o))
-  => ActionController (IOAct i o) i (Verdict, r) ( AutIntrpr      m loc q t tdest (IOAct i o)
-                                                 , TestController m loc q t tdest (IOAct i o) state i r)
-  -> IO (OfflineTree o i (Verdict, r))
-offlineTester' = go
+offlineTester spec testSelection = go (makeTester spec testSelection)
   where
     go controller = do
       let indefiniteAct = indefiniteMenu $ fst $ controllerState controller
@@ -354,31 +333,32 @@ offlineTreeToTrace (CaseSplit m) = case Map.toList m of
   _ -> Nothing
 
 
--- The STS version
--- TODO: once this works, abstract the commonalities with non-sts version into a typeclass or helper function
--- the Either be handled by a typeclass
--- technically, the Maybe can also be replaced by calling locationActions from FiniteMenu, which gives [Quiescence] or []
--- though that feels ugly somehow; probably because I'm not sure what the purpose of that function is
-offlineTester''
+{- |
+    Offline test generation: Instead of connecting to a system and running the tests live,
+    generate a decision tree that can later be used to test a system.
+    On 'Nothing', inputs are only generated from states with no outputs.
+    On 'Just Quiescence', inputs are also generated from other states after observing quiescence.
+-}
+offlineSMTTester
   :: forall m loc i o o' state r
-   . (SameOrSuspended o o', StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o)
+   . (SameOrSuspended o o', StepSemantics m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o)), BooleanConfiguration m, Ord (IOAct i o), Ord (m (Expr Bool)), Ord o', Eq o, IOAfter m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) SMTRef, TestChoice (Maybe (GateValue i)) (GateValue (IOAct i o')))
   => SMTRef
-  -> ActionController (GateValue (IOAct i o')) (Maybe (GateValue i)) (Verdict, r) ( AutIntrpr      m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
-                                                                                  , TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r)
+  -> AutIntrpr m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o'))
+  -> TestController m loc (IntrpState loc) (SymInteract (IOAct i o)) STStdest (GateValue (IOAct i o')) state (Maybe (GateValue i)) r
   -> IO (OfflineTreeSTS o' i (Verdict, r))
-offlineTester'' ref = go
+offlineSMTTester smtRef spec testSelection = go (makeSMTTester smtRef spec testSelection)
   where
     go controller = do
       let inputIsAndGs = selectInteractionsAndGuards (fst $ controllerState controller) (mapM maybeFromInput)
       let inputSMTs = map
             (\(interact'@(SymInteract _ vars),guard) -> fmap (valuationToGateValue interact') <$> solveGuard vars guard)
             inputIsAndGs
-      inputs <- catMaybes <$> mapM (runSMT ref) inputSMTs
+      inputs <- catMaybes <$> mapM (runSMT smtRef) inputSMTs
       let outputIsAndGs = selectInteractionsAndGuardsOut (fst $ controllerState controller) (mapM maybeFromOutput)
       let outputSMTs = map
             (\(interact'@(SymInteract _ vars),guard) -> fmap (valuationToGateValue interact') <$> solveGuard vars guard)
             outputIsAndGs
-      outputs <- catMaybes <$> mapM (runSMT ref) outputSMTs
+      outputs <- catMaybes <$> mapM (runSMT smtRef) outputSMTs
       case (outputs,inputs) of
         ([],[]) -> case sameOrSuspended @o @o' of
           Left Refl ->
@@ -418,7 +398,7 @@ offlineTester'' ref = go
                     vars
                     consts
               otherValueSMT = fmap (valuationToGateValue interact') <$> solveGuard vars otherValueGuard
-          otherValue <- runSMT ref otherValueSMT
+          otherValue <- runSMT smtRef otherValueSMT
           ot <- handleUpdate controller (Out . oToO' <$> o)
           return $ case otherValue of
             Nothing -> (OnlyValidAssignment $ oToO' <$> o, ot)
@@ -480,6 +460,15 @@ instance (Show o, Show i, Show r) => Show (OfflineTreeSTS o i r) where
           ))
 
 
+-- |If the tree has no branching, convert it to a trace
+offlineTreeSTSToTrace :: OfflineTreeSTS o i r -> Maybe ([IOGateValue i o],r)
+offlineTreeSTSToTrace (Leaf' r) = Just ([],r)
+offlineTreeSTSToTrace (InputRequest' i ot) = first (fmap In i:) <$> offlineTreeSTSToTrace ot
+offlineTreeSTSToTrace (CaseSplit' m) = case Map.toList m of
+  [(o,ot)] -> case o of
+    OnlyValidAssignment o' -> first (fmap Out o':) <$> offlineTreeSTSToTrace ot
+    OtherInconclusive _ -> Nothing -- Other output valuations are possible, so we refuse to treat this tree as a trace
+  _ -> Nothing -- Multiple output gates are possible, so we refuse to trea this tree as a trace
 
 
 -- | Proof that either 'o' and 'suspo' are the same type,
