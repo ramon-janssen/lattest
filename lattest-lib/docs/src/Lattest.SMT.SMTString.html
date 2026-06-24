@@ -16,8 +16,8 @@ See LICENSE in the parent SMT folder.
 </span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Text.Printf</span></span><span>
 </span><span id="line-17"></span><span>
 </span><span id="line-18"></span><span>
-</span><span id="line-19"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTStringAlex</span></span><span>
-</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Lattest.SMT.SMTStringHappy</span></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTStringAlex.html"><span class="hs-identifier">Lattest.SMT.SMTStringAlex</span></a></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.SMT.SMTStringHappy.html"><span class="hs-identifier">Lattest.SMT.SMTStringHappy</span></a></span><span>
 </span><span id="line-21"></span><span>
 </span><span id="line-22"></span><span class="hs-comment">-- | Encode String to SMT.</span><span>
 </span><span id="line-23"></span><span class="hs-comment">--</span><span>
@@ -29,26 +29,26 @@ See LICENSE in the parent SMT folder.
 </span><span id="line-29"></span><span id="stringToSMT"><span class="annot"><span class="annottext">stringToSMT :: Text -&gt; Text
 </span><a href="Lattest.SMT.SMTString.html#stringToSMT"><span class="hs-identifier hs-var hs-var">stringToSMT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Text) -&gt; Text -&gt; Text
 </span><span class="hs-identifier hs-var">T.concatMap</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Text
-</span><a href="#local-6989586621679348712"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span>
+</span><a href="#local-6989586621679220541"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span>
 </span><span id="line-30"></span><span>    </span><span class="hs-keyword">where</span><span>
-</span><span id="line-31"></span><span>        </span><span class="annot"><a href="#local-6989586621679348712"><span class="hs-identifier hs-type">toSMTChar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
-</span><span id="line-32"></span><span>        </span><span id="local-6989586621679348712"><span class="annot"><span class="annottext">toSMTChar :: Char -&gt; Text
-</span><a href="#local-6989586621679348712"><span class="hs-identifier hs-var hs-var">toSMTChar</span></a></span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span id="line-31"></span><span>        </span><span class="annot"><a href="#local-6989586621679220541"><span class="hs-identifier hs-type">toSMTChar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-32"></span><span>        </span><span id="local-6989586621679220541"><span class="annot"><span class="annottext">toSMTChar :: Char -&gt; Text
+</span><a href="#local-6989586621679220541"><span class="hs-identifier hs-var hs-var">toSMTChar</span></a></span></span><span> </span><span class="annot"><span class="annottext">Char
 </span><span class="hs-char">'&quot;'</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text
 </span><span class="hs-string">&quot;\&quot;\&quot;&quot;</span></span><span>
-</span><span id="line-33"></span><span>        </span><span class="annot"><a href="#local-6989586621679348712"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span id="line-33"></span><span>        </span><span class="annot"><a href="#local-6989586621679220541"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span class="annot"><span class="annottext">Char
 </span><span class="hs-char">'\\'</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text
 </span><span class="hs-string">&quot;\\\\&quot;</span></span><span>
-</span><span id="line-34"></span><span>        </span><span class="annot"><a href="#local-6989586621679348712"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679348713"><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679348713"><span class="hs-identifier hs-var">c</span></a></span></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
+</span><span id="line-34"></span><span>        </span><span class="annot"><a href="#local-6989586621679220541"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679220542"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679220542"><span class="hs-identifier hs-var">c</span></a></span></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
 </span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679348713"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+</span><a href="#local-6989586621679220542"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
 forall a. Ord a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Int
 </span><span class="hs-number">32</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
 </span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
 </span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679348713"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+</span><a href="#local-6989586621679220542"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
 forall a. Ord a =&gt; a -&gt; a -&gt; Bool
 </span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
 </span><span class="hs-number">127</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Text
@@ -59,11 +59,11 @@ forall r. PrintfType r =&gt; String -&gt; r
 </span><span class="hs-identifier hs-var">printf</span></span><span> </span><span class="annot"><span class="annottext">String
 </span><span class="hs-string">&quot;\\x%02x&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Int
 </span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679348713"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
-</span><span id="line-35"></span><span>        </span><span class="annot"><a href="#local-6989586621679348712"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679348719"><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679348719"><span class="hs-identifier hs-var">c</span></a></span></span><span>                                   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Text
+</span><a href="#local-6989586621679220542"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>        </span><span class="annot"><a href="#local-6989586621679220541"><span class="hs-identifier hs-var">toSMTChar</span></a></span><span> </span><span id="local-6989586621679220548"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679220548"><span class="hs-identifier hs-var">c</span></a></span></span><span>                                   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Text
 </span><span class="hs-identifier hs-var">T.singleton</span></span><span> </span><span class="annot"><span class="annottext">Char
-</span><a href="#local-6989586621679348719"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><a href="#local-6989586621679220548"><span class="hs-identifier hs-var">c</span></a></span><span>
 </span><span id="line-36"></span><span>        </span><span>
 </span><span id="line-37"></span><span class="annot"><span class="hs-comment">-- | Decode SMT to String.</span></span><span>
 </span><span id="line-38"></span><span class="annot"><a href="Lattest.SMT.SMTString.html#stringFromSMT"><span class="hs-identifier hs-type">stringFromSMT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
@@ -72,10 +72,10 @@ forall r. PrintfType r =&gt; String -&gt; r
 </span><span class="hs-identifier hs-var">T.pack</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Text) -&gt; (Text -&gt; String) -&gt; Text -&gt; Text
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Token] -&gt; String
-</span><span class="hs-identifier hs-var">smtStringParser</span></span><span> </span><span class="annot"><span class="annottext">([Token] -&gt; String) -&gt; (Text -&gt; [Token]) -&gt; Text -&gt; String
+</span><a href="Lattest.SMT.SMTStringHappy.html#smtStringParser"><span class="hs-identifier hs-var">smtStringParser</span></a></span><span> </span><span class="annot"><span class="annottext">([Token] -&gt; String) -&gt; (Text -&gt; [Token]) -&gt; Text -&gt; String
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [Token]
-</span><span class="hs-identifier hs-var">smtStringLexer</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; [Token]) -&gt; (Text -&gt; String) -&gt; Text -&gt; [Token]
+</span><a href="Lattest.SMT.SMTStringAlex.html#smtStringLexer"><span class="hs-identifier hs-var">smtStringLexer</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; [Token]) -&gt; (Text -&gt; String) -&gt; Text -&gt; [Token]
 forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
 </span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; String
 </span><span class="hs-identifier hs-var">T.unpack</span></span><span>

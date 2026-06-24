@@ -189,7 +189,7 @@ testOfflineTrace = TestCase $ do
       modelOT = interpretConcrete specOT
       testSelectorOT =
         randomTestSelectorFromSeed 123
-  r <- offlineTester modelOT testSelectorOT Nothing
+  r <- offlineTester modelOT testSelectorOT
   let r2 = offlineTreeToTrace r
   assertEqual
     "trace through single-path automaton"
