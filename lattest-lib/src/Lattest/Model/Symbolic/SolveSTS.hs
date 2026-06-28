@@ -17,7 +17,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, (.&&), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, (.&&), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -95,21 +95,24 @@ interactsToGuard intrpr = interactsToGuard' $ toSolveTree $ symbolicExecutionTre
     interactsToGuard' seg [] = traceCondition seg
     interactsToGuard' seg (i:is) =
         case Map.lookup i (traceChildren seg) of
-            Nothing -> error "interaction not in seg" -- FIXME nicer error handling
+            Nothing -> sFalse -- no specified transition continues the trace here, so it is infeasible via specified behaviour
             Just seg' -> interactsToGuard' seg' is
 
-toSolveTree :: (BooleanConfiguration m, BM.OrdMonad m, Ord g) => SymExecTree m loc g -> SolverTree g
+toSolveTree :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => SymExecTree m loc g -> SolverTree g
 toSolveTree tree = toSolveTree' [tree]
     where
-    toSolveTree' :: (BooleanConfiguration m, BM.OrdMonad m, Ord g) => [SymExecTree m loc g] -> SolverTree g
+    toSolveTree' :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => [SymExecTree m loc g] -> SolverTree g
     toSolveTree' trees =
         let cond = sOr $ Set.fromList $ (asDualExpr . BM.ordMap pathCondition . node) <$> trees
             childInteracts = deduplicateEquals ((Map.keysSet . pathChildren) <$> trees)
             children = Map.fromSet (\interact -> toSolveTree' (trees >>= interactChild interact)) childInteracts
         in SolverTree cond children
         where
-        interactChild :: Ord g => SymInteract g -> SymExecTree m loc g -> [SymExecTree m loc g]
-        interactChild interact tree = Map.elems $ (Map.! interact) $ pathChildren tree
+        -- Only follow derivative classes that lead to a real (indefinite) configuration. The guard-violated classes go to
+        -- the implicit locations (underspecified/forbidden) representing values that don't actually take the transition;
+        -- merging them in would pollute the path condition (a forbidden destination contributes True via asDualExpr).
+        interactChild :: (Ord g, BM.BoundedConfiguration m) => SymInteract g -> SymExecTree m loc g -> [SymExecTree m loc g]
+        interactChild interact tree = filter (BM.isIndefinite . node) $ Map.elems $ (Map.! interact) $ pathChildren tree
         deduplicateEquals :: Eq a => [Set.Set a] -> Set.Set a
         deduplicateEquals [] = Set.empty
         deduplicateEquals sets = foldr1 deduplicateEqual sets
@@ -164,7 +167,7 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
             | guard `Set.member` negs = interactToImplicitLocation gate
             | otherwise = error "destination guard is not in any derivative class condition" -- this would be a bug in derivClasses or pathStep
         addToPath pDepth pVars pCond (poss, negs) (STSLoc (tguard, tassign), tloc) =
-            let classCond = sAnd poss .&& sNot (sAnd negs)
+            let classCond = sAnd (Set.map (indexExpr pDepth) poss) .&& sNot (sOr (Set.map (indexExpr pDepth) negs)) -- (∀ poss hold) ∧ ¬(∃ negs holds), indexed at this depth like tguard
                 completedAssign = tassign `varUnion` identityVarModel locVarSet
                 indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
                 pathLoc = tloc
