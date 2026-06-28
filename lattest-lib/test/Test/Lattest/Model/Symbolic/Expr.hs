@@ -13,6 +13,7 @@ solveTests
 where
 
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
+import Lattest.Model.Symbolic.Internal.Product (FreeProduct)
 import Lattest.Model.Symbolic.Expr
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(Expr))
 import Lattest.Model.Symbolic.SolveSymPrim
@@ -315,7 +316,7 @@ testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
 
 testEvalEmptyProduct :: Test
-testEvalEmptyProduct = testEvalExpression (sProduct []) "empty product evaluation incorrect"
+testEvalEmptyProduct = testEvalExpression (sProduct ([] :: FreeProduct (Expr Integer))) "empty product evaluation incorrect"
 
 testSolveExpression :: Expr Bool -> SMT.SMTRef -> Test
 testSolveExpression guard smt = TestCase $ do

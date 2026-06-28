@@ -47,8 +47,8 @@ stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
-    let p = sVar pvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
@@ -207,8 +207,8 @@ testSTSTestSelection = TestCase $ do
 
 stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
 stsExample2 =
-    let p = sVar pvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
@@ -285,9 +285,9 @@ testLatticeCoffeeSTS = TestCase $ do
 -}
 specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> IOSTS FreeLattice Integer String String
 specParameterized startType endType comp splitFirst =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        q = sVar qvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         done = SymInteract (Out "done") []
@@ -409,9 +409,9 @@ testLatticeSTS = concat [
 -}
 specQ :: IOSTS FreeLattice Integer String String
 specQ =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        q = sVar qvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
         initConf = pure 0 :: FreeLattice Integer
@@ -517,9 +517,9 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
 -}
 specUnimplementableParameterized :: Bool -> IOSTS FreeLattice Integer String String
 specUnimplementableParameterized splitFirst =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        q = sVar qvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
         initConf = pure 0 :: FreeLattice Integer
