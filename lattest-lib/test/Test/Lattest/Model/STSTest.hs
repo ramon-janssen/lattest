@@ -4,6 +4,7 @@
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testSTSHappyFlowFloat,
     testLatticeCoffeeSTS,
     testErrorThrowingGates,
     testSTSUnHappyFlow,
@@ -204,6 +205,54 @@ testSTSTestSelection = TestCase $ do
     where
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
+
+pvarf :: Variable
+pvarf = (Variable "p" FloatType)
+xvarf :: Variable
+xvarf = (Variable "x" FloatType)
+
+stsExampleInitAssignFloat :: Valuation
+stsExampleInitAssignFloat = fromConstantsMap $ Map.singleton xvarf (Cfloat (0.0 :: Double))
+
+stsExampleFloat :: IOSTS NonDet Integer String String
+stsExampleFloat =
+    let p = sVar pvarf :: Expr Double
+        x = sVar xvarf :: Expr Double
+        water = SymInteract (In "water") [pvar]
+        ok = SymInteract (Out "ok") [pvar]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .<= p .&& p .<= 10
+        waterAssign = assignment [xvarf =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= sConst (14.5 :: Double)
+        initConf = nonDet [0] :: NonDet Integer
+        switches = \q -> case q of
+            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrprFloat :: STSIntrp NonDet Integer (IOAct String String)
+stsExampleIntrprFloat = interpretSTS stsExample stsExampleInitAssignFloat
+
+getSTSIntrpStateFloat :: Integer -> Double -> NonDet (IntrpState Integer)
+getSTSIntrpStateFloat loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
+
+testSTSHappyFlowFloat :: Test
+testSTSHappyFlowFloat = TestCase $ do
+    -- assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrpr)
+    let intrp2 = after stsExampleIntrpr (GateValue (In "water") [Cfloat (7.0 :: Double)])
+    assertEqual "after water 7.5: " (getSTSIntrpStateFloat 1 (7.5 :: Double)) (stateConf intrp2)
+    -- let intrp3 = after intrp2 (GateValue (Out "ok") [Cfloat 7.5])
+    -- assertEqual "after ok 7.5: " (getSTSIntrpStateFloat 0 (7.5 :: Double)) (stateConf intrp3)
+    -- let intrp4 = after intrp3 (GateValue (In "water") [Cfloat 8.5])
+    -- assertEqual "after water 8.5: " (getSTSIntrpStateFloat 1 (16.0 :: Double)) (stateConf intrp4)
+    -- let intrp5 = after intrp4 (GateValue (Out "ok") [Cfloat 16.0])
+    -- assertEqual "after ok 16.0: " (getSTSIntrpStateFloat 0 (16.0 :: Double)) (stateConf intrp5)
+    -- let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    -- assertEqual "after coffee: " (getSTSIntrpStateFloat 2 (16.0 :: Double)) (stateConf intrp6)
+    return()
+
 
 stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
 stsExample2 =
