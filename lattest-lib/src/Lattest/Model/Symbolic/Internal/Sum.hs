@@ -63,6 +63,7 @@ instance TermWrapper SumTerm where
     wrap = SumTerm
     unwrap = summand
 
+-- TODO: Rename to NumMultipliable?
 instance Num a => IntMultipliable (SumTerm a) where
     n <.> SumTerm x = SumTerm (fromInteger (toInteger n) * x)
 
