@@ -148,7 +148,8 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
         derivClass :: Set.Set SymGuard -> Set.Set SymGuard -> DerivClassCond
         derivClass elems elemSubSet = Set.partition (`Set.member` elemSubSet) elems
         classIsEmpty :: DerivClassCond -> Bool -- should be sound, not necessarily complete (True must mean unsat, but False may also be unsat)
-        classIsEmpty (poss, negs) = not $ Set.null (poss `Set.intersection` negs) -- unsat case: a guard g is in both the negatives and positives
+        classIsEmpty (poss, negs) = any (\c -> sNot c `Set.member` poss) poss -- unsat case: g and ¬g are both positive
+                                    || any (\c -> sNot c `Set.member` negs) negs
     --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract -> DerivClassCond -> SymbExecTree g
     pathStep pDepth pExecConf interact derivClass = symbExecTree (pDepth + 1) (pExecConf BM.>># pathStep' pDepth derivClass interact)
         where
