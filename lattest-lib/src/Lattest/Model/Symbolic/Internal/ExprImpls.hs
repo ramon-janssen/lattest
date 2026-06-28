@@ -240,25 +240,34 @@ infix 4 .==
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
 sNot :: Expr Bool -> Expr Bool
-{-sNot (view -> Vconst (Cbool True))       = sConst (Cbool False)
-sNot (view -> Vconst (Cbool False))      = sConst (Cbool True)
-sNot (view -> Vnot ve)                   = ve
--- not (if cs then tb else fb) == if cs then not (tb) else not (fb)
-sNot (view -> Vite cs tb fb)             = Expr (Vite cs (sNot tb) (sNot fb))-}
-sNot (view -> ve) = Expr $ Not ve
+sNot (view -> Const b)      = sConst (not b) -- constant fold: ¬True ≡ False, ¬False ≡ True
+sNot (view -> Not ve)       = Expr ve -- eliminate double negation: ¬¬e ≡ e
+-- push the negation into the branches: ¬(if cs then tb else fb) ≡ if cs then ¬tb else ¬fb
+sNot (view -> Ite cs tb fb) = Expr (Ite cs (view $ sNot (Expr tb)) (view $ sNot (Expr fb)))
+sNot (view -> ve)           = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 sAnd :: Set.Set (Expr Bool) -> Expr Bool
 --sAnd = sAnd' . flattenAnd
-sAnd = Expr . And . flattenAnd
+sAnd = mkAnd . flattenAnd
     where
         flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
-        
+
         fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
         fromExpr (view -> And a) = a
         fromExpr (view -> x) = Set.singleton x
+
+        -- annihilation (x ∧ False ≡ False) and identity (x ∧ True ≡ x); a single conjunct needs no wrapping
+        mkAnd :: Set.Set (ExprView Bool) -> Expr Bool
+        mkAnd vs
+            | Set.member (Const False) vs = sFalse
+            | otherwise = case Set.toList vs' of
+                []  -> sTrue
+                [v] -> Expr v
+                _   -> Expr (And vs')
+            where vs' = Set.delete (Const True) vs
 {-
 -- And doesn't contain elements of type Vand.
 sAnd' :: Set.Set Expr Bool -> Expr Bool
