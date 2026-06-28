@@ -2,6 +2,7 @@
 
 module Test.Lattest.Util.STSJSONParserTest
     ( testSTSJSONParserNominal
+    , testSTSJSONParserNominalFloat
     , testSTSJSONParserUnknownType
     , testSTSJSONParserAssignmentTypeMismatch
     , testSTSJSONParserGuardTypeMismatch
@@ -35,7 +36,6 @@ assertErrorContains label errsubstr (Left err) =
     assertBool
         (label ++ ": expected error to contain '" ++ errsubstr ++ "', got: " ++ err)
         (errsubstr `isInfixOf` err)
-
 
 {-|
 Evaluate nominal case with:
@@ -87,6 +87,54 @@ transitions:
 "2"  ――?"update" [counter_p:Int]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
 "2"  ――!"confirm" [counter_p:Int]⟶  ⊥
+|]
+
+{-|
+Evaluate nominal case with float variables
+-}
+testSTSJSONParserNominalFloat :: Test
+testSTSJSONParserNominalFloat = TestCase $ do
+    result <- stsFromJSONFile (testDir ++ "nominal_float_types.json")
+    case result of
+        Left err -> assertFailure ("expected successful parse, got: " ++ err)
+        Right (sts, valuation) -> do
+            assertEqual "initial valuation"
+                (fromConstantsMap $ Map.fromList
+                    [ (Variable "counter" FloatType,  Cfloat  0.0  )
+                    , (Variable "label"   StringType, Cstring ""   )
+                    , (Variable "active"  BoolType,   Cbool   False)
+                    ])
+                valuation
+            assertEqual "alphabet"
+                (Set.fromList
+                    [ SymInteract (In  "register")  [Variable "label_p"   StringType]
+                    , SymInteract (In  "update")    [Variable "counter_p" FloatType  ]
+                    , SymInteract (Out "O1")        []
+                    , SymInteract (Out "confirm")   [Variable "counter_p" FloatType  ]
+                    ])
+                (alphabet sts)
+            assertBool failureMessage (expected == actual)
+                where
+                intrpsts = interpretSTS sts valuation
+                actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
+                failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+                expected = [QQ.r|
+current state configuration: ("0",{active:=False,label:="",counter:=0.0})
+initial location configuration: "0"
+locations: "0", "1", "2"
+transitions:
+"0"  ――?"register" [label_p:String]⟶  ⊤
+"0"  ――?"update" [counter_p:Real]⟶  (((counter+-5.5)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1")
+"0"  ――!"O1" []⟶  ⊥
+"0"  ――!"confirm" [counter_p:Real]⟶  ⊥
+"1"  ――?"register" [label_p:String]⟶  ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0") ∧ ((active) = (True), {label:=label_p},"0")
+"1"  ――?"update" [counter_p:Real]⟶  ⊤
+"1"  ――!"O1" []⟶  ⊥
+"1"  ――!"confirm" [counter_p:Real]⟶  ⊥
+"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"update" [counter_p:Real]⟶  ⊤
+"2"  ――!"O1" []⟶  (True, {},"0")
+"2"  ――!"confirm" [counter_p:Real]⟶  ⊥
 |]
 
 ----- Non-nominal cases -----
@@ -143,6 +191,7 @@ testSTSJSONParserMissingGates = TestCase $ do
 stsJSONParserTests :: [Test]
 stsJSONParserTests =
     [ testSTSJSONParserNominal
+    , testSTSJSONParserNominalFloat
     , testSTSJSONParserUnknownType
     , testSTSJSONParserAssignmentTypeMismatch
     , testSTSJSONParserGuardTypeMismatch

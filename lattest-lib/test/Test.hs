@@ -89,6 +89,7 @@ makeHUnitTests = do
         testPrintSTS,
         testReadAutFile,
         testSTSJSONParserNominal,
+        testSTSJSONParserNominalFloat,
         testSTSJSONParserUnknownType,
         testSTSJSONParserUnsupportedGuardOperand,
         testSTSJSONParserUnsupportedAssignmentOperand,
