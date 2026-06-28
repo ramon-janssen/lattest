@@ -16,7 +16,7 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
-import Data.Maybe(fromJust)
+import Data.Maybe(fromJust, isJust)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -31,6 +31,7 @@ import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretST
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
+import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -515,6 +516,29 @@ testLatticeSTSQuiescence = [
 
 testSTSPathCondition :: Test
 testSTSPathCondition = TestCase $ do
-    let pathCondition = interactsToGuard stsExampleIntrpr [water, ok, water, ok, coffee]
-    -- FIXME do an actual test here instead of printing
-    putStrLn $ "\n\npath condition: " ++ show pathCondition ++ "\n\n"
+    let cfg = Config.changeLog Config.defaultConfig False
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    _ <- SMT.runSMT smtRef SMT.openSolver
+    let -- is the given guard satisfiable, according to the SMT solver?
+        isSat guard = SMT.runSMT smtRef $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        pathCond = interactsToGuard stsExampleIntrpr
+        assertSat lbl prefix = isSat (pathCond prefix) >>= assertBool (lbl ++ " should be satisfiable")
+        assertUnsat lbl prefix = isSat (pathCond prefix) >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
+        -- guards against a regression to True: a tautology's negation is unsatisfiable
+        assertNotTautology lbl prefix = isSat (sNot (pathCond prefix)) >>= assertBool (lbl ++ " should not be a tautology")
+    -- Build up from a trivial example to the full trace [water, ok, water, ok, coffee]. Every prefix must yield a
+    -- meaningful path condition, never collapsing to True (which it did before the symbolic-execution-tree fixes).
+    assertSat           "[]" []
+    assertUnsat         "[coffee] (coffee cannot be the first action: x starts at 0, guard needs x >= 15)" [coffee]
+    assertSat           "[water]" [water]
+    assertNotTautology  "[water]" [water]
+    assertSat           "[water, ok]" [water, ok]
+    assertNotTautology  "[water, ok]" [water, ok]
+    assertSat           "[water, ok, water]" [water, ok, water]
+    assertNotTautology  "[water, ok, water]" [water, ok, water]
+    assertSat           "[water, ok, water, ok]" [water, ok, water, ok]
+    assertNotTautology  "[water, ok, water, ok]" [water, ok, water, ok]
+    assertSat           "[water, ok, water, ok, coffee]" [water, ok, water, ok, coffee]
+    assertNotTautology  "[water, ok, water, ok, coffee]" [water, ok, water, ok, coffee]
