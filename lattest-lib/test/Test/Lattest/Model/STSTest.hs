@@ -10,7 +10,8 @@ module Test.Lattest.Model.STSTest (
     testSTSTestSelection,
     testLatticeSTS,
     testLatticeSTSQuiescence,
-    testSTSPathCondition
+    testSTSPathCondition,
+    testBranchingPathCondition
     )
 where
 
@@ -26,10 +27,10 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
+import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import qualified Data.Map as Map
@@ -68,6 +69,102 @@ stsExample =
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
+
+-- Interactions and STS for the branching tests, using the CNF lattice monad (FreeLatticeCNF).
+-- Input variants (unsatisfied guard -> underspecified/top) and output variants (unsatisfied guard -> forbidden/bottom).
+gateA = SymInteract (In "a") [pvar, qvar]
+gateB = SymInteract (In "b") [pvar, qvar]
+gateAo = SymInteract (Out "a") [pvar, qvar]
+gateBo = SymInteract (Out "b") [pvar, qvar]
+
+branchInitAssign :: Valuation
+branchInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+
+-- A depth-2 binary-branching STS over the CNF monad:
+--   loc 0 --a--> {loc 1, loc 2}   combined with op0
+--   loc 1 --b--> {loc 3, loc 4}   combined with op1
+--   loc 2 --b--> {loc 5, loc 6}   combined with op2
+-- Each branch has exactly two outgoing transitions, combined by either disjunction (\/) or conjunction (/\).
+-- The two destination guards at each branch are gp (p>=5) and gq (q>=5) on two independent parameters p and q, so
+-- they are orthogonal: all four cells of the value-partition (neither / p-only / q-only / both) are satisfiable and
+-- routed differently, and the choice of branch operator is observable in the resulting path condition.
+type Branch = FreeLatticeCNF (STStdest, Integer) -> FreeLatticeCNF (STStdest, Integer) -> FreeLatticeCNF (STStdest, Integer)
+
+-- The first-level gate g1 is used at loc 0; the second-level gate g2 at locs 1 and 2. Passing input or output gates
+-- selects whether unsatisfied guards fall through to top or to bottom.
+branchingSTS :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> IOSTS FreeLatticeCNF Integer String String
+branchingSTS g1 g2 op0 op1 op2 =
+    let p = sVar pvar
+        q = sVar qvar
+        gp = p .>= 5
+        gq = q .>= 5
+        asgn = assignment [xvar =: p]
+        switches loc = case loc of
+            0 -> Map.fromList [(g1, atom (stsTLoc gp asgn, 1) `op0` atom (stsTLoc gq asgn, 2))]
+            1 -> Map.fromList [(g2, atom (stsTLoc gp noAssignment, 3) `op1` atom (stsTLoc gq noAssignment, 4))]
+            2 -> Map.fromList [(g2, atom (stsTLoc gp noAssignment, 5) `op2` atom (stsTLoc gq noAssignment, 6))]
+            _ -> Map.empty
+    in automaton (atom 0 :: FreeLatticeCNF Integer) (Set.fromList [g1, g2]) switches
+
+branchingIntrpr :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> STSIntrp FreeLatticeCNF Integer (IOAct String String)
+branchingIntrpr g1 g2 op0 op1 op2 = interpretSTS (branchingSTS g1 g2 op0 op1 op2) branchInitAssign
+
+-- Path conditions over the branching STS, exercising disjunctive vs conjunctive branching in the CNF monad, for
+-- inputs and outputs. asDualExpr reads the configuration dually, but the input/output distinction is whether an
+-- unsatisfied guard falls through to top (underspecified, inputs) or bottom (forbidden, outputs):
+--   * for INPUTS a disjunctive (\/) branch requires *both* guards (gp ∧ gq) and a conjunctive (/\) one *either*
+--     (gp ∨ gq) -- the operator is dualised, because an unsatisfied alternative becomes top and absorbs the join;
+--   * for OUTPUTS it is mirrored -- disjunction yields gp ∨ gq and conjunction gp ∧ gq -- because an unsatisfied
+--     alternative becomes bottom, which is absorbed by the join and absorbing for the meet.
+testBranchingPathCondition :: Test
+testBranchingPathCondition = TestCase $ do
+    let cfg = Config.changeLog Config.defaultConfig False
+        smtLog = Config.smtLog cfg
+        smtProc = fromJust (Config.getProc cfg)
+    smtRef <- SMT.createSMTRef smtProc smtLog
+    _ <- SMT.runSMT smtRef SMT.openSolver
+    let disj = (\/) :: Branch
+        conj = (/\) :: Branch
+        p = sVar pvar
+        isSat guard = SMT.runSMT smtRef $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        assertSat lbl g = isSat g >>= assertBool (lbl ++ " should be satisfiable")
+        assertUnsat lbl g = isSat g >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
+        assertNotTautology lbl g = isSat (sNot g) >>= assertBool (lbl ++ " should not be a tautology")
+        -- a ⟹ b iff a ∧ ¬b is unsatisfiable
+        assertImplies lbl a b = isSat (a .&& sNot b) >>= (assertBool (lbl ++ ": expected implication") . not)
+        assertNotImplies lbl a b = isSat (a .&& sNot b) >>= assertBool (lbl ++ ": expected non-implication")
+        combos = [ ("DDD",disj,disj,disj), ("DDC",disj,disj,conj), ("DCD",disj,conj,disj), ("DCC",disj,conj,conj)
+                 , ("CDD",conj,disj,disj), ("CDC",conj,disj,conj), ("CCD",conj,conj,disj), ("CCC",conj,conj,conj) ]
+    -- 1. Across every combination of branch operators, both traces, and both input/output, the path condition is a
+    --    genuine constraint: never collapsing to True (a tautology) nor to False (unsatisfiable).
+    sequence_ [ assertSat (kind ++ " " ++ nm ++ " " ++ tn) g >> assertNotTautology (kind ++ " " ++ nm ++ " " ++ tn) g
+              | (kind, g1, g2) <- [ ("in", gateA, gateB), ("out", gateAo, gateBo) ]
+              , (nm, o0, o1, o2) <- combos
+              , (tn, tr) <- [ ("[a]", [g1]), ("[a,b]", [g1, g2]) ]
+              , let g = interactsToGuard (branchingIntrpr g1 g2 o0 o1 o2) tr ]
+    -- 2. INPUT branch on [a]: disjunction is strictly stronger than conjunction (it requires both guards).
+    let inD = interactsToGuard (branchingIntrpr gateA gateB disj disj disj) [gateA]
+        inC = interactsToGuard (branchingIntrpr gateA gateB conj conj conj) [gateA]
+    assertImplies    "input [a]: disjunction ⟹ conjunction" inD inC
+    assertNotImplies "input [a]: conjunction ⇏ disjunction" inC inD
+    assertUnsat "input [a] disjunction with p<5 (needs p>=5 AND q>=5)" (inD .&& (p .<= 4))
+    assertSat   "input [a] conjunction with p<5 (q>=5 alone suffices)" (inC .&& (p .<= 4))
+    -- 3. OUTPUT branch on [a]: mirrored -- conjunction is strictly stronger than disjunction.
+    let outD = interactsToGuard (branchingIntrpr gateAo gateBo disj disj disj) [gateAo]
+        outC = interactsToGuard (branchingIntrpr gateAo gateBo conj conj conj) [gateAo]
+    assertImplies    "output [a]: conjunction ⟹ disjunction" outC outD
+    assertNotImplies "output [a]: disjunction ⇏ conjunction" outD outC
+    assertUnsat "output [a] conjunction with p<5 (needs p>=5 AND q>=5)" (outC .&& (p .<= 4))
+    assertSat   "output [a] disjunction with p<5 (q>=5 alone suffices)" (outD .&& (p .<= 4))
+    -- 4. The same input/output contrast one branching level deeper, on trace [a,b].
+    let inDAB = interactsToGuard (branchingIntrpr gateA gateB disj disj disj) [gateA, gateB]
+        inCAB = interactsToGuard (branchingIntrpr gateA gateB conj conj conj) [gateA, gateB]
+        outDAB = interactsToGuard (branchingIntrpr gateAo gateBo disj disj disj) [gateAo, gateBo]
+        outCAB = interactsToGuard (branchingIntrpr gateAo gateBo conj conj conj) [gateAo, gateBo]
+    assertImplies    "input [a,b]: all-disjunction ⟹ all-conjunction" inDAB inCAB
+    assertNotImplies "input [a,b]: all-conjunction ⇏ all-disjunction" inCAB inDAB
+    assertImplies    "output [a,b]: all-conjunction ⟹ all-disjunction" outCAB outDAB
+    assertNotImplies "output [a,b]: all-disjunction ⇏ all-conjunction" outDAB outCAB
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]

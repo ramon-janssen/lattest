@@ -381,5 +381,9 @@ instance BooleanConfiguration FreeLattice where
         asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
         asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 
+-- A FreeLatticeCNF is a conjunction (the outer set) of disjunctions (the inner sets) of states.
+instance BooleanConfiguration FreeLatticeCNF where
+    asExpr (FreeLatticeCNF x) = E.sAnd $ Set.map E.sOr x
+
 asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
 asDualExpr m = E.sNot $ asExpr $ E.sNot OM.<#> m
