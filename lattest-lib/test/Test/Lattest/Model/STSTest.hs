@@ -31,7 +31,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, BoundedConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
@@ -49,6 +49,7 @@ qvar :: Variable
 qvar = (Variable "q" IntType)
 xvar :: Variable
 xvar = (Variable "x" IntType)
+x = sVar xvar
 stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
@@ -59,7 +60,6 @@ coffee = SymInteract (Out "coffee") []
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
     let p = sVar pvar
-        x = sVar xvar
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
@@ -173,18 +173,22 @@ testBranchingPathCondition = TestCase $ do
 -- A minimal STS for asserting the tree structures directly (rather than via the SMT solver):
 --   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
 -- One input gate keeps the symbolic-execution tree narrow enough to read.
-treeGate :: SymInteract (IOAct String String)
-treeGate = SymInteract (In "a") [pvar]
+inGate :: SymInteract (IOAct String String)
+inGate = SymInteract (In "a") [pvar]
+outGate :: SymInteract (IOAct String String)
+outGate = SymInteract (Out "x") [pvar]
 
-treeSTS :: IOSTS NonDet Integer String String
+treeSTS :: IOSTS FreeLatticeCNF Integer String String
 treeSTS =
     let p = sVar pvar
         switches loc = case loc of
-            0 -> Map.fromList [(treeGate, NonDet $ Set.singleton (stsTLoc (p .>= 5) (assignment [xvar =: p]), 1))]
+            0 -> Map.fromList [(inGate, ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
+            1 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
+            2 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
             _ -> Map.empty
-    in automaton (nonDet [0] :: NonDet Integer) (Set.fromList [treeGate]) switches
+    in automaton (ordReturn 0 :: FreeLatticeCNF Integer) (Set.fromList [inGate, outGate]) switches
 
-treeIntrpr :: STSIntrp NonDet Integer (IOAct String String)
+treeIntrpr :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
 treeIntrpr = interpretSTS treeSTS branchInitAssign
 
 -- Pretty-printers for the (infinite) trees, bounded to a maximum depth, rendered as an indented outline.
@@ -192,7 +196,7 @@ showGate :: SymInteract (IOAct String String) -> String
 showGate (SymInteract (In s) _) = "?" ++ s
 showGate (SymInteract (Out s) _) = "!" ++ s
 
-prettyExecTree :: Int -> Solve.SymExecTree NonDet Integer (IOAct String String) -> String
+prettyExecTree :: (BoundedConfiguration m, Foldable m) => Int -> Solve.SymExecTree m Integer (IOAct String String) -> String
 prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
     where
     go d indent t
@@ -232,27 +236,97 @@ testTreeStructure = TestCase $ do
     actualExecTree = "\n" ++ prettyExecTree 20 tree
     actualSolveTree = "\n" ++ prettySolveTree 20 (Solve.toSolveTree tree)
     failure what e a = "\nprint of " ++ what ++ " does not match, expected:" ++ e ++ "but received:" ++ a
-    -- The symbolic-execution tree branches on every alphabet action; at each branch the derivative classes [+poss -negs]
-    -- partition the values by which destination guards hold. Here the guard p>=5 either holds (-> real loc 1) or fails
-    -- (-> UNDERSPECIFIED, as `a` is an input). Expansion stops at conclusive (top/bottom) configurations, so this is the
-    -- complete interesting part of the model: loc 1 is terminal, so its only continuation is UNDERSPECIFIED.
     expectedExecTree = [QQ.r|
 node loc=0 cond=(x) = (0)
-?a [+{} -{((p+-5)) ≥ 0}]:
+?a [+{} -{((-p+20)) ≥ 0, ((p+20)) ≥ 0}]:
     node UNDERSPECIFIED
-?a [+{((p+-5)) ≥ 0} -{}]:
-    node loc=1 cond=((x) = (0))∧((x_1) = (p))∧(((p+-5)) ≥ 0)
+?a [+{((-p+20)) ≥ 0} -{((p+20)) ≥ 0}]:
+    node loc=2 cond=((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(¬(((p+20)) ≥ 0))
     ?a [+{} -{}]:
         node UNDERSPECIFIED
+    !x [+{} -{(p^1⋅x^1) ≥ 0}]:
+        node FORBIDDEN
+    !x [+{(p^1⋅x^1) ≥ 0} -{}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((-p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((p+20)) ≥ 0))
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+?a [+{((-p+20)) ≥ 0, ((p+20)) ≥ 0} -{}]:
+    node loc=1 cond=((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0) ; loc=2 cond=((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)
+    ?a [+{} -{}]:
+        node UNDERSPECIFIED
+    !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
+        node FORBIDDEN
+    !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
+        node FORBIDDEN
+    !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{(p^1⋅x^1) ≥ 0}]:
+        node FORBIDDEN
+    !x [+{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+    !x [+{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (3)) = (0)}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (3)) = (0)))
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+    !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0}]:
+        node FORBIDDEN
+    !x [+{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0)}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (2)) = (0)))
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+    !x [+{(p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
+        node FORBIDDEN
+?a [+{((p+20)) ≥ 0} -{((-p+20)) ≥ 0}]:
+    node loc=1 cond=((x) = (0))∧((x_1) = (p))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0))
+    ?a [+{} -{}]:
+        node UNDERSPECIFIED
+    !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
+        node FORBIDDEN
+    !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0)}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (3)) = (0)))∧(¬(((-p+20)) ≥ 0))
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+    !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0))
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+    !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0)}]:
+        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (2)) = (0)))∧(¬(((-p+20)) ≥ 0))
+        ?a [+{} -{}]:
+            node UNDERSPECIFIED
+        !x [+{} -{}]:
+            node FORBIDDEN
+!x [+{} -{}]:
+    node FORBIDDEN
 |]
     -- The solve tree keeps only the specified (real) branches and carries flat path conditions. It is the chain
     -- loc 0 --a--> loc 1 --a--> (no specified continuation: cond False), since loc 1 is terminal.
     expectedSolveTree = [QQ.r|
 cond (x) = (0)
 ?a:
-    cond ((x) = (0))∧((x_1) = (p))∧(((p+-5)) ≥ 0)
+    cond ¬((¬(((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)))∧(¬(((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(¬(((p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0)))))
     ?a:
         cond False
+    !x:
+        cond ¬((¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (3)) = (0)))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (3)) = (0)))∧(¬(((-p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (2)) = (0)))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (2)) = (0)))∧(¬(((-p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((-p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((p+20)) ≥ 0)))))
+        ?a:
+            cond False
+        !x:
+            cond False
+!x:
+    cond False
 |]
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
