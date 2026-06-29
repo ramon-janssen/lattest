@@ -200,7 +200,7 @@ instance Show t => Show (ExprView t) where
         showSumTerm 1 t = t
         showSumTerm n t = show n ++ "⋅" ++ t
     show (Product es) | es == mempty = "∏∅"
-    show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
+    show (Product es) = showFreeMonoid "⋅" (\n t -> t ++ "^" ++ show n) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
     show (Length e) = "length(" ++ show e ++ ")"
     show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
