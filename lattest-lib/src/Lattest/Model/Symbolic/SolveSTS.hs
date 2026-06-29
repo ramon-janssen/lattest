@@ -8,6 +8,12 @@
 module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
 interactsToGuard, -- FIXME maybe this doesn't need to be exposed but we want to test this
+symbolicExecutionTree,
+toSolveTree,
+SymExecTree(..),
+SymExecNodeElem(..),
+SolverTree(..),
+DerivClassCond,
 )
 where
 

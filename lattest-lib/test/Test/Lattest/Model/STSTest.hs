@@ -11,7 +11,8 @@ module Test.Lattest.Model.STSTest (
     testLatticeSTS,
     testLatticeSTSQuiescence,
     testSTSPathCondition,
-    testBranchingPathCondition
+    testBranchingPathCondition,
+    testTreeStructure
     )
 where
 
@@ -30,9 +31,12 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
+import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
+import Data.List(intercalate)
+import Data.Foldable(toList)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -165,6 +169,91 @@ testBranchingPathCondition = TestCase $ do
     assertNotImplies "input [a,b]: all-conjunction ⇏ all-disjunction" inCAB inDAB
     assertImplies    "output [a,b]: all-conjunction ⟹ all-disjunction" outCAB outDAB
     assertNotImplies "output [a,b]: all-disjunction ⇏ all-conjunction" outDAB outCAB
+
+-- A minimal STS for asserting the tree structures directly (rather than via the SMT solver):
+--   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
+-- One input gate keeps the symbolic-execution tree narrow enough to read.
+treeGate :: SymInteract (IOAct String String)
+treeGate = SymInteract (In "a") [pvar]
+
+treeSTS :: IOSTS NonDet Integer String String
+treeSTS =
+    let p = sVar pvar
+        switches loc = case loc of
+            0 -> Map.fromList [(treeGate, NonDet $ Set.singleton (stsTLoc (p .>= 5) (assignment [xvar =: p]), 1))]
+            _ -> Map.empty
+    in automaton (nonDet [0] :: NonDet Integer) (Set.fromList [treeGate]) switches
+
+treeIntrpr :: STSIntrp NonDet Integer (IOAct String String)
+treeIntrpr = interpretSTS treeSTS branchInitAssign
+
+-- Pretty-printers for the (infinite) trees, bounded to a maximum depth, rendered as an indented outline.
+showGate :: SymInteract (IOAct String String) -> String
+showGate (SymInteract (In s) _) = "?" ++ s
+showGate (SymInteract (Out s) _) = "!" ++ s
+
+prettyExecTree :: Int -> Solve.SymExecTree NonDet Integer (IOAct String String) -> String
+prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
+    where
+    go d indent t
+        | d > maxDepth = [indent ++ "..."]
+        -- conclusive (top/bottom) configurations only ever lead to more of themselves, so stop expanding there
+        | isForbidden (Solve.node t) || isUnderspecified (Solve.node t) = [indent ++ "node " ++ showNode (Solve.node t)]
+        | otherwise = (indent ++ "node " ++ showNode (Solve.node t))
+                    : concatMap (childLines d indent) (Map.toList (Solve.pathChildren t))
+    childLines d indent (act, classMap) =
+        concatMap (\(dc, sub) -> (indent ++ showGate act ++ " " ++ showClass dc ++ ":") : go (d + 1) (indent ++ "    ") sub)
+                  (Map.toList classMap)
+    showNode n
+        | isForbidden n = "FORBIDDEN"
+        | isUnderspecified n = "UNDERSPECIFIED"
+        | otherwise = intercalate " ; " [ "loc=" ++ show (Solve.loc e) ++ " cond=" ++ show (Solve.pathCondition e) | e <- toList n ]
+    showClass (poss, negs) = "[+" ++ showSet poss ++ " -" ++ showSet negs ++ "]"
+    showSet s = "{" ++ intercalate ", " (map show (Set.toList s)) ++ "}"
+
+prettySolveTree :: Int -> Solve.SolverTree (IOAct String String) -> String
+prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
+    where
+    go d indent t
+        | d > maxDepth = [indent ++ "..."]
+        | otherwise = (indent ++ "cond " ++ show (Solve.traceCondition t))
+                    : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
+                                (Map.toList (Solve.traceChildren t))
+
+-- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
+-- assertBool (rather than assertEqual) keeps the printed unicode readable on failure; the expected strings use raw
+-- quasiquotes so the printed output can be pasted straight into the source.
+testTreeStructure :: Test
+testTreeStructure = TestCase $ do
+    assertBool (failure "symbolicExecutionTree" expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
+    assertBool (failure "toSolveTree" expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
+    where
+    tree = Solve.symbolicExecutionTree treeIntrpr
+    actualExecTree = "\n" ++ prettyExecTree 20 tree
+    actualSolveTree = "\n" ++ prettySolveTree 20 (Solve.toSolveTree tree)
+    failure what e a = "\nprint of " ++ what ++ " does not match, expected:" ++ e ++ "but received:" ++ a
+    -- The symbolic-execution tree branches on every alphabet action; at each branch the derivative classes [+poss -negs]
+    -- partition the values by which destination guards hold. Here the guard p>=5 either holds (-> real loc 1) or fails
+    -- (-> UNDERSPECIFIED, as `a` is an input). Expansion stops at conclusive (top/bottom) configurations, so this is the
+    -- complete interesting part of the model: loc 1 is terminal, so its only continuation is UNDERSPECIFIED.
+    expectedExecTree = [QQ.r|
+node loc=0 cond=(x) = (0)
+?a [+{} -{((p+-5)) ≥ 0}]:
+    node UNDERSPECIFIED
+?a [+{((p+-5)) ≥ 0} -{}]:
+    node loc=1 cond=((x) = (0))∧((x_1) = (p))∧(((p+-5)) ≥ 0)
+    ?a [+{} -{}]:
+        node UNDERSPECIFIED
+|]
+    -- The solve tree keeps only the specified (real) branches and carries flat path conditions. It is the chain
+    -- loc 0 --a--> loc 1 --a--> (no specified continuation: cond False), since loc 1 is terminal.
+    expectedSolveTree = [QQ.r|
+cond (x) = (0)
+?a:
+    cond ((x) = (0))∧((x_1) = (p))∧(((p+-5)) ≥ 0)
+    ?a:
+        cond False
+|]
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
