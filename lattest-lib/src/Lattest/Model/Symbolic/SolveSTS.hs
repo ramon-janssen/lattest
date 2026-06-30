@@ -17,7 +17,7 @@ import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
 import Lattest.Model.Symbolic.Expr(substConst, Expr(..))
 import Lattest.SMT.SMT(SMT)
-import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
+import Lattest.Util.Utils(distributeFirstMaybe)
 
 import Control.Arrow((&&&))
 import Control.Exception(throw)
@@ -27,6 +27,7 @@ import qualified Data.Map as Map
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
+import Data.Maybe (mapMaybe)
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -38,13 +39,13 @@ solveRandomInteraction :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m 
 solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
-    fmap (,r') $ solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
+    (,r') <$> solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
     selectInteractionsAndGuards :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
     selectInteractionsAndGuards intrpr' subsetFunction' =
         let alph = toList $ alphabet $ syntacticAutomaton intrpr'
-        in takeJusts $ fmap (distributeFirstMaybe . (subsetFunction' &&& interactToGuard intrpr')) $ alph
+        in mapMaybe (distributeFirstMaybe . (subsetFunction' &&& interactToGuard intrpr')) alph
 
 interactToGuard :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymInteract g -> SymGuard
 interactToGuard intrpr interaction = let

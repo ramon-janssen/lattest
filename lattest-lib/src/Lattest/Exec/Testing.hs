@@ -5,14 +5,14 @@
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
-    
+
     For an experiment, we assume that we have an 'Adapter', which serves as an interface to send inputs to a system under test,
     and observe actions shown by that system. The experiment is controlled by an 'ActionController'. Specifically for a testing
-    experiment, we also assume that we have a specification model that dictates which observations are allowed and forbidden, and a test
-    controller that steers the testing.
-    
+    experiment, we can create an 'ActionController' from a specification model that dictates which observations are allowed and
+    forbidden, and a 'TestController' that steers the testing.
+
     To get started with testing experiments quickly, use the 'runTester' function, and to get the required ingredients, see the following modules:
-    
+
     * "Lattest.Adapter.StandardAdapters" to create adapters,
     * "Lattest.Exec.StandardTestControllers" to create test controllers, and
     * "Lattest.Model.StandardAutomata" to create specification models.

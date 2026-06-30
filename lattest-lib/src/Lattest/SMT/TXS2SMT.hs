@@ -6,7 +6,6 @@ See LICENSE in the parent SMT folder.
 
 -- ----------------------------------------------------------------------------------------- --
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 module Lattest.SMT.TXS2SMT
@@ -109,13 +108,13 @@ insertFunc (funcId, FuncDef x y) enames
                     show x ++ " " ++ show y ++  ") already defined\n"
        else enames { funcNames = Map.insert funcId (toFuncName funcId) (funcNames enames) }
 -}
-       
+
 -- ----------------------------------------------------------------------------------------- --
 -- basic definitions for SMT
 -- native Torxakis functions that are not natively supported in SMT
 -- ----------------------------------------------------------------------------------------- --
-basicDefinitionsSMT :: Text
-basicDefinitionsSMT = ""
+-- basicDefinitionsSMT :: Text
+-- basicDefinitionsSMT = ""
 
 -- | convert sort definitions to SMT type declarations (as multiple lines of commands)
 {-sortdefsToSMT :: EnvNames -> EnvDefs -> Text
@@ -190,7 +189,7 @@ instance ConstToSMT Bool where
     constToSMT b = if b then "true" else "false"
 
 instance ConstToSMT Integer where
-    constToSMT n = integer2smt n
+    constToSMT = integer2smt
 
 instance ConstToSMT String where
     constToSMT s =  "\"" <> stringToSMT (T.pack s) <> "\""

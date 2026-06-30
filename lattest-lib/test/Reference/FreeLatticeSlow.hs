@@ -86,3 +86,8 @@ instance BooleanConfiguration FreeLatticeSlow where
         asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
         asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 
+instance Traversable FreeLatticeSlow where
+  sequenceA (FreeLatticeSlow Bottom)       = pure $ FreeLatticeSlow Bottom
+  sequenceA (FreeLatticeSlow Top)          = pure $ FreeLatticeSlow Top
+  sequenceA (FreeLatticeSlow (Levitate a)) = FreeLatticeSlow . Levitate <$> sequenceA a
+

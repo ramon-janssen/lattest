@@ -1,5 +1,4 @@
-{-# LANGUAGE BangPatterns       #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# OPTIONS_HADDOCK hide, prune #-}
 {-# LANGUAGE FlexibleContexts   #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
@@ -13,8 +12,7 @@ import           Control.Exception(Exception)
 import           Control.Monad(unless)
 import           Data.String(IsString)
 import           Control.Monad.Extra((||^), (&&^))
-import qualified Data.Attoparsec.ByteString as C8(parse,feed)
-import qualified Data.Attoparsec.ByteString as C8(Parser)
+import qualified Data.Attoparsec.ByteString as C8(parse,feed, Parser)
 import           Data.Attoparsec.Types(Parser,IResult(..))
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as C8(null)
@@ -74,11 +72,11 @@ errorContext :: IsString a => IResult a r -> (a, [String], String)
 errorContext (Fail residual ctx msg) = (residual, ctx, msg)
 errorContext (Partial _) = ("", [], "")
 
-isFinished :: (IResult a b) -> Bool
+isFinished :: IResult a b -> Bool
 isFinished (Partial _) = False
 isFinished _ = True
 
-data ParseException = ParseException String
+newtype ParseException = ParseException String
 
 instance Exception ParseException
 instance Show ParseException where

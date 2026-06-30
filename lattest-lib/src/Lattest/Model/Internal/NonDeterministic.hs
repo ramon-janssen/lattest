@@ -13,7 +13,7 @@ import Lattest.Model.BoundedMonad (BoundedConfiguration (..), BooleanConfigurati
 import Lattest.Model.Symbolic.Expr (sOr, sTrue)
 import Lattest.Model.Automaton (Completable (..))
 import Data.Map (Map)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.OrdMonad ((<#>))
 import qualified Data.Map as Map
 
@@ -87,9 +87,7 @@ transFromRelWith :: (Ord loc, Ord t) =>
     -> Maybe (loc -> Map t (m (tdest, loc))) -- a transition function, or Nothing if combining two monadic transitions failed
 transFromRelWith c' fe' f' trans = do
     tMapMap <- foldr (addToMap c' fe' f') (Just Map.empty) trans -- map from locations to a map from transitions to Dets
-    Just $ \loc -> case loc `Map.lookup` tMapMap of
-        Just tMap -> tMap
-        Nothing -> Map.empty
+    Just $ \loc -> fromMaybe Map.empty $ loc `Map.lookup` tMapMap
     where
     addToMap :: (Ord loc, Ord t) => (m (tdest, loc) -> m (tdest, loc) -> Maybe (m (tdest, loc))) -> (te -> (loc, t, tdest, loc')) -> (loc' -> tdest -> t -> m (tdest, loc)) -> te -> Maybe (Map loc (Map t (m (tdest, loc)))) -> Maybe (Map loc (Map t (m (tdest, loc))))
     addToMap c fe f te maybeTMapMap = do

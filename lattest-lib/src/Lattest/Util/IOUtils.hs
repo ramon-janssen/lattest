@@ -19,7 +19,7 @@ statefulIO'
 )
 where
 
-import Control.Monad (void)
+import Control.Monad (void, unless, when)
 import GHC.Conc(newTVarIO, readTVar, writeTVar, atomically, STM, retry)
 
 -- | While-loop for monads. Any state passed between loop iterations should be carried by the monad.
@@ -34,7 +34,7 @@ ifMM_ mb m = do
 
 -- | If-statement for monads, with a pure condition: if the condition holds, execute the given monad and discard the result, otherwise return ().
 ifM_ :: (Applicative m) => Bool -> m a -> m ()
-ifM_ b m = if b then void m else pure ()
+ifM_ b m = when b $ void m
 
 -- | If-statement for monads, with a monadic condition: if the condition holds, execute the given monad and return the result, otherwise return Nothing.
 ifMM :: (Monad m) => m Bool -> m a -> m (Maybe a)
@@ -61,7 +61,7 @@ transformWhile state transformAndPredicate = do
 
 -- | Produce an IO monad that behaves like the given Mealy machine, with separate transition and output functions.
 statefulIO :: (q -> i -> q) -> (q -> i -> o) -> q -> IO (i -> IO o)
-statefulIO transitionFunction outputFunction initialState = statefulIO' (\q i -> (transitionFunction q i, outputFunction q i)) initialState
+statefulIO transitionFunction outputFunction = statefulIO' (\q i -> (transitionFunction q i, outputFunction q i))
 
 -- | Produce an IO monad that behaves like the given Mealy machine, with a combined transition/output function.
 statefulIO' :: (q -> i -> (q, o)) -> q -> IO (i -> IO o)
@@ -77,9 +77,7 @@ statefulIO' transitionFunction initialState = do
 waitUntil :: STM Bool -> STM ()
 waitUntil condition = do
     mayContinue <- condition
-    if mayContinue
-        then return ()
-        else retry
+    unless mayContinue retry
 
 -- | An STM action that waits for the given STM condition, and then performs the given STM action
 doAfter :: STM Bool -> STM a -> STM a

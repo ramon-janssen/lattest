@@ -6,7 +6,7 @@
 -}
 
 module Data.OrdMonad (
--- * Functors and Monads with Ordering
+-- * Functors, Monads, and Traversables with Ordering
 -- ** Functors with ordering
 OrdFunctor,
 ordMap,
@@ -15,7 +15,9 @@ ordMap,
 OrdMonad,
 ordBind,
 ordReturn,
-ordJoin
+ordJoin,
+-- ** Traversables with ordering
+OrdTraversable(..)
 )
 where
 
@@ -62,6 +64,32 @@ instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
 ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
 ordJoin mma = ordBind mma id
 
+-- |Traversable with additional 'Ord' constraints.
+class (OrdFunctor t, Foldable t) => OrdTraversable t where
+    {-# MINIMAL ordTraverse, ordSequenceA #-}
+
+    -- | Map each element of a structure to an action, evaluate these actions
+    -- from left to right, and collect the results.
+    ordTraverse :: (Applicative f, Ord b) => (a -> f b) -> t a -> f (t b)
+
+    -- | Evaluate each action in the structure from left to right, and
+    -- collect the results.
+    ordSequenceA :: (Applicative f, Ord a) => t (f a) -> f (t a)
+
+    -- | Map each element of a structure to a monadic action, evaluate
+    -- these actions from left to right, and collect the results.
+    ordMapM :: (Monad m, Ord b) => (a -> m b) -> t a -> m (t b)
+    ordMapM = ordTraverse
+
+    -- | Evaluate each monadic action in the structure from left to
+    -- right, and collect the results.
+    ordSequence :: (Monad m, Ord a) => t (m a) -> m (t a)
+    ordSequence = ordSequenceA
+
+instance {-# OVERLAPPABLE #-} (Foldable t, Traversable t) => OrdTraversable t where
+  ordTraverse = traverse
+  ordSequenceA = sequenceA
+
 -- | 'Set' is the the prototypical 'OrdFunctor' instance. It maps a function over the set elements, deduplicating the results.
 instance OrdFunctor Set.Set where
     ordMap = Set.map
@@ -70,3 +98,9 @@ instance OrdFunctor Set.Set where
 instance OrdMonad Set.Set where
     ordBind s f = Set.unions $ Set.map f s
     ordReturn = Set.singleton
+
+-- | 'Set' is the prototypical 'OrdTraversable' instance.
+instance OrdTraversable Set.Set where
+    ordSequenceA = foldr (\x xs -> Set.insert <$> x <*> xs) $ pure Set.empty
+    ordTraverse f = fmap Set.fromList . traverse f . Set.toList
+
