@@ -11,6 +11,7 @@ import Data.Foldable (toList)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Sequence as Seq
+import Control.Monad (void)
 
 
 data TestResult = TestResult
@@ -53,7 +54,7 @@ writeResults csvPath newResults buf threshold = do
     if threshold == 0 || newBufLen >= threshold
         then do
             BS.appendFile csvPath (BL.toStrict (encode (toList newBuf)))
-            return (Seq.empty)
+            return Seq.empty
         else
             return newBuf
 
@@ -63,4 +64,4 @@ writeResults csvPath newResults buf threshold = do
 -}
 flushResults :: FilePath -> Seq.Seq TestResult -> IO ()
 flushResults csvPath revBuf =
-    writeResults csvPath [] (revBuf) 0 >> return ()
+    void $ writeResults csvPath [] revBuf 0

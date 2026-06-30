@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide, prune #-}
 {-
 This is a modified version of:
 TorXakis - Model Based Testing
@@ -5,10 +6,10 @@ See LICENSE in the parent Symbolic folder.
 -}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedLists            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TupleSections #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  FreeMonoidX
@@ -161,11 +162,11 @@ instance Ord a => Semigroup (FreeMonoidX a) where
 
 instance Ord a => Monoid (FreeMonoidX a) where
     mempty = FMX []
-    
+
 
 instance Ord a => IsList (FreeMonoidX a) where
     type Item (FreeMonoidX a) = a
-    fromList xs = FMX $ Map.fromListWith (+) $ zip xs (repeat 1)
+    fromList xs = FMX $ Map.fromListWith (+) $ map (,1) xs
     toList (FMX p) = do
         (x, n) <- Map.toList p
         genericReplicate n x

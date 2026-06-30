@@ -3,13 +3,13 @@
 module Lattest.Util.ModelParsingUtils (readAutFile, dumpLTSdot) where
 
 import Lattest.Model.Alphabet(IOAct(..))
-import Lattest.Util.Utils(removeDuplicates)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
 
 import Data.List (isSuffixOf)
+import Data.Containers.ListUtils (nubOrd)
 
 {-|
     Read an .aut file representing an LTS from the provided filepath, parse its content and return:
@@ -31,8 +31,8 @@ readAutFile path = do
           Nothing -> error "Error: Could not parse initial state from header."
           Just initialState ->
             let parsed = mapMaybe parseTupleLine restLines
-                inputAlphabet  = removeDuplicates [s | (_, In s, _)  <- parsed]
-                outputAlphabet = removeDuplicates [s | (_, Out s, _) <- parsed]
+                inputAlphabet  = nubOrd [s | (_, In s, _)  <- parsed]
+                outputAlphabet = nubOrd [s | (_, Out s, _) <- parsed]
                 allStates = Set.fromList $
                             [s1 | (s1, _, _) <- parsed] ++
                             [s2 | (_, _, s2) <- parsed]

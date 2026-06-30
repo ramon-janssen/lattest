@@ -64,11 +64,12 @@ import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanCon
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
 
 import Lattest.SMT.SMT(SMTRef, runSMT)
-import Lattest.Util.Utils(takeRandom, takeJusts, flipCoin)
+import Lattest.Util.Utils(takeRandom, flipCoin)
 
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import qualified Lattest.Model.BoundedMonad as BM
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen)
+import Data.Maybe (mapMaybe)
 
 
 
@@ -120,7 +121,7 @@ randomTestSelectorFromGen :: (After m loc q t tdest act, FiniteMenu t act, Folda
 randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ Just s)
     where
     randomSelectTest g' aut _ =
-        let ins = takeJusts $ actToChoice <$> specifiedMenu aut
+        let ins = mapMaybe actToChoice (specifiedMenu aut)
         in if null ins
             then error "random test selector found an empty menu"
             else return $ Just $ takeRandom g' ins

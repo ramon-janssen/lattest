@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide, prune #-}
 {-
 This is a modified version of:
 TorXakis - Model Based Testing
