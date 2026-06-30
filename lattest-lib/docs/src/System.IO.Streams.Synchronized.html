@@ -1,0 +1,1013 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# OPTIONS_HADDOCK hide, prune #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">System.IO.Streams.Synchronized</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-3"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier">TInputStream</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-4"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier">read</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-5"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#readAll"><span class="hs-identifier">readAll</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-6"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#unRead"><span class="hs-identifier">unRead</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-7"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier">hasInput</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-8"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromInputStreamBuffered"><span class="hs-identifier">fromInputStreamBuffered</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-9"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#makeTInputStream"><span class="hs-identifier">makeTInputStream</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-10"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromBuffer"><span class="hs-identifier">fromBuffer</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-11"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromTMVar"><span class="hs-identifier">fromTMVar</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-12"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#duplicate"><span class="hs-identifier">duplicate</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-13"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#map"><span class="hs-identifier">map</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-14"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#mapUnbuffered"><span class="hs-identifier">mapUnbuffered</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-15"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#mergeBuffered"><span class="hs-identifier">mergeBuffered</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-16"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#mergeBufferedWith"><span class="hs-identifier">mergeBufferedWith</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-17"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#consumeBufferedWith"><span class="hs-identifier">consumeBufferedWith</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-18"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier">Streamed</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryRead"><span class="hs-identifier">tryRead</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryReadIO"><span class="hs-identifier">tryReadIO</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryReadIO%27"><span class="hs-identifier">tryReadIO'</span></a></span><span>
+</span><span id="line-22"></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">read</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">map</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent.STM</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">STM</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">retry</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent.STM.TQueue</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">TQueue</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">newTQueueIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeTQueue</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">readTQueue</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">isEmptyTQueue</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">unGetTQueue</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent.STM.TMVar</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">TMVar</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">takeTMVar</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">isEmptyTMVar</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent.STM.TVar</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">newTVarIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">readTVar</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeTVar</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.IO.Exception</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ioe_location</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ioe_errno</span></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">throwIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Exception</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">catchJust</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">void</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">when</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">singleton</span></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Conc</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">atomically</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">forkIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO.Streams</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">InputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">OutputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">makeOutputStream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">connect</span></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">System.IO.Streams</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Streams</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">write</span></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Extra</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(||^)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.C.Error</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">eBADF</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Errno</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Errno</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">data</span><span> </span><span id="TInputStream"><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-var">TInputStream</span></a></span></span><span> </span><span id="local-6989586621679230073"><span class="annot"><a href="#local-6989586621679230073"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TInputStream"><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-var">TInputStream</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-42"></span><span>    </span><span id="tRead"><span class="annot"><span class="annottext">forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var hs-var">tRead</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230073"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-43"></span><span>    </span><span id="tUnRead"><span class="annot"><span class="annottext">forall a. TInputStream a -&gt; a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var hs-var">tUnRead</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679230073"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-44"></span><span>    </span><span id="tHasInput"><span class="annot"><span class="annottext">forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var hs-var">tHasInput</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- whether this stream has a (Maybe a) available right now, *or* whether it is closed. Note: it may be tempting</span><span>
+</span><span id="line-45"></span><span>                          </span><span class="hs-comment">-- to omit this field, and just check whether tRead retries, but that is ambiguous: tRead will retry either if</span><span>
+</span><span id="line-46"></span><span>                          </span><span class="hs-comment">-- there is no input yet, *or* if someone is writing to the unknown TVars used to implement tRead. The first case</span><span>
+</span><span id="line-47"></span><span>                          </span><span class="hs-comment">-- would not have an input, the second case would.</span><span>
+</span><span id="line-48"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span id="local-6989586621679230253"><span class="annot"><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-type">read</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230253"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230253"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-51"></span><span id="read"><span class="annot"><span class="annottext">read :: forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var hs-var">read</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span id="local-6989586621679230254"><span class="annot"><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-type">hasInput</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230254"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span></span><span>
+</span><span id="line-54"></span><span id="hasInput"><span class="annot"><span class="annottext">hasInput :: forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var hs-var">hasInput</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- read inputs from the stream until it has no more input</span><span>
+</span><span id="line-57"></span><span id="local-6989586621679230081"><span class="annot"><a href="System.IO.Streams.Synchronized.html#readAll"><span class="hs-identifier hs-type">readAll</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230081"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230081"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-58"></span><span id="readAll"><span class="annot"><span class="annottext">readAll :: forall a. TInputStream a -&gt; STM [Maybe a]
+</span><a href="System.IO.Streams.Synchronized.html#readAll"><span class="hs-identifier hs-var hs-var">readAll</span></a></span></span><span> </span><span id="local-6989586621679230257"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230257"><span class="hs-identifier hs-var">tis</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Maybe a] -&gt; [Maybe a]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">([Maybe a] -&gt; [Maybe a]) -&gt; STM [Maybe a] -&gt; STM [Maybe a]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">[Maybe a] -&gt; STM [Maybe a]
+</span><a href="#local-6989586621679230260"><span class="hs-identifier hs-var">readAll'</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-59"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-60"></span><span>    </span><span id="local-6989586621679230260"><span class="annot"><span class="annottext">readAll' :: [Maybe a] -&gt; STM [Maybe a]
+</span><a href="#local-6989586621679230260"><span class="hs-identifier hs-var hs-var">readAll'</span></a></span></span><span> </span><span id="local-6989586621679230265"><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230265"><span class="hs-identifier hs-var">acc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-61"></span><span>        </span><span id="local-6989586621679230266"><span class="annot"><span class="annottext">Streamed a
+</span><a href="#local-6989586621679230266"><span class="hs-identifier hs-var">readAttempt</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Streamed a)
+forall a. TInputStream a -&gt; STM (Streamed a)
+</span><a href="System.IO.Streams.Synchronized.html#tryRead"><span class="hs-identifier hs-var">tryRead</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230257"><span class="hs-identifier hs-var">tis</span></a></span><span>
+</span><span id="line-62"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Streamed a
+</span><a href="#local-6989586621679230266"><span class="hs-identifier hs-var">readAttempt</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-63"></span><span>            </span><span class="annot"><span class="annottext">Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#StreamClosed"><span class="hs-identifier hs-var">StreamClosed</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Maybe a] -&gt; STM [Maybe a]
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="annot"><span class="annottext">Maybe a -&gt; [Maybe a] -&gt; [Maybe a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230265"><span class="hs-identifier hs-var">acc</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>            </span><span class="annot"><span class="annottext">Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#Unavailable"><span class="hs-identifier hs-var">Unavailable</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Maybe a] -&gt; STM [Maybe a]
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230265"><span class="hs-identifier hs-var">acc</span></a></span><span>
+</span><span id="line-65"></span><span>            </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Available"><span class="hs-identifier hs-type">Available</span></a></span><span> </span><span id="local-6989586621679230270"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230270"><span class="hs-identifier hs-var">next</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Maybe a] -&gt; STM [Maybe a]
+</span><a href="#local-6989586621679230260"><span class="hs-identifier hs-var">readAll'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230270"><span class="hs-identifier hs-var">next</span></a></span><span class="annot"><span class="annottext">Maybe a -&gt; [Maybe a] -&gt; [Maybe a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230265"><span class="hs-identifier hs-var">acc</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span id="local-6989586621679230092"><span class="annot"><a href="System.IO.Streams.Synchronized.html#unRead"><span class="hs-identifier hs-type">unRead</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679230092"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230092"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span><span>
+</span><span id="line-68"></span><span id="unRead"><span class="annot"><span class="annottext">unRead :: forall a. a -&gt; TInputStream a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#unRead"><span class="hs-identifier hs-var hs-var">unRead</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TInputStream a -&gt; a -&gt; STM ()) -&gt; a -&gt; TInputStream a -&gt; STM ()
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; a -&gt; STM ()
+forall a. TInputStream a -&gt; a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span class="hs-keyword">data</span><span> </span><span id="Streamed"><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier hs-var">Streamed</span></a></span></span><span> </span><span id="local-6989586621679230119"><span class="annot"><a href="#local-6989586621679230119"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Available"><span class="annot"><a href="System.IO.Streams.Synchronized.html#Available"><span class="hs-identifier hs-var">Available</span></a></span></span><span> </span><span class="annot"><a href="#local-6989586621679230119"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Unavailable"><span class="annot"><a href="System.IO.Streams.Synchronized.html#Unavailable"><span class="hs-identifier hs-var">Unavailable</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="StreamClosed"><span class="annot"><a href="System.IO.Streams.Synchronized.html#StreamClosed"><span class="hs-identifier hs-var">StreamClosed</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679230274"><span id="local-6989586621679230277"><span class="annot"><span class="annottext">Streamed a -&gt; Streamed a -&gt; Bool
+(Streamed a -&gt; Streamed a -&gt; Bool)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Bool) -&gt; Eq (Streamed a)
+forall a. Eq a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: forall a. Eq a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+== :: Streamed a -&gt; Streamed a -&gt; Bool
+$c/= :: forall a. Eq a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+/= :: Streamed a -&gt; Streamed a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679230286"><span id="local-6989586621679230289"><span id="local-6989586621679230292"><span id="local-6989586621679230296"><span id="local-6989586621679230299"><span id="local-6989586621679230302"><span id="local-6989586621679230305"><span class="annot"><span class="annottext">Eq (Streamed a)
+Eq (Streamed a) =&gt;
+(Streamed a -&gt; Streamed a -&gt; Ordering)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Bool)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Bool)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Bool)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Bool)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Streamed a)
+-&gt; (Streamed a -&gt; Streamed a -&gt; Streamed a)
+-&gt; Ord (Streamed a)
+Streamed a -&gt; Streamed a -&gt; Bool
+Streamed a -&gt; Streamed a -&gt; Ordering
+Streamed a -&gt; Streamed a -&gt; Streamed a
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+forall a. Ord a =&gt; Eq (Streamed a)
+forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Ordering
+forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Streamed a
+$ccompare :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Ordering
+compare :: Streamed a -&gt; Streamed a -&gt; Ordering
+$c&lt; :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+&lt; :: Streamed a -&gt; Streamed a -&gt; Bool
+$c&lt;= :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+&lt;= :: Streamed a -&gt; Streamed a -&gt; Bool
+$c&gt; :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+&gt; :: Streamed a -&gt; Streamed a -&gt; Bool
+$c&gt;= :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Bool
+&gt;= :: Streamed a -&gt; Streamed a -&gt; Bool
+$cmax :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Streamed a
+max :: Streamed a -&gt; Streamed a -&gt; Streamed a
+$cmin :: forall a. Ord a =&gt; Streamed a -&gt; Streamed a -&gt; Streamed a
+min :: Streamed a -&gt; Streamed a -&gt; Streamed a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679230311"><span id="local-6989586621679230316"><span id="local-6989586621679230320"><span class="annot"><span class="annottext">Int -&gt; Streamed a -&gt; ShowS
+[Streamed a] -&gt; ShowS
+Streamed a -&gt; String
+(Int -&gt; Streamed a -&gt; ShowS)
+-&gt; (Streamed a -&gt; String)
+-&gt; ([Streamed a] -&gt; ShowS)
+-&gt; Show (Streamed a)
+forall a. Show a =&gt; Int -&gt; Streamed a -&gt; ShowS
+forall a. Show a =&gt; [Streamed a] -&gt; ShowS
+forall a. Show a =&gt; Streamed a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: forall a. Show a =&gt; Int -&gt; Streamed a -&gt; ShowS
+showsPrec :: Int -&gt; Streamed a -&gt; ShowS
+$cshow :: forall a. Show a =&gt; Streamed a -&gt; String
+show :: Streamed a -&gt; String
+$cshowList :: forall a. Show a =&gt; [Streamed a] -&gt; ShowS
+showList :: [Streamed a] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679230325"><span id="local-6989586621679230329"><span id="local-6989586621679230332"><span id="local-6989586621679230341"><span class="annot"><span class="annottext">ReadPrec [Streamed a]
+ReadPrec (Streamed a)
+Int -&gt; ReadS (Streamed a)
+ReadS [Streamed a]
+(Int -&gt; ReadS (Streamed a))
+-&gt; ReadS [Streamed a]
+-&gt; ReadPrec (Streamed a)
+-&gt; ReadPrec [Streamed a]
+-&gt; Read (Streamed a)
+forall a. Read a =&gt; ReadPrec [Streamed a]
+forall a. Read a =&gt; ReadPrec (Streamed a)
+forall a. Read a =&gt; Int -&gt; ReadS (Streamed a)
+forall a. Read a =&gt; ReadS [Streamed a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+$creadsPrec :: forall a. Read a =&gt; Int -&gt; ReadS (Streamed a)
+readsPrec :: Int -&gt; ReadS (Streamed a)
+$creadList :: forall a. Read a =&gt; ReadS [Streamed a]
+readList :: ReadS [Streamed a]
+$creadPrec :: forall a. Read a =&gt; ReadPrec (Streamed a)
+readPrec :: ReadPrec (Streamed a)
+$creadListPrec :: forall a. Read a =&gt; ReadPrec [Streamed a]
+readListPrec :: ReadPrec [Streamed a]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span id="local-6989586621679230089"><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryRead"><span class="hs-identifier hs-type">tryRead</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230089"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier hs-type">Streamed</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230089"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-73"></span><span id="tryRead"><span class="annot"><span class="annottext">tryRead :: forall a. TInputStream a -&gt; STM (Streamed a)
+</span><a href="System.IO.Streams.Synchronized.html#tryRead"><span class="hs-identifier hs-var hs-var">tryRead</span></a></span></span><span> </span><span id="local-6989586621679230348"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230348"><span class="hs-identifier hs-var">tis</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-74"></span><span>    </span><span id="local-6989586621679230349"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230349"><span class="hs-identifier hs-var">ready</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var">hasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230348"><span class="hs-identifier hs-var">tis</span></a></span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230349"><span class="hs-identifier hs-var">ready</span></a></span><span>
+</span><span id="line-76"></span><span>        </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-77"></span><span>            </span><span id="local-6989586621679230350"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230350"><span class="hs-identifier hs-var">minput</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var">read</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230348"><span class="hs-identifier hs-var">tis</span></a></span><span>
+</span><span id="line-78"></span><span>            </span><span class="annot"><span class="annottext">Streamed a -&gt; STM (Streamed a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Streamed a -&gt; STM (Streamed a)) -&gt; Streamed a -&gt; STM (Streamed a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Streamed a -&gt; (a -&gt; Streamed a) -&gt; Maybe a -&gt; Streamed a
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Streamed a
+forall a. Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#StreamClosed"><span class="hs-identifier hs-var">StreamClosed</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; Streamed a
+forall a. a -&gt; Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#Available"><span class="hs-identifier hs-var">Available</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230350"><span class="hs-identifier hs-var">minput</span></a></span><span>
+</span><span id="line-79"></span><span>        </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Streamed a -&gt; STM (Streamed a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Streamed a
+forall a. Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#Unavailable"><span class="hs-identifier hs-var">Unavailable</span></a></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span id="local-6989586621679230120"><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryReadIO"><span class="hs-identifier hs-type">tryReadIO</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230120"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Streamed"><span class="hs-identifier hs-type">Streamed</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230120"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-82"></span><span id="tryReadIO"><span class="annot"><span class="annottext">tryReadIO :: forall a. TInputStream a -&gt; IO (Streamed a)
+</span><a href="System.IO.Streams.Synchronized.html#tryReadIO"><span class="hs-identifier hs-var hs-var">tryReadIO</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">STM (Streamed a) -&gt; IO (Streamed a)
+forall a. STM a -&gt; IO a
+</span><span class="hs-identifier hs-var">atomically</span></span><span> </span><span class="annot"><span class="annottext">(STM (Streamed a) -&gt; IO (Streamed a))
+-&gt; (TInputStream a -&gt; STM (Streamed a))
+-&gt; TInputStream a
+-&gt; IO (Streamed a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Streamed a)
+forall a. TInputStream a -&gt; STM (Streamed a)
+</span><a href="System.IO.Streams.Synchronized.html#tryRead"><span class="hs-identifier hs-var">tryRead</span></a></span><span>
+</span><span id="line-83"></span><span>
+</span><span id="line-84"></span><span class="hs-keyword">data</span><span> </span><span id="TInputStreamClosedException"><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStreamClosedException"><span class="hs-identifier hs-var">TInputStreamClosedException</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TInputStreamClosedException"><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStreamClosedException"><span class="hs-identifier hs-var">TInputStreamClosedException</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679230355"><span id="local-6989586621679230357"><span class="annot"><span class="annottext">TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+(TInputStreamClosedException
+ -&gt; TInputStreamClosedException -&gt; Bool)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; Bool)
+-&gt; Eq TInputStreamClosedException
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+== :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+$c/= :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+/= :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679230363"><span id="local-6989586621679230365"><span id="local-6989586621679230367"><span id="local-6989586621679230371"><span id="local-6989586621679230374"><span id="local-6989586621679230377"><span id="local-6989586621679230380"><span class="annot"><span class="annottext">Eq TInputStreamClosedException
+Eq TInputStreamClosedException =&gt;
+(TInputStreamClosedException
+ -&gt; TInputStreamClosedException -&gt; Ordering)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; Bool)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; Bool)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; Bool)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; Bool)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; TInputStreamClosedException)
+-&gt; (TInputStreamClosedException
+    -&gt; TInputStreamClosedException -&gt; TInputStreamClosedException)
+-&gt; Ord TInputStreamClosedException
+TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; Ordering
+TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; TInputStreamClosedException
+forall a.
+Eq a =&gt;
+(a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+$ccompare :: TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; Ordering
+compare :: TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; Ordering
+$c&lt; :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+&lt; :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+$c&lt;= :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+&lt;= :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+$c&gt; :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+&gt; :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+$c&gt;= :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+&gt;= :: TInputStreamClosedException -&gt; TInputStreamClosedException -&gt; Bool
+$cmax :: TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; TInputStreamClosedException
+max :: TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; TInputStreamClosedException
+$cmin :: TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; TInputStreamClosedException
+min :: TInputStreamClosedException
+-&gt; TInputStreamClosedException -&gt; TInputStreamClosedException
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679230383"><span id="local-6989586621679230385"><span id="local-6989586621679230389"><span class="annot"><span class="annottext">Int -&gt; TInputStreamClosedException -&gt; ShowS
+[TInputStreamClosedException] -&gt; ShowS
+TInputStreamClosedException -&gt; String
+(Int -&gt; TInputStreamClosedException -&gt; ShowS)
+-&gt; (TInputStreamClosedException -&gt; String)
+-&gt; ([TInputStreamClosedException] -&gt; ShowS)
+-&gt; Show TInputStreamClosedException
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; TInputStreamClosedException -&gt; ShowS
+showsPrec :: Int -&gt; TInputStreamClosedException -&gt; ShowS
+$cshow :: TInputStreamClosedException -&gt; String
+show :: TInputStreamClosedException -&gt; String
+$cshowList :: [TInputStreamClosedException] -&gt; ShowS
+showList :: [TInputStreamClosedException] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-85"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679230396"><span id="local-6989586621679230400"><span id="local-6989586621679230403"><span class="annot"><span class="hs-identifier hs-type">Exception</span></span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStreamClosedException"><span class="hs-identifier hs-type">TInputStreamClosedException</span></a></span></span></span></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span id="local-6989586621679230130"><span class="annot"><a href="System.IO.Streams.Synchronized.html#tryReadIO%27"><span class="hs-identifier hs-type">tryReadIO'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230130"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230130"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-88"></span><span id="tryReadIO%27"><span class="annot"><span class="annottext">tryReadIO' :: forall a. TInputStream a -&gt; IO (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tryReadIO%27"><span class="hs-identifier hs-var hs-var">tryReadIO'</span></a></span></span><span> </span><span id="local-6989586621679230411"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230411"><span class="hs-identifier hs-var">tis</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-89"></span><span>    </span><span id="local-6989586621679230412"><span class="annot"><span class="annottext">Streamed a
+</span><a href="#local-6989586621679230412"><span class="hs-identifier hs-var">streamed</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; IO (Streamed a)
+forall a. TInputStream a -&gt; IO (Streamed a)
+</span><a href="System.IO.Streams.Synchronized.html#tryReadIO"><span class="hs-identifier hs-var">tryReadIO</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230411"><span class="hs-identifier hs-var">tis</span></a></span><span>
+</span><span id="line-90"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Streamed a
+</span><a href="#local-6989586621679230412"><span class="hs-identifier hs-var">streamed</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-91"></span><span>        </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#Available"><span class="hs-identifier hs-type">Available</span></a></span><span> </span><span id="local-6989586621679230413"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230413"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; IO (Maybe a)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; IO (Maybe a)) -&gt; Maybe a -&gt; IO (Maybe a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230413"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-92"></span><span>        </span><span class="annot"><span class="annottext">Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#Unavailable"><span class="hs-identifier hs-var">Unavailable</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; IO (Maybe a)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-93"></span><span>        </span><span class="annot"><span class="annottext">Streamed a
+</span><a href="System.IO.Streams.Synchronized.html#StreamClosed"><span class="hs-identifier hs-var">StreamClosed</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TInputStreamClosedException -&gt; IO (Maybe a)
+forall e a. Exception e =&gt; e -&gt; IO a
+</span><span class="hs-identifier hs-var">throwIO</span></span><span> </span><span class="annot"><span class="annottext">TInputStreamClosedException
+</span><a href="System.IO.Streams.Synchronized.html#TInputStreamClosedException"><span class="hs-identifier hs-var">TInputStreamClosedException</span></a></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span id="local-6989586621679230134"><span class="annot"><a href="System.IO.Streams.Synchronized.html#makeTInputStream"><span class="hs-identifier hs-type">makeTInputStream</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230134"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230134"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-96"></span><span id="makeTInputStream"><span class="annot"><span class="annottext">makeTInputStream :: forall a. STM (Maybe a) -&gt; STM Bool -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#makeTInputStream"><span class="hs-identifier hs-var hs-var">makeTInputStream</span></a></span></span><span> </span><span id="local-6989586621679230418"><span class="annot"><span class="annottext">STM (Maybe a)
+</span><a href="#local-6989586621679230418"><span class="hs-identifier hs-var">readInput</span></a></span></span><span> </span><span id="local-6989586621679230419"><span class="annot"><span class="annottext">STM Bool
+</span><a href="#local-6989586621679230419"><span class="hs-identifier hs-var">hasInput'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-97"></span><span>    </span><span id="local-6989586621679230420"><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230420"><span class="hs-identifier hs-var">pushbackStack</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (TQueue a)
+forall a. IO (TQueue a)
+</span><span class="hs-identifier hs-var">newTQueueIO</span></span><span>
+</span><span id="line-98"></span><span>    </span><span class="annot"><span class="annottext">TInputStream a -&gt; IO (TInputStream a)
+forall a. TInputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#withClosedState"><span class="hs-identifier hs-var">withClosedState</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream a -&gt; IO (TInputStream a))
+-&gt; TInputStream a -&gt; IO (TInputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-99"></span><span>        </span><span class="annot"><span class="annottext">tRead :: STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-100"></span><span>            </span><span id="local-6989586621679230422"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230422"><span class="hs-identifier hs-var">hasPushback</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TQueue a -&gt; STM Bool
+forall a. TQueue a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#isNonEmptyTQueue"><span class="hs-identifier hs-var">isNonEmptyTQueue</span></a></span><span> </span><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230420"><span class="hs-identifier hs-var">pushbackStack</span></a></span><span>
+</span><span id="line-101"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230422"><span class="hs-identifier hs-var">hasPushback</span></a></span><span>
+</span><span id="line-102"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Maybe a) -&gt; STM a -&gt; STM (Maybe a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TQueue a -&gt; STM a
+forall a. TQueue a -&gt; STM a
+</span><span class="hs-identifier hs-var">readTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230420"><span class="hs-identifier hs-var">pushbackStack</span></a></span><span>
+</span><span id="line-103"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">STM (Maybe a)
+</span><a href="#local-6989586621679230418"><span class="hs-identifier hs-var">readInput</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-104"></span><span>        </span><span class="annot"><span class="annottext">tUnRead :: a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TQueue a -&gt; a -&gt; STM ()
+forall a. TQueue a -&gt; a -&gt; STM ()
+</span><span class="hs-identifier hs-var">unGetTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230420"><span class="hs-identifier hs-var">pushbackStack</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-105"></span><span>        </span><span class="annot"><span class="annottext">tHasInput :: STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TQueue a -&gt; STM Bool
+forall a. TQueue a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#isNonEmptyTQueue"><span class="hs-identifier hs-var">isNonEmptyTQueue</span></a></span><span> </span><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230420"><span class="hs-identifier hs-var">pushbackStack</span></a></span><span> </span><span class="annot"><span class="annottext">STM Bool -&gt; STM Bool -&gt; STM Bool
+forall (m :: * -&gt; *). Monad m =&gt; m Bool -&gt; m Bool -&gt; m Bool
+</span><span class="hs-operator hs-var">||^</span></span><span> </span><span class="annot"><span class="annottext">STM Bool
+</span><a href="#local-6989586621679230419"><span class="hs-identifier hs-var">hasInput'</span></a></span><span>
+</span><span id="line-106"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span id="local-6989586621679230138"><span class="annot"><a href="System.IO.Streams.Synchronized.html#withClosedState"><span class="hs-identifier hs-type">withClosedState</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230138"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230138"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-109"></span><span id="withClosedState"><span class="annot"><span class="annottext">withClosedState :: forall a. TInputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#withClosedState"><span class="hs-identifier hs-var hs-var">withClosedState</span></a></span></span><span> </span><span id="local-6989586621679230434"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230434"><span class="hs-identifier hs-var">stream</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-110"></span><span>    </span><span id="local-6989586621679230435"><span class="annot"><span class="annottext">TVar Bool
+</span><a href="#local-6989586621679230435"><span class="hs-identifier hs-var">closeVar</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; IO (TVar Bool)
+forall a. a -&gt; IO (TVar a)
+</span><span class="hs-identifier hs-var">newTVarIO</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-111"></span><span>    </span><span class="annot"><span class="annottext">TInputStream a -&gt; IO (TInputStream a)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(TInputStream a -&gt; IO (TInputStream a))
+-&gt; TInputStream a -&gt; IO (TInputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-112"></span><span>        </span><span class="annot"><span class="annottext">tRead :: STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-113"></span><span>            </span><span id="local-6989586621679230436"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230436"><span class="hs-identifier hs-var">closed</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TVar Bool -&gt; STM Bool
+forall a. TVar a -&gt; STM a
+</span><span class="hs-identifier hs-var">readTVar</span></span><span> </span><span class="annot"><span class="annottext">TVar Bool
+</span><a href="#local-6989586621679230435"><span class="hs-identifier hs-var">closeVar</span></a></span><span>
+</span><span id="line-114"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230436"><span class="hs-identifier hs-var">closed</span></a></span><span>
+</span><span id="line-115"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; STM (Maybe a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-116"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-117"></span><span>                    </span><span id="local-6989586621679230437"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230437"><span class="hs-identifier hs-var">mi</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230434"><span class="hs-identifier hs-var">stream</span></a></span><span>
+</span><span id="line-118"></span><span>                    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230437"><span class="hs-identifier hs-var">mi</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-119"></span><span>                        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679230438"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230438"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; STM (Maybe a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; STM (Maybe a)) -&gt; Maybe a -&gt; STM (Maybe a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230438"><span class="hs-identifier hs-var">i</span></a></span><span>
+</span><span id="line-120"></span><span>                        </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-121"></span><span>                            </span><span class="annot"><span class="annottext">TVar Bool -&gt; Bool -&gt; STM ()
+forall a. TVar a -&gt; a -&gt; STM ()
+</span><span class="hs-identifier hs-var">writeTVar</span></span><span> </span><span class="annot"><span class="annottext">TVar Bool
+</span><a href="#local-6989586621679230435"><span class="hs-identifier hs-var">closeVar</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-122"></span><span>                            </span><span class="annot"><span class="annottext">Maybe a -&gt; STM (Maybe a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">,</span><span>
+</span><span id="line-123"></span><span>        </span><span class="annot"><span class="annottext">tUnRead :: a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; a -&gt; STM ()
+forall a. TInputStream a -&gt; a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230434"><span class="hs-identifier hs-var">stream</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-124"></span><span>        </span><span class="annot"><span class="annottext">tHasInput :: STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-125"></span><span>            </span><span id="local-6989586621679230439"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230439"><span class="hs-identifier hs-var">closed</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TVar Bool -&gt; STM Bool
+forall a. TVar a -&gt; STM a
+</span><span class="hs-identifier hs-var">readTVar</span></span><span> </span><span class="annot"><span class="annottext">TVar Bool
+</span><a href="#local-6989586621679230435"><span class="hs-identifier hs-var">closeVar</span></a></span><span>
+</span><span id="line-126"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230439"><span class="hs-identifier hs-var">closed</span></a></span><span>
+</span><span id="line-127"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; STM Bool
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-128"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230434"><span class="hs-identifier hs-var">stream</span></a></span><span>
+</span><span id="line-129"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-130"></span><span>
+</span><span id="line-131"></span><span id="local-6989586621679230148"><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromTMVar"><span class="hs-identifier hs-type">fromTMVar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TMVar</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230148"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230148"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-132"></span><span id="fromTMVar"><span class="annot"><span class="annottext">fromTMVar :: forall a. TMVar (Maybe a) -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#fromTMVar"><span class="hs-identifier hs-var hs-var">fromTMVar</span></a></span></span><span> </span><span id="local-6989586621679230441"><span class="annot"><span class="annottext">TMVar (Maybe a)
+</span><a href="#local-6989586621679230441"><span class="hs-identifier hs-var">tmvar</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">STM (Maybe a) -&gt; STM Bool -&gt; IO (TInputStream a)
+forall a. STM (Maybe a) -&gt; STM Bool -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#makeTInputStream"><span class="hs-identifier hs-var">makeTInputStream</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TMVar (Maybe a) -&gt; STM (Maybe a)
+forall a. TMVar a -&gt; STM a
+</span><span class="hs-identifier hs-var">takeTMVar</span></span><span> </span><span class="annot"><span class="annottext">TMVar (Maybe a)
+</span><a href="#local-6989586621679230441"><span class="hs-identifier hs-var">tmvar</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; STM Bool -&gt; STM Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TMVar (Maybe a) -&gt; STM Bool
+forall a. TMVar a -&gt; STM Bool
+</span><span class="hs-identifier hs-var">isEmptyTMVar</span></span><span> </span><span class="annot"><span class="annottext">TMVar (Maybe a)
+</span><a href="#local-6989586621679230441"><span class="hs-identifier hs-var">tmvar</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- note: the buffer is also used to push back values. Thus, do not read this buffer from outside the resulting stream, as then this stream may</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- violate the principle that pushed back values are read again.</span><span>
+</span><span id="line-136"></span><span id="local-6989586621679230153"><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromBuffer"><span class="hs-identifier hs-type">fromBuffer</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TQueue</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230153"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230153"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-137"></span><span id="fromBuffer"><span class="annot"><span class="annottext">fromBuffer :: forall a. TQueue (Maybe a) -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#fromBuffer"><span class="hs-identifier hs-var hs-var">fromBuffer</span></a></span></span><span> </span><span id="local-6989586621679230443"><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230443"><span class="hs-identifier hs-var">buffer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; IO (TInputStream a)
+forall a. TInputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#withClosedState"><span class="hs-identifier hs-var">withClosedState</span></a></span><span> </span><span class="annot"><span class="annottext">(TInputStream a -&gt; IO (TInputStream a))
+-&gt; TInputStream a -&gt; IO (TInputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-138"></span><span>        </span><span class="annot"><span class="annottext">tRead :: STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; STM (Maybe a)
+forall a. TQueue a -&gt; STM a
+</span><span class="hs-identifier hs-var">readTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230443"><span class="hs-identifier hs-var">buffer</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-139"></span><span>        </span><span class="annot"><span class="annottext">tUnRead :: a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; Maybe a -&gt; STM ()
+forall a. TQueue a -&gt; a -&gt; STM ()
+</span><span class="hs-identifier hs-var">unGetTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230443"><span class="hs-identifier hs-var">buffer</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; STM ()) -&gt; (a -&gt; Maybe a) -&gt; a -&gt; STM ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span class="hs-special">,</span><span>
+</span><span id="line-140"></span><span>        </span><span class="annot"><span class="annottext">tHasInput :: STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; STM Bool
+forall a. TQueue a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#isNonEmptyTQueue"><span class="hs-identifier hs-var">isNonEmptyTQueue</span></a></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230443"><span class="hs-identifier hs-var">buffer</span></a></span><span>
+</span><span id="line-141"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-142"></span><span>
+</span><span id="line-143"></span><span class="hs-comment">-- a synchronized input stream that reads from the given input stream. A monitoring thread reads the given input stream and buffers the inputs on the background</span><span>
+</span><span id="line-144"></span><span class="hs-comment">-- TODO support a bound for the buffer</span><span>
+</span><span id="line-145"></span><span id="local-6989586621679230155"><span class="annot"><a href="System.IO.Streams.Synchronized.html#fromInputStreamBuffered"><span class="hs-identifier hs-type">fromInputStreamBuffered</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">InputStream</span></span><span> </span><span class="annot"><a href="#local-6989586621679230155"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230155"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-146"></span><span id="fromInputStreamBuffered"><span class="annot"><span class="annottext">fromInputStreamBuffered :: forall a. InputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#fromInputStreamBuffered"><span class="hs-identifier hs-var hs-var">fromInputStreamBuffered</span></a></span></span><span> </span><span id="local-6989586621679230449"><span class="annot"><span class="annottext">InputStream a
+</span><a href="#local-6989586621679230449"><span class="hs-identifier hs-var">is</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-147"></span><span>    </span><span id="local-6989586621679230450"><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230450"><span class="hs-identifier hs-var">buffer</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (TQueue (Maybe a))
+forall a. IO (TQueue a)
+</span><span class="hs-identifier hs-var">newTQueueIO</span></span><span>
+</span><span id="line-148"></span><span>    </span><span id="local-6989586621679230451"><span class="annot"><span class="annottext">OutputStream a
+</span><a href="#local-6989586621679230451"><span class="hs-identifier hs-var">bufferOS</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; IO ()) -&gt; IO (OutputStream a)
+forall a. (Maybe a -&gt; IO ()) -&gt; IO (OutputStream a)
+</span><span class="hs-identifier hs-var">makeOutputStream</span></span><span> </span><span class="annot"><span class="annottext">((Maybe a -&gt; IO ()) -&gt; IO (OutputStream a))
+-&gt; (Maybe a -&gt; IO ()) -&gt; IO (OutputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">STM () -&gt; IO ()
+forall a. STM a -&gt; IO a
+</span><span class="hs-identifier hs-var">atomically</span></span><span> </span><span class="annot"><span class="annottext">(STM () -&gt; IO ()) -&gt; (Maybe a -&gt; STM ()) -&gt; Maybe a -&gt; IO ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; Maybe a -&gt; STM ()
+forall a. TQueue a -&gt; a -&gt; STM ()
+</span><span class="hs-identifier hs-var">writeTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230450"><span class="hs-identifier hs-var">buffer</span></a></span><span> </span><span class="hs-comment">-- an intermediate output stream to write to the queue</span><span>
+</span><span id="line-149"></span><span>    </span><span class="annot"><span class="annottext">IO ThreadId -&gt; IO ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">(IO ThreadId -&gt; IO ()) -&gt; IO ThreadId -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; IO ThreadId
+</span><span class="hs-identifier hs-var">forkIO</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ThreadId) -&gt; IO () -&gt; IO ThreadId
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; IO ()
+</span><a href="#local-6989586621679230452"><span class="hs-identifier hs-var">catchSocketClosed</span></a></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">InputStream a -&gt; OutputStream a -&gt; IO ()
+forall a. InputStream a -&gt; OutputStream a -&gt; IO ()
+</span><span class="hs-identifier hs-var">connect</span></span><span> </span><span class="annot"><span class="annottext">InputStream a
+</span><a href="#local-6989586621679230449"><span class="hs-identifier hs-var">is</span></a></span><span> </span><span class="annot"><span class="annottext">OutputStream a
+</span><a href="#local-6989586621679230451"><span class="hs-identifier hs-var">bufferOS</span></a></span><span> </span><span class="hs-comment">-- move items from the original adapter into the buffer in a separate thread</span><span>
+</span><span id="line-150"></span><span>    </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; IO (TInputStream a)
+forall a. TQueue (Maybe a) -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#fromBuffer"><span class="hs-identifier hs-var">fromBuffer</span></a></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230450"><span class="hs-identifier hs-var">buffer</span></a></span><span>
+</span><span id="line-151"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-152"></span><span>   </span><span class="hs-comment">-- catches &quot;threadWait: invalid argument (Bad file descriptor)&quot;</span><span>
+</span><span id="line-153"></span><span>   </span><span class="hs-comment">-- which is thrown when the socket is closed while this thread is running, e.g. on Adaptor.close()</span><span>
+</span><span id="line-154"></span><span>   </span><span class="hs-comment">-- The alternative solution is to keep track of the threadID given by forkIO,</span><span>
+</span><span id="line-155"></span><span>   </span><span class="hs-comment">-- and explicitly stop the thread before closing the socket.</span><span>
+</span><span id="line-156"></span><span>   </span><span id="local-6989586621679230452"><span class="annot"><span class="annottext">catchSocketClosed :: IO () -&gt; IO ()
+</span><a href="#local-6989586621679230452"><span class="hs-identifier hs-var hs-var">catchSocketClosed</span></a></span></span><span> </span><span id="local-6989586621679230457"><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679230457"><span class="hs-identifier hs-var">forkedThread</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(IOException -&gt; Maybe ()) -&gt; IO () -&gt; (() -&gt; IO ()) -&gt; IO ()
+forall e b a.
+Exception e =&gt;
+(e -&gt; Maybe b) -&gt; IO a -&gt; (b -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">catchJust</span></span><span> </span><span class="annot"><span class="annottext">IOException -&gt; Maybe ()
+</span><a href="#local-6989586621679230458"><span class="hs-identifier hs-var">threadwaitinvalid</span></a></span><span> </span><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679230457"><span class="hs-identifier hs-var">forkedThread</span></a></span><span> </span><span class="annot"><span class="annottext">() -&gt; IO ()
+forall a. a -&gt; IO a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span>
+</span><span id="line-157"></span><span>   </span><span id="local-6989586621679230458"><span class="annot"><span class="annottext">threadwaitinvalid :: IOException -&gt; Maybe ()
+</span><a href="#local-6989586621679230458"><span class="hs-identifier hs-var hs-var">threadwaitinvalid</span></a></span></span><span> </span><span id="local-6989586621679230469"><span class="annot"><span class="annottext">IOException
+</span><a href="#local-6989586621679230469"><span class="hs-identifier hs-var">e</span></a></span></span><span>
+</span><span id="line-158"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">IOException -&gt; String
+</span><span class="hs-identifier hs-var">ioe_location</span></span><span> </span><span class="annot"><span class="annottext">IOException
+</span><a href="#local-6989586621679230469"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;threadWait&quot;</span></span><span>
+</span><span id="line-159"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Errno) -&gt; Maybe CInt -&gt; Maybe Errno
+forall a b. (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Errno
+</span><span class="hs-identifier hs-var">Errno</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IOException -&gt; Maybe CInt
+</span><span class="hs-identifier hs-var">ioe_errno</span></span><span> </span><span class="annot"><span class="annottext">IOException
+</span><a href="#local-6989586621679230469"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Errno -&gt; Maybe Errno -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Errno -&gt; Maybe Errno
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Errno
+</span><span class="hs-identifier hs-var">eBADF</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">() -&gt; Maybe ()
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe ()
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-161"></span><span>
+</span><span id="line-162"></span><span id="local-6989586621679230177"><span id="local-6989586621679230178"><span class="annot"><a href="System.IO.Streams.Synchronized.html#mapUnbuffered"><span class="hs-identifier hs-type">mapUnbuffered</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679230177"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679230178"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679230178"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679230177"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230177"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230178"><span class="hs-identifier hs-type">b</span></a></span></span></span><span> </span><span class="hs-comment">-- we need an inverse to push a's back to the original TInputStream of b's</span><span>
+</span><span id="line-163"></span><span id="mapUnbuffered"><span class="annot"><span class="annottext">mapUnbuffered :: forall a b.
+(a -&gt; b) -&gt; (b -&gt; a) -&gt; TInputStream a -&gt; TInputStream b
+</span><a href="System.IO.Streams.Synchronized.html#mapUnbuffered"><span class="hs-identifier hs-var hs-var">mapUnbuffered</span></a></span></span><span> </span><span id="local-6989586621679230472"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679230472"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679230473"><span class="annot"><span class="annottext">b -&gt; a
+</span><a href="#local-6989586621679230473"><span class="hs-identifier hs-var">f'</span></a></span></span><span> </span><span id="local-6989586621679230474"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230474"><span class="hs-identifier hs-var">tis</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="hs-comment">-- FIXME either remove or wrap in withClosedState</span><span>
+</span><span id="line-164"></span><span>    </span><span class="annot"><span class="annottext">tRead :: STM (Maybe b)
+</span><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall a b. (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679230472"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; Maybe b) -&gt; STM (Maybe a) -&gt; STM (Maybe b)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var">read</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230474"><span class="hs-identifier hs-var">tis</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-165"></span><span>    </span><span class="annot"><span class="annottext">tUnRead :: b -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; a -&gt; STM ()
+forall a. TInputStream a -&gt; a -&gt; STM ()
+</span><a href="System.IO.Streams.Synchronized.html#tUnRead"><span class="hs-identifier hs-var">tUnRead</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230474"><span class="hs-identifier hs-var">tis</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; STM ()) -&gt; (b -&gt; a) -&gt; b -&gt; STM ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">b -&gt; a
+</span><a href="#local-6989586621679230473"><span class="hs-identifier hs-var">f'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-166"></span><span>    </span><span class="annot"><span class="annottext">tHasInput :: STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230474"><span class="hs-identifier hs-var">tis</span></a></span><span>
+</span><span id="line-167"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-168"></span><span>
+</span><span id="line-169"></span><span id="local-6989586621679230181"><span id="local-6989586621679230182"><span class="annot"><a href="System.IO.Streams.Synchronized.html#map"><span class="hs-identifier hs-type">map</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679230181"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679230182"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230181"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230182"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span></span></span><span> </span><span>
+</span><span id="line-170"></span><span id="map"><span class="annot"><span class="annottext">map :: forall a b. (a -&gt; b) -&gt; TInputStream a -&gt; IO (TInputStream b)
+</span><a href="System.IO.Streams.Synchronized.html#map"><span class="hs-identifier hs-var hs-var">map</span></a></span></span><span> </span><span id="local-6989586621679230477"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679230477"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679230478"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230478"><span class="hs-identifier hs-var">tis</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">STM (Maybe b) -&gt; STM Bool -&gt; IO (TInputStream b)
+forall a. STM (Maybe a) -&gt; STM Bool -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#makeTInputStream"><span class="hs-identifier hs-var">makeTInputStream</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall a b. (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679230477"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; Maybe b) -&gt; STM (Maybe a) -&gt; STM (Maybe b)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var">read</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230478"><span class="hs-identifier hs-var">tis</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var">hasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230478"><span class="hs-identifier hs-var">tis</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-171"></span><span>
+</span><span id="line-172"></span><span class="hs-comment">-- Take inputs from both given input streams. If both streams have an input available, the first stream takes precedence. The resulting stream closes </span><span>
+</span><span id="line-173"></span><span class="hs-comment">-- if either given stream closes. The merge is buffered, so that the sequence of arrival of inputs in both streams is preserved, even if the resulting</span><span>
+</span><span id="line-174"></span><span class="hs-comment">-- stream is not read.</span><span>
+</span><span id="line-175"></span><span id="local-6989586621679230185"><span class="annot"><a href="System.IO.Streams.Synchronized.html#mergeBuffered"><span class="hs-identifier hs-type">mergeBuffered</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230185"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230185"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230185"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-176"></span><span id="mergeBuffered"><span class="annot"><span class="annottext">mergeBuffered :: forall a. TInputStream a -&gt; TInputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#mergeBuffered"><span class="hs-identifier hs-var hs-var">mergeBuffered</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a])
+-&gt; TInputStream a -&gt; TInputStream a -&gt; IO (TInputStream a)
+forall a.
+(TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a])
+-&gt; TInputStream a -&gt; TInputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#mergeBufferedWith"><span class="hs-identifier hs-var">mergeBufferedWith</span></a></span><span> </span><span class="annot"><span class="annottext">((TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a])
+ -&gt; TInputStream a -&gt; TInputStream a -&gt; IO (TInputStream a))
+-&gt; (TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a])
+-&gt; TInputStream a
+-&gt; TInputStream a
+-&gt; IO (TInputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679230482"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230482"><span class="hs-identifier hs-var">tis1</span></a></span></span><span> </span><span id="local-6989586621679230483"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230483"><span class="hs-identifier hs-var">tis2</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; [Maybe a]
+forall a. a -&gt; [a]
+</span><span class="hs-identifier hs-var">singleton</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; [Maybe a]) -&gt; STM (Maybe a) -&gt; STM [Maybe a]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-177"></span><span>    </span><span id="local-6989586621679230484"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230484"><span class="hs-identifier hs-var">ready1</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var">hasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230482"><span class="hs-identifier hs-var">tis1</span></a></span><span>
+</span><span id="line-178"></span><span>    </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230484"><span class="hs-identifier hs-var">ready1</span></a></span><span>
+</span><span id="line-179"></span><span>        </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var">read</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230482"><span class="hs-identifier hs-var">tis1</span></a></span><span>
+</span><span id="line-180"></span><span>        </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-181"></span><span>            </span><span id="local-6989586621679230485"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230485"><span class="hs-identifier hs-var">ready2</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var">hasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230483"><span class="hs-identifier hs-var">tis2</span></a></span><span>
+</span><span id="line-182"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230485"><span class="hs-identifier hs-var">ready2</span></a></span><span>
+</span><span id="line-183"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM (Maybe a)
+forall a. TInputStream a -&gt; STM (Maybe a)
+</span><a href="System.IO.Streams.Synchronized.html#read"><span class="hs-identifier hs-var">read</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230483"><span class="hs-identifier hs-var">tis2</span></a></span><span>
+</span><span id="line-184"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">STM (Maybe a)
+forall a. STM a
+</span><span class="hs-identifier hs-var">retry</span></span><span>
+</span><span id="line-185"></span><span>
+</span><span id="line-186"></span><span class="hs-comment">-- Take inputs from both given input streams, using the given combinator function. The merge is buffered, so that the sequence of arrival of inputs in both streams is preserved,</span><span>
+</span><span id="line-187"></span><span class="hs-comment">-- even if the resulting stream is not read. The resulting stream closes if either given stream closes.</span><span>
+</span><span id="line-188"></span><span id="local-6989586621679230187"><span class="annot"><a href="System.IO.Streams.Synchronized.html#mergeBufferedWith"><span class="hs-identifier hs-type">mergeBufferedWith</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230187"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230187"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230187"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230187"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230187"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230187"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-189"></span><span id="mergeBufferedWith"><span class="annot"><span class="annottext">mergeBufferedWith :: forall a.
+(TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a])
+-&gt; TInputStream a -&gt; TInputStream a -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#mergeBufferedWith"><span class="hs-identifier hs-var hs-var">mergeBufferedWith</span></a></span></span><span> </span><span id="local-6989586621679230486"><span class="annot"><span class="annottext">TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a]
+</span><a href="#local-6989586621679230486"><span class="hs-identifier hs-var">merge</span></a></span></span><span> </span><span id="local-6989586621679230487"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230487"><span class="hs-identifier hs-var">tis1</span></a></span></span><span> </span><span id="local-6989586621679230488"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230488"><span class="hs-identifier hs-var">tis2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">STM [Maybe a] -&gt; STM Bool -&gt; IO (TInputStream a)
+forall a. STM [Maybe a] -&gt; STM Bool -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#consumeBufferedWith"><span class="hs-identifier hs-var">consumeBufferedWith</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TInputStream a -&gt; TInputStream a -&gt; STM [Maybe a]
+</span><a href="#local-6989586621679230486"><span class="hs-identifier hs-var">merge</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230487"><span class="hs-identifier hs-var">tis1</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230488"><span class="hs-identifier hs-var">tis2</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TInputStream a -&gt; TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasAnyInput"><span class="hs-identifier hs-var">hasAnyInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230487"><span class="hs-identifier hs-var">tis1</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230488"><span class="hs-identifier hs-var">tis2</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- FIXME if one stream closes, then no further inputs should be read from the other stream, and only Nothings should be returned instead</span><span>
+</span><span id="line-190"></span><span>
+</span><span id="line-191"></span><span id="local-6989586621679230192"><span class="annot"><a href="System.IO.Streams.Synchronized.html#hasAnyInput"><span class="hs-identifier hs-type">hasAnyInput</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230192"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230192"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span></span><span>
+</span><span id="line-192"></span><span id="hasAnyInput"><span class="annot"><span class="annottext">hasAnyInput :: forall a. TInputStream a -&gt; TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasAnyInput"><span class="hs-identifier hs-var hs-var">hasAnyInput</span></a></span></span><span> </span><span id="local-6989586621679230491"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230491"><span class="hs-identifier hs-var">tis1</span></a></span></span><span> </span><span id="local-6989586621679230492"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230492"><span class="hs-identifier hs-var">tis2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var">hasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230491"><span class="hs-identifier hs-var">tis1</span></a></span><span> </span><span class="annot"><span class="annottext">STM Bool -&gt; STM Bool -&gt; STM Bool
+forall (m :: * -&gt; *). Monad m =&gt; m Bool -&gt; m Bool -&gt; m Bool
+</span><span class="hs-operator hs-var">||^</span></span><span> </span><span class="annot"><span class="annottext">TInputStream a -&gt; STM Bool
+forall a. TInputStream a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-var">hasInput</span></a></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230492"><span class="hs-identifier hs-var">tis2</span></a></span><span>
+</span><span id="line-193"></span><span>
+</span><span id="line-194"></span><span class="hs-comment">-- Actively take inputs from the given list STM, via a separate thread. This ensures that ordering from the given list STM is preserved as much as possible,</span><span>
+</span><span id="line-195"></span><span class="hs-comment">-- in case of concurrent inputs. The resulting stream only reads via the separate thread if needed, and reads from the list STM directly if this is faster.</span><span>
+</span><span id="line-196"></span><span class="hs-comment">-- The resulting stream closes if the consumer closes. This function assumes that the given STMs close properly, i.e., no Just's are sent after a Nothing</span><span>
+</span><span id="line-197"></span><span id="local-6989586621679230191"><span class="annot"><a href="System.IO.Streams.Synchronized.html#consumeBufferedWith"><span class="hs-identifier hs-type">consumeBufferedWith</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679230191"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="System.IO.Streams.Synchronized.html#TInputStream"><span class="hs-identifier hs-type">TInputStream</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230191"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-198"></span><span id="consumeBufferedWith"><span class="annot"><span class="annottext">consumeBufferedWith :: forall a. STM [Maybe a] -&gt; STM Bool -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#consumeBufferedWith"><span class="hs-identifier hs-var hs-var">consumeBufferedWith</span></a></span></span><span> </span><span id="local-6989586621679230499"><span class="annot"><span class="annottext">STM [Maybe a]
+</span><a href="#local-6989586621679230499"><span class="hs-identifier hs-var">producer</span></a></span></span><span> </span><span id="local-6989586621679230500"><span class="annot"><span class="annottext">STM Bool
+</span><a href="#local-6989586621679230500"><span class="hs-identifier hs-var">producerHasInput</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-199"></span><span>    </span><span id="local-6989586621679230501"><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230501"><span class="hs-identifier hs-var">buffer</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (TQueue (Maybe a))
+forall a. IO (TQueue a)
+</span><span class="hs-identifier hs-var">newTQueueIO</span></span><span>
+</span><span id="line-200"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679230502"><span class="annot"><span class="annottext">writeToBuffer :: Maybe a -&gt; STM ()
+</span><a href="#local-6989586621679230502"><span class="hs-identifier hs-var hs-var">writeToBuffer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; Maybe a -&gt; STM ()
+forall a. TQueue a -&gt; a -&gt; STM ()
+</span><span class="hs-identifier hs-var">writeTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230501"><span class="hs-identifier hs-var">buffer</span></a></span><span>
+</span><span id="line-201"></span><span>    </span><span class="hs-comment">--bufferOS &lt;- makeOutputStream $ \x -&gt; putStrLn &quot;Synchronized.merging&quot; &gt;&gt; (atomically . writeTQueue buffer) x -- an intermediate output stream to write to the queue</span><span>
+</span><span id="line-202"></span><span>    </span><span class="annot"><span class="annottext">IO ThreadId -&gt; IO ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">(IO ThreadId -&gt; IO ()) -&gt; IO ThreadId -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; IO ThreadId
+</span><span class="hs-identifier hs-var">forkIO</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ThreadId) -&gt; IO () -&gt; IO ThreadId
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; STM ()) -&gt; IO ()
+forall {a}. (Maybe a -&gt; STM a) -&gt; IO ()
+</span><a href="#local-6989586621679230503"><span class="hs-identifier hs-var">bufferLoop</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; STM ()
+</span><a href="#local-6989586621679230502"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span> </span><span class="hs-comment">-- move items from the original streams into the buffer in a separate thread</span><span>
+</span><span id="line-203"></span><span>    </span><span id="local-6989586621679230504"><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230504"><span class="hs-identifier hs-var">bufferIS</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; IO (TInputStream a)
+forall a. TQueue (Maybe a) -&gt; IO (TInputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#fromBuffer"><span class="hs-identifier hs-var">fromBuffer</span></a></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230501"><span class="hs-identifier hs-var">buffer</span></a></span><span>
+</span><span id="line-204"></span><span>    </span><span class="annot"><span class="annottext">TInputStream a -&gt; IO (TInputStream a)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(TInputStream a -&gt; IO (TInputStream a))
+-&gt; TInputStream a -&gt; IO (TInputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TInputStream a
+</span><a href="#local-6989586621679230504"><span class="hs-identifier hs-var">bufferIS</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-205"></span><span>        </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tRead"><span class="hs-identifier hs-var">tRead</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679230505"><span class="hs-identifier hs-type">pickOneAndMergeRest</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230501"><span class="hs-identifier hs-type">buffer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230502"><span class="hs-identifier hs-type">writeToBuffer</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-206"></span><span>        </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#tHasInput"><span class="hs-identifier hs-var">tHasInput</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="System.IO.Streams.Synchronized.html#hasInput"><span class="hs-identifier hs-type">hasInput</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679230504"><span class="hs-identifier hs-type">bufferIS</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">||^</span></span><span> </span><span class="annot"><a href="#local-6989586621679230500"><span class="hs-identifier hs-type">producerHasInput</span></a></span><span>
+</span><span id="line-207"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-208"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-209"></span><span>    </span><span id="local-6989586621679230503"><span class="annot"><span class="annottext">bufferLoop :: (Maybe a -&gt; STM a) -&gt; IO ()
+</span><a href="#local-6989586621679230503"><span class="hs-identifier hs-var hs-var">bufferLoop</span></a></span></span><span> </span><span id="local-6989586621679230510"><span class="annot"><span class="annottext">Maybe a -&gt; STM a
+</span><a href="#local-6989586621679230510"><span class="hs-identifier hs-var">writeToBuffer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-210"></span><span>        </span><span id="local-6989586621679230511"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230511"><span class="hs-identifier hs-var">continue</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">STM Bool -&gt; IO Bool
+forall a. STM a -&gt; IO a
+</span><span class="hs-identifier hs-var">atomically</span></span><span> </span><span class="annot"><span class="annottext">(STM Bool -&gt; IO Bool) -&gt; STM Bool -&gt; IO Bool
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-211"></span><span>            </span><span id="local-6989586621679230512"><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230512"><span class="hs-identifier hs-var">produced</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">STM [Maybe a]
+</span><a href="#local-6989586621679230499"><span class="hs-identifier hs-var">producer</span></a></span><span>
+</span><span id="line-212"></span><span>            </span><span class="annot"><span class="annottext">[Maybe a] -&gt; (Maybe a -&gt; STM a) -&gt; STM Bool
+forall {m :: * -&gt; *} {a} {a}.
+Monad m =&gt;
+[Maybe a] -&gt; (Maybe a -&gt; m a) -&gt; m Bool
+</span><a href="#local-6989586621679230513"><span class="hs-identifier hs-var">writeSeqTo</span></a></span><span> </span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230512"><span class="hs-identifier hs-var">produced</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; STM a
+</span><a href="#local-6989586621679230510"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span>
+</span><span id="line-213"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; IO () -&gt; IO ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230511"><span class="hs-identifier hs-var">continue</span></a></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; STM a) -&gt; IO ()
+</span><a href="#local-6989586621679230503"><span class="hs-identifier hs-var">bufferLoop</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; STM a
+</span><a href="#local-6989586621679230510"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span>
+</span><span id="line-214"></span><span>    </span><span id="local-6989586621679230513"><span class="annot"><span class="annottext">writeSeqTo :: [Maybe a] -&gt; (Maybe a -&gt; m a) -&gt; m Bool
+</span><a href="#local-6989586621679230513"><span class="hs-identifier hs-var hs-var">writeSeqTo</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; m a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; m Bool
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>  </span><span class="hs-comment">-- TODO this is an OutputStream utils function, similar to Streams.write/writeTo, move to an appropriate module</span><span>
+</span><span id="line-215"></span><span>    </span><span class="annot"><a href="#local-6989586621679230513"><span class="hs-identifier hs-var">writeSeqTo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[Maybe a]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679230525"><span class="annot"><span class="annottext">Maybe a -&gt; m a
+</span><a href="#local-6989586621679230525"><span class="hs-identifier hs-var">writeToBuffer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-216"></span><span>        </span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; m a
+</span><a href="#local-6989586621679230525"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-217"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; m Bool
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-218"></span><span>    </span><span class="annot"><a href="#local-6989586621679230513"><span class="hs-identifier hs-var">writeSeqTo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679230526"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230526"><span class="hs-identifier hs-var">a</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679230527"><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230527"><span class="hs-keyword hs-var">as</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679230528"><span class="annot"><span class="annottext">Maybe a -&gt; m a
+</span><a href="#local-6989586621679230528"><span class="hs-identifier hs-var">writeToBuffer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-219"></span><span>        </span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; m a
+</span><a href="#local-6989586621679230528"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230526"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-220"></span><span>        </span><span class="annot"><span class="annottext">[Maybe a] -&gt; (Maybe a -&gt; m a) -&gt; m Bool
+</span><a href="#local-6989586621679230513"><span class="hs-identifier hs-var">writeSeqTo</span></a></span><span> </span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230527"><span class="hs-keyword hs-var">as</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; m a
+</span><a href="#local-6989586621679230528"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span>
+</span><span id="line-221"></span><span>    </span><span id="local-6989586621679230505"><span class="annot"><span class="annottext">pickOneAndMergeRest :: TQueue (Maybe a) -&gt; (Maybe a -&gt; STM a) -&gt; STM (Maybe a)
+</span><a href="#local-6989586621679230505"><span class="hs-identifier hs-var hs-var">pickOneAndMergeRest</span></a></span></span><span> </span><span id="local-6989586621679230539"><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230539"><span class="hs-identifier hs-var">buffer</span></a></span></span><span> </span><span id="local-6989586621679230540"><span class="annot"><span class="annottext">Maybe a -&gt; STM a
+</span><a href="#local-6989586621679230540"><span class="hs-identifier hs-var">writeToBuffer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-222"></span><span>        </span><span id="local-6989586621679230541"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230541"><span class="hs-identifier hs-var">bufferHasInput</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; STM Bool -&gt; STM Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; STM Bool
+forall a. TQueue a -&gt; STM Bool
+</span><span class="hs-identifier hs-var">isEmptyTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230539"><span class="hs-identifier hs-var">buffer</span></a></span><span>
+</span><span id="line-223"></span><span>        </span><span id="local-6989586621679230542"><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230542"><span class="hs-identifier hs-var">produced</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679230541"><span class="hs-identifier hs-var">bufferHasInput</span></a></span><span>
+</span><span id="line-224"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; [Maybe a]
+forall a. a -&gt; [a]
+</span><span class="hs-identifier hs-var">singleton</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; [Maybe a]) -&gt; STM (Maybe a) -&gt; STM [Maybe a]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; STM (Maybe a)
+forall a. TQueue a -&gt; STM a
+</span><span class="hs-identifier hs-var">readTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230539"><span class="hs-identifier hs-var">buffer</span></a></span><span>
+</span><span id="line-225"></span><span>            </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">STM [Maybe a]
+</span><a href="#local-6989586621679230499"><span class="hs-identifier hs-var">producer</span></a></span><span>
+</span><span id="line-226"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230542"><span class="hs-identifier hs-var">produced</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-227"></span><span>            </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">STM (Maybe a)
+forall a. STM a
+</span><span class="hs-identifier hs-var">retry</span></span><span>
+</span><span id="line-228"></span><span>            </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679230543"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230543"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679230544"><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230544"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-229"></span><span>                </span><span class="annot"><span class="annottext">STM Bool -&gt; STM ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">(STM Bool -&gt; STM ()) -&gt; STM Bool -&gt; STM ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Maybe a] -&gt; (Maybe a -&gt; STM a) -&gt; STM Bool
+forall {m :: * -&gt; *} {a} {a}.
+Monad m =&gt;
+[Maybe a] -&gt; (Maybe a -&gt; m a) -&gt; m Bool
+</span><a href="#local-6989586621679230513"><span class="hs-identifier hs-var">writeSeqTo</span></a></span><span> </span><span class="annot"><span class="annottext">[Maybe a]
+</span><a href="#local-6989586621679230544"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; STM a
+</span><a href="#local-6989586621679230540"><span class="hs-identifier hs-var">writeToBuffer</span></a></span><span>
+</span><span id="line-230"></span><span>                </span><span class="annot"><span class="annottext">Maybe a -&gt; STM (Maybe a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; STM (Maybe a)) -&gt; Maybe a -&gt; STM (Maybe a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679230543"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-231"></span><span>            </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[Maybe a]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-232"></span><span>                </span><span class="annot"><span class="annottext">TQueue (Maybe a) -&gt; Maybe a -&gt; STM ()
+forall a. TQueue a -&gt; a -&gt; STM ()
+</span><span class="hs-identifier hs-var">unGetTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue (Maybe a)
+</span><a href="#local-6989586621679230539"><span class="hs-identifier hs-var">buffer</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-233"></span><span>                </span><span class="annot"><span class="annottext">Maybe a -&gt; STM (Maybe a)
+forall a. a -&gt; STM a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-234"></span><span>
+</span><span id="line-235"></span><span class="hs-comment">{-
+-- TODO either remove or expose as nice util function, even though we don't seem to need this now
+tconnect :: TInputStream a -&gt; OutputStream a -&gt; IO ()
+tconnect tis os = tconnect'
+    where
+    tconnect' = do
+        mA &lt;- atomically $ read tis
+        case mA of
+            Nothing -&gt; Streams.write Nothing os
+            Just _ -&gt; do
+                Streams.write mA os
+                tconnect'
+-}</span><span>
+</span><span id="line-248"></span><span>
+</span><span id="line-249"></span><span class="hs-comment">-- FIXME split to a separate module, conceptually there's nothing synchronized about this w.r.t. other OutputStreams</span><span>
+</span><span id="line-250"></span><span id="local-6989586621679230201"><span class="annot"><a href="System.IO.Streams.Synchronized.html#duplicate"><span class="hs-identifier hs-type">duplicate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">OutputStream</span></span><span> </span><span class="annot"><a href="#local-6989586621679230201"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">OutputStream</span></span><span> </span><span class="annot"><a href="#local-6989586621679230201"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">OutputStream</span></span><span> </span><span class="annot"><a href="#local-6989586621679230201"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-251"></span><span id="duplicate"><span class="annot"><span class="annottext">duplicate :: forall a. OutputStream a -&gt; OutputStream a -&gt; IO (OutputStream a)
+</span><a href="System.IO.Streams.Synchronized.html#duplicate"><span class="hs-identifier hs-var hs-var">duplicate</span></a></span></span><span> </span><span id="local-6989586621679230546"><span class="annot"><span class="annottext">OutputStream a
+</span><a href="#local-6989586621679230546"><span class="hs-identifier hs-var">out1</span></a></span></span><span> </span><span id="local-6989586621679230547"><span class="annot"><span class="annottext">OutputStream a
+</span><a href="#local-6989586621679230547"><span class="hs-identifier hs-var">out2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Maybe a -&gt; IO ()) -&gt; IO (OutputStream a)
+forall a. (Maybe a -&gt; IO ()) -&gt; IO (OutputStream a)
+</span><span class="hs-identifier hs-var">makeOutputStream</span></span><span> </span><span class="annot"><span class="annottext">((Maybe a -&gt; IO ()) -&gt; IO (OutputStream a))
+-&gt; (Maybe a -&gt; IO ()) -&gt; IO (OutputStream a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679230548"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230548"><span class="hs-identifier hs-var">maybeVal</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-252"></span><span>    </span><span class="annot"><span class="annottext">Maybe a -&gt; OutputStream a -&gt; IO ()
+forall a. Maybe a -&gt; OutputStream a -&gt; IO ()
+</span><span class="hs-identifier hs-var">Streams.write</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230548"><span class="hs-identifier hs-var">maybeVal</span></a></span><span> </span><span class="annot"><span class="annottext">OutputStream a
+</span><a href="#local-6989586621679230546"><span class="hs-identifier hs-var">out1</span></a></span><span>
+</span><span id="line-253"></span><span>    </span><span class="annot"><span class="annottext">Maybe a -&gt; OutputStream a -&gt; IO ()
+forall a. Maybe a -&gt; OutputStream a -&gt; IO ()
+</span><span class="hs-identifier hs-var">Streams.write</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679230548"><span class="hs-identifier hs-var">maybeVal</span></a></span><span> </span><span class="annot"><span class="annottext">OutputStream a
+</span><a href="#local-6989586621679230547"><span class="hs-identifier hs-var">out2</span></a></span><span>
+</span><span id="line-254"></span><span>
+</span><span id="line-255"></span><span id="local-6989586621679230139"><span class="annot"><a href="System.IO.Streams.Synchronized.html#isNonEmptyTQueue"><span class="hs-identifier hs-type">isNonEmptyTQueue</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TQueue</span></span><span> </span><span class="annot"><a href="#local-6989586621679230139"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">STM</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span></span><span>
+</span><span id="line-256"></span><span id="isNonEmptyTQueue"><span class="annot"><span class="annottext">isNonEmptyTQueue :: forall a. TQueue a -&gt; STM Bool
+</span><a href="System.IO.Streams.Synchronized.html#isNonEmptyTQueue"><span class="hs-identifier hs-var hs-var">isNonEmptyTQueue</span></a></span></span><span> </span><span id="local-6989586621679230550"><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230550"><span class="hs-identifier hs-var">queue</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; STM Bool -&gt; STM Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TQueue a -&gt; STM Bool
+forall a. TQueue a -&gt; STM Bool
+</span><span class="hs-identifier hs-var">isEmptyTQueue</span></span><span> </span><span class="annot"><span class="annottext">TQueue a
+</span><a href="#local-6989586621679230550"><span class="hs-identifier hs-var">queue</span></a></span><span>
+</span><span id="line-257"></span></pre></body></html>
