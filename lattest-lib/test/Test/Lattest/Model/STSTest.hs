@@ -12,7 +12,8 @@ module Test.Lattest.Model.STSTest (
     testLatticeSTSQuiescence,
     testSTSPathCondition,
     testBranchingPathCondition,
-    testTreeStructure
+    testLinearCoffeeTreeStructure,
+    testComplexTreeStructure
     )
 where
 
@@ -31,7 +32,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, BoundedConfiguration)
+import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, BoundedConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
@@ -224,18 +225,103 @@ prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
                     : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
                                 (Map.toList (Solve.traceChildren t))
 
--- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
--- assertBool (rather than assertEqual) keeps the printed unicode readable on failure; the expected strings use raw
--- quasiquotes so the printed output can be pasted straight into the source.
-testTreeStructure :: Test
-testTreeStructure = TestCase $ do
-    assertBool (failure "symbolicExecutionTree" expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
-    assertBool (failure "toSolveTree" expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
+testLinearCoffeeTreeStructure :: Test
+testLinearCoffeeTreeStructure = testTreeStructure stsExampleIntrpr 3 expectedExecTree expectedSolveTree
     where
-    tree = Solve.symbolicExecutionTree treeIntrpr
-    actualExecTree = "\n" ++ prettyExecTree 20 tree
-    actualSolveTree = "\n" ++ prettySolveTree 20 (Solve.toSolveTree tree)
-    failure what e a = "\nprint of " ++ what ++ " does not match, expected:" ++ e ++ "but received:" ++ a
+    expectedExecTree = [QQ.r|
+node loc=0 cond=(x) = (0)
+?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
+    node UNDERSPECIFIED
+?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
+    node loc=1 cond=((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    ?water [+{} -{}]:
+        node UNDERSPECIFIED
+    !coffee [+{} -{}]:
+        node FORBIDDEN
+    !ok [+{} -{(x) = (p)}]:
+        node FORBIDDEN
+    !ok [+{(x) = (p)} -{}]:
+        node loc=0 cond=((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+        ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
+            node UNDERSPECIFIED
+        ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
+            node loc=1 cond=((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
+            ?water [+{} -{}]:
+                ...
+            !coffee [+{} -{}]:
+                ...
+            !ok [+{} -{(x) = (p)}]:
+                ...
+            !ok [+{(x) = (p)} -{}]:
+                ...
+        !coffee [+{} -{((x+-15)) ≥ 0}]:
+            node FORBIDDEN
+        !coffee [+{((x+-15)) ≥ 0} -{}]:
+            node loc=2 cond=((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = (x_2))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((x_2+-15)) ≥ 0)
+            ?water [+{} -{}]:
+                ...
+            !coffee [+{} -{}]:
+                ...
+            !ok [+{} -{}]:
+                ...
+        !ok [+{} -{}]:
+            node FORBIDDEN
+!coffee [+{} -{((x+-15)) ≥ 0}]:
+    node FORBIDDEN
+!coffee [+{((x+-15)) ≥ 0} -{}]:
+    node loc=2 cond=((x) = (0))∧((x_1) = (x))∧(((x+-15)) ≥ 0)
+    ?water [+{} -{}]:
+        node UNDERSPECIFIED
+    !coffee [+{} -{}]:
+        node FORBIDDEN
+    !ok [+{} -{}]:
+        node FORBIDDEN
+!ok [+{} -{}]:
+    node FORBIDDEN
+|]
+    expectedSolveTree = [QQ.r|
+cond (x) = (0)
+?water:
+    cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    ?water:
+        cond False
+    !coffee:
+        cond False
+    !ok:
+        cond ((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+        ?water:
+            cond ((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = (x_2))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((x_2+-15)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond False
+!coffee:
+    cond ((x) = (0))∧((x_1) = (x))∧(((x+-15)) ≥ 0)
+    ?water:
+        cond False
+    !coffee:
+        cond False
+    !ok:
+        cond False
+!ok:
+    cond False
+|]
+
+testComplexTreeStructure :: Test
+testComplexTreeStructure = testTreeStructure treeIntrpr 20 expectedExecTree expectedSolveTree
+    where
     expectedExecTree = [QQ.r|
 node loc=0 cond=(x) = (0)
 ?a [+{} -{((-p+20)) ≥ 0, ((p+20)) ≥ 0}]:
@@ -328,6 +414,19 @@ cond (x) = (0)
 !x:
     cond False
 |]
+
+-- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
+-- assertBool (rather than assertEqual) keeps the printed unicode readable on failure; the expected strings use raw
+-- quasiquotes so the printed output can be pasted straight into the source.
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m) => STSIntrp m Integer (IOAct String String) -> Int -> String -> String -> Test
+testTreeStructure stsIntrpr depth expectedExecTree expectedSolveTree = TestCase $ do
+    assertBool (failure "symbolicExecutionTree" expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
+    assertBool (failure "toSolveTree" expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
+    where
+    tree = Solve.symbolicExecutionTree stsIntrpr
+    actualExecTree = "\n" ++ prettyExecTree depth tree
+    actualSolveTree = "\n" ++ prettySolveTree depth (Solve.toSolveTree tree)
+    failure what e a = "\nprint of " ++ what ++ " does not match, expected:" ++ e ++ "but received:" ++ a
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]

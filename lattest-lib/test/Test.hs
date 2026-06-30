@@ -84,7 +84,8 @@ makeHUnitTests = do
         testSTSUnHappyFlow,
         testSTSPathCondition,
         testBranchingPathCondition,
-        testTreeStructure,
+        testLinearCoffeeTreeStructure,
+        testComplexTreeStructure,
         testPrintSTS,
         testReadAutFile
         ]
