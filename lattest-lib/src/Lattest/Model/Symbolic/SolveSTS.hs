@@ -105,20 +105,21 @@ interactsToGuard intrpr = interactsToGuard' $ toSolveTree $ symbolicExecutionTre
             Just seg' -> interactsToGuard' seg' is
 
 toSolveTree :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => SymExecTree m loc g -> SolverTree g
-toSolveTree tree = toSolveTree' [tree]
+toSolveTree tree = toSolveTree' 0 [(emptyClassCond, tree)]
     where
-    toSolveTree' :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => [SymExecTree m loc g] -> SolverTree g
-    toSolveTree' trees =
-        let cond = sOr $ Set.fromList $ (asDualExpr . BM.ordMap pathCondition . node) <$> trees
+    emptyClassCond :: DerivClassCond
+    emptyClassCond = (Set.empty, Set.empty)
+    toSolveTree' :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => Int -> [(DerivClassCond, SymExecTree m loc g)] -> SolverTree g
+    toSolveTree' pDepth trees =
+        let cond = sOr $ Set.fromList $ uncurry (.&&) . fst classCondToGuard . snd (asDualExpr . BM.ordMap pathCondition . node) <$> trees
             childInteracts = deduplicateEquals ((Map.keysSet . pathChildren) <$> trees)
-            children = Map.fromSet (\interact -> toSolveTree' (trees >>= interactChild interact)) childInteracts
+            children = Map.fromSet (\interact -> toSolveTree' (pDepth + 1) (trees >>= interactChild interact)) childInteracts
         in SolverTree cond children
         where
-        -- Only follow derivative classes that lead to a real (indefinite) configuration. The guard-violated classes go to
-        -- the implicit locations (underspecified/forbidden) representing values that don't actually take the transition;
-        -- merging them in would pollute the path condition (a forbidden destination contributes True via asDualExpr).
-        interactChild :: (Ord g, BM.BoundedConfiguration m) => SymInteract g -> SymExecTree m loc g -> [SymExecTree m loc g]
-        interactChild interact tree = filter (BM.isIndefinite . node) $ Map.elems $ (Map.! interact) $ pathChildren tree
+        classCondToGuard :: DerivClassCond -> SymGuard
+        classCondToGuard poss negs = sAnd (Set.map (indexExpr pDepth) poss) .&& sNot (sOr (Set.map (indexExpr pDepth) negs))
+        interactChild :: (Ord g, BM.BoundedConfiguration m) => SymInteract g -> SymExecTree m loc g -> [(DerivClassCond, SymExecTree m loc g)]
+        interactChild interact tree = Map.assocs $ (Map.! interact) $ pathChildren tree
         deduplicateEquals :: Eq a => [Set.Set a] -> Set.Set a
         deduplicateEquals [] = Set.empty
         deduplicateEquals sets = foldr1 deduplicateEqual sets
@@ -126,6 +127,11 @@ toSolveTree tree = toSolveTree' [tree]
         deduplicateEqual s1 s2
             | s1 == s2 = s1
             | otherwise = error "inequal key maps in symbolic execution tree"
+        indexExpr :: Int -> Expr t -> Expr t
+        indexExpr n e = mapExpressionVars (indexVar n) e
+        indexVar :: Int -> Variable -> Variable
+        indexVar 0 v = v
+        indexVar n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between 
 
 symbolicExecutionTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SymExecTree m loc (IOAct i o)
 symbolicExecutionTree = symbolicExecutionTree' ioInteractToImpliticLocation
@@ -173,13 +179,12 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
             | guard `Set.member` negs = interactToImplicitLocation gate
             | otherwise = error "destination guard is not in any derivative class condition" -- this would be a bug in derivClasses or pathStep
         addToPath pDepth pVars pCond (poss, negs) (STSLoc (tguard, tassign), tloc) =
-            let classCond = sAnd (Set.map (indexExpr pDepth) poss) .&& sNot (sOr (Set.map (indexExpr pDepth) negs)) -- (∀ poss hold) ∧ ¬(∃ negs holds), indexed at this depth like tguard
-                completedAssign = tassign `varUnion` identityVarModel locVarSet
+            let completedAssign = tassign `varUnion` identityVarModel locVarSet
                 indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
                 pathLoc = tloc
                 pathAssign = pVars `varUnion` indexedAssign
                 -- TODO the assigment could also be included in the pathCondition via substitution, resulting in less intermediate variables
-                pathCondition = classCond .&& pCond .&& varsToGuard indexedAssign .&& indexExpr pDepth tguard
+                pathCondition = pCond .&& varsToGuard indexedAssign .&& indexExpr pDepth tguard
             in SymExecNodeElem pathLoc pathAssign pathCondition
     -- administration boilerplate: add indices to variables
     indexLeft :: Int -> VarModel -> VarModel
