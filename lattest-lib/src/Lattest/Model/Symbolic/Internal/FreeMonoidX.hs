@@ -77,7 +77,7 @@ module Lattest.Model.Symbolic.Internal.FreeMonoidX
   , partition
   , partitionT
 
-  -- * Folds
+  -- | Folds
   , foldrTerms
   , foldOccur
   , foldFMX

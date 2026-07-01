@@ -28,7 +28,7 @@ import Lattest.SMTTor.SMTData
 #else
 -- The rest of this file is in the 'else' branch
 
-import Data.SBV( constrain, HasKind(isBoolean), symbolic, Symbolic, SBV, SymVal (..), freshVar)
+import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
 import Data.SBV.Internals( CV(cvVal), CVal(CString, CInteger), SMTModel(modelAssocs),cvToBool )
 import qualified Data.SBV as SBV
@@ -46,6 +46,7 @@ import Data.IORef (IORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 
 --------------------
 -- exported types and functions
@@ -119,9 +120,7 @@ exprToSymbolic v = case v of
   Divide x y      -> SBV.sDiv  <$> go x <*> go y
   Modulo x y      -> SBV.sMod  <$> go x <*> go y
   Sum s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i + sY) <$> go x <*> symY) (pure $ literal 0) s
-  -- I don't see any 'power' option in SBV (one of the examples defines power as a recursive haskell function),
-  -- so we just multiply the dumb way
-  Product p -> foldrTerms (\x symY -> (*) <$> go x <*> symY) (pure $ literal 1) p
+  Product p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   Length s -> SBV.length <$> go s
   GezInt i -> (SBV..>= literal 0) <$> go i
   Not b -> SBV.sNot <$> go b
@@ -136,6 +135,7 @@ exprToSymbolic v = case v of
   where
     go :: (SBV.SymVal a, Show a) => ExprView a -> SMT (SBV a)
     go = exprToSymbolic
+
 
 
 checkSatToSolveProblem :: CheckSatResult -> SolvableProblem
