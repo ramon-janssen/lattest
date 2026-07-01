@@ -5,7 +5,7 @@
 -----------------------------------------------------------------------------
 -- Tokenize SMT response.
 -----------------------------------------------------------------------------
-module Lattest.SMT.SMTAlex
+module Lattest.SMTTor.SMTAlex
 ( Token(..)                  -- exporting
 , smtLexer                   -- txsLexer :: String -> [Token]
 )

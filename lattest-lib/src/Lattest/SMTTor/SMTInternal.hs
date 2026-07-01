@@ -7,7 +7,7 @@ See LICENSE in the parent SMT folder.
 -- ----------------------------------------------------------------------------------------- --
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lattest.SMT.SMTInternal
+module Lattest.SMTTor.SMTInternal
 
 -- ------------------------------------------------------------
 -- SMT Internal should not be included directly in production code.
@@ -35,11 +35,11 @@ import           System.Process
 
 --import           Constant
 
-import           Lattest.SMT.SMTAlex
-import           Lattest.SMT.SMTData
-import           Lattest.SMT.SMTHappy
-import           Lattest.SMT.SolveDefs
-import           Lattest.SMT.TXS2SMT
+import           Lattest.SMTTor.SMTAlex
+import           Lattest.SMTTor.SMTData
+import           Lattest.SMTTor.SMTHappy
+import           Lattest.SMTTor.SolveDefs
+import           Lattest.SMTTor.TXS2SMT
 import           Lattest.Model.Symbolic.Expr
 --import           Variable
 
@@ -52,7 +52,7 @@ openSolver :: SMT String
 openSolver = do
     n <- getInfo "name"
     v <- getInfo "version"
-    Lattest.SMT.SMTInternal.init
+    Lattest.SMTTor.SMTInternal.init
     push
     return $ n ++ " [" ++ v ++ "]"
 

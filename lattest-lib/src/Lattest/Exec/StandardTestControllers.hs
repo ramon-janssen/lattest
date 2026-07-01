@@ -63,7 +63,7 @@ import Lattest.Model.StandardAutomata(IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction)
 
-import Lattest.SMT.SMT(SMTRef, runSMT)
+import Lattest.SMT(SMTRef, runSMT)
 import Lattest.Util.Utils(takeRandom, takeJusts, flipCoin)
 
 import Data.Either.Combinators(leftToMaybe, maybeToLeft)

@@ -6,7 +6,7 @@ See LICENSE in the parent SMT folder.
 
 -- ----------------------------------------------------------------------------------------- --
 {-# LANGUAGE OverloadedStrings #-}
-module Lattest.SMT.SMTString
+module Lattest.SMTTor.SMTString
 
 where
 
@@ -16,8 +16,8 @@ import qualified Data.Text as T
 import Text.Printf
 
 
-import Lattest.SMT.SMTStringAlex
-import Lattest.SMT.SMTStringHappy
+import Lattest.SMTTor.SMTStringAlex
+import Lattest.SMTTor.SMTStringHappy
 
 -- | Encode String to SMT.
 --

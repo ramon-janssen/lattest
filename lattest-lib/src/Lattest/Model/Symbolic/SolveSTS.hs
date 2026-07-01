@@ -16,7 +16,7 @@ import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
 import Lattest.Model.Symbolic.Expr(substConst, Expr(..))
-import Lattest.SMT.SMT(SMT)
+import Lattest.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
 import Control.Arrow((&&&))

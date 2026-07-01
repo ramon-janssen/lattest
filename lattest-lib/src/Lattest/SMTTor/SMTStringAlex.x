@@ -6,7 +6,7 @@
 -- Tokenize SMT String.
 -----------------------------------------------------------------------------
 
-module Lattest.SMT.SMTStringAlex
+module Lattest.SMTTor.SMTStringAlex
 ( Token(..)                  -- exporting
 , smtStringLexer             -- txsStringLexer :: String -> [Token]
 )

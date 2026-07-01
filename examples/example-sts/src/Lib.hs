@@ -6,8 +6,7 @@ import qualified Lattest.Model.Automaton as Aut
 import qualified Lattest.Model.Alphabet as Alph
 import           Lattest.Model.Alphabet(IOAct(In, Out))
 import           Lattest.Model.Symbolic.Expr
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import qualified Lattest.SMT as SMT
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
@@ -45,12 +44,6 @@ model = interpretSTSQuiescent stsExample stsExampleInitAssign
 
 run :: IO ()
 run = do
-    let cfg = Config.changeLog Config.defaultConfig False 
-        smtLog = Config.smtLog cfg
-        smtProc = Maybe.fromJust (Config.getProc cfg)
-    putStrLn $ "starting SMT solver..."
-    smtRef <- SMT.createSMTRef smtProc smtLog
-
     putStrLn $ "connecting to SUT..."
     let quiesenceMillis = 300
     let delayMillis = 100
@@ -62,7 +55,7 @@ run = do
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
-        testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
+        testSelector = randomDataOrWaitForOutputTestSelectorFromSeed undefined randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     (verdict, (observed, maybeMq)) <- runTester model testSelector adap
     

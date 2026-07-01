@@ -5,7 +5,7 @@ See LICENSE in the parent SMT folder.
 -}
 
 -- ----------------------------------------------------------------------------------------- --
-module Lattest.SMT.SMT
+module Lattest.SMTTor.SMT
 -- ----------------------------------------------------------------------------------------- --
 --
 -- SMT: open a connection to SMT, send constraints, and retrieve a model
@@ -41,6 +41,6 @@ module Lattest.SMT.SMT
 
 where
 
-import           Lattest.SMT.SMTInternal
-import           Lattest.SMT.SMTData
-import           Lattest.SMT.SolveDefs
+import           Lattest.SMTTor.SMTInternal
+import           Lattest.SMTTor.SMTData
+import           Lattest.SMTTor.SolveDefs

@@ -12,7 +12,7 @@ See LICENSE in the parent SMT folder.
 
 
 {-# LANGUAGE FlexibleInstances #-}
-module Lattest.SMT.SolveDefs
+module Lattest.SMTTor.SolveDefs
 ( Solution
 , SolvableProblem(..)
 , SolveProblem(..)

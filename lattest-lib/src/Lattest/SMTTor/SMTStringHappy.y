@@ -8,12 +8,12 @@
 -----------------------------------------------------------------------------
 -- Parse SMT String.
 -----------------------------------------------------------------------------
-module Lattest.SMT.SMTStringHappy
+module Lattest.SMTTor.SMTStringHappy
 ( smtStringParser
 )
 where
 
-import Lattest.SMT.SMTStringAlex (Token(..), smtStringLexer)
+import Lattest.SMTTor.SMTStringAlex (Token(..), smtStringLexer)
 
 import Numeric
 import Data.Char

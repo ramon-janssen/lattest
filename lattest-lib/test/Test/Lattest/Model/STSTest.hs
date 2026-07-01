@@ -33,8 +33,8 @@ import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import qualified Lattest.SMTTor.Config as Config
+import qualified Lattest.SMTTor.SMT as SMT
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
