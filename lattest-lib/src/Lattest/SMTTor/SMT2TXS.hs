@@ -7,7 +7,7 @@ See LICENSE in the parent SMT folder.
 -- ----------------------------------------------------------------------------------------- --
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Lattest.SMT.SMT2TXS
+module Lattest.SMTTor.SMT2TXS
 
 -- ----------------------------------------------------------------------------------------- --
 --

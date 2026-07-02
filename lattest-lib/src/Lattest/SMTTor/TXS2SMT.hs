@@ -9,7 +9,7 @@ See LICENSE in the parent SMT folder.
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-module Lattest.SMT.TXS2SMT
+module Lattest.SMTTor.TXS2SMT
 
 -- ----------------------------------------------------------------------------------------- --
 --
@@ -46,9 +46,9 @@ import qualified Data.Text     as T
 import           Lattest.Model.Symbolic.Internal.FreeMonoidX
 --import           FuncDef
 --import           FuncId
---import           Lattest.SMT.RegexXSD2SMT
+--import           Lattest.SMTTor.RegexXSD2SMT
 
-import           Lattest.SMT.SMTString
+import           Lattest.SMTTor.SMTString
 --import           SortDef
 --import           SortId
 import           Lattest.Model.Symbolic.Expr

@@ -65,8 +65,7 @@ import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
 import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
-import Lattest.SMT.SMT(SMTRef, runSMT)
-import Lattest.SMT.SMTData(SmtEnv)
+import Lattest.SMT(SMTRef, runSMT, SmtEnv)
 import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
 
 import Control.Exception(throw,Exception)

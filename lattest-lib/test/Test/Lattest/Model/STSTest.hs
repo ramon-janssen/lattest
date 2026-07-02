@@ -33,8 +33,7 @@ import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import qualified Lattest.SMT as SMT
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
@@ -151,11 +150,8 @@ impExampleCorrect = do
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 37
-        cfg = Config.changeLog Config.defaultConfig False 
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
+
+    let smtRef = undefined
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
@@ -353,11 +349,8 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
                 then (In, Out, inp, out)
                 else (Out, In, out, inp)
     let nrSteps = 4
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
+
+    let smtRef = undefined
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
@@ -458,11 +451,8 @@ impQParameterized startType p = do
 testLatticeSTSQuiescentPass :: String -> Bool -> Test
 testLatticeSTSQuiescentPass testName _ = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
+
+    let smtRef = undefined
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
@@ -479,11 +469,8 @@ testLatticeSTSQuiescentPass testName _ = TestCase $ do
 testLatticeSTSQuiescentFail1 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
+
+    let smtRef = undefined
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
@@ -500,11 +487,8 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
 testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
+
+    let smtRef = undefined
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
@@ -560,11 +544,8 @@ specUnimplementableParameterized splitFirst =
 testLatticeSTSUnimplementable :: String -> Bool -> Test
 testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
+
+    let smtRef = undefined
 
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver

@@ -12,7 +12,7 @@ import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr(Valuation,Variable(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs(eval)
 import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
-import Lattest.SMT.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
+import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import qualified Data.Map as Map
 

@@ -5,7 +5,7 @@ See LICENSE in the parent SMT folder.
 -}
 
 -- | This module defines the options that can be passed to TorXakis.
-module Lattest.SMT.Config
+module Lattest.SMTTor.Config
   ( Config (..)
   , getProc
   , defaultConfig
@@ -26,7 +26,7 @@ where
 import qualified Data.Map       as Map
 import           System.Process
 
-import Lattest.SMT.ParamCore
+import Lattest.SMTTor.ParamCore
 
 data SolverConfig = SolverConfig
   {
