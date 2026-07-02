@@ -219,9 +219,9 @@ symbolicEval = rightToMaybe . eval
     rightToMaybe (Left _) = Nothing
     rightToMaybe (Right b) = Just b
 
-prop_solveSymbolic :: SMT.SMTRef -> Expr Bool -> Property
-prop_solveSymbolic smt guard = monadicIO $ do
-    mValuation <- run $ SMT.runSMT smt $ solveGuard (Set.toList $ freeVars guard) guard
+prop_solveSymbolic :: Expr Bool -> Property
+prop_solveSymbolic guard = monadicIO $ do
+    mValuation <- run $ SMT.runSMT $ solveGuard (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
@@ -308,7 +308,7 @@ concreteIfThenElse i t e = do
 evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo, testEvalNegativeAt]
 
-solveTests :: [SMT.SMTRef -> Test]
+solveTests :: [Test]
 solveTests = [testSolveNegativeModulo, testSolveNegativeAt]
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
@@ -317,9 +317,9 @@ testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolic
 testEvalEmptyProduct :: Test
 testEvalEmptyProduct = testEvalExpression (sProduct []) "empty product evaluation incorrect"
 
-testSolveExpression :: Expr Bool -> SMT.SMTRef -> Test
-testSolveExpression guard smt = TestCase $ do
-    mValuation <- SMT.runSMT smt $ solveGuard (Set.toList $ freeVars guard) guard
+testSolveExpression :: Expr Bool -> Test
+testSolveExpression guard = TestCase $ do
+    mValuation <- SMT.runSMT $ solveGuard (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
@@ -332,11 +332,11 @@ testSolveExpression guard smt = TestCase $ do
 testEvalNegativeModulo :: Test
 testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"
 
-testSolveNegativeModulo :: SMT.SMTRef -> Test
+testSolveNegativeModulo :: Test
 testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Variable "ix" IntType))
 
 testEvalNegativeAt :: Test
 testEvalNegativeAt = testEvalExpression (sConst "abc" .@ -1) "negative At evaluates incorrectly"
 
-testSolveNegativeAt :: SMT.SMTRef -> Test
+testSolveNegativeAt :: Test
 testSolveNegativeAt = testSolveExpression (sConst "abc" .@ -1 .== sVar (Variable "sx" StringType))

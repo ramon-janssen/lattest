@@ -4,17 +4,16 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 module Lattest.SMT (
-  runSMT,
-  SMTRef,
   SMT,
-  pop,
-  getSolution,
+  SolvableProblem(..),
+
   addAssertions,
   addDeclarations,
+  getSolution,
   getSolvable,
+  pop,
   push,
-  SolvableProblem(..),
-  SmtEnv
+  runSMT
 ) where
 
 import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
@@ -22,8 +21,8 @@ import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
 import Data.SBV.Internals( CV(cvVal), CVal(CString, CInteger), SMTModel(modelAssocs),cvToBool )
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
-import qualified Data.SBV.Internals as SBVI
 import qualified Data.SBV.List as SBV
+import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
 import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, fromConstantsMap, Type (..), Constant (..), toConstantsMap, view)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
@@ -31,7 +30,6 @@ import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
 import Control.Monad((<=<))
 import Control.Monad.State (StateT, evalStateT, lift, modify, gets)
-import Data.IORef (IORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -39,9 +37,8 @@ import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 
 --------------------
 -- exported types and functions
--- these define the interface between
--- either of the SMT backends and the
--- rest of the library
+-- these define the interface to
+-- the SMT backend
 --------------------
 type  Solution v       =  Map.Map v Constant
 data  SolvableProblem  = Sat
@@ -53,12 +50,10 @@ data  SolveProblem v  = Solved (Solution v)
                       | UnableToSolve
      deriving (Eq,Ord,Read,Show)
 
-type SMTRef = IORef ()
 type SMT = StateT (Map String SBVI.SVal) Query
-type SmtEnv = ()
 
-runSMT :: SMTRef -> SMT a -> IO a
-runSMT _ = SBV.runSMT . query . flip evalStateT Map.empty
+runSMT :: SMT a -> IO a
+runSMT = SBV.runSMT . query . flip evalStateT Map.empty
 
 getSolution :: [Variable] -> SMT Valuation
 getSolution vs =
@@ -124,8 +119,6 @@ exprToSymbolic v = case v of
   where
     go :: (SBV.SymVal a, Show a) => ExprView a -> SMT (SBV a)
     go = exprToSymbolic
-
-
 
 checkSatToSolveProblem :: CheckSatResult -> SolvableProblem
 checkSatToSolveProblem = \case

@@ -1,7 +1,9 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -47,7 +49,6 @@ import Lattest.Model.Alphabet(TestChoice)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
-import Lattest.SMT(SMTRef)
 
 
 import Control.Exception(catch,evaluate)
@@ -101,21 +102,21 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester = makeTester' ()
+makeTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
+    AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t () act, TestController m loc q t () act state i r)
+makeTester = makeTester'
 
 --makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
-makeSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeSMTTester :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
 makeSMTTester = makeTester'
 
-makeTester' :: (IOAfter m loc q t tdest act ioState, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    ioState -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester' ioState initSpec initTestController = ActionController {
+makeTester' :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeTester' initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
-    update = makeUpdate ioState,
+    update = makeUpdate,
     handleClose = makeHandleClose
     }
     where
@@ -130,10 +131,12 @@ makeTester' ioState initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (IOAfter m loc q t tdest act ioState, StepSemantics m loc q t tdest act) =>
-            ioState -> (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
-        makeUpdate ioState' (spec, testController) act = do
-            spec' <- ioAfter ioState' spec act
+        makeUpdate :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act)
+                   => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+                   -> act
+                   -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
+        makeUpdate (spec, testController) act = do
+            spec' <- ioAfter spec act
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do
@@ -198,13 +201,13 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
+runTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
+    AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection = runExperiment (makeTester spec testSelection)
 
-runSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
-runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState spec testSelection)
+runSMTTester :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act) =>
+    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
+runSMTTester spec testSelection = runExperiment (makeSMTTester spec testSelection)
 
 --runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
 --runStepper spec controller = runExperiment controller (simulateSpec spec)

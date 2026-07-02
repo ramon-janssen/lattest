@@ -36,8 +36,7 @@ quickCheckTests = testGroup "Quickcheck"
   [ quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property) "jsonStream"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
---    smtRef <- createTestSMTRef
---    quickCheckWithTimeoutWithNumWithSize (prop_solveSymbolic smtRef) 100 2
+--    quickCheckWithTimeoutWithNumWithSize prop_solveSymbolic 100 2
   , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
   , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
   ]
@@ -102,7 +101,7 @@ makeHUnitTests = do
         ++ testLatticeSTS
         ++ testLatticeSTSQuiescence
         ++ evalTests
-        ++ fmap ($ undefined) solveTests -- undefined is the unused smtref
+        ++ solveTests
 
 -- TODO: This wraps HUnit tests into a Tasty test.
 -- The reason we need this wrapper, is that plain HUnit
