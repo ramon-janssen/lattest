@@ -114,8 +114,6 @@ exprToSymbolic v = case v of
    -- looked deep enough nor done enough testing to report as a bug.
    -- SBV.and <$> foldr (\b bs -> (SBV..:) <$> go b <*> bs) (pure SBV.nil) (Set.toList xs)
   Concat strs -> SBV.concat <$> foldr (\s ss -> (SBV..:) <$> go s <*> ss) (pure SBV.nil) strs
-  -- At :: {string2 :: ExprView String, position2 :: ExprView Integer} -> ExprView String
-  At _ _ -> error "I don't know what this is supposed to do. Is it string indexing, returning String instead of Char?"
   where
     go :: (SBV.SymVal a, Show a) => ExprView a -> SMT (SBV a)
     go = exprToSymbolic
