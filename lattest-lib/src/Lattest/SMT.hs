@@ -17,17 +17,6 @@ module Lattest.SMT (
   SmtEnv
 ) where
 
--- Comment this line out to use SBV, un-comment it to use TorXaKis
--- #define USE_TOR
-
-#ifdef USE_TOR
-
-import Lattest.SMTTor.SMT
-import Lattest.SMTTor.SMTData
-
-#else
--- The rest of this file is in the 'else' branch
-
 import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
 import Data.SBV.Internals( CV(cvVal), CVal(CString, CInteger), SMTModel(modelAssocs),cvToBool )
@@ -154,6 +143,4 @@ sbvModelToValuation = fromConstantsMap . foldr f Map.empty . modelAssocs
       CInteger i -> (IntType, Cint i)
       CString s -> (StringType, Cstring s)
       _ -> error "todo: the other SBV types, including lists, sets, arbitrary ADTs, floating point values, etc"
-
-#endif
 
