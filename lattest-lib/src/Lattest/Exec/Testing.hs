@@ -101,8 +101,8 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
+    AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t () act, TestController m loc q t () act state i r)
 makeTester = makeTester' ()
 
 --makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
@@ -198,8 +198,8 @@ runExperiment controller adapter = do
     to the specification model. Returns the test verdict according to the specification model and the additional
     result returned by the test controller.
 -}
-runTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
+runTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
+    AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
 runTester spec testSelection = runExperiment (makeTester spec testSelection)
 
 runSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act) =>
