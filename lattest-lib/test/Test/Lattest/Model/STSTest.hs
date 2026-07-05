@@ -227,7 +227,7 @@ prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
     showClass (poss, negs) = "[+" ++ showSet poss ++ " -" ++ showSet negs ++ "]"
     showSet s = "{" ++ intercalate ", " (map show (Set.toList s)) ++ "}"
 
-prettySolveTree :: Int -> Solve.SolverTree (IOAct String String) -> String
+prettySolveTree :: Int -> Solve.SolveTree (IOAct String String) -> String
 prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
     where
     go d indent t
@@ -244,7 +244,7 @@ node loc=0 cond=(x) = (0)
 ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
     node UNDERSPECIFIED
 ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-    node loc=1 cond=((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    node loc=1 cond=((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
     ?water [+{} -{}]:
         node UNDERSPECIFIED
     !coffee [+{} -{}]:
@@ -252,11 +252,11 @@ node loc=0 cond=(x) = (0)
     !ok [+{} -{(x) = (p)}]:
         node FORBIDDEN
     !ok [+{(x) = (p)} -{}]:
-        node loc=0 cond=((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+        node loc=0 cond=((x_1) = (p_1))∧((x_2) = (x_1))
         ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
             node UNDERSPECIFIED
         ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-            node loc=1 cond=((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
+            node loc=1 cond=((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
             ?water [+{} -{}]:
                 ...
             !coffee [+{} -{}]:
@@ -268,7 +268,7 @@ node loc=0 cond=(x) = (0)
         !coffee [+{} -{((x+-15)) ≥ 0}]:
             node FORBIDDEN
         !coffee [+{((x+-15)) ≥ 0} -{}]:
-            node loc=2 cond=((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = (x_2))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((x_2+-15)) ≥ 0)
+            node loc=2 cond=((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)
             ?water [+{} -{}]:
                 ...
             !coffee [+{} -{}]:
@@ -280,7 +280,7 @@ node loc=0 cond=(x) = (0)
 !coffee [+{} -{((x+-15)) ≥ 0}]:
     node FORBIDDEN
 !coffee [+{((x+-15)) ≥ 0} -{}]:
-    node loc=2 cond=((x) = (0))∧((x_1) = (x))∧(((x+-15)) ≥ 0)
+    node loc=2 cond=((x_1) = (x))∧(((x+-15)) ≥ 0)
     ?water [+{} -{}]:
         node UNDERSPECIFIED
     !coffee [+{} -{}]:
@@ -296,12 +296,8 @@ cond (x) = (0)
     cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
     ?water:
         cond False
-    !coffee:
-        cond False
-    !ok:
-        cond ((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
         ?water:
-            cond ((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
+            cond False
             ?water:
                 ...
             !coffee:
@@ -309,7 +305,7 @@ cond (x) = (0)
             !ok:
                 ...
         !coffee:
-            cond ((x) = (0))∧((x_1) = (p_1))∧((x_1) = ((p+x)))∧((x_2) = (x_1))∧((x_3) = (x_2))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(((x_2+-15)) ≥ 0)
+            cond False
             ?water:
                 ...
             !coffee:
@@ -318,16 +314,225 @@ cond (x) = (0)
                 ...
         !ok:
             cond False
-!coffee:
-    cond ((x) = (0))∧((x_1) = (x))∧(((x+-15)) ≥ 0)
-    ?water:
-        cond False
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
     !coffee:
-        cond False
+        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+        ?water:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
     !ok:
-        cond False
+        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
+        ?water:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧(¬((((x_2+-15)) ≥ 0)∧(¬(((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)))))))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+!coffee:
+    cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+    ?water:
+        cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+        ?water:
+            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !coffee:
+        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+        ?water:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !ok:
+        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+        ?water:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
 !ok:
-    cond False
+    cond (x) = (0)
+    ?water:
+        cond (x) = (0)
+        ?water:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !coffee:
+        cond (x) = (0)
+        ?water:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !ok:
+        cond (x) = (0)
+        ?water:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+
 |]
 
 testComplexTreeStructure :: Test
@@ -338,19 +543,19 @@ node loc=0 cond=(x) = (0)
 ?a [+{} -{((-p+20)) ≥ 0, ((p+20)) ≥ 0}]:
     node UNDERSPECIFIED
 ?a [+{((-p+20)) ≥ 0} -{((p+20)) ≥ 0}]:
-    node loc=2 cond=((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(¬(((p+20)) ≥ 0))
+    node loc=2 cond=((x_1) = (p))∧(((-p+20)) ≥ 0)
     ?a [+{} -{}]:
         node UNDERSPECIFIED
     !x [+{} -{(p^1⋅x^1) ≥ 0}]:
         node FORBIDDEN
     !x [+{(p^1⋅x^1) ≥ 0} -{}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((-p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((p+20)) ≥ 0))
+        node loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
             node FORBIDDEN
 ?a [+{((-p+20)) ≥ 0, ((p+20)) ≥ 0} -{}]:
-    node loc=1 cond=((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0) ; loc=2 cond=((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)
+    node loc=1 cond=((x_1) = (p))∧(((p+20)) ≥ 0) ; loc=2 cond=((x_1) = (p))∧(((-p+20)) ≥ 0)
     ?a [+{} -{}]:
         node UNDERSPECIFIED
     !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
@@ -360,13 +565,13 @@ node loc=0 cond=(x) = (0)
     !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{(p^1⋅x^1) ≥ 0}]:
         node FORBIDDEN
     !x [+{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)
+        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
             node FORBIDDEN
     !x [+{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (3)) = (0)}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (3)) = (0)))
+        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
@@ -374,7 +579,7 @@ node loc=0 cond=(x) = (0)
     !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0}]:
         node FORBIDDEN
     !x [+{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0)}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (2)) = (0)))
+        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
@@ -382,25 +587,25 @@ node loc=0 cond=(x) = (0)
     !x [+{(p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
         node FORBIDDEN
 ?a [+{((p+20)) ≥ 0} -{((-p+20)) ≥ 0}]:
-    node loc=1 cond=((x) = (0))∧((x_1) = (p))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0))
+    node loc=1 cond=((x_1) = (p))∧(((p+20)) ≥ 0)
     ?a [+{} -{}]:
         node UNDERSPECIFIED
     !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
         node FORBIDDEN
     !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0)}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (3)) = (0)))∧(¬(((-p+20)) ≥ 0))
+        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0))
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
             node FORBIDDEN
     !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0))
+        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0))
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
             node FORBIDDEN
     !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0)}]:
-        node loc=3 cond=((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (2)) = (0)))∧(¬(((-p+20)) ≥ 0))
+        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0))
         ?a [+{} -{}]:
             node UNDERSPECIFIED
         !x [+{} -{}]:
@@ -436,7 +641,7 @@ testTreeStructure stsIntrpr depth expectedExecTree expectedSolveTree = TestCase 
     where
     tree = Solve.symbolicExecutionTree stsIntrpr
     actualExecTree = "\n" ++ prettyExecTree depth tree
-    actualSolveTree = "\n" ++ prettySolveTree depth (Solve.toSolveTree tree)
+    actualSolveTree = "\n" ++ prettySolveTree depth (Solve.toSolveTree stsIntrpr)
     failure what e a = "\nprint of " ++ what ++ " does not match, expected:" ++ e ++ "but received:" ++ a
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)

@@ -7,12 +7,13 @@
 
 module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
-interactsToGuard, -- FIXME maybe this doesn't need to be exposed but we want to test this
+interactsToGuard,
+interactsToGuard',
 symbolicExecutionTree,
 toSolveTree,
 SymExecTree(..),
 SymExecNodeElem(..),
-SolverTree(..),
+SolveTree(..),
 DerivClassCond,
 )
 where
@@ -27,7 +28,7 @@ import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVa
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
-import Control.Arrow((&&&))
+import Control.Arrow((&&&), first, second)
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
@@ -77,9 +78,9 @@ stateAndInteractToGuards aut interaction (IntrpState l valuation) =
     FIXME replace `interactToGuard` and `stateAndInteractToGuards` by the code below entirely, since
     a 1-step lookahead is just a specific version of the n-step lookahead.
 -}
-data SolverTree g = SolverTree {
+data SolveTree g = SolveTree {
     traceCondition :: SymGuard,
-    traceChildren :: Map.Map (SymInteract g) (SolverTree g)
+    traceChildren :: Map.Map (SymInteract g) (SolveTree g)
     }
 
 data SymExecNodeElem loc = SymExecNodeElem {
@@ -95,43 +96,30 @@ data SymExecTree m loc g = SymExecTree {
 
 type DerivClassCond = (Set.Set SymGuard, Set.Set SymGuard) -- set of positive and negative guards, corresponding to a guard (∀ left) ∧ ¬(∃ right)
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToGuard intrpr = interactsToGuard' $ toSolveTree $ symbolicExecutionTree intrpr
-    where
-    interactsToGuard' seg [] = traceCondition seg
-    interactsToGuard' seg (i:is) =
-        case Map.lookup i (traceChildren seg) of
-            Nothing -> sFalse -- no specified transition continues the trace here, so it is infeasible via specified behaviour
-            Just seg' -> interactsToGuard' seg' is
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToGuard intrpr interacts = interactsToGuard' (symbolicExecutionTree intrpr) interacts
 
-toSolveTree :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => SymExecTree m loc g -> SolverTree g
-toSolveTree tree = toSolveTree' 0 [(emptyClassCond, tree)]
+interactsToGuard' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => SymExecTree m loc (IOAct i o) -> [IOSymInteract i o] -> SymGuard
+interactsToGuard' tree interacts = interactsToGuard'' 0 interacts tree
     where
-    emptyClassCond :: DerivClassCond
-    emptyClassCond = (Set.empty, Set.empty)
-    toSolveTree' :: (BooleanConfiguration m, BM.BoundedConfiguration m, BM.OrdMonad m, Ord g) => Int -> [(DerivClassCond, SymExecTree m loc g)] -> SolverTree g
-    toSolveTree' pDepth trees =
-        let cond = sOr $ Set.fromList $ uncurry (.&&) . fst classCondToGuard . snd (asDualExpr . BM.ordMap pathCondition . node) <$> trees
-            childInteracts = deduplicateEquals ((Map.keysSet . pathChildren) <$> trees)
-            children = Map.fromSet (\interact -> toSolveTree' (pDepth + 1) (trees >>= interactChild interact)) childInteracts
-        in SolverTree cond children
-        where
-        classCondToGuard :: DerivClassCond -> SymGuard
-        classCondToGuard poss negs = sAnd (Set.map (indexExpr pDepth) poss) .&& sNot (sOr (Set.map (indexExpr pDepth) negs))
-        interactChild :: (Ord g, BM.BoundedConfiguration m) => SymInteract g -> SymExecTree m loc g -> [(DerivClassCond, SymExecTree m loc g)]
-        interactChild interact tree = Map.assocs $ (Map.! interact) $ pathChildren tree
-        deduplicateEquals :: Eq a => [Set.Set a] -> Set.Set a
-        deduplicateEquals [] = Set.empty
-        deduplicateEquals sets = foldr1 deduplicateEqual sets
-        deduplicateEqual :: Eq a => Set.Set a -> Set.Set a -> Set.Set a
-        deduplicateEqual s1 s2
-            | s1 == s2 = s1
-            | otherwise = error "inequal key maps in symbolic execution tree"
-        indexExpr :: Int -> Expr t -> Expr t
-        indexExpr n e = mapExpressionVars (indexVar n) e
-        indexVar :: Int -> Variable -> Variable
-        indexVar 0 v = v
-        indexVar n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between 
+    interactsToGuard'' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => Int -> [IOSymInteract i o] -> SymExecTree m loc (IOAct i o) -> SymGuard
+    interactsToGuard'' n [] tree = nodeCondition tree
+    interactsToGuard'' n (x:xs) tree =
+        let derivBranches = Map.assocs $ (pathChildren tree) Map.! x
+            derivBranchConditions = uncurry (.&&) <$> first (classCondToGuard n) <$> second (interactsToGuard'' (n+1) xs) <$> derivBranches
+        in nodeCondition tree .&& sOr (Set.fromList derivBranchConditions)
+    nodeCondition :: (BM.BoundedMonad m, BooleanConfiguration m) => SymExecTree m loc g -> SymGuard
+    nodeCondition = asDualExpr . BM.ordMap pathCondition . node
+    classCondToGuard :: Int -> DerivClassCond -> SymGuard
+    classCondToGuard pDepth (poss,negs) = sAnd (Set.map (indexExpr pDepth) poss) .&& sNot (sOr (Set.map (indexExpr pDepth) negs))
+
+toSolveTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toSolveTree intrpr = toSolveTree'  intrpr []
+    where
+    toSolveTree' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SolveTree (IOAct i o)
+    toSolveTree' intrpr pref = 
+        let children = Map.fromSet (\x -> toSolveTree' intrpr (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
+        in SolveTree (interactsToGuard intrpr pref) children
 
 symbolicExecutionTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SymExecTree m loc (IOAct i o)
 symbolicExecutionTree = symbolicExecutionTree' ioInteractToImpliticLocation
@@ -169,22 +157,22 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
     pathStep pDepth pExecConf interact derivClass = symbExecTree (pDepth + 1) (pExecConf BM.>># pathStep' pDepth derivClass interact)
         where
         --pathStep' :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> DerivClassCond -> SymInteract g -> (SymGuard, loc, VarModel) -> m (SymGuard, loc, VarModel)
-        pathStep' pDepth derivClass interact@(SymInteract gate _) (SymExecNodeElem pLoc pVars pCond) =
+        pathStep' pDepth derivClass interact@(SymInteract gate _) (SymExecNodeElem pLoc pVars _) =
             let mtdestloc = tDest interact pLoc
                 classmtdestloc = mtdestloc BM.>># classDest derivClass gate
-            in BM.ordMap (addToPath pDepth pVars pCond derivClass) classmtdestloc
+            in BM.ordMap (addToPath pDepth pVars derivClass) classmtdestloc
         --classDest :: DerivClassCond -> gate -> (STStdest, a) -> m (STStdest, a)
         classDest (poss, negs) gate globaldest@(STSLoc (guard, _), _)
             | guard `Set.member` poss = BM.ordReturn globaldest
             | guard `Set.member` negs = interactToImplicitLocation gate
             | otherwise = error "destination guard is not in any derivative class condition" -- this would be a bug in derivClasses or pathStep
-        addToPath pDepth pVars pCond (poss, negs) (STSLoc (tguard, tassign), tloc) =
+        addToPath pDepth pVars (poss, negs) (STSLoc (tguard, tassign), tloc) =
             let completedAssign = tassign `varUnion` identityVarModel locVarSet
                 indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
                 pathLoc = tloc
                 pathAssign = pVars `varUnion` indexedAssign
                 -- TODO the assigment could also be included in the pathCondition via substitution, resulting in less intermediate variables
-                pathCondition = pCond .&& varsToGuard indexedAssign .&& indexExpr pDepth tguard
+                pathCondition = varsToGuard indexedAssign .&& indexExpr pDepth tguard
             in SymExecNodeElem pathLoc pathAssign pathCondition
     -- administration boilerplate: add indices to variables
     indexLeft :: Int -> VarModel -> VarModel
@@ -193,11 +181,6 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
     indexRight :: Int -> VarModel -> VarModel
     indexRight 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     indexRight n = mapVarExprs $ indexVar n
-    indexExpr :: Int -> Expr t -> Expr t
-    indexExpr n e = mapExpressionVars (indexVar n) e
-    indexVar :: Int -> Variable -> Variable
-    indexVar 0 v = v
-    indexVar n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
     -- simple util functions
     tDestGuard (STSLoc (g, _), _) = g
     --tDest :: SymInteract g -> loc -> m (STStdest (SymGuard, SymAssign), loc)
@@ -208,3 +191,8 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
 
+indexExpr :: Int -> Expr t -> Expr t
+indexExpr n e = mapExpressionVars (indexVar n) e
+indexVar :: Int -> Variable -> Variable
+indexVar 0 v = v
+indexVar n v = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
