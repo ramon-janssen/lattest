@@ -124,17 +124,17 @@ initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
 "0"  ――?"register" [label_p:String]⟶  ⊤
-"0"  ――?"update" [counter_p:Real]⟶  (((counter+-5.5)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1")
+"0"  ――?"update" [counter_p:Float]⟶  (((counter+-5.5)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1")
 "0"  ――!"O1" []⟶  ⊥
-"0"  ――!"confirm" [counter_p:Real]⟶  ⊥
+"0"  ――!"confirm" [counter_p:Float]⟶  ⊥
 "1"  ――?"register" [label_p:String]⟶  ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0") ∧ ((active) = (True), {label:=label_p},"0")
-"1"  ――?"update" [counter_p:Real]⟶  ⊤
+"1"  ――?"update" [counter_p:Float]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
-"1"  ――!"confirm" [counter_p:Real]⟶  ⊥
+"1"  ――!"confirm" [counter_p:Float]⟶  ⊥
 "2"  ――?"register" [label_p:String]⟶  ⊤
-"2"  ――?"update" [counter_p:Real]⟶  ⊤
+"2"  ――?"update" [counter_p:Float]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
-"2"  ――!"confirm" [counter_p:Real]⟶  ⊥
+"2"  ――!"confirm" [counter_p:Float]⟶  ⊥
 |]
 
 ----- Non-nominal cases -----

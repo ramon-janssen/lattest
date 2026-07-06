@@ -16,10 +16,10 @@ import           Lattest.Exec.Testing(TestController(..), Verdict(..), runSMTTes
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
 
-pvar = (Variable "p" IntType)
-xvar = (Variable "x" IntType)
+pvar = (Variable "p" FloatType)
+xvar = (Variable "x" FloatType)
 
-stsExample :: IOSTS Det Integer String String
+stsExample :: IOSTS Det Double String String
 stsExample =
     let p = sVar pvar
         x = sVar xvar
@@ -29,7 +29,7 @@ stsExample =
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
-        coffeeGuard = x .>= 15
+        coffeeGuard = x .>= (15 :: Expr Double)
         initConf = return 0
         switches = \q -> case q of
             0 -> Map.fromList [(water, pure (Aut.stsTLoc waterGuard waterAssign, 1)),

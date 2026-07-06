@@ -12,7 +12,7 @@ import Control.Monad (forM)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map.Strict as Map
-import Data.Scientific (floatingOrInteger, toRealFloat)
+import Data.Scientific (floatingOrInteger, toRealFloat, Scientific)
 import qualified Data.Set as Set
 import Data.Text (unpack)
 import Data.Maybe (fromMaybe)
@@ -20,22 +20,19 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), fromConstantsMap, Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
 
 data UntypedExpr
     = UEBool Bool
-    | UEInt  Integer
+    | UENumber Scientific
     | UEStr  String
-    | UEFloat Double
     | UEOp1  String UntypedExpr
     | UEOp2  String UntypedExpr UntypedExpr
     deriving (Show, Eq)
 
 instance JSON.FromJSON UntypedExpr where
     parseJSON (JSON.Bool b)   = pure (UEBool b)
-    parseJSON (JSON.Number n) = case floatingOrInteger @Double n of
-        Left  f -> pure (UEFloat f)
-        Right i -> pure (UEInt i)
+    parseJSON (JSON.Number n) = pure (UENumber n)
     parseJSON (JSON.String s) = pure (UEStr (unpack s))
     parseJSON (JSON.Object o) = do
         (op :: String) <- o JSON..: "op"
@@ -68,8 +65,8 @@ inferOperandType varmap lhs rhs =
         varOperandType (UEStr name) = fmap varType (Map.lookup name varmap)
         varOperandType _            = Nothing
         literalOperandType (UEBool _)  = Just BoolType
-        literalOperandType (UEInt  _)  = Just IntType
-        literalOperandType (UEFloat _) = Just FloatType
+        literalOperandType (UENumber n)
+          | Left _ <- floatingOrInteger n = Just FloatType
         literalOperandType _           = Nothing
 
 toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)
@@ -102,7 +99,8 @@ toComparisonExpr cmp varmap e1 e2 = do
         _         -> Left $ "comparison operator is not defined for type " ++ show t
 
 toIntExpr :: VarMap -> UntypedExpr -> Either String (Expr Integer)
-toIntExpr _   (UEInt n)            = Right (sConst n)
+toIntExpr _   (UENumber n)
+ | Right i <- floatingOrInteger @Double n = Right (sConst i)
 toIntExpr varmap (UEStr name)         = lookupVar varmap name IntType sVar
 toIntExpr varmap (UEOp1 "neg" e)     = sNeg <$> toIntExpr varmap e
 toIntExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
@@ -113,10 +111,7 @@ toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toIntExpr varmap e1 <*> toIntExp
 toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
 
 toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
-toFloatExpr _   (UEFloat f)          = Right (sConst f)
--- A JSON literal such as 1.0 or 10.0 is indistinguishable from an integer literal once parsed
--- so an integral literal is also accepted in a float context.
-toFloatExpr _   (UEInt n)            = Right (sConst (fromInteger n))
+toFloatExpr _   (UENumber n)          = Right (sConst $ toRealFloat n)
 toFloatExpr varmap (UEStr name)         = lookupVar varmap name FloatType sVar
 toFloatExpr varmap (UEOp1 "neg" e)     = sNeg <$> toFloatExpr varmap e
 toFloatExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2

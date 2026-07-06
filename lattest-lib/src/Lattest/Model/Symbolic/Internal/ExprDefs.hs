@@ -77,7 +77,7 @@ instance Show Type where
     show IntType = "Int"
     show BoolType = "Bool"
     show StringType = "String"
-    show FloatType = "Real"
+    show FloatType = "Float"
 
 data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
 
@@ -130,7 +130,7 @@ instance JSON.ToJSON Constant where
     toJSON (Cbool b) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
     toJSON (Cint i) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
     toJSON (Cstring s) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
-    toJSON (Cfloat f) = JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) $ JSON.empty
+    toJSON (Cfloat f) = JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
     toJSON (Ccstr _ _) = error "toJSON cstr"
 
 constType :: Constant -> Type
@@ -169,6 +169,7 @@ instance ConstType String where
 
 instance ConstType Double where
     fromConst (Cfloat f) = Right f
+    fromConst (Cint i) = Right (fromInteger i)
     fromConst v = Left $ typeError "Float" v
     toConst = Cfloat
 

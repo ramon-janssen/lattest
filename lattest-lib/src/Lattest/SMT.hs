@@ -18,7 +18,7 @@ module Lattest.SMT (
 
 import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
-import Data.SBV.Internals( CV(cvVal), CVal(CString, CInteger), SMTModel(modelAssocs),cvToBool )
+import Data.SBV.Internals( CV(cvVal), CVal(..), SMTModel(modelAssocs),cvToBool )
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
@@ -80,6 +80,9 @@ addDeclarations = mapM_ $ \(Variable nm tp) -> case tp of
   StringType -> do
     SBVI.SBV v <- freshVar @String nm
     modify $ Map.insert nm v
+  FloatType -> do
+    SBVI.SBV v <- freshVar @Double nm
+    modify $ Map.insert nm v
 
 getSolvable :: SMT SolvableProblem
 getSolvable = checkSatToSolveProblem <$> lift checkSat
@@ -99,14 +102,19 @@ exprToSymbolic v = case v of
   Const t -> pure $ literal t
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   EqualInt    l r -> (SBV..==) <$> go l <*> go r
+  EqualFloat  l r -> (SBV..==) <$> go l <*> go r
   EqualString l r -> (SBV..==) <$> go l <*> go r
   EqualBool   l r -> (SBV..==) <$> go l <*> go r
-  Divide x y      -> SBV.sDiv  <$> go x <*> go y
+  Divide      x y -> SBV.sDiv  <$> go x <*> go y
+  DivideFloat x y -> (/)       <$> go x <*> go y
   Modulo x y      -> SBV.sMod  <$> go x <*> go y
-  Sum s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i + sY) <$> go x <*> symY) (pure $ literal 0) s
-  Product p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
+  Sum      s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i               + sY) <$> go x <*> symY) (pure $ literal 0) s
+  SumFloat s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
+  Product      p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
+  ProductFloat p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   Length s -> SBV.length <$> go s
-  GezInt i -> (SBV..>= literal 0) <$> go i
+  GezInt   i -> (SBV..>= literal 0) <$> go i
+  GezFloat f -> (SBV..>= literal 0) <$> go f
   Not b -> SBV.sNot <$> go b
   And xs -> foldr (\b bs -> (SBV..&&) <$> go b <*> bs) (pure $ literal True) (Set.toList xs)
    -- The below version errors because SBV doesn't properly declare some variable
@@ -133,5 +141,6 @@ sbvModelToValuation = fromConstantsMap . foldr f Map.empty . modelAssocs
       _ | isBoolean cv -> (BoolType, Cbool (cvToBool cv))
       CInteger i -> (IntType, Cint i)
       CString s -> (StringType, Cstring s)
+      CDouble d -> (FloatType, Cfloat d)
       _ -> error "todo: the other SBV types, including lists, sets, arbitrary ADTs, floating point values, etc"
 
