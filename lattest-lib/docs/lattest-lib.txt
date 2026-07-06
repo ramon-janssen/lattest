@@ -64,612 +64,31 @@ ordReturn :: OrdMonad m => a -> m a
 -- | Standard monadic <tt>join</tt>, but with an additional <a>Ord</a>
 --   constraint.
 ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
+
+-- | Traversable with additional <a>Ord</a> constraints.
+class (OrdFunctor t, Foldable t) => OrdTraversable (t :: Type -> Type)
+
+-- | Map each element of a structure to an action, evaluate these actions
+--   from left to right, and collect the results.
+ordTraverse :: (OrdTraversable t, Applicative f, Ord b) => (a -> f b) -> t a -> f (t b)
+
+-- | Evaluate each action in the structure from left to right, and collect
+--   the results.
+ordSequenceA :: (OrdTraversable t, Applicative f, Ord a) => t (f a) -> f (t a)
+
+-- | Map each element of a structure to a monadic action, evaluate these
+--   actions from left to right, and collect the results.
+ordMapM :: (OrdTraversable t, Monad m, Ord b) => (a -> m b) -> t a -> m (t b)
+
+-- | Evaluate each monadic action in the structure from left to right, and
+--   collect the results.
+ordSequence :: (OrdTraversable t, Monad m, Ord a) => t (m a) -> m (t a)
 instance Data.OrdMonad.OrdFunctor Data.Set.Internal.Set
 instance GHC.Base.Functor f => Data.OrdMonad.OrdFunctor f
 instance Data.OrdMonad.OrdMonad Data.Set.Internal.Set
 instance GHC.Base.Monad m => Data.OrdMonad.OrdMonad m
-
-module Lattest.Model.Symbolic.Internal.Boute
-
--- | operator divMod on the provided integer values.
---   
---   <pre>
---   (for all ((m Int) (n Int))
---     (=&gt; (distinct n 0)
---         (let ((q (div m n)) (r (mod m n)))
---           (and (= m (+ (* n q) r))
---                (&lt;= 0 r (- (abs n) 1))))))
---   </pre>
-divMod :: Integer -> Integer -> (Integer, Integer)
-
--- | operator divide on the provided integer values.
-div :: Integer -> Integer -> Integer
-
--- | operator modulo on the provided integer values.
---   
---   <pre>
---   (for all ((m Int) (n Int)) 
---     (=&gt; (distinct n 0)
---                (&lt;= 0 (mod m n) (- (abs n) 1))))
---   </pre>
-mod :: Integer -> Integer -> Integer
-
-
--- | <pre>
---   a0 &lt;&gt; a1 &lt;&gt; ... &lt;&gt; an-1
---   </pre>
---   
---   `ai in A`, <a>&lt;&gt;</a> is a commutative (binary) operation, `(A,
---   &lt;&gt;)` is a Monoid, there is a multiplication operator
---   <a>&lt;.&gt;</a> that is distributive w.r.t <a>&lt;&gt;</a>, and there
---   is additive inverse for the elements of <tt>A</tt>:
---   
---   <pre>
---   a &lt;&gt; b         = b &lt;&gt; a                 -- for all a, b in A (commutativity)
---   a &lt;.&gt; (b &lt;&gt; c) = (a &lt;.&gt; b) &lt;&gt; (a &lt;.&gt; c) -- for all a, b, c in A (left distributivity).
---   (b &lt;&gt; c) &lt;.&gt; a = (b &lt;.&gt; a) &lt;&gt; (c &lt;.&gt; a) -- for all a, b, c in A (right distributivity).
---   a &lt;&gt; -a        = 0                      -- for all a, for some (-a), where `0 = mempty`.
---   </pre>
---   
---   Furthermore, to be able to assign semantics to this symbolic
---   representation it is required that the terms are integer-multipliable,
---   meaning that
---   
---   <pre>
---   `a &lt;.&gt; n`
---   </pre>
---   
---   is equivalent to adding an element <tt>a</tt> <tt>n</tt> times if
---   <tt>n</tt> is non-negative, or removing it <tt>n</tt> times otherwise.
---   See <a>IntMultipliable</a> class, and <tt>multiplyLaw</tt> in
---   <tt>FreeMonoidXSpec</tt>.
---   
---   Note that we're using <a>&lt;.&gt;</a> as having both types `A -&gt;
---   A` and `Integral n =&gt; n -&gt; a`, which is fine at the moment since
---   the <a>FreeMonoidX</a>'s we are dealing with are numeric types.
---   
---   `FreeMonoidX a` is an instance of the <a>IsList</a> class, which means
---   that in combination with the <tt>OverloadedLists</tt> extension is
---   possible to write free-monoids as lists. For instance the free-monoid:
---   
---   <pre>
---   a0 &lt;&gt; a1 &lt;&gt; ... &lt;&gt; an-1
---   </pre>
---   
---   Can be written as
---   
---   <ul>
---   <li><i>a0, a1, ..., an-1</i></li>
---   </ul>
-module Lattest.Model.Symbolic.Internal.FreeMonoidX
-
--- | Symbolic representation of a polynomial, where each term is a member
---   of type <tt>a</tt>.
---   
---   The integer value of the map represents the number of occurrences of a
---   term in the polynomial. Given this representation it is crucial that
---   the operation is commutative, since the information of about the order
---   of the term is lost in this representation.
-newtype FreeMonoidX a
-FMX :: Map a Integer -> FreeMonoidX a
-[asMap] :: FreeMonoidX a -> Map a Integer
-
--- | Number of distinct terms in the free-monoid.
-nrofDistinctTerms :: FreeMonoidX a -> Int
-
--- | <i>O(n)</i>. The distinct terms of a free-monoid., each term occurs
---   only once in the list.
-distinctTerms :: FreeMonoidX a -> [a]
-distinctTermsT :: TermWrapper t => FreeMonoidX (t a) -> [a]
-allFreeMonoidX :: TermWrapper f => (a -> Bool) -> FreeMonoidX (f a) -> Bool
-
--- | Map the terms of the free-monoid.
-mapTerms :: Ord b => (a -> b) -> FreeMonoidX a -> FreeMonoidX b
-mapFreeMonoidX :: (Functor f, Ord (f b)) => (a -> b) -> FreeMonoidX (f a) -> FreeMonoidX (f b)
-
--- | <i>O(n)</i>. Partition the free-monoid into two free-monoids, one with
---   all elements that satisfy the predicate and one with all elements that
---   don't satisfy the predicate.
-partition :: (a -> Bool) -> FreeMonoidX a -> (FreeMonoidX a, FreeMonoidX a)
-partitionT :: TermWrapper t => (a -> Bool) -> FreeMonoidX (t a) -> (FreeMonoidX (t a), FreeMonoidX (t a))
-foldrTerms :: TermWrapper f => (a -> b -> b) -> b -> FreeMonoidX (f a) -> b
-
--- | <i>O(n)</i>. Fold over the terms of the free-monoid with their
---   multipliers.
-foldOccur :: (a -> Integer -> b -> b) -> b -> FreeMonoidX a -> b
-
--- | Fold the free-monoid.
-foldFMX :: (IntMultipliable a, Monoid a) => FreeMonoidX a -> a
-
--- | Fold the free-monoid of term wrappers.
-fold :: (IntMultipliable (t a), Monoid (t a), TermWrapper t) => FreeMonoidX (t a) -> a
-
--- | Append a term to the free-monoid.
---   
---   <pre>
---   append 2 [1, 2, 3]
---   </pre>
---   
---   should be equivalent to the free-monoid.
---   
---   <pre>
---   [1, 2, 3, 2]
---   </pre>
-append :: Ord a => a -> FreeMonoidX a -> FreeMonoidX a
-
--- | Remove a term from the free-monoid.
---   
---   <pre>
---   remove 2 (1 &lt;&gt; 2 &lt;&gt; 3)
---   </pre>
---   
---   should be equivalent to the free-monoid
---   
---   <pre>
---   (1 &lt;&gt; 3)
---   </pre>
-remove :: Ord a => a -> FreeMonoidX a -> FreeMonoidX a
-
--- | Add the term <tt>x</tt> <tt>n</tt> times. If <tt>n</tt> is negative
---   the term will be removed <tt>n</tt> times.
---   
---   <pre>
---   appendMany 2 10 (10 &lt;&gt; 12 &lt;&gt; 12)
---   </pre>
---   
---   should be equivalent to
---   
---   (10 &lt;&gt; 10 &lt;&gt; 10 &lt;&gt; 12 &lt;&gt; 12)
---   
---   <pre>
---   appendMany (-2) 10 (10 &lt;&gt; 12 &lt;&gt; 12)
---   </pre>
---   
---   should be equivalent to
---   
---   <pre>
---   (-10 &lt;&gt; 12 &lt;&gt; 12)
---   </pre>
-appendMany :: Ord a => Integer -> a -> FreeMonoidX a -> FreeMonoidX a
-
--- | Flatten a free-monoid.
---   
---   For instance, the monoid
---   
---   <pre>
---   (a &lt;&gt; b) &lt;&gt; (a &lt;&gt; b) &lt;&gt; a
---   </pre>
---   
---   will be rewritten as:
---   
---   <pre>
---   a &lt;&gt; a &lt;&gt; a &lt;&gt; b &lt;&gt; b
---   </pre>
---   
---   Assuming `a &lt; b`.
-flatten :: Ord a => FreeMonoidX (FreeMonoidX a) -> FreeMonoidX a
-
--- | `n <a>.</a> x` multiplies <tt>x</tt> <tt>n</tt> times.
-(<.>) :: (IntMultipliable a, Integral n) => n -> a -> a
-
--- | Types that can be multiplied by an integral. This restriction is
---   required to be able to assign a correct semantic to the symbolic
---   representation of the free-monoid. If the elements of the free-monoid
---   are not <a>IntMultipliable</a>, then <a>foldFMX</a> is ill-defined.
---   
---   See the test code <tt>FreeMonoidXspec</tt> for examples of instances
---   of this class.
-class IntMultipliable a
-
--- | A term of the monoid which wraps a value. This could be for instance a
---   sum-term or a product term.
-class TermWrapper (f :: Type -> Type)
-wrap :: TermWrapper f => a -> f a
-unwrap :: TermWrapper f => f a -> a
-
--- | <i>O(n)</i>. Convert the free-monoid to a list of (term, occurrence)
---   tuples.
---   
---   For instance given the term:
---   
---   <pre>
---   a &lt;&gt; b &lt;&gt; a &lt;&gt; b &lt;&gt; a
---   </pre>
---   
---   <a>toOccurList</a> applied to it will result in the following list:
---   
---   <pre>
---   [(a, 3), (b, 2)]
---   </pre>
-toOccurList :: FreeMonoidX a -> [(a, Integer)]
-
--- | <i>O(n)</i>. Convert the free-monoid to a distinct ascending list of
---   term/multiplier pairs.
-toDistinctAscOccurList :: FreeMonoidX a -> [(a, Integer)]
-
--- | <i>O(n*log n)</i>. Create a free-monoid from a list of term/multiplier
---   pairs.
-fromOccurList :: Ord a => [(a, Integer)] -> FreeMonoidX a
-
--- | <i>O(n)</i>. Build a free-monoid from an ascending list of
---   term/multiplier pairs where each term appears only once. /The
---   precondition (input list is strictly ascending) is not checked./
-fromDistinctAscOccurList :: [(a, Integer)] -> FreeMonoidX a
-
--- | <i>O(t*log t)</i>. Create a product from a list of terms using the
---   given term wrapper.
-fromListT :: (Ord (t a), TermWrapper t) => [a] -> FreeMonoidX (t a)
-toOccurListT :: TermWrapper t => FreeMonoidX (t a) -> [(a, Integer)]
-toDistinctAscOccurListT :: TermWrapper t => FreeMonoidX (t a) -> [(a, Integer)]
-fromOccurListT :: (Ord (t a), TermWrapper t) => [(a, Integer)] -> FreeMonoidX (t a)
-fromDistinctAscPowerListT :: TermWrapper t => [(a, Integer)] -> FreeMonoidX (t a)
-
--- | The <a>toList</a> function extracts a list of <tt>Item l</tt> from the
---   structure <tt>l</tt>. It should satisfy fromList . toList = id.
-toList :: IsList l => l -> [Item l]
-
--- | The <a>fromList</a> function constructs the structure <tt>l</tt> from
---   the given list of <tt>Item l</tt>
-fromList :: IsList l => [Item l] -> l
-instance (Data.Data.Data a, GHC.Classes.Ord a) => Data.Data.Data (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Generics.Generic (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Classes.Ord a => Lattest.Model.Symbolic.Internal.FreeMonoidX.IntMultipliable (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Classes.Ord a => GHC.IsList.IsList (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Classes.Ord a => GHC.Base.Monoid (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance (GHC.Classes.Ord a, GHC.Read.Read a) => GHC.Read.Read (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-instance GHC.Classes.Ord a => GHC.Base.Semigroup (Lattest.Model.Symbolic.Internal.FreeMonoidX.FreeMonoidX a)
-
-module Lattest.Model.Symbolic.Internal.Product
-
--- | <a>FreeProduct</a> represents a symbolic product of terms of the type
---   parameter <tt>a</tt>. The same term can occur multiple times.
-type FreeProduct a = FreeMonoidX ProductTerm a
-
--- | Terms of a free-monoids of the form:
---   
---   <pre>
---   a0 &lt;&gt; a1 &lt;&gt; ... &lt;&gt; an-1
---   </pre>
---   
---   where <a>&lt;&gt;</a> will be interpreted as the arithmetic
---   multiplication of terms:
---   
---   <pre>
---   a0 * a1 * ... * an-1
---   </pre>
-newtype ProductTerm a
-ProductTerm :: a -> ProductTerm a
-[factor] :: ProductTerm a -> a
-
--- | <i>O(n)</i>. Partition the product into the dividend and divisor.
-fraction :: Ord a => FreeProduct a -> (FreeProduct a, FreeProduct a)
-
--- | <i>O(log n)</i>. Multiply a product with a term.
-multiply :: Ord a => a -> FreeProduct a -> FreeProduct a
-
--- | <i>O(log n)</i>. Divide a product by a term.
-divide :: Ord a => a -> FreeProduct a -> FreeProduct a
-
--- | <i>O(n+m)</i>. The product of two products.
-product :: Ord a => FreeProduct a -> FreeProduct a -> FreeProduct a
-
--- | The product of a list of products.
-products :: Ord a => [FreeProduct a] -> FreeProduct a
-
--- | <i>O(n)</i>. Take the product <i>ms</i> to the power with the constant
---   <i>x</i>.
-power :: Ord a => Integer -> FreeProduct a -> FreeProduct a
-instance GHC.Base.Applicative Lattest.Model.Symbolic.Internal.Product.ProductTerm
-instance Data.Data.Data a => Data.Data.Data (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance Data.Foldable.Foldable Lattest.Model.Symbolic.Internal.Product.ProductTerm
-instance GHC.Base.Functor Lattest.Model.Symbolic.Internal.Product.ProductTerm
-instance GHC.Generics.Generic (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Real.Integral a => Lattest.Model.Symbolic.Internal.FreeMonoidX.IntMultipliable (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Num.Num a => GHC.Base.Monoid (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Read.Read a => GHC.Read.Read (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Num.Num a => GHC.Base.Semigroup (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.Symbolic.Internal.Product.ProductTerm a)
-instance Lattest.Model.Symbolic.Internal.FreeMonoidX.TermWrapper Lattest.Model.Symbolic.Internal.Product.ProductTerm
-
-module Lattest.Model.Symbolic.Internal.Sum
-
--- | <a>FreeSum</a> represents a symbolic sum of terms of the type
---   parameter <tt>a</tt>. The same term can occur multiple times.
-type FreeSum a = FreeMonoidX SumTerm a
-
--- | Terms of a free-monoids of the form:
---   
---   <pre>
---   a0 &lt;&gt; a1 &lt;&gt; ... &lt;&gt; an-1
---   </pre>
---   
---   where <a>&lt;&gt;</a> will be interpreted as the arithmetic sum of
---   terms:
---   
---   <pre>
---   a0 + a1 + ... + an-1
---   </pre>
-newtype SumTerm a
-SumTerm :: a -> SumTerm a
-[summand] :: SumTerm a -> a
-
--- | <i>O(log n)</i>. Add a term to a sum.
-add :: Ord a => a -> FreeSum a -> FreeSum a
-
--- | <i>O(log n)</i>. Subtract a term from a sum.
-subtract :: Ord a => a -> FreeSum a -> FreeSum a
-
--- | <i>O(n+m)</i>. The sum of two sums.
-sum :: Ord a => FreeSum a -> FreeSum a -> FreeSum a
-
--- | The sum of a list of sums.
-sums :: Ord a => [FreeSum a] -> FreeSum a
-
--- | <i>O(n)</i>. Multiply the constant with the sum.
-multiply :: Ord a => Integer -> FreeSum a -> FreeSum a
-instance Data.Data.Data a => Data.Data.Data (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance Data.Foldable.Foldable Lattest.Model.Symbolic.Internal.Sum.SumTerm
-instance GHC.Base.Functor Lattest.Model.Symbolic.Internal.Sum.SumTerm
-instance GHC.Generics.Generic (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Real.Integral a => Lattest.Model.Symbolic.Internal.FreeMonoidX.IntMultipliable (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Num.Num a => GHC.Base.Monoid (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Read.Read a => GHC.Read.Read (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Num.Num a => GHC.Base.Semigroup (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.Symbolic.Internal.Sum.SumTerm a)
-instance Lattest.Model.Symbolic.Internal.FreeMonoidX.TermWrapper Lattest.Model.Symbolic.Internal.Sum.SumTerm
-
-module Lattest.Model.Symbolic.Internal.ExprDefs
-data ExprView t
-[Var] :: forall t. Variable -> ExprView t
-[Const] :: forall t. ExprType t => t -> ExprView t
-[Ite] :: forall t. ExprView Bool -> ExprView t -> ExprView t -> ExprView t
-[EqualInt] :: ExprView Integer -> ExprView Integer -> ExprView Bool
-[EqualString] :: ExprView String -> ExprView String -> ExprView Bool
-[EqualBool] :: ExprView Bool -> ExprView Bool -> ExprView Bool
-[Divide] :: ExprView Integer -> ExprView Integer -> ExprView Integer
-[Modulo] :: ExprView Integer -> ExprView Integer -> ExprView Integer
-[Sum] :: FreeSum (ExprView Integer) -> ExprView Integer
-[Product] :: FreeProduct (ExprView Integer) -> ExprView Integer
-[Length] :: ExprView String -> ExprView Integer
-[GezInt] :: ExprView Integer -> ExprView Bool
-[Not] :: ExprView Bool -> ExprView Bool
-[And] :: Set (ExprView Bool) -> ExprView Bool
-[At] :: ExprView String -> ExprView Integer -> ExprView [Char]
-[Concat] :: [ExprView String] -> ExprView [Char]
-
--- | Expr: value expression 1. User can't directly construct Expr (such
---   that invariants will always hold) 2. User can still pattern match on
---   Expr using <a>ExprView</a> 3. Overhead at run-time is zero. See
---   <a>https://wiki.haskell.org/Performance/Data_types#Newtypes</a>
-newtype Expr t
-Expr :: ExprView t -> Expr t
-[view] :: Expr t -> ExprView t
-
--- | Evaluate the provided value expression. Either the Right Constant
---   Value is returned or a (Left) error message.
-eval :: Expr v -> Either String v
-reduce :: ExprView v -> ExprView v
-data Variable
-Variable :: String -> Type -> Variable
-[varName] :: Variable -> String
-[varType] :: Variable -> Type
-data Type
-IntType :: Type
-BoolType :: Type
-StringType :: Type
-allTypes :: [Type]
-data Constant
-
--- | Constructor of Boolean constant.
-Cbool :: Bool -> Constant
-[toBool] :: Constant -> Bool
-
--- | Constructor of Integer constant.
-Cint :: Integer -> Constant
-[toInteger] :: Constant -> Integer
-
--- | Constructor of String constant.
-Cstring :: String -> Constant
-[toString] :: Constant -> String
-
--- | Constructor of constructor constant (value of ADT).
-Ccstr :: String -> [Constant] -> Constant
-[cstrName] :: Constant -> String
-[args] :: Constant -> [Constant]
-constType :: Constant -> Type
-
--- | convert a Constant to an typed value
-class ConstType t
-fromConst :: ConstType t => Constant -> Either String t
-toConst :: ConstType t => t -> Constant
-class ExprType t
-typeOf :: ExprType t => t -> Type
-typeOf' :: ExprType t => f t -> Type
-isConst :: ExprView v -> Bool
-freeVars :: Expr t -> Set Variable
-instance Lattest.Model.Symbolic.Internal.ExprDefs.ConstType GHC.Types.Bool
-instance Lattest.Model.Symbolic.Internal.ExprDefs.ConstType GHC.Num.Integer.Integer
-instance Lattest.Model.Symbolic.Internal.ExprDefs.ConstType GHC.Base.String
-instance GHC.Classes.Eq Lattest.Model.Symbolic.Internal.ExprDefs.Constant
-instance GHC.Classes.Eq t => GHC.Classes.Eq (Lattest.Model.Symbolic.Internal.ExprDefs.Expr t)
-instance GHC.Classes.Eq t => GHC.Classes.Eq (Lattest.Model.Symbolic.Internal.ExprDefs.ExprView t)
-instance GHC.Classes.Eq Lattest.Model.Symbolic.Internal.ExprDefs.Type
-instance GHC.Classes.Eq Lattest.Model.Symbolic.Internal.ExprDefs.Variable
-instance Lattest.Model.Symbolic.Internal.ExprDefs.ExprType GHC.Types.Bool
-instance Lattest.Model.Symbolic.Internal.ExprDefs.ExprType GHC.Num.Integer.Integer
-instance Lattest.Model.Symbolic.Internal.ExprDefs.ExprType GHC.Base.String
-instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Model.Symbolic.Internal.ExprDefs.Constant
-instance GHC.Classes.Ord Lattest.Model.Symbolic.Internal.ExprDefs.Constant
-instance GHC.Classes.Ord t => GHC.Classes.Ord (Lattest.Model.Symbolic.Internal.ExprDefs.Expr t)
-instance GHC.Classes.Ord t => GHC.Classes.Ord (Lattest.Model.Symbolic.Internal.ExprDefs.ExprView t)
-instance GHC.Classes.Ord Lattest.Model.Symbolic.Internal.ExprDefs.Type
-instance GHC.Classes.Ord Lattest.Model.Symbolic.Internal.ExprDefs.Variable
-instance GHC.Read.Read Lattest.Model.Symbolic.Internal.ExprDefs.Constant
-instance GHC.Show.Show Lattest.Model.Symbolic.Internal.ExprDefs.Constant
-instance GHC.Show.Show t => GHC.Show.Show (Lattest.Model.Symbolic.Internal.ExprDefs.Expr t)
-instance GHC.Show.Show t => GHC.Show.Show (Lattest.Model.Symbolic.Internal.ExprDefs.ExprView t)
-instance GHC.Show.Show Lattest.Model.Symbolic.Internal.ExprDefs.Type
-instance GHC.Show.Show Lattest.Model.Symbolic.Internal.ExprDefs.Variable
-instance Data.Aeson.Types.ToJSON.ToJSON Lattest.Model.Symbolic.Internal.ExprDefs.Constant
-
-module Lattest.Model.Symbolic.Internal.ExprImpls
-
--- | Create a function call. Preconditions are <i>not</i> checked.
---   
---   Is Expr a Constant/Value Expression? isConst :: Expr -&gt; Bool
---   isConst (view -&gt; Vconst{}) = True isConst _ = False
-sConst :: ExprType t => t -> Expr t
-sTrue :: Expr Bool
-sFalse :: Expr Bool
-sVar :: VarExpr t => Variable -> Expr t
-(.==) :: EqExpr t => Expr t -> Expr t -> Expr Bool
-infix 4 .==
-
--- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
---   Preconditions are <i>not</i> checked.
-sIfThenElse :: Expr Bool -> Expr t -> Expr t -> Expr t
-
--- | Apply operator Not on the provided value expression. Preconditions are
---   <i>not</i> checked.
-sNot :: Expr Bool -> Expr Bool
-
--- | Apply operator And on the provided set of value expressions.
---   Preconditions are <i>not</i> checked.
-sAnd :: Set (Expr Bool) -> Expr Bool
-sSum :: FreeSum (Expr Integer) -> Expr Integer
-sProduct :: FreeProduct (Expr Integer) -> Expr Integer
-
--- | Apply operator Divide on the provided value expressions. Preconditions
---   are <i>not</i> checked.
-(./) :: Expr Integer -> Expr Integer -> Expr Integer
-infixl 7 ./
-
--- | Apply operator Modulo on the provided value expressions. Preconditions
---   are <i>not</i> checked.
-(.%) :: Expr Integer -> Expr Integer -> Expr Integer
-infixl 7 .%
-
--- | Apply operator GEZ (Greater Equal Zero) on the provided value
---   expression. Preconditions are <i>not</i> checked.
-sIsNonNegative :: Expr Integer -> Expr Bool
-
--- | Apply operator Length on the provided value expression. Preconditions
---   are <i>not</i> checked.
-sLength :: Expr String -> Expr Integer
-
--- | Apply operator At on the provided value expressions. Preconditions are
---   <i>not</i> checked.
-(.@) :: Expr String -> Expr Integer -> Expr String
-infixl 5 .@
-
--- | Apply operator Concat on the provided sequence of value expressions.
---   Preconditions are <i>not</i> checked.
-sConcat :: [Expr String] -> Expr String
-data VarModel
-class Assignable t
-assign :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
-data Valuation
-toConstantsMap :: Valuation -> Map Variable Constant
-fromConstantsMap :: Map Variable Constant -> Valuation
-emptyValuation :: Valuation
-assignValues :: [Valuation -> Valuation] -> Valuation
-assignValue :: Assignable t => Variable -> t -> Valuation -> Valuation
-insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
-substConst :: Assignable t => Valuation -> Expr t -> Expr t
-
--- | Substitute variables by value expressions in a value expression.
---   
---   Preconditions are <i>not</i> checked.
-subst :: Assignable t => VarModel -> Expr t -> Expr t
-assignedExpr :: Assignable t => Variable -> VarModel -> Maybe (Expr t)
-assignment :: [VarModel -> VarModel] -> VarModel
-noAssignment :: VarModel
-(=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
-infixr 0 =:
-instance Lattest.Model.Symbolic.Internal.ExprImpls.Assignable GHC.Types.Bool
-instance Lattest.Model.Symbolic.Internal.ExprImpls.Assignable GHC.Num.Integer.Integer
-instance Lattest.Model.Symbolic.Internal.ExprImpls.Assignable GHC.Base.String
-instance Lattest.Model.Symbolic.Internal.ExprImpls.EqExpr GHC.Types.Bool
-instance Lattest.Model.Symbolic.Internal.ExprImpls.EqExpr GHC.Num.Integer.Integer
-instance Lattest.Model.Symbolic.Internal.ExprImpls.EqExpr GHC.Base.String
-instance GHC.Classes.Eq Lattest.Model.Symbolic.Internal.ExprImpls.Valuation
-instance GHC.Classes.Eq Lattest.Model.Symbolic.Internal.ExprImpls.VarModel
-instance GHC.Classes.Ord Lattest.Model.Symbolic.Internal.ExprImpls.Valuation
-instance GHC.Classes.Ord Lattest.Model.Symbolic.Internal.ExprImpls.VarModel
-instance GHC.Show.Show Lattest.Model.Symbolic.Internal.ExprImpls.Valuation
-instance GHC.Show.Show Lattest.Model.Symbolic.Internal.ExprImpls.VarModel
-instance Lattest.Model.Symbolic.Internal.ExprImpls.VarExpr GHC.Types.Bool
-instance Lattest.Model.Symbolic.Internal.ExprImpls.VarExpr GHC.Num.Integer.Integer
-instance Lattest.Model.Symbolic.Internal.ExprImpls.VarExpr GHC.Base.String
-
-module Lattest.Model.Symbolic.Internal.ExprImplsExtension
-
--- | Apply operator Or (\/) on the provided set of value expressions.
---   Preconditions are <i>not</i> checked.
-sOr :: Set (Expr Bool) -> Expr Bool
-(.&&) :: Expr Bool -> Expr Bool -> Expr Bool
-infixr 3 .&&
-(.||) :: Expr Bool -> Expr Bool -> Expr Bool
-infixr 2 .||
-
--- | Apply operator Xor (\|/) on the provided set of value expressions.
---   Preconditions are <i>not</i> checked.
-sXor :: Expr Bool -> Expr Bool -> Expr Bool
-
--- | Apply operator Implies (=&gt;) on the provided value expressions.
---   Preconditions are <i>not</i> checked.
-(.=>) :: Expr Bool -> Expr Bool -> Expr Bool
-infixr 1 .=>
-
--- | Apply unary operator Minus on the provided value expression.
---   Preconditions are <i>not</i> checked.
-sNeg :: Expr Integer -> Expr Integer
-
--- | Apply operator Add on the provided value expressions. Preconditions
---   are <i>not</i> checked.
-(.+) :: Expr Integer -> Expr Integer -> Expr Integer
-infixl 6 .+
-
--- | Apply operator Minus on the provided value expressions. Preconditions
---   are <i>not</i> checked.
-(.-) :: Expr Integer -> Expr Integer -> Expr Integer
-infixl 6 .-
-
--- | Apply operator Times on the provided value expressions. Preconditions
---   are <i>not</i> checked.
-(.*) :: Expr Integer -> Expr Integer -> Expr Integer
-infixl 7 .*
-
--- | Apply operator Absolute value (abs) on the provided value expression.
---   Preconditions are <i>not</i> checked.
-sAbs :: Expr Integer -> Expr Integer
-
--- | Apply operator LT (&lt;) on the provided value expression.
---   Preconditions are <i>not</i> checked.
-(.<) :: Expr Integer -> Expr Integer -> Expr Bool
-infix 4 .<
-
--- | Apply operator LE (&lt;=) on the provided value expression.
---   Preconditions are <i>not</i> checked.
-(.<=) :: Expr Integer -> Expr Integer -> Expr Bool
-infix 4 .<=
-
--- | Apply operator GE (&gt;=) on the provided value expression.
---   Preconditions are <i>not</i> checked.
-(.>=) :: Expr Integer -> Expr Integer -> Expr Bool
-infix 4 .>=
-
--- | Apply operator GT (&gt;) on the provided value expression.
---   Preconditions are <i>not</i> checked.
-(.>) :: Expr Integer -> Expr Integer -> Expr Bool
-infix 4 .>
-instance GHC.Num.Num (Lattest.Model.Symbolic.Internal.ExprDefs.Expr GHC.Num.Integer.Integer)
+instance Data.OrdMonad.OrdTraversable Data.Set.Internal.Set
+instance (Data.Foldable.Foldable t, Data.Traversable.Traversable t) => Data.OrdMonad.OrdTraversable t
 
 module Lattest.Model.Symbolic.Expr
 
@@ -733,6 +152,139 @@ Variable :: String -> Type -> Variable
 --   Value is returned or a (Left) error message.
 eval :: Expr v -> Either String v
 freeVars :: Expr t -> Set Variable
+data Valuation
+data VarModel
+substConst :: Assignable t => Valuation -> Expr t -> Expr t
+class Assignable t
+assign :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
+assignValue :: Assignable t => Variable -> t -> Valuation -> Valuation
+assignedExpr :: Assignable t => Variable -> VarModel -> Maybe (Expr t)
+fromConstantsMap :: Map Variable Constant -> Valuation
+toConstantsMap :: Valuation -> Map Variable Constant
+assignValues :: [Valuation -> Valuation] -> Valuation
+insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
+(=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
+infixr 0 =:
+
+-- | Apply operator Divide on the provided value expressions. Preconditions
+--   are <i>not</i> checked.
+(./) :: Expr Integer -> Expr Integer -> Expr Integer
+infixl 7 ./
+
+-- | Apply operator Modulo on the provided value expressions. Preconditions
+--   are <i>not</i> checked.
+(.%) :: Expr Integer -> Expr Integer -> Expr Integer
+infixl 7 .%
+(.==) :: EqExpr t => Expr t -> Expr t -> Expr Bool
+infix 4 .==
+
+-- | Apply operator Not on the provided value expression. Preconditions are
+--   <i>not</i> checked.
+sNot :: Expr Bool -> Expr Bool
+assignment :: [VarModel -> VarModel] -> VarModel
+sTrue :: Expr Bool
+
+-- | Apply operator Concat on the provided sequence of value expressions.
+--   Preconditions are <i>not</i> checked.
+sConcat :: [Expr String] -> Expr String
+
+-- | Create a function call. Preconditions are <i>not</i> checked.
+--   
+--   Is Expr a Constant/Value Expression? isConst :: Expr -&gt; Bool
+--   isConst (view -&gt; Vconst{}) = True isConst _ = False
+sConst :: ExprType t => t -> Expr t
+sVar :: VarExpr t => Variable -> Expr t
+sFalse :: Expr Bool
+
+-- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
+--   Preconditions are <i>not</i> checked.
+sIfThenElse :: Expr Bool -> Expr t -> Expr t -> Expr t
+
+-- | Apply operator And on the provided set of value expressions.
+--   Preconditions are <i>not</i> checked.
+sAnd :: Set (Expr Bool) -> Expr Bool
+sSum :: FreeSum (Expr Integer) -> Expr Integer
+sProduct :: FreeProduct (Expr Integer) -> Expr Integer
+
+-- | Apply operator GEZ (Greater Equal Zero) on the provided value
+--   expression. Preconditions are <i>not</i> checked.
+sIsNonNegative :: Expr Integer -> Expr Bool
+
+-- | Apply operator Length on the provided value expression. Preconditions
+--   are <i>not</i> checked.
+sLength :: Expr String -> Expr Integer
+
+-- | Apply operator At on the provided value expressions. Preconditions are
+--   <i>not</i> checked.
+(.@) :: Expr String -> Expr Integer -> Expr String
+infixl 5 .@
+emptyValuation :: Valuation
+
+-- | Substitute variables by value expressions in a value expression.
+--   
+--   Preconditions are <i>not</i> checked.
+subst :: Assignable t => VarModel -> Expr t -> Expr t
+noAssignment :: VarModel
+(.||) :: Expr Bool -> Expr Bool -> Expr Bool
+infixr 2 .||
+
+-- | Apply operator GT (&gt;) on the provided value expression.
+--   Preconditions are <i>not</i> checked.
+(.>) :: Expr Integer -> Expr Integer -> Expr Bool
+infix 4 .>
+
+-- | Apply operator Add on the provided value expressions. Preconditions
+--   are <i>not</i> checked.
+(.+) :: Expr Integer -> Expr Integer -> Expr Integer
+infixl 6 .+
+
+-- | Apply operator Minus on the provided value expressions. Preconditions
+--   are <i>not</i> checked.
+(.-) :: Expr Integer -> Expr Integer -> Expr Integer
+infixl 6 .-
+
+-- | Apply operator Times on the provided value expressions. Preconditions
+--   are <i>not</i> checked.
+(.*) :: Expr Integer -> Expr Integer -> Expr Integer
+infixl 7 .*
+
+-- | Apply operator GE (&gt;=) on the provided value expression.
+--   Preconditions are <i>not</i> checked.
+(.>=) :: Expr Integer -> Expr Integer -> Expr Bool
+infix 4 .>=
+
+-- | Apply operator LE (&lt;=) on the provided value expression.
+--   Preconditions are <i>not</i> checked.
+(.<=) :: Expr Integer -> Expr Integer -> Expr Bool
+infix 4 .<=
+
+-- | Apply operator LT (&lt;) on the provided value expression.
+--   Preconditions are <i>not</i> checked.
+(.<) :: Expr Integer -> Expr Integer -> Expr Bool
+infix 4 .<
+(.&&) :: Expr Bool -> Expr Bool -> Expr Bool
+infixr 3 .&&
+
+-- | Apply unary operator Minus on the provided value expression.
+--   Preconditions are <i>not</i> checked.
+sNeg :: Expr Integer -> Expr Integer
+
+-- | Apply operator Or (\/) on the provided set of value expressions.
+--   Preconditions are <i>not</i> checked.
+sOr :: Set (Expr Bool) -> Expr Bool
+
+-- | Apply operator Xor (\|/) on the provided set of value expressions.
+--   Preconditions are <i>not</i> checked.
+sXor :: Expr Bool -> Expr Bool -> Expr Bool
+
+-- | Apply operator Implies (=&gt;) on the provided value expressions.
+--   Preconditions are <i>not</i> checked.
+(.=>) :: Expr Bool -> Expr Bool -> Expr Bool
+infixr 1 .=>
+
+-- | Apply operator Absolute value (abs) on the provided value expression.
+--   Preconditions are <i>not</i> checked.
+sAbs :: Expr Integer -> Expr Integer
 
 
 -- | A <i>bounded monad</i> is a type constructor which represents the
@@ -784,17 +336,17 @@ UnderspecDet :: Det q
 
 -- | Free distributive lattice, or a positive boolean formula, in
 --   CNF-format.
-newtype FreeLatticeCNF a
-FreeLatticeCNF :: Set (Set a) -> FreeLatticeCNF a
+newtype FreeLattice a
+FreeLattice :: Set (Set a) -> FreeLattice a
 
 -- | A single state embedded in a free distributive lattice.
-atom :: a -> FreeLatticeCNF a
+atom :: a -> FreeLattice a
 
 -- | The free distributive lattice element ⊤, or true.
-top :: FreeLatticeCNF a
+top :: FreeLattice a
 
 -- | The free distributive lattice element ⊥, or false.
-bot :: FreeLatticeCNF a
+bot :: FreeLattice a
 
 -- | Specifiednesss describe wether behaviour (a sequence of actions) is
 --   allowed a stateful specification model. <a>Forbidden</a> describes
@@ -853,56 +405,48 @@ class MeetSemiLattice a
 class BooleanConfiguration (m :: Type -> Type)
 asExpr :: BooleanConfiguration m => m (Expr Bool) -> Expr Bool
 asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (Expr Bool) -> Expr Bool
-joins :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
-meets :: (Foldable f, Ord a) => f a -> FreeLatticeCNF a
+
+-- | Combine a collection of FreeLattices using <a>(\/)</a>
+joins :: (Foldable f, Ord a) => f (FreeLattice a) -> FreeLattice a
+
+-- | Combine a collection of FreeLattices using <a>(/\)</a>
+meets :: (Foldable f, Ord a) => f (FreeLattice a) -> FreeLattice a
+
+-- | Combine a collection of states using <a>(\/)</a>
+disjunction :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+
+-- | Synonym for <a>disjunction</a>
+(\$/) :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+
+-- | Combine a collection of states using <a>(/\)</a>
+conjunction :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
+
+-- | Synonym for <a>conjunction</a>
+(/$\) :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
 instance GHC.Base.Applicative Lattest.Model.BoundedMonad.Det
 instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.Det
-instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.FreeLatticeCNF
+instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.BoundedMonad.FreeLattice
 instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.Det
-instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.FreeLatticeCNF
+instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.BoundedMonad.FreeLattice
 instance GHC.Classes.Eq q => GHC.Classes.Eq (Lattest.Model.BoundedMonad.Det q)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
+instance GHC.Classes.Eq a => GHC.Classes.Eq (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Classes.Eq Lattest.Model.BoundedMonad.Specifiedness
 instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.Det
-instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.FreeLatticeCNF
+instance Data.Foldable.Foldable Lattest.Model.BoundedMonad.FreeLattice
 instance GHC.Base.Functor Lattest.Model.BoundedMonad.Det
-instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
-instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.MeetSemiLattice (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
+instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.BoundedMonad.FreeLattice a)
+instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.MeetSemiLattice (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Base.Monad Lattest.Model.BoundedMonad.Det
-instance Data.OrdMonad.OrdFunctor Lattest.Model.BoundedMonad.FreeLatticeCNF
-instance Data.OrdMonad.OrdMonad Lattest.Model.BoundedMonad.FreeLatticeCNF
+instance Data.OrdMonad.OrdFunctor Lattest.Model.BoundedMonad.FreeLattice
+instance Data.OrdMonad.OrdMonad Lattest.Model.BoundedMonad.FreeLattice
 instance GHC.Classes.Ord q => GHC.Classes.Ord (Lattest.Model.BoundedMonad.Det q)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
+instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Classes.Ord Lattest.Model.BoundedMonad.Specifiedness
 instance GHC.Read.Read Lattest.Model.BoundedMonad.Specifiedness
 instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.Det a)
-instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.FreeLatticeCNF a)
+instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.BoundedMonad.FreeLattice a)
 instance GHC.Show.Show Lattest.Model.BoundedMonad.Specifiedness
-
-
--- | Non-deterministic model definitions, where observable behaviour may
---   lead to a set of states. These are equivalent to using Lattices with
---   only <a>(\/)</a>, and defined in this separate module because
---   <tt>(/\)</tt> is more often the intended meaning.
-module Lattest.Model.Internal.NonDeterministic
-
--- | Non-deterministic state configuration. This means that an automaton
---   non-deterministically in a number of states, where zero states
---   indicates the forbidden configuration, or in an explicit
---   underspecified configuration.
-data NonDet q
-NonDet :: Set q -> NonDet q
-UnderspecNonDet :: NonDet q
-nonDet :: Ord q => [q] -> NonDet q
-instance Lattest.Model.BoundedMonad.BooleanConfiguration Lattest.Model.Internal.NonDeterministic.NonDet
-instance Lattest.Model.BoundedMonad.BoundedConfiguration Lattest.Model.Internal.NonDeterministic.NonDet
-instance GHC.Classes.Ord a => GHC.Classes.Eq (Lattest.Model.Internal.NonDeterministic.NonDet a)
-instance Data.Foldable.Foldable Lattest.Model.Internal.NonDeterministic.NonDet
-instance GHC.Classes.Ord a => Lattest.Model.BoundedMonad.JoinSemiLattice (Lattest.Model.Internal.NonDeterministic.NonDet a)
-instance Data.OrdMonad.OrdFunctor Lattest.Model.Internal.NonDeterministic.NonDet
-instance Data.OrdMonad.OrdMonad Lattest.Model.Internal.NonDeterministic.NonDet
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Lattest.Model.Internal.NonDeterministic.NonDet a)
-instance GHC.Show.Show a => GHC.Show.Show (Lattest.Model.Internal.NonDeterministic.NonDet a)
+instance Data.Traversable.Traversable Lattest.Model.BoundedMonad.Det
 
 
 -- | This module contains the definitions and semantics of different forms
@@ -1043,312 +587,21 @@ instance Lattest.Model.Alphabet.TestChoice i (Lattest.Model.Alphabet.IFAct i o)
 instance Lattest.Model.Alphabet.TestChoice i (Lattest.Model.Alphabet.IOAct i o)
 instance Data.Aeson.Types.ToJSON.ToJSON a => Data.Aeson.Types.ToJSON.ToJSON (Lattest.Model.Alphabet.GateValue a)
 
-module Lattest.SMT.ParamCore
-type Params = Map String (String, String -> Bool)
-initParams :: Params
+module Lattest.Util.ModelParsingUtils
 
+-- | Read an .aut file representing an LTS from the provided filepath,
+--   parse its content and return: - [String]: Input Alphabet - [String]:
+--   Output Alphabet - Set.Set String: Set of all LTS states - String:
+--   Initial state - Maybe [(String, IOAct String String, String)]: List of
+--   LTS transition tuples as (InitialState, Action, EndState) NOTE: In
+--   order to parse actions correctly, inputs and outputs must end in _i
+--   and _o respectively. The first line of the .aut file must follow the
+--   structure des (initState,nEdges,nStates).
+readAutFile :: FilePath -> IO ([String], [String], Set String, String, Maybe [(String, IOAct String String, String)])
 
--- | This module defines the options that can be passed to TorXakis.
-module Lattest.SMT.Config
-
--- | TorXakis configuration options.
-data Config
-Config :: Bool -> Map SolverId SolverConfig -> SolverId -> [(ParamName, ParamValue)] -> Config
-
--- | Log all SMT commands?
-[smtLog] :: Config -> Bool
-
--- | Available solvers that can be chosen from.
-[availableSolvers] :: Config -> Map SolverId SolverConfig
-[selectedSolver] :: Config -> SolverId
-[configuredParameters] :: Config -> [(ParamName, ParamValue)]
-
--- | Return a <a>CreateProcess</a> according to the selected solver in the
---   configuration.
-getProc :: Config -> Maybe CreateProcess
-
--- | TorXakis default configuration
-defaultConfig :: Config
-newtype SolverId
-SolverId :: String -> SolverId
-[solverId] :: SolverId -> String
-data SolverConfig
-SolverConfig :: FilePath -> [String] -> SolverConfig
-
--- | Executable name.
-[execName] :: SolverConfig -> FilePath
-
--- | Arguments for to be passed to the smtSolver.
-[smtArgs] :: SolverConfig -> [String]
-newtype ParamName
-ParamName :: String -> ParamName
-newtype ParamValue
-ParamValue :: String -> ParamValue
-changeSolver :: Config -> String -> Config
-changeLog :: Config -> Bool -> Config
-addSolvers :: Config -> Map SolverId SolverConfig -> Config
-setParams :: Config -> [(ParamName, ParamValue)] -> Config
-
--- | Updates a Map of parameters' values with given list of configured
---   parameter
-updateParamVals :: Params -> [(ParamName, ParamValue)] -> Params
-updateCfg :: Maybe a -> (Config -> a -> Config) -> Config -> Config
-instance GHC.Classes.Eq Lattest.SMT.Config.Config
-instance GHC.Classes.Eq Lattest.SMT.Config.ParamName
-instance GHC.Classes.Eq Lattest.SMT.Config.ParamValue
-instance GHC.Classes.Eq Lattest.SMT.Config.SolverConfig
-instance GHC.Classes.Eq Lattest.SMT.Config.SolverId
-instance GHC.Classes.Ord Lattest.SMT.Config.ParamName
-instance GHC.Classes.Ord Lattest.SMT.Config.ParamValue
-instance GHC.Classes.Ord Lattest.SMT.Config.SolverId
-instance GHC.Show.Show Lattest.SMT.Config.Config
-instance GHC.Show.Show Lattest.SMT.Config.ParamName
-instance GHC.Show.Show Lattest.SMT.Config.ParamValue
-instance GHC.Show.Show Lattest.SMT.Config.SolverConfig
-instance GHC.Show.Show Lattest.SMT.Config.SolverId
-
-module Lattest.SMT.SMT2TXS
-
-module Lattest.SMT.SMTAlex
-
--- | Data structure for Smt Tokens.
-data Token
-Tname :: AlexPosn -> String -> Token
-Tbool :: AlexPosn -> Bool -> Token
-Tinteger :: AlexPosn -> Integer -> Token
-Tstring :: AlexPosn -> String -> Token
-Tlet :: AlexPosn -> Token
-Topenpar :: AlexPosn -> Token
-Tclosepar :: AlexPosn -> Token
-Tminus :: AlexPosn -> Token
-
--- | Smt lexer.
-smtLexer :: String -> [Token]
-instance GHC.Classes.Eq Lattest.SMT.SMTAlex.AlexPosn
-instance GHC.Classes.Eq Lattest.SMT.SMTAlex.Token
-instance GHC.Classes.Ord Lattest.SMT.SMTAlex.AlexPosn
-instance GHC.Show.Show Lattest.SMT.SMTAlex.AlexPosn
-instance GHC.Show.Show Lattest.SMT.SMTAlex.Token
-
-module Lattest.SMT.SMTData
-type SMT a = StateT SmtEnv IO a
-data SmtEnv
-SmtEnv :: Handle -> Handle -> ProcessHandle -> Maybe Handle -> SmtEnv
-[inHandle] :: SmtEnv -> Handle
-[outHandle] :: SmtEnv -> Handle
-[smtProcessHandle] :: SmtEnv -> ProcessHandle
-[logFileHandle] :: SmtEnv -> Maybe Handle
-SmtEnvError :: SmtEnv
-type SMTRef = IORef SmtEnv
-newSMTRef :: SmtEnv -> IO SMTRef
-runSMT :: SMTRef -> SMT a -> IO a
-readSMTRef :: SMTRef -> IO SmtEnv
-
-module Lattest.SMT.SMTStringAlex
-
--- | Data structure for Smt String Tokens.
-data Token
-Tquotes :: AlexPosn -> Token
-TescSequence :: AlexPosn -> String -> Token
-Tchar :: AlexPosn -> String -> Token
-
--- | Smt String lexer.
-smtStringLexer :: String -> [Token]
-instance GHC.Classes.Eq Lattest.SMT.SMTStringAlex.AlexPosn
-instance GHC.Classes.Eq Lattest.SMT.SMTStringAlex.Token
-instance GHC.Classes.Ord Lattest.SMT.SMTStringAlex.AlexPosn
-instance GHC.Show.Show Lattest.SMT.SMTStringAlex.AlexPosn
-instance GHC.Show.Show Lattest.SMT.SMTStringAlex.Token
-
-module Lattest.SMT.SMTStringHappy
-
--- | Smt String Parser.
-smtStringParser :: [Token] -> String
-instance GHC.Base.Applicative Lattest.SMT.SMTStringHappy.HappyIdentity
-instance GHC.Base.Functor Lattest.SMT.SMTStringHappy.HappyIdentity
-instance GHC.Base.Monad Lattest.SMT.SMTStringHappy.HappyIdentity
-
-module Lattest.SMT.SMTString
-
--- | Encode String to SMT.
---   
---   According to smt-lib-version 2.5 standard
---   (http:/<i>smtlib.cs.uiowa.edu</i>papers/smt-lib-reference-v2.5-r2015-06-28.pdf),
---   quote and escape characters are escaped.
---   
---   Furthermore, prevent CVC4 Parse Error "Extended/unprintable characters
---   are not part of SMT-LIB, and they must be encoded as escape sequences"
-stringToSMT :: Text -> Text
-
--- | Decode SMT to String.
-stringFromSMT :: Text -> Text
-
-
--- | Parse SMT response.
-module Lattest.SMT.SMTHappy
-
--- | Smt Parser.
-smtParser :: [Token] -> Map String Constant
-instance GHC.Base.Applicative Lattest.SMT.SMTHappy.HappyIdentity
-instance GHC.Base.Functor Lattest.SMT.SMTHappy.HappyIdentity
-instance GHC.Base.Monad Lattest.SMT.SMTHappy.HappyIdentity
-
-module Lattest.SMT.SolveDefs
-type Solution v = Map v Constant
-data SolvableProblem
-Sat :: SolvableProblem
-Unsat :: SolvableProblem
-Unknown :: SolvableProblem
-data SolveProblem v
-Solved :: Solution v -> SolveProblem v
-Unsolvable :: SolveProblem v
-UnableToSolve :: SolveProblem v
-instance GHC.Classes.Eq Lattest.SMT.SolveDefs.SolvableProblem
-instance GHC.Classes.Eq v => GHC.Classes.Eq (Lattest.SMT.SolveDefs.SolveProblem v)
-instance GHC.Classes.Ord Lattest.SMT.SolveDefs.SolvableProblem
-instance GHC.Classes.Ord v => GHC.Classes.Ord (Lattest.SMT.SolveDefs.SolveProblem v)
-instance GHC.Read.Read Lattest.SMT.SolveDefs.SolvableProblem
-instance (GHC.Classes.Ord v, GHC.Read.Read v) => GHC.Read.Read (Lattest.SMT.SolveDefs.SolveProblem v)
-instance GHC.Show.Show Lattest.SMT.SolveDefs.SolvableProblem
-instance GHC.Show.Show v => GHC.Show.Show (Lattest.SMT.SolveDefs.SolveProblem v)
-
-module Lattest.SMT.TXS2SMT
-
--- | convert sort definitions to SMT type declarations (as multiple lines
---   of commands)
---   
---   Convert function definitions to SMT type declarations (as multiple
---   lines of commands).
-assertionsToSMT :: [Expr Bool] -> Text
-declarationsToSMT :: [Variable] -> Text
-class ConstToSMT t
-valexprToSMT :: ConstToSMT t => Expr t -> Text
-instance Lattest.SMT.TXS2SMT.ConstToSMT GHC.Types.Bool
-instance Lattest.SMT.TXS2SMT.ConstToSMT GHC.Num.Integer.Integer
-instance Lattest.SMT.TXS2SMT.ConstToSMT GHC.Base.String
-
-module Lattest.SMT.SMTInternal
-openSolver :: SMT String
-close :: SMT ()
-push :: SMT ()
-pop :: SMT ()
-createSMTRef :: CreateProcess -> Bool -> IO SMTRef
-createSMTEnv :: CreateProcess -> Bool -> IO SmtEnv
-addDeclarations :: [Variable] -> SMT ()
-addAssertions :: [Expr Bool] -> SMT ()
-getSolvable :: SMT SolvableProblem
-getSolution :: [Variable] -> SMT Valuation
-getInfo :: String -> SMT String
-init :: SMT ()
-
--- | execute the SMT command given as a string
-put :: String -> SMT ()
-putT :: Text -> SMT ()
-
--- | Transform value expression to an SMT string.
-valExprToString :: ConstToSMT t => Expr t -> SMT Text
-showErrors :: Handle -> String -> IO ()
-getResponse :: Handle -> Integer -> IO String
-getSMTresponse :: SMT String
-countBracket :: String -> Integer
-skipCountInsideString :: String -> Integer
-
-module Lattest.SMT.SMT
-createSMTEnv :: CreateProcess -> Bool -> IO SmtEnv
-openSolver :: SMT String
-close :: SMT ()
-addDeclarations :: [Variable] -> SMT ()
-addAssertions :: [Expr Bool] -> SMT ()
-getSolvable :: SMT SolvableProblem
-getSolution :: [Variable] -> SMT Valuation
-push :: SMT ()
-pop :: SMT ()
-
--- | execute the SMT command given as a string
-put :: String -> SMT ()
-putT :: Text -> SMT ()
-
--- | Transform value expression to an SMT string.
-valExprToString :: ConstToSMT t => Expr t -> SMT Text
-type SMTRef = IORef SmtEnv
-createSMTRef :: CreateProcess -> Bool -> IO SMTRef
-newSMTRef :: SmtEnv -> IO SMTRef
-runSMT :: SMTRef -> SMT a -> IO a
-readSMTRef :: SMTRef -> IO SmtEnv
-type Solution v = Map v Constant
-data SolvableProblem
-Sat :: SolvableProblem
-Unsat :: SolvableProblem
-Unknown :: SolvableProblem
-type SMT a = StateT SmtEnv IO a
-
-module Lattest.Model.Symbolic.SolveSymPrim
-
--- | Combine the given guards into one.
-combineGuards :: (BooleanConfiguration m, OrdFunctor m) => m SymGuard -> SymGuard
-
--- | In the given guard, substitute the given valuation.
-substituteInGuard :: Valuation -> SymGuard -> SymGuard
-
--- | Evaluate the given guard
-evaluateGuard :: SymGuard -> Bool
-
--- | For the given list of interactions and guards, using SMT solving, pick
---   the first interaction in that list for which the guard is satisfiable,
---   if any. The returned gate values for that interaction are not
---   randomized in any way, picking values is left to the SMT solver.
-solveAnySequential :: [(SymInteract g, SymGuard)] -> SMT (Maybe (GateValue g))
-solveGuard :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
-
-
--- | An unsorted collection of utility functions for working with the IO
---   monad.
-module Lattest.Util.IOUtils
-
--- | If-statement for monads, with a pure condition: if the condition
---   holds, execute the given monad and discard the result, otherwise
---   return ().
-ifM_ :: Applicative m => Bool -> m a -> m ()
-
--- | If-statement for monads, with a monadic condition: if the condition
---   holds, execute the given monad and discard the result, otherwise
---   return ().
-ifMM_ :: Monad m => m Bool -> m a -> m ()
-
--- | If-statement for monads, with a pure condition: if the condition
---   holds, execute the given monad and return the result, otherwise return
---   Nothing.
-ifM :: Applicative m => Bool -> m a -> m (Maybe a)
-
--- | If-statement for monads, with a monadic condition: if the condition
---   holds, execute the given monad and return the result, otherwise return
---   Nothing.
-ifMM :: Monad m => m Bool -> m a -> m (Maybe a)
-
--- | While-loop for monads. Any state passed between loop iterations should
---   be carried by the monad.
-whileM :: Monad m => m Bool -> m () -> m ()
-
--- | While-loop for monads with explicit state passing.
-transformWhile :: Monad m => a -> (a -> m (a, Bool)) -> m a
-
--- | Execute the given Monad, or return () if not present.
-doMaybe :: Applicative m => Maybe (m ()) -> m ()
-
--- | An STM action that waits for the given STM condition
-waitUntil :: STM Bool -> STM ()
-
--- | An STM action that waits for the given STM condition, and then
---   performs the given STM action
-doAfter :: STM Bool -> STM a -> STM a
-
--- | Produce an IO monad that behaves like the given Mealy machine, with
---   separate transition and output functions.
-statefulIO :: (q -> i -> q) -> (q -> i -> o) -> q -> IO (i -> IO o)
-
--- | Produce an IO monad that behaves like the given Mealy machine, with a
---   combined transition/output function.
-statefulIO' :: (q -> i -> (q, o)) -> q -> IO (i -> IO o)
+-- | Build a .dot file representation of LTS transitions and save it in the
+--   specified File Path
+dumpLTSdot :: (Show s, Show i, Show o) => FilePath -> [(s, IOAct i o, s)] -> IO ()
 
 module Lattest.Util.ReportUtils
 
@@ -1403,10 +656,6 @@ flipCoin :: RandomGen g => g -> Double -> (Bool, g)
 --   list, so the user should check that first.
 takeRandom :: RandomGen g => g -> [a] -> (a, g)
 
--- | Filter out Nothings from a Foldable of Maybes, and returns only the
---   Justs.
-takeJusts :: Foldable f => f (Maybe t) -> [t]
-
 -- | If the first tuple element is a Nothing, then take a Nothing, ignoring
 --   the second element, otherwise take a Just of both elements.
 distributeFirstMaybe :: (Maybe a, b) -> Maybe (a, b)
@@ -1415,37 +664,6 @@ distributeFirstMaybe :: (Maybe a, b) -> Maybe (a, b)
 --   element and the remaining set, or <a>Nothing</a> if the given set was
 --   empty.
 takeArbitrary :: Set a -> Maybe (a, Set a)
-
--- | Remove duplicates from a list by sorting, grouping and taking only the
---   first element of each group. Returns ordered and filtered list.
-removeDuplicates :: Ord a => [a] -> [a]
-
--- | Apply a monadic computation over a functor, where the monadic
---   computations are performed sequentially according to the natural
---   ordering of the functor elements. If m is the <tt>Identity</tt> monad,
---   then this function boils down to a normal <a>fmap</a>.
---   
---   Strictly speaking, this function is partial: it is undefined if the
---   functor maps the computation over an element which is not folded by
---   that same functor. In practice, the elements mapped over by a foldable
---   functor are usually exactly the folded elements.
-distributeMonadOverFoldable :: (OrdFunctor f, Foldable f, Monad m, Ord x, Ord y) => (x -> m y) -> f x -> m (f y)
-
-module Lattest.Util.ModelParsingUtils
-
--- | Read an .aut file representing an LTS from the provided filepath,
---   parse its content and return: - [String]: Input Alphabet - [String]:
---   Output Alphabet - Set.Set String: Set of all LTS states - String:
---   Initial state - Maybe [(String, IOAct String String, String)]: List of
---   LTS transition tuples as (InitialState, Action, EndState) NOTE: In
---   order to parse actions correctly, inputs and outputs must end in _i
---   and _o respectively. The first line of the .aut file must follow the
---   structure des (initState,nEdges,nStates).
-readAutFile :: FilePath -> IO ([String], [String], Set String, String, Maybe [(String, IOAct String String, String)])
-
--- | Build a .dot file representation of LTS transitions and save it in the
---   specified File Path
-dumpLTSdot :: (Show s, Show i, Show o) => FilePath -> [(s, IOAct i o, s)] -> IO ()
 
 
 -- | This module contains the definitions and interpretations of automata
@@ -1599,7 +817,7 @@ instance Lattest.Model.Automaton.FiniteMenu (Lattest.Model.Alphabet.IOAct i o) (
 instance Lattest.Model.Automaton.FiniteMenu (Lattest.Model.Alphabet.IOAct i o) (Lattest.Model.Alphabet.IFAct i o)
 instance Lattest.Model.Automaton.FiniteMenu (Lattest.Model.Alphabet.IOAct i o) (Lattest.Model.Alphabet.SuspendedIF i o)
 instance Lattest.Model.Automaton.FiniteMenu act act
-instance (Lattest.Model.Automaton.StepSemantics m loc q t tdest act, Lattest.Model.Automaton.IOTransitionSemantics loc q t tdest act z, Lattest.Model.BoundedMonad.BooleanConfiguration m, Data.Foldable.Foldable m, GHC.Classes.Ord q, GHC.Classes.Ord t, GHC.Classes.Ord (m q)) => Lattest.Model.Automaton.IOAfter m loc q t tdest act (GHC.IORef.IORef z)
+instance (Lattest.Model.Automaton.StepSemantics m loc q t tdest act, Lattest.Model.Automaton.IOTransitionSemantics loc q t tdest act z, Lattest.Model.BoundedMonad.BooleanConfiguration m, Data.OrdMonad.OrdTraversable m, GHC.Classes.Ord q, GHC.Classes.Ord t, GHC.Classes.Ord (m q)) => Lattest.Model.Automaton.IOAfter m loc q t tdest act (GHC.IORef.IORef z)
 instance (Lattest.Model.Automaton.After m loc q t tdest act, GHC.Classes.Ord (m q), GHC.Classes.Ord q) => Lattest.Model.Automaton.IOAfter m loc q t tdest act ()
 instance (GHC.Classes.Ord i, GHC.Classes.Ord o) => Lattest.Model.Automaton.IOTransitionSemantics loc (Lattest.Model.Automaton.IntrpState loc) (Lattest.Model.Alphabet.IOSymInteract i o) Lattest.Model.Automaton.STStdest (Lattest.Model.Alphabet.IOSuspGateValue i o) Lattest.SMT.SMTData.SmtEnv
 instance (GHC.Classes.Ord i, GHC.Classes.Ord o) => Lattest.Model.Automaton.IOTransitionSemantics loc (Lattest.Model.Automaton.IntrpState loc) (Lattest.Model.Alphabet.IOSymInteract i o) Lattest.Model.Automaton.STStdest (Lattest.Model.Alphabet.IFGateValue i o) Lattest.SMT.SMTData.SmtEnv
@@ -1684,26 +902,18 @@ nonDetConcTransFromRel :: (Ord loc, Ord t, OrdMonad m, JoinSemiLattice (m ((), l
 --   is interpreted as non-deterministic choice between the destinations.
 nonDetConcTransFromMRel :: (Ord loc, Ord t, OrdMonad m, JoinSemiLattice (m ((), loc))) => [(loc, t, m loc)] -> loc -> Map t (m ((), loc))
 
--- | Create a non-deterministic concrete transition relation from an
---   explicit list of tuples, with the destination of transitions expressed
---   as lists of locations, where the empty list is mapped to either
---   <tt>forbidden</tt> or <tt>underspecified</tt>, depending on the
---   transition label. Having multiple occurrences of a transition label is
---   interpreted as non-deterministic choice between the destinations.
-nonDetConcTransFromListRel :: (Completable t, Ord loc, Ord t) => [(loc, t, [loc])] -> loc -> Map t (NonDet ((), loc))
-
 -- | Free distributive lattice, or a positive boolean formula, in
 --   CNF-format.
-data FreeLatticeCNF a
+data FreeLattice a
 
 -- | A single state embedded in a free distributive lattice.
-atom :: a -> FreeLatticeCNF a
+atom :: a -> FreeLattice a
 
 -- | The free distributive lattice element ⊤, or true.
-top :: FreeLatticeCNF a
+top :: FreeLattice a
 
 -- | The free distributive lattice element ⊥, or false.
-bot :: FreeLatticeCNF a
+bot :: FreeLattice a
 (\/) :: JoinSemiLattice a => a -> a -> a
 (/\) :: MeetSemiLattice a => a -> a -> a
 
@@ -1762,19 +972,20 @@ interpretSTSQuiescent :: forall loc (m :: Type -> Type) i o. (Ord loc, BoundedMo
 type SuspInputAttemptSTSIntrp (m :: Type -> Type) loc i o = AutIntrpr m loc IntrpState loc IOSymInteract i o STStdest SuspendedIFGateValue i o
 interpretSTSQuiescentInputAttemptConcrete :: forall loc (m :: Type -> Type) i o. (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o
 
+module Lattest.Util.STSJSONParser
 
--- | Find concrete values to take transitions in STSes, using an SMT
---   solver.
-module Lattest.Model.Symbolic.SolveSTS
-
--- | For the given STS and a subset function, using SMT solving, find a
---   interaction of the STS in that subset for which the guard is true from
---   the current STS state. The interaction is picked uniformly randomly
---   among interactions with satisfied gates, if any. This uses the
---   supplied random generator and returns the new random generator state.
---   The returned gate values for that interaction are not randomized in
---   any way, picking values is left to the SMT solver.
-solveRandomInteraction :: forall (m :: Type -> Type) g r loc g'' g'. (OrdMonad m, BooleanConfiguration m, Ord g, Ord (m (Expr Bool)), RandomGen r) => AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g'') -> (SymInteract g -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
+-- | Read a JSON file and parse an STS from it.
+stsFromJSONFile :: FilePath -> IO (Either String (IOSTS FreeLattice String String String, Valuation))
+instance GHC.Classes.Eq Lattest.Util.STSJSONParser.UntypedExpr
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.AssignmentDefJson
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.GateDefJson
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.GateId
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.LocationId
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.STSJsonFormat
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.SwitchDefJson
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.UntypedExpr
+instance Data.Aeson.Types.FromJSON.FromJSON Lattest.Util.STSJSONParser.VarDefJson
+instance GHC.Show.Show Lattest.Util.STSJSONParser.UntypedExpr
 
 module Lattest.Exec.ADG.Aut
 data Aut a b
@@ -1861,44 +1072,6 @@ getStartStatesLeaves :: (Ord a, Ord b) => Aut a b -> Evidence b -> [Set (State a
 getEvidenceStats :: (Ord a, Ord b) => Aut a b -> Evidence b -> (Int, Int, Int, Int, Int, Int)
 computeAdaptiveDistGraph :: (Ord a, Ord b) => Aut a b -> Bool -> Bool -> Bool -> Evidence b
 
-module System.IO.Streams.Synchronized
-data TInputStream a
-read :: TInputStream a -> STM (Maybe a)
-readAll :: TInputStream a -> STM [Maybe a]
-unRead :: a -> TInputStream a -> STM ()
-hasInput :: TInputStream a -> STM Bool
-fromInputStreamBuffered :: InputStream a -> IO (TInputStream a)
-makeTInputStream :: STM (Maybe a) -> STM Bool -> IO (TInputStream a)
-fromBuffer :: TQueue (Maybe a) -> IO (TInputStream a)
-fromTMVar :: TMVar (Maybe a) -> IO (TInputStream a)
-duplicate :: OutputStream a -> OutputStream a -> IO (OutputStream a)
-map :: (a -> b) -> TInputStream a -> IO (TInputStream b)
-mapUnbuffered :: (a -> b) -> (b -> a) -> TInputStream a -> TInputStream b
-mergeBuffered :: TInputStream a -> TInputStream a -> IO (TInputStream a)
-mergeBufferedWith :: (TInputStream a -> TInputStream a -> STM [Maybe a]) -> TInputStream a -> TInputStream a -> IO (TInputStream a)
-consumeBufferedWith :: STM [Maybe a] -> STM Bool -> IO (TInputStream a)
-data Streamed a
-Available :: a -> Streamed a
-Unavailable :: Streamed a
-StreamClosed :: Streamed a
-tryRead :: TInputStream a -> STM (Streamed a)
-tryReadIO :: TInputStream a -> IO (Streamed a)
-tryReadIO' :: TInputStream a -> IO (Maybe a)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (System.IO.Streams.Synchronized.Streamed a)
-instance GHC.Classes.Eq System.IO.Streams.Synchronized.TInputStreamClosedException
-instance GHC.Exception.Type.Exception System.IO.Streams.Synchronized.TInputStreamClosedException
-instance GHC.Classes.Ord a => GHC.Classes.Ord (System.IO.Streams.Synchronized.Streamed a)
-instance GHC.Classes.Ord System.IO.Streams.Synchronized.TInputStreamClosedException
-instance GHC.Read.Read a => GHC.Read.Read (System.IO.Streams.Synchronized.Streamed a)
-instance GHC.Show.Show a => GHC.Show.Show (System.IO.Streams.Synchronized.Streamed a)
-instance GHC.Show.Show System.IO.Streams.Synchronized.TInputStreamClosedException
-
-module System.IO.Streams.Synchronized.Attoparsec
-parseFromStream :: TVar (Bool, IResult ByteString (Maybe r)) -> Parser ByteString (Maybe r) -> TInputStream ByteString -> STM (Maybe r)
-parserToInputStream :: Parser (Maybe r) -> TInputStream ByteString -> IO (TInputStream r)
-instance GHC.Exception.Type.Exception System.IO.Streams.Synchronized.Attoparsec.ParseException
-instance GHC.Show.Show System.IO.Streams.Synchronized.Attoparsec.ParseException
-
 module Lattest.Adapter.Adapter
 
 -- | An adapter to a (usually external) system. Uses two channels for
@@ -1961,9 +1134,9 @@ parseActionsFromSut :: Parser act -> Adapter ByteString i -> IO (Adapter act i)
 --   serves as an interface to send inputs to a system under test, and
 --   observe actions shown by that system. The experiment is controlled by
 --   an <a>ActionController</a>. Specifically for a testing experiment, we
---   also assume that we have a specification model that dictates which
---   observations are allowed and forbidden, and a test controller that
---   steers the testing.
+--   can create an <a>ActionController</a> from a specification model that
+--   dictates which observations are allowed and forbidden, and a
+--   <a>TestController</a> that steers the testing.
 --   
 --   To get started with testing experiments quickly, use the
 --   <a>runTester</a> function, and to get the required ingredients, see

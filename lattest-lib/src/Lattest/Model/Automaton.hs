@@ -69,7 +69,7 @@ import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiesce
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
 import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
 import Lattest.SMT(runSMT)
-import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
+import Lattest.Util.Utils((&&&), takeArbitrary)
 
 import Control.Exception(throw,Exception)
 
@@ -246,8 +246,8 @@ instance (After m loc q t () act, Ord (m q), Ord q) => IOAfter m loc q t () act 
     ioAfter aut act = return $ after aut act
 
 -- tdest ~ STStdest <=> STS
-instance (StepSemantics m loc q t STStdest act, IOTransitionSemantics loc q t STStdest act, BooleanConfiguration m, Foldable m, Ord q, Ord t, Ord (m q)) => IOAfter m loc q t STStdest act where
-    ioAfter = afterInternal ioTakeTransition distributeMonadOverFoldable
+instance (StepSemantics m loc q t STStdest act, IOTransitionSemantics loc q t STStdest act, BooleanConfiguration m, Ord q, Ord t, Ord (m q), BM.OrdTraversable m) => IOAfter m loc q t STStdest act where
+    ioAfter = afterInternal ioTakeTransition BM.ordTraverse
 
 --takeTransition :: (BoundedMonad m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
 --ioTakeTransition :: (BoundedMonad m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)

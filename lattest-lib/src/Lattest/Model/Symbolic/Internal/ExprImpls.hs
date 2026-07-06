@@ -182,7 +182,7 @@ sIfThenElse (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 -- typeclass because every type has its own ExprView-constructor
 class EqExpr t where
     (.==) :: Expr t -> Expr t -> Expr Bool
-    
+
 instance EqExpr Integer where
     (.==) (view -> x) (view -> y) = Expr $ EqualInt x y
 
@@ -245,7 +245,7 @@ sAnd = Expr . And . flattenAnd
     where
         flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
-        
+
         fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
         fromExpr (view -> And a) = a
         fromExpr (view -> x) = Set.singleton x
@@ -478,7 +478,7 @@ data Valuation = Valuation {
     deriving (Eq, Ord)
 
 instance Show Valuation where
-    show (Valuation i b s) = "{" ++ (List.intercalate "," $ printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
+    show (Valuation i b s) = "{" ++ List.intercalate "," (printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
         where
         printAsAssignments :: Show t => Map.Map Variable t -> [String]
         printAsAssignments m = printAsAssignment <$> Map.toList m
@@ -493,7 +493,7 @@ fromConstantsMap :: Map.Map Variable Constant -> Valuation
 fromConstantsMap = assignValues . fmap (uncurry insertIntoValuation) . Map.toList
 
 assignValues :: [Valuation -> Valuation] -> Valuation
-assignValues fs = foldr ($) emptyValuation fs
+assignValues = foldr ($) emptyValuation
 
 emptyValuation :: Valuation
 emptyValuation = Valuation Map.empty Map.empty Map.empty
@@ -507,10 +507,10 @@ data VarModel = VarModel {
     deriving (Eq, Ord)
 
 assignment :: [VarModel -> VarModel] -> VarModel
-assignment fs = foldr ($) noAssignment fs
+assignment = foldr ($) noAssignment
 
 typedValuationToVarModel :: ExprType t => TypedValuation t -> TypedVarModel t
-typedValuationToVarModel vals = Map.map sConst vals
+typedValuationToVarModel = Map.map sConst
 
 valuationToVarModel :: Valuation -> VarModel
 valuationToVarModel vals = VarModel {
@@ -574,12 +574,12 @@ noAssignment = VarModel Map.empty Map.empty Map.empty
 instance Show VarModel where
     show (VarModel ints bools strings) = showMapList $ showList' ints ++ showList' bools ++ showList' strings
         where
-        showMapList m' = "{" ++ (List.intercalate ", " m') ++ "}"
+        showMapList m' = "{" ++ List.intercalate ", " m' ++ "}"
         showList' m' = showAssign <$> Map.toList m'
         showAssign (v,e) = varName v ++ ":=" ++ show e
 
 substConst :: Assignable t => Valuation -> Expr t -> Expr t
-substConst valuation e = subst (valuationToVarModel valuation) e
+substConst valuation = subst (valuationToVarModel valuation)
 
 -- | Substitute variables by value expressions in a value expression.
 --

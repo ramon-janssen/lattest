@@ -17,6 +17,8 @@ import qualified Control.Parallel as Parallel
 
 import qualified Lattest.Exec.ADG.Aut as Aut
 import Lattest.Exec.ADG.Aut as Aut (Aut, State)
+import Control.Monad (join)
+import Data.Bifunctor (Bifunctor(..))
 
 data SplitNode a b = SplitNode {nodeStates :: Set (State a b), children :: Set (Set (State a b)), evidence :: Maybe (Evidence b)} -- , isInjective :: Maybe Bool} --, splittedStates :: Maybe (Set SuspState)
     deriving (Eq,Ord)
@@ -39,7 +41,7 @@ instance (Show b) => Show (Evidence b) where
     show (Prefix mu (Plus ev)) = show mu ++ ".(" ++ show (Plus ev) ++ ")"
     show (Prefix mu ev) = show mu ++ "." ++ show ev
     show (Plus []) = "empty evidence error"
-    show (Plus ([x])) = show x
+    show (Plus [x]) = show x
     show (Plus (x:xs)) = show (Plus [x]) ++ " + " ++ show (Plus xs)
 
 depth :: (Ord b) => Evidence b -> Int
@@ -55,20 +57,21 @@ getObservations (Plus evs) = Set.unions $ List.map getObservations evs
 getWeight :: (Ord a, Ord b, Show b) => [b] -> Evidence b -> Set (State a b) -> Aut a b -> Int
 getWeight [] _ _ _ = 1
 getWeight _ Nil _ _ = error "Nil encountered"
-getWeight (mu : sigma) (Prefix nu ev) states aut = if mu == nu then getWeight sigma ev (Aut.afterSet states mu aut) aut else error $ "Prefix: observation not matching evidence: " ++ (show mu) ++ " " ++ (show nu)
+getWeight (mu : sigma) (Prefix nu ev) states aut = if mu == nu then getWeight sigma ev (Aut.afterSet states mu aut) aut else error $ "Prefix: observation not matching evidence: " ++ show mu ++ " " ++ show nu
 getWeight (mu : sigma) (Plus evs) states aut =
      case List.find (\case 
                         Prefix nu _ -> nu == mu
                         _ -> error "Non-prefix encountered") evs of
-        Just (Prefix _ nuev) -> (getWeight sigma nuev (Aut.afterSet states mu aut) aut) * (List.length [ev | ev <- evs, case ev of (Prefix nu _) -> Set.member nu (Aut.outSet states) ; _ -> False])
+        Just (Prefix _ nuev) -> getWeight sigma nuev (Aut.afterSet states mu aut) aut * List.length [ev | ev <- evs, case ev of (Prefix nu _) -> Set.member nu (Aut.outSet states) ; _ -> False]
         _ -> error $ "Plus: observation not matching evidence: " ++ show mu ++ " " ++ show evs
 
 getNodeSizeCount :: SplitGraph a b -> Map Int Int
 getNodeSizeCount (SplitGraph _ nodeMap') =
-    List.foldr (\count m' -> case Map.lookup count m' of
+    List.foldr (\s m' -> let count = Set.size s
+                         in case Map.lookup count m' of
                               Just v -> Map.insert count (v+1) m'
                               Nothing -> Map.insert count 1 m')
-        Map.empty (List.map Set.size (Map.keys nodeMap'))
+        Map.empty (Map.keys nodeMap')
 
 size :: SplitGraph a b -> Int
 size graph = Map.size $ nodeMap graph
@@ -99,17 +102,17 @@ isNonLeaf :: SplitNode a b -> Bool
 isNonLeaf n = not $ isLeaf n
 
 getInducedSplit :: (Ord a, Ord b) => Aut a b -> Set (State a b) -> b -> SplitNode a b -> Set (Set (State a b))
-getInducedSplit aut stateSet mu node = let ind = (Set.fromList [Set.fromList [ q | q <- Set.toList stateSet,
+getInducedSplit aut stateSet mu node = let ind = Set.fromList [Set.fromList [ q | q <- Set.toList stateSet,
                                                                                     case Aut.after q mu aut of
                                                                                         Nothing -> False
-                                                                                        (Just s) -> Set.member s c ] | c <- Set.toList (children node)])
+                                                                                        (Just s) -> Set.member s c ] | c <- Set.toList (children node)]
                                         in Set.delete Set.empty ind
 
 injective :: (Ord a, Ord b) => Aut a b -> Set (State a b) -> Set (State a b,State a b) -> b -> Bool
-injective aut stateSet compRel mu = and [ ((Set.member mu $ Aut.outputs aut) && ((Set.notMember mu $ Set.intersection (Aut.out q) (Aut.out q'))))
+injective aut stateSet compRel mu = and [ (Set.member mu (Aut.outputs aut) && Set.notMember mu (Set.intersection (Aut.out q) (Aut.out q')))
                                         ||
-                                         ((Set.member mu (Set.intersection (Aut.enab q) (Aut.enab q')))
-                                         && (Set.notMember (Maybe.fromJust $ Aut.after q mu aut, Maybe.fromJust $ Aut.after q' mu aut) compRel))
+                                         (Set.member mu (Set.intersection (Aut.enab q) (Aut.enab q'))
+                                         && Set.notMember (Maybe.fromJust $ Aut.after q mu aut, Maybe.fromJust $ Aut.after q' mu aut) compRel)
                                          | (q,q') <- Set.toList $ (Set.fromList [(q,q') | q <- Set.toList stateSet, q' <- Set.toList stateSet]) Set.\\ compRel]
 
 injectiveSet :: (Ord a, Ord b) => Aut a b -> Set (State a b) -> Set (State a b,State a b) -> Set b -> Bool
@@ -151,23 +154,18 @@ evidenceInjectiveForStates aut ev stateSet compRel =
         Plus evs -> List.foldr (\(b,s) (bt,st) -> (b && bt,Set.union s st)) (True,Set.empty) [evidenceInjectiveForStates aut evc stateSet compRel | evc <- evs]
 
 getLCAgreedy :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> Set (SplitNode a b)
-getLCAgreedy graph states =
-    case getLCAgreedyStep graph states (getRootNode graph) of
-        Nothing -> Set.empty
-        Just n -> Set.singleton n
+getLCAgreedy graph states = maybe Set.empty Set.singleton $ getLCAgreedyStep graph states (getRootNode graph)
 
 getLCAgreedyStep :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> SplitNode a b -> Maybe (SplitNode a b)
 getLCAgreedyStep graph states node =
     if isLeaf node then -- Trace.trace ("leaf node lca: " ++ (show node) ++
                            -- (case evidence node of Just (Prefix mu ev) -> " after " ++ mu ++ "= " ++ (show $ Set.map (\s -> Map.lookup mu $ Aut.trans s) (nodeStates node)); _ -> ""))
                             Nothing
-    else let cont = Set.filter (\ch -> Set.isSubsetOf states ch) (children node)
+    else let cont = Set.filter (Set.isSubsetOf states) (children node)
          in if Set.null cont then Just node
-            else case Foldable.find (\m -> case m of Nothing -> False; Just _ -> True) $
-                                    (let todoList = (List.map (\ch -> (getLCAgreedyStep graph states) (nodeMap graph ! ch)) (Set.toList cont))
-                                      in todoList `ParallelS.using` ParallelS.parList ParallelS.rseq) of
-                Nothing -> Nothing
-                Just a -> a
+            else join $ Foldable.find Maybe.isJust $
+                  let todoList = List.map (\ch -> getLCAgreedyStep graph states (nodeMap graph ! ch)) (Set.toList cont)
+                    in todoList `ParallelS.using` ParallelS.parList ParallelS.rseq
 
 getAllLCAsTopDown :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> Set (SplitNode a b)
 getAllLCAsTopDown graph states = getAllLCAs graph states (getRootNode graph)
@@ -175,18 +173,18 @@ getAllLCAsTopDown graph states = getAllLCAs graph states (getRootNode graph)
 getAllLCAs :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> SplitNode a b -> Set (SplitNode a b)
 getAllLCAs graph states node =
     if isLeaf node then Set.empty
-    else let cont = Set.filter (\ch -> Set.isSubsetOf states ch) (children node)
+    else let cont = Set.filter (Set.isSubsetOf states) (children node)
          in if Set.null cont then Set.singleton node
             else List.foldl  Set.union
                             Set.empty
-                            (let todoList = List.map (\ch -> getAllLCAs graph states ((nodeMap graph) ! ch)) (Set.toList cont)
+                            (let todoList = List.map (\ch -> getAllLCAs graph states (nodeMap graph ! ch)) (Set.toList cont)
                              in todoList `ParallelS.using` ParallelS.parList ParallelS.rpar)
 
 isLCA :: (Ord a, Ord b) => SplitNode a b -> Set (State a b) -> Bool
 isLCA node lcaStates =
-    (isNonLeaf node)
-    && (Set.isSubsetOf lcaStates (nodeStates node))
-    && (all (\ch -> not $ Set.isSubsetOf lcaStates ch) (children node))
+    isNonLeaf node
+    && Set.isSubsetOf lcaStates (nodeStates node)
+    && not (any (Set.isSubsetOf lcaStates) (children node))
 
 getLCA :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> Set (SplitNode a b)
 getLCA g@(SplitGraph r m') lcaStates =  let (lca,_,_) = getLCA' g (Maybe.fromMaybe (error "root node lookup") $ Map.lookup r m') lcaStates Map.empty in lca
@@ -198,10 +196,10 @@ getLCA' g currentNode lcaStates visited =
         Just b -> (Set.empty,b,visited)
         Nothing ->
          if isLeaf currentNode
-         then if any (flip Set.member lcaStates) (nodeStates currentNode)
+         then if any (`Set.member` lcaStates) (nodeStates currentNode)
               then (Set.empty, True, Map.insert currentNode True visited)
               else(Set.empty, False, Map.insert currentNode False visited)
-         else let childNodes = (Set.map (\childstates -> Maybe.fromMaybe (error ("child node lookup: ")) $ Map.lookup childstates (nodeMap g)) (children currentNode)) -- :: Set (SplitNode a)
+         else let childNodes = Set.map (\childstates -> Maybe.fromMaybe (error "child node lookup: ") $ Map.lookup childstates (nodeMap g)) (children currentNode) -- :: Set (SplitNode a)
                   (totalFound,childrenFoundLCA,totalVisited) = parallelLCAsearch g lcaStates childNodes visited
               in if childrenFoundLCA
                  then if isLCA currentNode lcaStates -- done
@@ -212,12 +210,12 @@ getLCA' g currentNode lcaStates visited =
 parallelLCAsearch :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> Set (SplitNode a b) -> Map (SplitNode a b) Bool -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool)
 parallelLCAsearch g lcaStates childNodes visited = pfold mergeLCAsearchResult [ getLCA' g child lcaStates visited | child <- Set.toList childNodes]
 
-linearLCAsearch :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> Set (SplitNode a b) -> Map (SplitNode a b) Bool -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool)
-linearLCAsearch g lcaStates childNodes visited = Set.fold (processChildForLCAsearch g lcaStates) (Set.empty,False,visited) childNodes
+-- linearLCAsearch :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> Set (SplitNode a b) -> Map (SplitNode a b) Bool -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool)
+-- linearLCAsearch g lcaStates childNodes visited = Set.fold (processChildForLCAsearch g lcaStates) (Set.empty,False,visited) childNodes
 
-processChildForLCAsearch :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> SplitNode a b -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool) -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool)
-processChildForLCAsearch g lcaStates child (totalFound,otherChildrenFoundLCA,totalVisited) =
-    mergeLCAsearchResult (totalFound,otherChildrenFoundLCA,totalVisited) (getLCA' g child lcaStates totalVisited)
+-- processChildForLCAsearch :: (Ord a, Ord b) => SplitGraph a b -> Set (State a b) -> SplitNode a b -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool) -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool)
+-- processChildForLCAsearch g lcaStates child (totalFound,otherChildrenFoundLCA,totalVisited) =
+--     mergeLCAsearchResult (totalFound,otherChildrenFoundLCA,totalVisited) (getLCA' g child lcaStates totalVisited)
 
 mergeLCAsearchResult :: (Ord a, Ord b) => (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool) -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool) -> (Set (SplitNode a b), Bool, Map (SplitNode a b) Bool)
 mergeLCAsearchResult (a1,b1,c1) (a2,b2,c2) = (Set.union a1 a2, b1 || b2, Map.union c1 c2)
@@ -225,23 +223,23 @@ mergeLCAsearchResult (a1,b1,c1) (a2,b2,c2) = (Set.union a1 a2, b1 || b2, Map.uni
 makeRoot :: Aut a b -> SplitGraph a b
 makeRoot aut = SplitGraph (Aut.states aut) (Map.singleton (Aut.states aut) (SplitNode (Aut.states aut) Set.empty Nothing)) -- Nothing))
 
-assignChildren :: (Ord a, Ord b) => SplitGraph a b -> SplitNode a b -> (Set (Set (State a b))) -> Evidence b -> (SplitGraph a b)
+assignChildren :: (Ord a, Ord b) => SplitGraph a b -> SplitNode a b -> Set (Set (State a b)) -> Evidence b -> SplitGraph a b
 assignChildren (SplitGraph r nodeMap') oldNode@(SplitNode states _ _ ) newChildren evidence'
-    = if (isLeaf oldNode)
+    = if isLeaf oldNode
         then let newNode = SplitNode states newChildren (Just evidence')
                  childNodes = Set.map (\ch -> case Map.lookup ch nodeMap' of Nothing -> SplitNode ch Set.empty Nothing ; Just n -> n) newChildren
                  newNodeMap = Map.insert states newNode (Set.foldr (\ch m' -> Map.insert (nodeStates ch) ch m') nodeMap' childNodes)
                in  -- Trace.trace ("splitted: " ++ (show newNode))
-                    (SplitGraph r newNodeMap)
-        else error ("Cannot assign child nodes to non-leaf node!")
+                    SplitGraph r newNodeMap
+        else error "Cannot assign child nodes to non-leaf node!"
 
-buildSplitGraph :: (Ord a, Ord b) => Aut a b -> Set (State a b, State a b) -> SplitGraphAdmin -> ((SplitGraph a b), SplitGraphAdmin)
+buildSplitGraph :: (Ord a, Ord b) => Aut a b -> Set (State a b, State a b) -> SplitGraphAdmin -> (SplitGraph a b, SplitGraphAdmin)
 buildSplitGraph aut compRel admin =
     let g = makeRoot aut
     in if Set.size compRel == Set.size (Aut.states aut) * Set.size (Aut.states aut) then (g,admin) -- all states of automaton are compatible
        else buildSplitGraphSimple aut g (Set.singleton $ nodeMap g ! root g) Set.empty compRel admin
 
-buildSplitGraphSimple :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> Set (SplitNode a b) -> Set (SplitNode a b) -> Set (State a b, State a b) -> SplitGraphAdmin -> ((SplitGraph a b), SplitGraphAdmin)
+buildSplitGraphSimple :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> Set (SplitNode a b) -> Set (SplitNode a b) -> Set (State a b, State a b) -> SplitGraphAdmin -> (SplitGraph a b, SplitGraphAdmin)
 buildSplitGraphSimple aut graph todo notSplitYet compRel admin
   | Set.null todo && Set.null notSplitYet = (graph, admin)
   | Set.null todo = buildSplitGraphSimple aut graph notSplitYet Set.empty compRel admin
@@ -256,11 +254,11 @@ buildSplitGraphSimple aut graph todo notSplitYet compRel admin
                                                                                         let newNode = nodeMap newGraph ! ch
                                                                                         in if isUnsplittable ch compRel
                                                                                                || Set.member newNode notSplitYet
-                                                                                               || (Map.member ch (nodeMap graph))
+                                                                                               || Map.member ch (nodeMap graph)
                                                                                            then todoset
                                                                                            else Set.insert newNode todoset)
                                                                                       (Set.delete node todo)
-                                                                                      (children $ (nodeMap newGraph) ! nodeStates node)) notSplitYet compRel nadmin
+                                                                                      (children $ nodeMap newGraph ! nodeStates node)) notSplitYet compRel nadmin
 
 splitNode :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> SplitNode a b -> Set (State a b, State a b) -> SplitGraphAdmin -> (Maybe (SplitGraph a b),SplitGraphAdmin)
 splitNode aut graph node compRel admin =
@@ -270,26 +268,26 @@ splitNode aut graph node compRel admin =
         (Nothing,Nothing) -> (Nothing, admin)
         (Nothing,Just (ci,ei)) -> (Just (assignChildren graph node ci ei), admin{inputSplit = inputSplit admin + 1}) -- ii)
         (Just (co,eo),Nothing) -> (Just (assignChildren graph node co eo), admin{outputSplit = outputSplit admin + 1}) -- io)
-        (Just (co,eo),Just (ci,ei)) -> if (splitOutputFirst admin)
-                                       then (Just (assignChildren graph node co eo), admin{outputSplit = (outputSplit admin) + 1})
-                                       else (Just (assignChildren graph node ci ei), admin{inputSplit = (inputSplit admin) + 1})
+        (Just (co,eo),Just (ci,ei)) -> if splitOutputFirst admin
+                                       then (Just (assignChildren graph node co eo), admin{outputSplit = outputSplit admin + 1})
+                                       else (Just (assignChildren graph node ci ei), admin{inputSplit = inputSplit admin + 1})
 
 outputCondition :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> SplitNode a b -> Set (State a b,State a b) -> Maybe (Map b (Set (SplitNode a b)))
 outputCondition aut graph node _ =
-    let states = (nodeStates node)
-        (bools,m') = getSymbolSplitNodeMap aut graph node (Aut.outSet states) (\x -> any (\q -> Set.notMember x (Aut.out q)) states)
+    let states = nodeStates node
+        (bools,m') = getSymbolSplitNodeMap aut graph node (Aut.outSet states) (\x -> any (Set.notMember x . Aut.out) states)
     in if and bools then Just m' else Nothing
 
 getSymbolSplitNodeMap :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> SplitNode a b -> Set b -> (b -> Bool) -> ([Bool], Map b (Set (SplitNode a b)))
 getSymbolSplitNodeMap aut graph node symbols isTrivial =
     Set.foldr (\mu res -> -- Trace.trace ("looking at symbol: " ++ mu) $
         if isTrivial mu
-        then (True:(fst res), Map.insert mu Set.empty (snd res))
+        then bimap (True :) (Map.insert mu Set.empty) res
         else let lcaNodes = getLCAgreedy graph $ Aut.afterSet (nodeStates node) mu aut
              in -- Trace.trace ("found lca for " ++ mu ++ ": " ++ (show $ Set.map (\n -> Set.map Aut.sid $ nodeStates n) lcaNodes))
                 (if Set.null lcaNodes
-                 then (False:(fst res), (snd res))
-                 else (True:(fst res), Map.insert mu lcaNodes (snd res)))) ([],Map.empty) symbols
+                 then first (False :) res
+                 else bimap (True :) (Map.insert mu lcaNodes) res)) ([],Map.empty) symbols
 
 selectSplitNodeForLabel :: (Ord a, Ord b) => Aut a b -> Set (State a b) -> Set (State a b, State a b) -> Map b (Set (SplitNode a b)) -> Bool -> Map b (Maybe (SplitNode a b))
 selectSplitNodeForLabel aut stateSet compRel spMap doBestSplit' =
@@ -300,7 +298,7 @@ selectSplitNodeForLabel aut stateSet compRel spMap doBestSplit' =
                                                     else Map.insert mu (Just (getFirstSplitNode splitNodes)) selMap)
                                            Map.empty spMap
 
-getBestSplitNode :: (Ord a, Ord b) => Aut a b -> Set (State a b) -> Set (State a b, State a b) -> (t a b -> SplitNode a b) -> Set (t a b) -> (t a b)
+getBestSplitNode :: (Ord a, Ord b) => Aut a b -> Set (State a b) -> Set (State a b, State a b) -> (t a b -> SplitNode a b) -> Set (t a b) -> t a b
 getBestSplitNode aut stateSet compRel getNode splitNodes =
     if Set.null splitNodes then error "cannot select best of zero items"
     else getMaxInjective aut stateSet compRel getNode splitNodes -- Foldable.minimumBy (comparing (\node -> Foldable.maximumBy (comparing Set.size) $ children node)) splitNodes
@@ -310,7 +308,7 @@ getFirstSplitNode splitNodes =
     if Set.null splitNodes then error "cannot select best of zero items"
     else Set.elemAt 0 splitNodes
                                     --                           Just children evidence isInjective | Nothing=no split
-getSplitOnOutputTransition :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> SplitNode a b -> Set (State a b,State a b) -> Bool -> Maybe ((Set (Set (State a b))), Evidence b)
+getSplitOnOutputTransition :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> SplitNode a b -> Set (State a b,State a b) -> Bool -> Maybe (Set (Set (State a b)), Evidence b)
 getSplitOnOutputTransition aut graph node compRel doBestSplit' =
     case outputCondition aut graph node compRel of
      Nothing -> Nothing
@@ -333,13 +331,13 @@ inputCondition aut graph node _ = let (bools,m') = getSymbolSplitNodeMap aut gra
 getChildsEvForSplitNode :: (Ord a, Ord b) => Aut a b -> SplitNode a b -> b -> Maybe (SplitNode a b) -> (Set (Set (State a b)), Evidence b)
 getChildsEvForSplitNode aut node mu maybesplitNode =
     case maybesplitNode of
-        Nothing -> (Set.singleton (Set.filter (\s -> Set.member mu (Aut.out s)) (nodeStates node)), Prefix mu Nil)
+        Nothing -> (Set.singleton (Set.filter (Set.member mu . Aut.out) (nodeStates node)), Prefix mu Nil)
         Just splitNode' -> (getInducedSplit aut (nodeStates node) mu splitNode', Prefix mu (Maybe.fromMaybe (error "evidence") (evidence splitNode')))
 
 addNonEnabledStatesToChildren :: (Ord a, Ord b) => Set (Set (State a b)) -> Set (State a b) -> b -> Set (Set (State a b))
 addNonEnabledStatesToChildren indsplit states input =
-    let nonEnabledStates = Set.filter (\s -> Set.notMember input (Aut.inp s)) states
-    in Set.map (\c -> Set.union c nonEnabledStates) indsplit
+    let nonEnabledStates = Set.filter (Set.notMember input . Aut.inp) states
+    in Set.map (`Set.union` nonEnabledStates) indsplit
 
 data ATup a b = ATup b (Maybe (SplitNode a b)) deriving (Eq,Ord)
 
@@ -348,7 +346,7 @@ getSplitOnInputTransition :: (Ord a, Ord b) => Aut a b -> SplitGraph a b -> Spli
 getSplitOnInputTransition aut graph node compRel doBestSplit' addInputStates' =
     case inputCondition aut graph node compRel of
         Nothing -> Nothing
-        Just spMap ->  let splitNodePerLabel = Set.fromList $ List.map (\(a'',b) -> ATup a'' b) $
+        Just spMap ->  let splitNodePerLabel = Set.fromList $ List.map (uncurry ATup) $
                                                Map.toList (selectSplitNodeForLabel aut (nodeStates node) compRel spMap doBestSplit')
                            (ATup a' (Just bestNode)) = if doBestSplit'
                                                       then getBestSplitNode aut (nodeStates node) compRel (\(ATup _ (Just n)) -> n) splitNodePerLabel
