@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -89,11 +90,11 @@ testSTSHappyFlow = TestCase $ do
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
     let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [Cint 7])
-    assertThrowsError "gate not in STS alphabet" (stateConf $ intrp1)
+    assertThrowsError "gate not in STS alphabet" (stateConf intrp1)
     let intrp2 = after stsExampleIntrpr (GateValue (In "water") [])
-    assertThrowsError "nr of values unequal to nr of parameters" (stateConf $ intrp2)
+    assertThrowsError "nr of values unequal to nr of parameters: 0 values and 1 variables" (stateConf intrp2)
     let intrp3 = after stsExampleIntrpr (GateValue (In "water") [Cbool True])
-    assertThrowsError "type of variable and value do not match" (stateConf $ intrp3)
+    assertThrowsError "type of variable and value do not match. Variables: [p:Int], Values: [True]" (stateConf intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
@@ -218,22 +219,22 @@ stsExampleFloat :: IOSTS NonDet Integer String String
 stsExampleFloat =
     let p = sVar pvarf :: Expr Double
         x = sVar xvarf :: Expr Double
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
+        water = SymInteract (In "water") [pvarf]
+        ok = SymInteract (Out "ok") [pvarf]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvarf =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= sConst (14.5 :: Double)
         initConf = nonDet [0] :: NonDet Integer
-        switches = \q -> case q of
+        switches = \case
             0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
                                 (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
             1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 stsExampleIntrprFloat :: STSIntrp NonDet Integer (IOAct String String)
-stsExampleIntrprFloat = interpretSTS stsExample stsExampleInitAssignFloat
+stsExampleIntrprFloat = interpretSTS stsExampleFloat stsExampleInitAssignFloat
 
 getSTSIntrpStateFloat :: Integer -> Double -> NonDet (IntrpState Integer)
 getSTSIntrpStateFloat loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
@@ -241,7 +242,7 @@ getSTSIntrpStateFloat loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.
 testSTSHappyFlowFloat :: Test
 testSTSHappyFlowFloat = TestCase $ do
     -- assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrpr)
-    let intrp2 = after stsExampleIntrpr (GateValue (In "water") [Cfloat (7.0 :: Double)])
+    let intrp2 = after stsExampleIntrprFloat (GateValue (In "water") [Cfloat (7.5 :: Double)])
     assertEqual "after water 7.5: " (getSTSIntrpStateFloat 1 (7.5 :: Double)) (stateConf intrp2)
     -- let intrp3 = after intrp2 (GateValue (Out "ok") [Cfloat 7.5])
     -- assertEqual "after ok 7.5: " (getSTSIntrpStateFloat 0 (7.5 :: Double)) (stateConf intrp3)

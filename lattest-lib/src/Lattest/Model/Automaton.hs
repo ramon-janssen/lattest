@@ -475,10 +475,12 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
             Nothing -> errorWithoutStackTrace "gate not in STS alphabet"
             Just i@(SymInteract _ vars) ->
                 if List.length vals /= List.length vars
-                    then errorWithoutStackTrace "nr of values unequal to nr of parameters"
+                    then errorWithoutStackTrace $
+                      "nr of values unequal to nr of parameters: " <> show (List.length vals) <> " values and " <> show (List.length vars) <> " variables"
                     else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
                             then Just i
-                            else errorWithoutStackTrace "type of variable and value do not match"
+                            else errorWithoutStackTrace $
+                              "type of variable and value do not match. Variables: " <> show vars <> ", Values: " <> show vals
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
