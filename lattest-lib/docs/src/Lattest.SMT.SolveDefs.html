@@ -28,12 +28,12 @@ See LICENSE in the parent SMT folder.
 </span><span id="line-28"></span><span class="hs-comment">-- SMT definitions</span><span>
 </span><span id="line-29"></span><span>
 </span><span id="line-30"></span><span>
-</span><span id="line-31"></span><span class="hs-keyword">type</span><span>  </span><span id="Solution"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solution"><span class="hs-identifier hs-var">Solution</span></a></span></span><span> </span><span id="local-6989586621679216604"><span class="annot"><a href="#local-6989586621679216604"><span class="hs-identifier hs-type">v</span></a></span></span><span>       </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679216604"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier hs-type">Constant</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">type</span><span>  </span><span id="Solution"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solution"><span class="hs-identifier hs-var">Solution</span></a></span></span><span> </span><span id="local-6989586621679221192"><span class="annot"><a href="#local-6989586621679221192"><span class="hs-identifier hs-type">v</span></a></span></span><span>       </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679221192"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprDefs.html#Constant"><span class="hs-identifier hs-type">Constant</span></a></span><span>
 </span><span id="line-32"></span><span>
 </span><span id="line-33"></span><span class="hs-keyword">data</span><span>  </span><span id="SolvableProblem"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#SolvableProblem"><span class="hs-identifier hs-var">SolvableProblem</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span id="Sat"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Sat"><span class="hs-identifier hs-var">Sat</span></a></span></span><span>
 </span><span id="line-34"></span><span>                       </span><span class="hs-glyph">|</span><span> </span><span id="Unsat"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Unsat"><span class="hs-identifier hs-var">Unsat</span></a></span></span><span>
 </span><span id="line-35"></span><span>                       </span><span class="hs-glyph">|</span><span> </span><span id="Unknown"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Unknown"><span class="hs-identifier hs-var">Unknown</span></a></span></span><span>
-</span><span id="line-36"></span><span>     </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679216609"><span id="local-6989586621679216611"><span class="annot"><span class="annottext">SolvableProblem -&gt; SolvableProblem -&gt; Bool
+</span><span id="line-36"></span><span>     </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679221197"><span id="local-6989586621679221199"><span class="annot"><span class="annottext">SolvableProblem -&gt; SolvableProblem -&gt; Bool
 (SolvableProblem -&gt; SolvableProblem -&gt; Bool)
 -&gt; (SolvableProblem -&gt; SolvableProblem -&gt; Bool)
 -&gt; Eq SolvableProblem
@@ -42,7 +42,7 @@ $c== :: SolvableProblem -&gt; SolvableProblem -&gt; Bool
 == :: SolvableProblem -&gt; SolvableProblem -&gt; Bool
 $c/= :: SolvableProblem -&gt; SolvableProblem -&gt; Bool
 /= :: SolvableProblem -&gt; SolvableProblem -&gt; Bool
-</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679216618"><span id="local-6989586621679216620"><span id="local-6989586621679216622"><span id="local-6989586621679216626"><span id="local-6989586621679216629"><span id="local-6989586621679216632"><span id="local-6989586621679216635"><span class="annot"><span class="annottext">Eq SolvableProblem
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679221206"><span id="local-6989586621679221208"><span id="local-6989586621679221210"><span id="local-6989586621679221214"><span id="local-6989586621679221217"><span id="local-6989586621679221220"><span id="local-6989586621679221223"><span class="annot"><span class="annottext">Eq SolvableProblem
 Eq SolvableProblem =&gt;
 (SolvableProblem -&gt; SolvableProblem -&gt; Ordering)
 -&gt; (SolvableProblem -&gt; SolvableProblem -&gt; Bool)
@@ -79,7 +79,7 @@ $cmax :: SolvableProblem -&gt; SolvableProblem -&gt; SolvableProblem
 max :: SolvableProblem -&gt; SolvableProblem -&gt; SolvableProblem
 $cmin :: SolvableProblem -&gt; SolvableProblem -&gt; SolvableProblem
 min :: SolvableProblem -&gt; SolvableProblem -&gt; SolvableProblem
-</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679216639"><span id="local-6989586621679216643"><span id="local-6989586621679216646"><span id="local-6989586621679216652"><span class="annot"><span class="annottext">ReadPrec [SolvableProblem]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679221227"><span id="local-6989586621679221231"><span id="local-6989586621679221234"><span id="local-6989586621679221240"><span class="annot"><span class="annottext">ReadPrec [SolvableProblem]
 ReadPrec SolvableProblem
 Int -&gt; ReadS SolvableProblem
 ReadS [SolvableProblem]
@@ -99,7 +99,7 @@ $creadPrec :: ReadPrec SolvableProblem
 readPrec :: ReadPrec SolvableProblem
 $creadListPrec :: ReadPrec [SolvableProblem]
 readListPrec :: ReadPrec [SolvableProblem]
-</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679216656"><span id="local-6989586621679216658"><span id="local-6989586621679216662"><span class="annot"><span class="annottext">Int -&gt; SolvableProblem -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679221244"><span id="local-6989586621679221246"><span id="local-6989586621679221250"><span class="annot"><span class="annottext">Int -&gt; SolvableProblem -&gt; ShowS
 [SolvableProblem] -&gt; ShowS
 SolvableProblem -&gt; String
 (Int -&gt; SolvableProblem -&gt; ShowS)
@@ -116,10 +116,10 @@ $cshowList :: [SolvableProblem] -&gt; ShowS
 showList :: [SolvableProblem] -&gt; ShowS
 </span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
 </span><span id="line-37"></span><span>
-</span><span id="line-38"></span><span class="hs-keyword">data</span><span>  </span><span id="SolveProblem"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#SolveProblem"><span class="hs-identifier hs-var">SolveProblem</span></a></span></span><span> </span><span id="local-6989586621679216665"><span class="annot"><a href="#local-6989586621679216665"><span class="hs-identifier hs-type">v</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span id="Solved"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solved"><span class="hs-identifier hs-var">Solved</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679216665"><span class="hs-identifier hs-type">v</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">data</span><span>  </span><span id="SolveProblem"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#SolveProblem"><span class="hs-identifier hs-var">SolveProblem</span></a></span></span><span> </span><span id="local-6989586621679221253"><span class="annot"><a href="#local-6989586621679221253"><span class="hs-identifier hs-type">v</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span id="Solved"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solved"><span class="hs-identifier hs-var">Solved</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679221253"><span class="hs-identifier hs-type">v</span></a></span><span class="hs-special">)</span><span>
 </span><span id="line-39"></span><span>                      </span><span class="hs-glyph">|</span><span> </span><span id="Unsolvable"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#Unsolvable"><span class="hs-identifier hs-var">Unsolvable</span></a></span></span><span>
 </span><span id="line-40"></span><span>                      </span><span class="hs-glyph">|</span><span> </span><span id="UnableToSolve"><span class="annot"><a href="Lattest.SMT.SolveDefs.html#UnableToSolve"><span class="hs-identifier hs-var">UnableToSolve</span></a></span></span><span>
-</span><span id="line-41"></span><span>     </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679216671"><span id="local-6989586621679216676"><span class="annot"><span class="annottext">SolveProblem v -&gt; SolveProblem v -&gt; Bool
+</span><span id="line-41"></span><span>     </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679221259"><span id="local-6989586621679221264"><span class="annot"><span class="annottext">SolveProblem v -&gt; SolveProblem v -&gt; Bool
 (SolveProblem v -&gt; SolveProblem v -&gt; Bool)
 -&gt; (SolveProblem v -&gt; SolveProblem v -&gt; Bool)
 -&gt; Eq (SolveProblem v)
@@ -129,7 +129,7 @@ $c== :: forall v. Eq v =&gt; SolveProblem v -&gt; SolveProblem v -&gt; Bool
 == :: SolveProblem v -&gt; SolveProblem v -&gt; Bool
 $c/= :: forall v. Eq v =&gt; SolveProblem v -&gt; SolveProblem v -&gt; Bool
 /= :: SolveProblem v -&gt; SolveProblem v -&gt; Bool
-</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679216685"><span id="local-6989586621679216690"><span id="local-6989586621679216694"><span id="local-6989586621679216698"><span id="local-6989586621679216701"><span id="local-6989586621679216704"><span id="local-6989586621679216707"><span class="annot"><span class="annottext">Eq (SolveProblem v)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679221273"><span id="local-6989586621679221278"><span id="local-6989586621679221282"><span id="local-6989586621679221286"><span id="local-6989586621679221289"><span id="local-6989586621679221292"><span id="local-6989586621679221295"><span class="annot"><span class="annottext">Eq (SolveProblem v)
 Eq (SolveProblem v) =&gt;
 (SolveProblem v -&gt; SolveProblem v -&gt; Ordering)
 -&gt; (SolveProblem v -&gt; SolveProblem v -&gt; Bool)
@@ -176,7 +176,7 @@ $cmin :: forall v.
 Ord v =&gt;
 SolveProblem v -&gt; SolveProblem v -&gt; SolveProblem v
 min :: SolveProblem v -&gt; SolveProblem v -&gt; SolveProblem v
-</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679216714"><span id="local-6989586621679216718"><span id="local-6989586621679216721"><span id="local-6989586621679216731"><span class="annot"><span class="annottext">ReadPrec [SolveProblem v]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679221302"><span id="local-6989586621679221306"><span id="local-6989586621679221309"><span id="local-6989586621679221319"><span class="annot"><span class="annottext">ReadPrec [SolveProblem v]
 ReadPrec (SolveProblem v)
 Int -&gt; ReadS (SolveProblem v)
 ReadS [SolveProblem v]
@@ -200,7 +200,7 @@ $creadPrec :: forall v. (Ord v, Read v) =&gt; ReadPrec (SolveProblem v)
 readPrec :: ReadPrec (SolveProblem v)
 $creadListPrec :: forall v. (Ord v, Read v) =&gt; ReadPrec [SolveProblem v]
 readListPrec :: ReadPrec [SolveProblem v]
-</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679216736"><span id="local-6989586621679216743"><span id="local-6989586621679216747"><span class="annot"><span class="annottext">Int -&gt; SolveProblem v -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679221324"><span id="local-6989586621679221331"><span id="local-6989586621679221335"><span class="annot"><span class="annottext">Int -&gt; SolveProblem v -&gt; ShowS
 [SolveProblem v] -&gt; ShowS
 SolveProblem v -&gt; String
 (Int -&gt; SolveProblem v -&gt; ShowS)

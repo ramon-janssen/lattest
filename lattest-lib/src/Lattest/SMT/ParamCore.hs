@@ -24,7 +24,6 @@ module Lattest.SMT.ParamCore
 
 where
 
-import qualified Data.Char as Char
 import qualified Data.Map  as Map
 
 
@@ -38,11 +37,11 @@ type  Params  =  Map.Map String (String,String->Bool)
 -- types of parameters
 
 
--- Represent String a positive integer within the given range?
--- lower and upper bound are inclusive.
-withinRangeInt :: Int -> Int -> String -> Bool
-withinRangeInt low high s = not (null s) && all Char.isDigit s && (let v = read s :: Int in ( low <= v ) && ( v <= high) )
-      
+-- -- Represent String a positive integer within the given range?
+-- -- lower and upper bound are inclusive.
+-- withinRangeInt :: Int -> Int -> String -> Bool
+-- withinRangeInt low high s = not (null s) && all Char.isDigit s && (let v = read s :: Int in ( low <= v ) && ( v <= high) )
+
 
 -- ----------------------------------------------------------------------------------------- --
 -- parameter initialization

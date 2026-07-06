@@ -3,7 +3,6 @@ This is a modified version of:
 TorXakis - Model Based Testing
 See LICENSE in the parent Symbolic folder.
 -}
-{-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE DeriveGeneric         #-}
@@ -66,7 +65,7 @@ instance Applicative ProductTerm where
     fa <*> a = ProductTerm $ factor fa (factor a)
 
 instance Num a => Semigroup (ProductTerm a) where
-    pt0 <> pt1 = pure (*) <*> pt0 <*> pt1
+    pt0 <> pt1 = (*) <$> pt0 <*> pt1
 
 instance Num a => Monoid (ProductTerm a) where
     mempty = pure 1

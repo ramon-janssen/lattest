@@ -283,3 +283,9 @@ instance BooleanConfiguration FreeLattice where
 
 asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
 asDualExpr m = E.sNot $ asExpr $ E.sNot OM.<#> m
+
+instance Traversable Det where
+  sequenceA (Det a) = Det <$> a
+  sequenceA ForbiddenDet = pure ForbiddenDet
+  sequenceA UnderspecDet = pure UnderspecDet
+

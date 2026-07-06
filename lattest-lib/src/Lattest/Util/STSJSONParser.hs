@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -18,7 +17,7 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), fromConstantsMap, Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
 
 data UntypedExpr
     = UEBool Bool

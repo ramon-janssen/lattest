@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide, prune #-}
 module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
@@ -27,7 +28,7 @@ combineGuards = asDualExpr
 -}
 substituteInGuard :: Valuation -> SymGuard -> SymGuard
 --substituteInGuard valuation guard = evalConst' valuation guard
-substituteInGuard valuation guard = substConst valuation guard
+substituteInGuard = substConst
 
 {-|
     Evaluate the given guard
