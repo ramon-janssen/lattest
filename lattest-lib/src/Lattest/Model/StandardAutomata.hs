@@ -77,10 +77,6 @@ import qualified Data.Set as Set
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
 ioAlphabet ti to = Set.fromList $ (In <$> toList ti) ++ (Out <$> toList to)
 
--- | To a transition relation without tdest, add vacuous tdests ().
-concreteTrans :: (Functor m) => (loc -> Map t (m loc)) -> (loc -> Map t (m ((), loc)))
-concreteTrans trans q = Map.map (fmap ((),)) (trans q)
-
 {- |
     Create a deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as explicit states.
     Having multiple occurrences of a transition label is forbidden, i.e., leads to a Nothing result.

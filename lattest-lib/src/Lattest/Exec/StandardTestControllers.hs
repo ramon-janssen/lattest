@@ -198,7 +198,7 @@ randomDataOrWaitForOutputTestSelectorFromGen g pWait = selector g (solveRandomOr
     maybeFromIFInteraction (SymInteract _ _) = Nothing
 
 solveRandomInput :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m SymGuard), RandomGen r)
-    => (r) -> (SymInteract g -> Maybe (SymInteract i)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> IO (Maybe (GateValue i), (r))
+    => r -> (SymInteract g -> Maybe (SymInteract i)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> IO (Maybe (GateValue i), r)
 solveRandomInput g f intrpr = do
     (maybeGateValue, g') <- runSMT $ solveRandomInteraction intrpr f g
     return (maybeGateValue, g') -- append the new state to the solved value, if any
