@@ -183,14 +183,14 @@ runExperiment controller adapter = do
             Right result -> return $ Right result
     handleClosed = Right <$> handleClose controller (controllerState controller)
 
+
 {- |
     This typeclass provides 'runTester', a way to conveniently run testing experiments.
     It has instances for STSs and LTSs.
 -}
 class RunTester tdest where
-  -- TODO: It looks like the constraints that the SMT version has follow from those that the LTS one has,
-  -- so I guess we could just only use those.
-  -- TODO: make sense of all the typeclasses going around; maybe make some constraint synonyms.
+  -- | A constraint synonym for the constraints of 'runTester'.
+  --   This allows each instance to have different constraints.
   type RunnableTester (m :: Type -> Type) loc q t tdest act i :: Constraint
 
   {- |
@@ -224,7 +224,7 @@ runLTSTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
 runLTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
-runSMTTester :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
+runSMTTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
+    AutIntrpr m loc q t STStdest act -> TestController m loc q t STStdest act state i r -> Adapter act i -> IO (Verdict, r)
 runSMTTester spec testSelection = runExperiment (makeTester spec testSelection)
 
