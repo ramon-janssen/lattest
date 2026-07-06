@@ -8,8 +8,7 @@ import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import qualified Lattest.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
 import qualified Data.Maybe as M
 
@@ -37,8 +36,7 @@ quickCheckTests = testGroup "Quickcheck"
   [ quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property) "jsonStream"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
---    smtRef <- createTestSMTRef
---    quickCheckWithTimeoutWithNumWithSize (prop_solveSymbolic smtRef) 100 2
+--    quickCheckWithTimeoutWithNumWithSize prop_solveSymbolic 100 2
   , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
   , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
   ]
@@ -53,8 +51,7 @@ quickCheckTests = testGroup "Quickcheck"
 
 makeHUnitTests :: IO TestTree
 makeHUnitTests = do
-    smt <- createTestSMTRef
-    return $ 
+    return $
       localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run in parallel
       singleTest "unit tests" $
       TestList $
@@ -104,7 +101,7 @@ makeHUnitTests = do
         ++ testLatticeSTS
         ++ testLatticeSTSQuiescence
         ++ evalTests
-        ++ fmap ($ smt) solveTests
+        ++ solveTests
 
 -- TODO: This wraps HUnit tests into a Tasty test.
 -- The reason we need this wrapper, is that plain HUnit
@@ -118,12 +115,4 @@ instance Tasty.IsTest HUnit.Test where
       then return $ testFailed (show c)
       else return $ testPassed (show c)
   testOptions = pure []
-
-
-createTestSMTRef :: IO SMT.SMTRef
-createTestSMTRef =
-    let cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = M.fromJust (Config.getProc cfg)
-    in SMT.createSMTRef smtProc smtLog
 

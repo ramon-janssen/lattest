@@ -45,6 +45,7 @@ dependencies:
     - text >= 2.1.1 && < 2.2
     - time >=1.12.2 && <1.15
     - unbounded-delays >= 0.1.1 && < 0.2
+    - sbv
 ghc-options:
 - -Wall
 - -Wcompat
@@ -65,16 +66,6 @@ library:
   - Lattest.Model.Symbolic.Internal.Product
   - Lattest.Model.Symbolic.Internal.Sum
   - Lattest.Model.Symbolic.SolveSTS
-  - Lattest.SMT.ParamCore
-  - Lattest.SMT.SMT2TXS
-  - Lattest.SMT.SMTAlex
-  - Lattest.SMT.SMTHappy
-  - Lattest.SMT.SMTInternal
-  - Lattest.SMT.SMTString
-  - Lattest.SMT.SMTStringAlex
-  - Lattest.SMT.SMTStringHappy
-  - Lattest.SMT.SolveDefs
-  - Lattest.SMT.TXS2SMT
   - Lattest.Util.IOUtils
   build-tools:
   - happy

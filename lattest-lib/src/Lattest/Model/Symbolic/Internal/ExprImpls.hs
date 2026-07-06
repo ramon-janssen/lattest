@@ -44,8 +44,6 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
   -- ** String Operators to create Value Expressions
   -- *** Length operator
 , sLength
-  -- *** At operator
-, (.@)
   -- *** Concat operator
 , sConcat
   -- ** Regular Expression Operators to create Value Expressions
@@ -431,15 +429,6 @@ sLength :: Expr String -> Expr Integer
 sLength (view -> Const s) = sConst (Prelude.toInteger (length s))
 sLength (view -> v)             = Expr (Length v)
 
--- | Apply operator At on the provided value expressions.
--- Preconditions are /not/ checked.
-(.@) :: Expr String -> Expr Integer -> Expr String
-(.@) (view -> Const s) (view -> Const i)
-    | i >= 0 || i < Prelude.toInteger (length s) = sConst (take 1 (drop (fromInteger i) s)) -- leave error case (index out of bounds) unevaluated
-(.@) (view -> ves) (view -> vei) = Expr $ At ves vei
-
-infixl 5 .@
-
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
 sConcat :: [Expr String] -> Expr String
@@ -625,5 +614,4 @@ subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
-subst' ve (At s p)                      = (.@) (subst' ve s) (subst' ve p)
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps

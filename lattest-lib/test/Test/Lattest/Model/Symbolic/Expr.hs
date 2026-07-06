@@ -16,7 +16,7 @@ import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(Expr))
 import Lattest.Model.Symbolic.SolveSymPrim
-import qualified Lattest.SMT.SMTData as SMT
+import qualified Lattest.SMT as SMT
 import qualified Data.List as List
 
 import qualified Data.Set as Set
@@ -51,7 +51,6 @@ sizeOf' (Length e) = sizeOf' e + 1
 sizeOf' (GezInt e) = sizeOf' e + 1
 sizeOf' (Not e) = sizeOf' e + 1
 sizeOf' (And es) = (sum $ sizeOf' <$> Set.toList es) + 1
-sizeOf' (At e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
 sizeOf' (Concat es) = (sum $ sizeOf' <$> es) + 1
 
 class SizeOf t
@@ -86,7 +85,6 @@ instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
     shrink (GezInt e) = GezInt <$> shrink e
     shrink (Not e) = [e]
     shrink (And es) = shrinkListExpr (And . Set.fromList) (Set.toList es)
-    shrink (At e1 e2) = [At e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1
     shrink (Concat es) = Concat <$> shrinkList (const []) es
 
 shrinkListExpr :: Arbitrary t1 => (t1 -> t2) -> t1 -> [t2]
@@ -158,7 +156,6 @@ instance ConcreteGenExpr String where
         arbitraryVar StringType,
         CM.liftM Const stringExpr,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
-        CM.liftM2 At subexpr2 subexpr2,
         CM.liftM Concat (genList subexprSqrt)
         ]
         where
@@ -219,9 +216,9 @@ symbolicEval = rightToMaybe . eval
     rightToMaybe (Left _) = Nothing
     rightToMaybe (Right b) = Just b
 
-prop_solveSymbolic :: SMT.SMTRef -> Expr Bool -> Property
-prop_solveSymbolic smt guard = monadicIO $ do
-    mValuation <- run $ SMT.runSMT smt $ solveGuard (Set.toList $ freeVars guard) guard
+prop_solveSymbolic :: Expr Bool -> Property
+prop_solveSymbolic guard = monadicIO $ do
+    mValuation <- run $ SMT.runSMT $ solveGuard (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
@@ -274,11 +271,6 @@ instance ConcreteEval String where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (At e1 e2) = concreteBinOp mCharAt e1 e2
-        where
-        mCharAt s n = case s List.!? fromInteger n of
-                        Nothing -> ""
-                        Just c -> [c]
     concreteEval' (Concat es) = concat <$> (sequence $ concreteEval' <$> es)
 
 concreteUnaryOp :: (ConcreteEval t1) => (t1 -> t2) -> ExprView t1 -> Maybe t2
@@ -306,10 +298,10 @@ concreteIfThenElse i t e = do
         else concreteEval' e
 
 evalTests :: [Test]
-evalTests = [testEvalEmptyProduct, testEvalNegativeModulo, testEvalNegativeAt]
+evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
 
-solveTests :: [SMT.SMTRef -> Test]
-solveTests = [testSolveNegativeModulo, testSolveNegativeAt]
+solveTests :: [Test]
+solveTests = [testSolveNegativeModulo]
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
@@ -317,9 +309,9 @@ testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolic
 testEvalEmptyProduct :: Test
 testEvalEmptyProduct = testEvalExpression (sProduct []) "empty product evaluation incorrect"
 
-testSolveExpression :: Expr Bool -> SMT.SMTRef -> Test
-testSolveExpression guard smt = TestCase $ do
-    mValuation <- SMT.runSMT smt $ solveGuard (Set.toList $ freeVars guard) guard
+testSolveExpression :: Expr Bool -> Test
+testSolveExpression guard = TestCase $ do
+    mValuation <- SMT.runSMT $ solveGuard (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
@@ -332,11 +324,6 @@ testSolveExpression guard smt = TestCase $ do
 testEvalNegativeModulo :: Test
 testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"
 
-testSolveNegativeModulo :: SMT.SMTRef -> Test
+testSolveNegativeModulo :: Test
 testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Variable "ix" IntType))
 
-testEvalNegativeAt :: Test
-testEvalNegativeAt = testEvalExpression (sConst "abc" .@ -1) "negative At evaluates incorrectly"
-
-testSolveNegativeAt :: SMT.SMTRef -> Test
-testSolveNegativeAt = testSolveExpression (sConst "abc" .@ -1 .== sVar (Variable "sx" StringType))

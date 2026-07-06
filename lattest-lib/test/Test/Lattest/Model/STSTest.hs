@@ -33,8 +33,7 @@ import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import qualified Lattest.SMT as SMT
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
@@ -151,16 +150,11 @@ impExampleCorrect = do
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 37
-        cfg = Config.changeLog Config.defaultConfig False 
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     let checkObserved = go 0 0 observed
     let exampleObserved = [
           inp "water" [Cint 1],
@@ -353,18 +347,13 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
                 then (In, Out, inp, out)
                 else (Out, In, out, inp)
     let nrSteps = 4
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized startType endType p1 p2 q2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
-    
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+
     case expectedNonConformalTrace of
         Nothing -> do
             assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
@@ -386,8 +375,8 @@ out g vals = GateValue (Out (OutSusp g)) vals
 
 testLatticeSTSParameterized :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
-    testLatticeSTSParameterized' testName inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
-    testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True p1 p2 q2 expectedNonConformalTrace
+    testLatticeSTSParameterized' testName          inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
+    testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True  p1 p2 q2 expectedNonConformalTrace
     ]
 
 testLatticeSTS :: [Test]
@@ -458,17 +447,12 @@ impQParameterized startType p = do
 testLatticeSTSQuiescentPass :: String -> Bool -> Test
 testLatticeSTSQuiescentPass testName _ = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
     assertEqual (testName ++ ": expected conformal trace") [
@@ -479,17 +463,12 @@ testLatticeSTSQuiescentPass testName _ = TestCase $ do
 testLatticeSTSQuiescentFail1 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -500,17 +479,12 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
 testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -560,17 +534,12 @@ specUnimplementableParameterized splitFirst =
 testLatticeSTSUnimplementable :: String -> Bool -> Test
 testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [

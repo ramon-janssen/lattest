@@ -182,7 +182,6 @@ data ExprView t where
     GezInt :: ExprView Integer -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
-    At :: {string2 :: ExprView String, position2 :: ExprView Integer} -> ExprView String
     Concat :: [ExprView String] -> ExprView String
 
 deriving instance Eq t => Eq (ExprView t)
@@ -210,7 +209,6 @@ instance Show t => Show (ExprView t) where
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⋀∅"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
-    show (At e1 e2) = show e1 ++ "[" ++ show e2 ++ "]"
     show (Concat []) = "∑'∅"
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
 
@@ -289,8 +287,6 @@ reduce (And (Set.map reduce -> es)) = And es
 --reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
 --reduce (view -> Viscstr { })                                   =
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
-reduce (At (reduce -> (Const s)) (reduce -> (Const i))) = Const $ drop (fromIntegral i) s -- TODO are these semantics the same as in SMT2?
-reduce (At (reduce -> e1) (reduce -> e2)) = At e1 e2
 reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concatMap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
 reduce (Concat (fmap reduce -> e)) = Concat e
 --reduce (view -> Vstrinre { })                                  =
@@ -318,11 +314,5 @@ freeVars' (EqualString e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
-freeVars' (At e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Concat es) = concatMap freeVars' es
-
-
-
-
-
 
