@@ -1,9 +1,12 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 {-|
     This module contains the definitions and interpretations of automata models.
@@ -65,9 +68,8 @@ import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
 import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
-import Lattest.SMT.SMT(SMTRef, runSMT)
-import Lattest.SMT.SMTData(SmtEnv)
-import Lattest.Util.Utils((&&&), takeArbitrary, distributeMonadOverFoldable)
+import Lattest.SMT(runSMT)
+import Lattest.Util.Utils((&&&), takeArbitrary)
 
 import Control.Exception(throw,Exception)
 
@@ -75,7 +77,6 @@ import Control.Arrow(second)
 
 import qualified Data.Foldable as Foldable
 import Data.Functor.Identity(Identity(Identity), runIdentity)
-import Data.IORef(IORef)
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -188,13 +189,13 @@ class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) =>
         Nothing -> LocationMove $ BM.ordReturn $ asLoc q
         Just t -> TransitionMove (t, trans' t)
 
-class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act z | t act -> tdest where
+class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act | t act -> tdest where
     {- |
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
     -}
-    ioTakeTransition :: (BoundedMonad m, BooleanConfiguration m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
-    ioTakeTransition _ q alph act trans' = return $ case asTransition alph act of
+    ioTakeTransition :: (BoundedMonad m, BooleanConfiguration m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
+    ioTakeTransition q alph act trans' = return $ case asTransition alph act of
         Nothing -> LocationMove $ BM.ordReturn (asLoc q)
         Just t -> TransitionMove (t, trans' t)
 
@@ -237,17 +238,19 @@ after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     fmapId :: (BM.OrdFunctor f, Ord y) => (x -> Identity y) -> f x -> Identity (f y)
     fmapId f = Identity . BM.ordMap (runIdentity . f)
 
-class IOAfter m loc q t tdest act ioState where
-    ioAfter :: ioState -> AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
+class IOAfter m loc q t tdest act where
+    ioAfter :: AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
 
-instance (After m loc q t tdest act, Ord (m q), Ord q) => IOAfter m loc q t tdest act () where
-    ioAfter () aut act = return $ after aut act
+-- tdest ~ () <=> LTS
+instance (After m loc q t () act, Ord (m q), Ord q) => IOAfter m loc q t () act where
+    ioAfter aut act = return $ after aut act
 
-instance (StepSemantics m loc q t tdest act, IOTransitionSemantics loc q t tdest act z, BooleanConfiguration m, Foldable m, Ord q, Ord t, Ord (m q)) => IOAfter m loc q t tdest act (IORef z) where
-    ioAfter execState = afterInternal (ioTakeTransition execState) distributeMonadOverFoldable
+-- tdest ~ STStdest <=> STS
+instance (StepSemantics m loc q t STStdest act, IOTransitionSemantics loc q t STStdest act, BooleanConfiguration m, Ord q, Ord t, Ord (m q), BM.OrdTraversable m) => IOAfter m loc q t STStdest act where
+    ioAfter = afterInternal ioTakeTransition BM.ordTraverse
 
 --takeTransition :: (BoundedMonad m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
---ioTakeTransition :: (BoundedMonad m) => IORef z -> q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
+--ioTakeTransition :: (BoundedMonad m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> IO (Move m t tdest loc)
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
@@ -514,28 +517,28 @@ evalBool valuation = toBool . evalVal valuation
 --------------------
 -- STS quiescence --
 --------------------
-instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) SmtEnv where
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
     -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
-    ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
-        qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
+    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+        qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
-    ioTakeTransition _ q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
+    ioTakeTransition q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
-hasSymbolicQuiescence :: (BoundedMonad m, BooleanConfiguration m) => SMTRef -> Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
-hasSymbolicQuiescence smtRef stateVal m = do
+hasSymbolicQuiescence :: (BoundedMonad m, BooleanConfiguration m) => Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
+hasSymbolicQuiescence stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
     -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> runSMT smtRef (solveAnySequential outputsAndCombinedGuards)
+    Maybe.isNothing <$> runSMT (solveAnySequential outputsAndCombinedGuards)
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 
 -----------------------
 -- STS input-failure --
 -----------------------
-instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) SmtEnv where
-    ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o) where
+    ioTakeTransition (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt (i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact'@(SymInteract _ gateVars) ->
@@ -550,17 +553,17 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         tdestlocToGuard (STSLoc (guard, _), _) = guard
         coerceIO :: IFGateValue i o -> Set.Set (IOSymInteract i o) -> IFGateValue i o
         coerceIO = const
-    ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromInputAttempt <$> gateValue) m
+    ioTakeTransition q alph gateValue m = return $ takeTransition q alph (fromInputAttempt <$> gateValue) m
 
 ------------------------------------
 -- STS input-failure + quiescence --
 ------------------------------------
 -- Ideally this would automatically follow from the above two interpretations stacked to avoid the boilerplate below, but that is a hassle
-instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) SmtEnv where
-    ioTakeTransition smtRef (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
-        qui <- hasSymbolicQuiescence smtRef stateVal (Map.fromSet m alph)
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o) where
+    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+        qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
-    ioTakeTransition _ (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
+    ioTakeTransition (IntrpState _ stateVal) alph (GateValue (In (InputAttempt(i, False))) gateVals) m =
         case asTransition alph (coerceIO (GateValue (In (InputAttempt (i, True))) gateVals) alph) of
             Nothing -> error "TransitionSemantics IFGateValue: error"
             Just interact'@(SymInteract _ gateVars) ->
@@ -575,7 +578,7 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
         tdestlocToGuard (STSLoc (guard, _), _) = guard
         coerceIO :: IFGateValue i o -> Set.Set (IOSymInteract i o) -> IFGateValue i o
         coerceIO = const
-    ioTakeTransition _ q alph gateValue m = return $ takeTransition q alph (fromSuspendedInputAttempt <$> gateValue) m
+    ioTakeTransition q alph gateValue m = return $ takeTransition q alph (fromSuspendedInputAttempt <$> gateValue) m
 
 -------------------------
 -- Auxiliary functions --

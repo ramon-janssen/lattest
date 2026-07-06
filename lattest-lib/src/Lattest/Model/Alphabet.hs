@@ -293,7 +293,7 @@ instance ToJSON a => ToJSON (GateValue a)
 type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where
-    show (GateValue g' vals) = show g' ++ (if null vals then "" else "") ++ show vals
+    show (GateValue g' vals) = show g' ++ if null vals then "" else show vals
 
 valueGate :: GateValue g -> g
 valueGate (GateValue g' _) = g'

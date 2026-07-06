@@ -23,7 +23,6 @@ import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
 import qualified Text.RawString.QQ as QQ
-
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
@@ -31,12 +30,12 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden, FreeLatticeCNF, atom)
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction)
+import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import qualified Lattest.SMT as SMT
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
@@ -47,7 +46,7 @@ xvar = (Variable "x" IntType)
 stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
-stsExample :: IOSTS NonDet Integer String String
+stsExample :: IOSTS Det Integer String String
 stsExample =
     let p = sVar pvar :: Expr Integer
         x = sVar xvar :: Expr Integer
@@ -58,18 +57,18 @@ stsExample =
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
-        initConf = nonDet [0] :: NonDet Integer
+        initConf = return 0
         switches = \q -> case q of
-            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
-                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
-            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
+            0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
-stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
+stsExampleIntrpr :: STSIntrp Det Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
-getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
-getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
+getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
+getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
@@ -122,19 +121,19 @@ testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no a
     actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
     -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
     expected = [QQ.r|
-current state configuration: [(0,{x:=0})]
-initial location configuration: [0]
+current state configuration: (0,{x:=0})
+initial location configuration: 0
 locations: 0, 1, 2
 transitions:
-0  ――?"water" [p:Int]⟶  [((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)]
-0  ――!"coffee" []⟶  [(((x+-15)) ≥ 0, {},2)]
-0  ――!"ok" [p:Int]⟶  ⊥
-1  ――?"water" [p:Int]⟶  ⊤
-1  ――!"coffee" []⟶  ⊥
-1  ――!"ok" [p:Int]⟶  [((x) = (p), {},0)]
-2  ――?"water" [p:Int]⟶  ⊤
-2  ――!"coffee" []⟶  ⊥
-2  ――!"ok" [p:Int]⟶  ⊥
+0  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)
+0  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},2)
+0  ――!"ok" [p:Int]⟶  -forbidden-
+1  ――?"water" [p:Int]⟶  -underspecified-
+1  ――!"coffee" []⟶  -forbidden-
+1  ――!"ok" [p:Int]⟶  ((x) = (p), {},0)
+2  ――?"water" [p:Int]⟶  -underspecified-
+2  ――!"coffee" []⟶  -forbidden-
+2  ――!"ok" [p:Int]⟶  -forbidden-
 |]
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
@@ -153,59 +152,69 @@ impExampleCorrect = do
 testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 37
-        cfg = Config.changeLog Config.defaultConfig False 
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.05 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    assertEqual "expected conformal trace" [-- FIXME this test case assumes the SMT solver to return 1, but any solution in (1,10) is correct
-        inp "water" [Cint 1],
-        out "ok" [Cint 1],
-        inp "water" [Cint 1],
-        out "ok" [Cint 2],
-        GateValue δ [],
-        inp "water" [Cint 1],
-        out "ok" [Cint 3],
-        inp "water" [Cint 1],
-        outL "ok" [Cint 4],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 5],
-        GateValue δ [],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 6],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 7],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 8],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 9],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 10],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 11],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 12],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 13],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 14],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 15],
-        inpL "water" [Cint 1],
-        outL "ok" [Cint 16],
-        outL "coffee" [],
-        GateValue δ [],
-        GateValue δ []
-        ] observed
+    (verdict, ((observed, _), _)) <- runSMTTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
+    let checkObserved = go 0 0 observed
+    let exampleObserved = [
+          inp "water" [Cint 1],
+          out "ok" [Cint 1],
+          inp "water" [Cint 1],
+          out "ok" [Cint 2],
+          GateValue δ [],
+          inp "water" [Cint 1],
+          out "ok" [Cint 3],
+          inp "water" [Cint 1],
+          outL "ok" [Cint 4],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 5],
+          GateValue δ [],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 6],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 7],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 8],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 9],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 10],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 11],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 12],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 13],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 14],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 15],
+          inpL "water" [Cint 1],
+          outL "ok" [Cint 16],
+          outL "coffee" [],
+          GateValue δ [],
+          GateValue δ []
+          ]
+    let checkExample = go 0 0 exampleObserved
+    assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
     inpL g vals = GateValue (In (InputAttempt(g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
+    go ds waterlevel [] = (ds, waterlevel)
+    go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
+    go ds waterlevel gv@(GateValue x y:os)
+      | x == In (InputAttempt ("water", True))
+      , [Cint w] <- y = go ds (waterlevel+w) os
+      | x == Out (OutSusp "ok")
+      , [Cint w] <- y
+      , w == waterlevel = go ds waterlevel os
+      | x == Out (OutSusp "coffee")
+      , [] <- y
+      , waterlevel > 15 = go ds waterlevel os
+      | otherwise = error $ "wrong gatevalue: " <> show gv
 
 pvarf :: Variable
 pvarf = (Variable "p" FloatType)
@@ -215,7 +224,7 @@ xvarf = (Variable "x" FloatType)
 stsExampleInitAssignFloat :: Valuation
 stsExampleInitAssignFloat = fromConstantsMap $ Map.singleton xvarf (Cfloat (0.0 :: Double))
 
-stsExampleFloat :: IOSTS NonDet Integer String String
+stsExampleFloat :: IOSTS FreeLattice Integer String String
 stsExampleFloat =
     let p = sVar pvarf :: Expr Double
         x = sVar xvarf :: Expr Double
@@ -226,18 +235,18 @@ stsExampleFloat =
         waterAssign = assignment [xvarf =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= sConst (14.5 :: Double)
-        initConf = nonDet [0] :: NonDet Integer
+        initConf = disjunction [0] :: FreeLattice Integer
         switches = \case
-            0 -> Map.fromList [(water,NonDet $ Set.singleton (stsTLoc waterGuard waterAssign, 1)),
-                                (coffee,NonDet $ Set.singleton (stsTLoc coffeeGuard noAssignment, 2))]
-            1 -> Map.fromList [(ok,NonDet $ Set.singleton (stsTLoc okGuard noAssignment, 0))]
+            0 -> Map.fromList [(water,   disjunction [(stsTLoc waterGuard waterAssign, 1)]),
+                                (coffee, disjunction [(stsTLoc coffeeGuard noAssignment, 2)])]
+            1 -> Map.fromList [(ok,      disjunction [(stsTLoc okGuard noAssignment, 0)])]
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
-stsExampleIntrprFloat :: STSIntrp NonDet Integer (IOAct String String)
+stsExampleIntrprFloat :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrprFloat = interpretSTS stsExampleFloat stsExampleInitAssignFloat
 
-getSTSIntrpStateFloat :: Integer -> Double -> NonDet (IntrpState Integer)
-getSTSIntrpStateFloat loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
+getSTSIntrpStateFloat :: Integer -> Double -> FreeLattice (IntrpState Integer)
+getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
 
 testSTSHappyFlowFloat :: Test
 testSTSHappyFlowFloat = TestCase $ do
@@ -255,7 +264,7 @@ testSTSHappyFlowFloat = TestCase $ do
     return()
 
 
-stsExample2 :: (IOSTS FreeLatticeCNF Integer String String, IOSTS FreeLatticeCNF Integer String String)
+stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =
     let p = sVar pvar :: Expr Integer
         x = sVar xvar :: Expr Integer
@@ -280,16 +289,16 @@ stsExample2 =
             3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
     in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
 
-stsExampleIntrpr2a :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2a :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
 
-stsExampleIntrpr2b :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
 getSTSValuation :: Integer -> Valuation
 getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
-getSTSIntrpState2 :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
+getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
 
 testLatticeCoffeeSTS :: Test
@@ -333,7 +342,7 @@ testLatticeCoffeeSTS = TestCase $ do
   * the type of branching from the second state (conjunction or disjunction)
   * whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> IOSTS FreeLattice Integer String String
+specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> IOSTS FreeLatticeSlow Integer String String
 specParameterized startType endType comp splitFirst =
     let p = sVar pvar :: Expr Integer
         q = sVar qvar :: Expr Integer
@@ -341,7 +350,7 @@ specParameterized startType endType comp splitFirst =
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         done = SymInteract (Out "done") []
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
         guardEnd2 = p .- q .== x
@@ -380,25 +389,20 @@ impParameterized startType endType p1 p2 q2 = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
     Adapter.mapActionsFromSut toIOGateValue imp
 
-testLatticeSTSParameterized' :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
+testLatticeSTSParameterized' :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> Test
 testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expectedNonConformalTrace = TestCase $ do
     let (startType, endType, startType', endType') =
             if inputThenOut
                 then (In, Out, inp, out)
                 else (Out, In, out, inp)
     let nrSteps = 4
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized startType endType p1 p2 q2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
-    
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+
     case expectedNonConformalTrace of
         Nothing -> do
             assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
@@ -418,10 +422,10 @@ inpf g vals = GateValue (In (InputAttempt(g, False))) vals
 out :: o -> [Constant] -> GateValue (IOAct i (Suspended o))
 out g vals = GateValue (Out (OutSusp g)) vals
 
-testLatticeSTSParameterized :: String -> Bool -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
+testLatticeSTSParameterized :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
-    testLatticeSTSParameterized' testName inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
-    testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True p1 p2 q2 expectedNonConformalTrace
+    testLatticeSTSParameterized' testName          inputThenOut comp False p1 p2 q2 expectedNonConformalTrace,
+    testLatticeSTSParameterized' (testName ++ "'") inputThenOut comp True  p1 p2 q2 expectedNonConformalTrace
     ]
 
 testLatticeSTS :: [Test]
@@ -457,14 +461,14 @@ testLatticeSTS = concat [
                                        
     note, the guard of the second transition is not satisfiable so the second state is quiescent
 -}
-specQ :: IOSTS FreeLattice Integer String String
+specQ :: IOSTS FreeLatticeSlow Integer String String
 specQ =
     let p = sVar pvar :: Expr Integer
         q = sVar qvar :: Expr Integer
         x = sVar xvar :: Expr Integer
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd = p .+ q .== p .+ q .+ x
         assignX = assignment [xvar =: p]
@@ -492,17 +496,12 @@ impQParameterized startType p = do
 testLatticeSTSQuiescentPass :: String -> Bool -> Test
 testLatticeSTSQuiescentPass testName _ = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
     assertEqual (testName ++ ": expected conformal trace") [
@@ -513,17 +512,12 @@ testLatticeSTSQuiescentPass testName _ = TestCase $ do
 testLatticeSTSQuiescentFail1 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -534,17 +528,12 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
 testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -565,14 +554,14 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
                                        
   parameterized by whether to split the second state into two, where the branching occurs on the first transition (with equal guards) instead of the second
 -}
-specUnimplementableParameterized :: Bool -> IOSTS FreeLattice Integer String String
+specUnimplementableParameterized :: Bool -> IOSTS FreeLatticeSlow Integer String String
 specUnimplementableParameterized splitFirst =
     let p = sVar pvar :: Expr Integer
         q = sVar qvar :: Expr Integer
         x = sVar xvar :: Expr Integer
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
-        initConf = pure 0 :: FreeLattice Integer
+        initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
         guardEnd2 = p .+ q .== x
@@ -594,17 +583,12 @@ specUnimplementableParameterized splitFirst =
 testLatticeSTSUnimplementable :: String -> Bool -> Test
 testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
     let nrSteps = 2
-        cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = fromJust (Config.getProc cfg)
-    smtRef <- SMT.createSMTRef smtProc smtLog
-    _ <- SMT.runSMT smtRef SMT.openSolver
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed smtRef 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester smtRef specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
     
     assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [

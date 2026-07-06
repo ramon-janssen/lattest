@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -19,7 +18,7 @@ import Data.Text (unpack)
 import Data.Maybe (fromMaybe)
 import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
-import Lattest.Model.BoundedMonad (FreeLatticeCNF, atom, (/\))
+import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
 import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), fromConstantsMap, Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
 
@@ -313,7 +312,7 @@ buildSwitchList gateMap guardMap assignMap switchDefs =
 buildTransitionRel
     :: [(String, SymInteract (IOAct String String), Expr Bool, VarModel, String)]
     -> String
-    -> Map.Map (SymInteract (IOAct String String)) (FreeLatticeCNF (STStdest, String))
+    -> Map.Map (SymInteract (IOAct String String)) (FreeLattice (STStdest, String))
 buildTransitionRel switchList loc =
     Map.fromListWith (/\)
         [ (gate, atom (stsTLoc guard' varModel, endLoc))
@@ -339,7 +338,7 @@ buildValuation locVarCtx initVal =
         defaultConst StringType = Cstring ""
         defaultConst FloatType  = Cfloat 0.0
 
-convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLatticeCNF String String String, Valuation)
+convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLattice String String String, Valuation)
 convertSTSJson json = do
     locVarMap <- buildVarMap (stsJsonLocVars json)
     paramMap  <- buildVarMap (stsJsonParams json)
@@ -360,7 +359,7 @@ convertSTSJson json = do
 {-| 
     Read a JSON file and parse an STS from it.
 -}
-stsFromJSONFile :: FilePath -> IO (Either String (IOSTS FreeLatticeCNF String String String, Valuation))
+stsFromJSONFile :: FilePath -> IO (Either String (IOSTS FreeLattice String String String, Valuation))
 stsFromJSONFile path = do
     bytes <- BSL.readFile path
     return $ case JSON.eitherDecode bytes of

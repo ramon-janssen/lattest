@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide, prune #-}
 module System.IO.Streams.Synchronized (
 TInputStream,
 read,
@@ -28,7 +29,7 @@ import Control.Concurrent.STM.TMVar(TMVar, takeTMVar, isEmptyTMVar)
 import Control.Concurrent.STM.TVar(newTVarIO, readTVar, writeTVar)
 import GHC.IO.Exception (ioe_location, ioe_errno)
 import Control.Exception(throwIO, Exception, catchJust)
-import Control.Monad (void)
+import Control.Monad (void, when)
 import Data.List(singleton)
 
 import GHC.Conc (atomically, forkIO)
@@ -74,9 +75,7 @@ tryRead tis = do
     if ready
         then do
             minput <- read tis
-            return $ case minput of
-                Nothing -> StreamClosed
-                Just input -> Available input
+            return $ maybe StreamClosed Available minput
         else return Unavailable
 
 tryReadIO :: TInputStream a -> IO (Streamed a)
@@ -103,7 +102,7 @@ makeTInputStream readInput hasInput' = do
                 then Just <$> readTQueue pushbackStack
                 else readInput,
         tUnRead = unGetTQueue pushbackStack,
-        tHasInput = (isNonEmptyTQueue pushbackStack) ||^ hasInput'
+        tHasInput = isNonEmptyTQueue pushbackStack ||^ hasInput'
         }
 
 withClosedState :: TInputStream a -> IO (TInputStream a)
@@ -137,7 +136,7 @@ fromTMVar tmvar = makeTInputStream (takeTMVar tmvar) (not <$> isEmptyTMVar tmvar
 fromBuffer :: TQueue (Maybe a) -> IO (TInputStream a)
 fromBuffer buffer = withClosedState $ TInputStream {
         tRead = readTQueue buffer,
-        tUnRead = \a -> unGetTQueue buffer (Just a),
+        tUnRead = unGetTQueue buffer . Just,
         tHasInput = isNonEmptyTQueue buffer
     }
 
@@ -162,7 +161,7 @@ fromInputStreamBuffered is = do
 
 mapUnbuffered :: (a -> b) -> (b -> a) -> TInputStream a -> TInputStream b -- we need an inverse to push a's back to the original TInputStream of b's
 mapUnbuffered f f' tis = TInputStream { -- FIXME either remove or wrap in withClosedState
-    tRead = fmap (fmap f) $ read tis,
+    tRead = fmap f <$> read tis,
     tUnRead = tUnRead tis . f',
     tHasInput = tHasInput tis
     }
@@ -195,7 +194,7 @@ hasAnyInput tis1 tis2 = hasInput tis1 ||^ hasInput tis2
 -- Actively take inputs from the given list STM, via a separate thread. This ensures that ordering from the given list STM is preserved as much as possible,
 -- in case of concurrent inputs. The resulting stream only reads via the separate thread if needed, and reads from the list STM directly if this is faster.
 -- The resulting stream closes if the consumer closes. This function assumes that the given STMs close properly, i.e., no Just's are sent after a Nothing
-consumeBufferedWith :: (STM [Maybe a]) -> STM Bool -> IO (TInputStream a)
+consumeBufferedWith :: STM [Maybe a] -> STM Bool -> IO (TInputStream a)
 consumeBufferedWith producer producerHasInput = do
     buffer <- newTQueueIO
     let writeToBuffer = writeTQueue buffer
@@ -211,9 +210,7 @@ consumeBufferedWith producer producerHasInput = do
         continue <- atomically $ do
             produced <- producer
             writeSeqTo produced writeToBuffer
-        if continue
-            then bufferLoop writeToBuffer
-            else return ()
+        when continue $ bufferLoop writeToBuffer
     writeSeqTo [] _ = return True  -- TODO this is an OutputStream utils function, similar to Streams.write/writeTo, move to an appropriate module
     writeSeqTo (Nothing:_) writeToBuffer = do
         _ <- writeToBuffer Nothing

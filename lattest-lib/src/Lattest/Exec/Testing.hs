@@ -1,18 +1,22 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
-    
+
     For an experiment, we assume that we have an 'Adapter', which serves as an interface to send inputs to a system under test,
     and observe actions shown by that system. The experiment is controlled by an 'ActionController'. Specifically for a testing
-    experiment, we also assume that we have a specification model that dictates which observations are allowed and forbidden, and a test
-    controller that steers the testing.
-    
+    experiment, we can create an 'ActionController' from a specification model that dictates which observations are allowed and
+    forbidden, and a 'TestController' that steers the testing.
+
     To get started with testing experiments quickly, use the 'runTester' function, and to get the required ingredients, see the following modules:
-    
+
     * "Lattest.Adapter.StandardAdapters" to create adapters,
     * "Lattest.Exec.StandardTestControllers" to create test controllers, and
     * "Lattest.Model.StandardAutomata" to create specification models.
@@ -35,8 +39,8 @@ runExperiment,
 -}
 TestController(..),
 makeTester,
-makeSMTTester,
-runTester,
+RunTester(..),
+runLTSTester,
 runSMTTester,
 Verdict(..),
 InconclusiveReason(..)
@@ -44,16 +48,16 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
-import Lattest.SMT.SMTData(SMTRef)
 
 
 import Control.Exception(catch,evaluate)
 
 --import Control.DeepSeq(force)
 import System.IO.Streams.Synchronized (Streamed(..))
+import Data.Kind (Constraint, Type)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -101,21 +105,12 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
+makeTester :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act) =>
     AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester = makeTester' ()
-
---makeSMTTester :: (IOStepSemantics m loc q t tdest act SmtEnv, TestChoice i act, BoundedConfiguration m, BooleanConfiguration m, Foldable m, Ord q, Ord loc, Ord tdest) =>
-makeSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeSMTTester = makeTester'
-
-makeTester' :: (IOAfter m loc q t tdest act ioState, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    ioState -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-makeTester' ioState initSpec initTestController = ActionController {
+makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
-    update = makeUpdate ioState,
+    update = makeUpdate,
     handleClose = makeHandleClose
     }
     where
@@ -130,10 +125,12 @@ makeTester' ioState initSpec initTestController = ActionController {
 --            return $ case next of
 --                Right r -> Right (pToVerd $ stateConf spec, r)
 --                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (IOAfter m loc q t tdest act ioState, StepSemantics m loc q t tdest act) =>
-            ioState -> (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> act -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
-        makeUpdate ioState' (spec, testController) act = do
-            spec' <- ioAfter ioState' spec act
+        makeUpdate :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act)
+                   => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+                   -> act
+                   -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
+        makeUpdate (spec, testController) act = do
+            spec' <- ioAfter spec act
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do
@@ -186,31 +183,48 @@ runExperiment controller adapter = do
             Right result -> return $ Right result
     handleClosed = Right <$> handleClose controller (controllerState controller)
 
+
 {- |
-    Running a tester requires:
-    
-    * a specification model in the form of an automaton, as defined in "Lattest.Model.Automaton"
-    * a 'TestController', defined in this module itself, and
-    * an adapter, as defined in "Lattest.Adapter.Adapter".
-
-    Running a testing experiment is done by interacting with the given adapter, controlled by the given test controller. The experiment
-    stops when the action controller decides to, or when an observation is made that is forbidden or underspecified according
-    to the specification model. Returns the test verdict according to the specification model and the additional
-    result returned by the test controller.
+    This typeclass provides 'runTester', a way to conveniently run testing experiments.
+    It has instances for STSs and LTSs.
 -}
-runTester :: (After m loc q t tdest act, TestChoice i act, Ord q, Ord (m q)) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
-runTester spec testSelection = runExperiment (makeTester spec testSelection)
+class RunTester tdest where
+  -- | A constraint synonym for the constraints of 'runTester'.
+  --   This allows each instance to have different constraints.
+  type RunnableTester (m :: Type -> Type) loc q t tdest act i :: Constraint
 
-runSMTTester :: (IOAfter m loc q t tdest act SMTRef, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    SMTRef -> AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> Adapter act i -> IO (Verdict, r)
-runSMTTester ioState spec testSelection = runExperiment (makeSMTTester ioState spec testSelection)
+  {- |
+      Running a tester requires:
 
---runStepper :: (Automaton aut c act) => aut -> ActionController (Path aut c act) act r state  -> IO r
---runStepper spec controller = runExperiment controller (simulateSpec spec)
+      * a specification model in the form of an automaton, as defined in "Lattest.Model.Automaton"
+      * a 'TestController', defined in this module itself, and
+      * an adapter, as defined in "Lattest.Adapter.Adapter".
 
+      Running a testing experiment is done by interacting with the given adapter, controlled by the given test controller. The experiment
+      stops when the action controller decides to, or when an observation is made that is forbidden or underspecified according
+      to the specification model. Returns the test verdict according to the specification model and the additional
+      result returned by the test controller.
+  -}
+  runTester
+    :: RunnableTester m loc q t tdest act i
+    => AutIntrpr m loc q t tdest act
+    -> TestController m loc q t tdest act state i r
+    -> Adapter act i
+    -> IO (Verdict, r)
 
+instance RunTester () where
+  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q))
+  runTester = runLTSTester
 
+instance RunTester STStdest where
+  type RunnableTester m loc q t STStdest act i = (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act)
+  runTester = runSMTTester
 
+runLTSTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
+    AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
+runLTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
+runSMTTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
+    AutIntrpr m loc q t STStdest act -> TestController m loc q t STStdest act state i r -> Adapter act i -> IO (Verdict, r)
+runSMTTester spec testSelection = runExperiment (makeTester spec testSelection)
 

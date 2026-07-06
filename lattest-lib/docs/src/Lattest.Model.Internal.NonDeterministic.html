@@ -1,0 +1,522 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+   Non-deterministic model definitions, where observable behaviour may lead to a set of states.
+   These are equivalent to using Lattices with only `(\/)`, and defined in this separate module
+   because `(/\)` is more often the intended meaning.
+-}</span></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Lattest.Model.Internal.NonDeterministic</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-7"></span><span>  </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier">NonDet</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-8"></span><span>  </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#nonDet"><span class="hs-identifier">nonDet</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-9"></span><span>  </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#nonDetConcTransFromListRel"><span class="hs-identifier">nonDetConcTransFromListRel</span></a></span><span>
+</span><span id="line-10"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Set</span></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html"><span class="hs-identifier">Lattest.Model.BoundedMonad</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#BoundedConfiguration"><span class="hs-identifier">BoundedConfiguration</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#BooleanConfiguration"><span class="hs-identifier">BooleanConfiguration</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#JoinSemiLattice"><span class="hs-identifier">JoinSemiLattice</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.OrdMonad.html#OrdFunctor"><span class="hs-identifier">OrdFunctor</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.OrdMonad.html#OrdMonad"><span class="hs-identifier">OrdMonad</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Expr.html"><span class="hs-identifier">Lattest.Model.Symbolic.Expr</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImplsExtension.html#sOr"><span class="hs-identifier">sOr</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#sTrue"><span class="hs-identifier">sTrue</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Lattest.Model.Automaton.html"><span class="hs-identifier">Lattest.Model.Automaton</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#Completable"><span class="hs-identifier">Completable</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Map</span></span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fromJust</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">)</span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Data.OrdMonad.html"><span class="hs-identifier">Data.OrdMonad</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Data.OrdMonad.html#%3C%23%3E"><span class="hs-operator">(&lt;#&gt;)</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="annot"><span class="hs-comment">-- | Non-deterministic state configuration. This means that an automaton non-deterministically in a number of states, where zero states indicates the forbidden configuration, or in an explicit underspecified configuration.</span></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">data</span><span> </span><span id="NonDet"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span></span><span> </span><span id="local-6989586621679226736"><span class="annot"><a href="#local-6989586621679226736"><span class="hs-identifier hs-type">q</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="NonDet"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Set.Set</span></span><span> </span><span class="annot"><a href="#local-6989586621679226736"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span id="UnderspecNonDet"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span></span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span id="local-6989586621679226732"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#nonDet"><span class="hs-identifier hs-type">nonDet</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226732"><span class="hs-identifier hs-type">q</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679226732"><span class="hs-identifier hs-type">q</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679226732"><span class="hs-identifier hs-type">q</span></a></span></span><span>
+</span><span id="line-24"></span><span id="nonDet"><span class="annot"><span class="annottext">nonDet :: forall q. Ord q =&gt; [q] -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#nonDet"><span class="hs-identifier hs-var hs-var">nonDet</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set q -&gt; NonDet q
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="annot"><span class="annottext">(Set q -&gt; NonDet q) -&gt; ([q] -&gt; Set q) -&gt; [q] -&gt; NonDet q
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[q] -&gt; Set q
+forall a. Ord a =&gt; [a] -&gt; Set a
+</span><span class="hs-identifier hs-var">Set.fromList</span></span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#BoundedConfiguration"><span class="hs-identifier hs-type">BoundedConfiguration</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span>    </span><span id="local-6989586621679226901"><span class="annot"><span class="annottext">isForbidden :: forall t. NonDet t -&gt; Bool
+</span><a href="#local-6989586621679226901"><span class="hs-identifier hs-var hs-var hs-var hs-var">isForbidden</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679226903"><span class="annot"><span class="annottext">Set t
+</span><a href="#local-6989586621679226903"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set t -&gt; Bool
+forall a. Set a -&gt; Bool
+</span><span class="hs-identifier hs-var">Set.null</span></span><span> </span><span class="annot"><span class="annottext">Set t
+</span><a href="#local-6989586621679226903"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-28"></span><span>    </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#isForbidden"><span class="hs-identifier hs-var">isForbidden</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet t
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-29"></span><span>    </span><span id="local-6989586621679226905"><span class="annot"><span class="annottext">isUnderspecified :: forall t. NonDet t -&gt; Bool
+</span><a href="#local-6989586621679226905"><span class="hs-identifier hs-var hs-var hs-var hs-var">isUnderspecified</span></a></span></span><span> </span><span class="annot"><span class="annottext">NonDet t
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-30"></span><span>    </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#isUnderspecified"><span class="hs-identifier hs-var">isUnderspecified</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet t
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-31"></span><span>    </span><span id="local-6989586621679226907"><span class="annot"><span class="annottext">forbidden :: forall t. NonDet t
+</span><a href="#local-6989586621679226907"><span class="hs-identifier hs-var hs-var hs-var hs-var">forbidden</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set t -&gt; NonDet t
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="annot"><span class="annottext">Set t
+forall a. Set a
+</span><span class="hs-identifier hs-var">Set.empty</span></span><span>
+</span><span id="line-32"></span><span>    </span><span id="local-6989586621679226910"><span class="annot"><span class="annottext">underspecified :: forall t. NonDet t
+</span><a href="#local-6989586621679226910"><span class="hs-identifier hs-var hs-var hs-var hs-var">underspecified</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">NonDet t
+forall t. NonDet t
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Data.OrdMonad.html#OrdFunctor"><span class="hs-identifier hs-type">OrdFunctor</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-35"></span><span>    </span><span id="local-6989586621679226919"><span class="annot"><span class="annottext">ordMap :: forall b a. Ord b =&gt; (a -&gt; b) -&gt; NonDet a -&gt; NonDet b
+</span><a href="#local-6989586621679226919"><span class="hs-identifier hs-var hs-var hs-var hs-var">ordMap</span></a></span></span><span> </span><span id="local-6989586621679226921"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679226921"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679226922"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679226922"><span class="hs-identifier hs-var">ss</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set b -&gt; NonDet b
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="annot"><span class="annottext">(Set b -&gt; NonDet b) -&gt; Set b -&gt; NonDet b
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; b) -&gt; Set a -&gt; Set b
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; Set a -&gt; Set b
+forall (f :: * -&gt; *) b a.
+(OrdFunctor f, Ord b) =&gt;
+(a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="Data.OrdMonad.html#ordMap"><span class="hs-identifier hs-var">ordMap</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679226921"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679226922"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-36"></span><span>    </span><span class="annot"><a href="Data.OrdMonad.html#ordMap"><span class="hs-identifier hs-var">ordMap</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">NonDet b
+forall t. NonDet t
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Data.OrdMonad.html#OrdMonad"><span class="hs-identifier hs-type">OrdMonad</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-39"></span><span>    </span><span id="local-6989586621679226936"><span class="annot"><span class="annottext">ordBind :: forall b a. Ord b =&gt; NonDet a -&gt; (a -&gt; NonDet b) -&gt; NonDet b
+</span><a href="#local-6989586621679226936"><span class="hs-identifier hs-var hs-var hs-var hs-var">ordBind</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679226938"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679226938"><span class="hs-identifier hs-var">ss</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679226939"><span class="annot"><span class="annottext">a -&gt; NonDet b
+</span><a href="#local-6989586621679226939"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(NonDet b -&gt; NonDet b -&gt; NonDet b)
+-&gt; NonDet b -&gt; Set (NonDet b) -&gt; NonDet b
+forall a b. (a -&gt; b -&gt; b) -&gt; b -&gt; Set a -&gt; b
+forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="annot"><span class="annottext">NonDet b -&gt; NonDet b -&gt; NonDet b
+forall a. JoinSemiLattice a =&gt; a -&gt; a -&gt; a
+</span><a href="Lattest.Model.BoundedMonad.html#%5C%2F"><span class="hs-operator hs-var">(\/)</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Set b -&gt; NonDet b
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="annot"><span class="annottext">Set b
+forall a. Set a
+</span><span class="hs-identifier hs-var">Set.empty</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Set (NonDet b) -&gt; NonDet b) -&gt; Set (NonDet b) -&gt; NonDet b
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; NonDet b) -&gt; Set a -&gt; Set (NonDet b)
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; Set a -&gt; Set b
+</span><span class="hs-identifier hs-var">Set.map</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; NonDet b
+</span><a href="#local-6989586621679226939"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679226938"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-40"></span><span>    </span><span class="annot"><a href="Data.OrdMonad.html#ordBind"><span class="hs-identifier hs-var">ordBind</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; NonDet b
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">NonDet b
+forall t. NonDet t
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span>
+</span><span id="line-41"></span><span>    </span><span id="local-6989586621679226942"><span class="annot"><span class="annottext">ordReturn :: forall a. a -&gt; NonDet a
+</span><a href="#local-6989586621679226942"><span class="hs-identifier hs-var hs-var hs-var hs-var">ordReturn</span></a></span></span><span> </span><span id="local-6989586621679226944"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679226944"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set a -&gt; NonDet a
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="annot"><span class="annottext">(Set a -&gt; NonDet a) -&gt; Set a -&gt; NonDet a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Set a
+forall a. a -&gt; Set a
+</span><span class="hs-identifier hs-var">Set.singleton</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679226944"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679226947"><span id="local-6989586621679226953"><span id="local-6989586621679226958"><span id="local-6989586621679226964"><span id="local-6989586621679226967"><span id="local-6989586621679226970"><span id="local-6989586621679226973"><span id="local-6989586621679226976"><span id="local-6989586621679226979"><span id="local-6989586621679226982"><span id="local-6989586621679226985"><span id="local-6989586621679226988"><span id="local-6989586621679226993"><span id="local-6989586621679226998"><span id="local-6989586621679227003"><span id="local-6989586621679227008"><span class="annot"><span class="hs-identifier hs-type">Foldable</span></span><span> </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-44"></span><span>    </span><span id="local-6989586621679227014"><span class="annot"><span class="annottext">foldr :: forall a b. (a -&gt; b -&gt; b) -&gt; b -&gt; NonDet a -&gt; b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">foldr</span></span></span><span> </span><span id="local-6989586621679227015"><span class="annot"><span class="annottext">a -&gt; b -&gt; b
+</span><a href="#local-6989586621679227015"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679227016"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227016"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227017"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227017"><span class="hs-identifier hs-var">qs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; b -&gt; b) -&gt; b -&gt; Set a -&gt; b
+forall a b. (a -&gt; b -&gt; b) -&gt; b -&gt; Set a -&gt; b
+forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; b
+</span><a href="#local-6989586621679227015"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227016"><span class="hs-identifier hs-var">q</span></a></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227017"><span class="hs-identifier hs-var">qs</span></a></span><span>
+</span><span id="line-45"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; b
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679227018"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227018"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227018"><span class="hs-identifier hs-var">q</span></a></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679226802"><span id="local-6989586621679227021"><span id="local-6989586621679227026"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679226802"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679226802"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-48"></span><span>    </span><span id="local-6989586621679227031"><span class="annot"><span class="annottext">show :: NonDet a -&gt; String
+</span><a href="#local-6989586621679227031"><span class="hs-identifier hs-var hs-var hs-var hs-var">show</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227033"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227033"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Set a -&gt; Bool
+forall a. Set a -&gt; Bool
+</span><span class="hs-identifier hs-var">Set.null</span></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227033"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&#8869;&quot;</span></span><span>
+</span><span id="line-50"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; String) -&gt; [a] -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Set a -&gt; [a]
+forall a. Set a -&gt; [a]
+</span><span class="hs-identifier hs-var">Set.toList</span></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227033"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-51"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&#8868;&quot;</span></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679226808"><span id="local-6989586621679227038"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226808"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679226808"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-54"></span><span>    </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span id="local-6989586621679227046"><span class="annot"><span class="annottext">== :: NonDet a -&gt; NonDet a -&gt; Bool
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">==</span></span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227047"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227047"><span class="hs-identifier hs-var">q1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227048"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227048"><span class="hs-identifier hs-var">q2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227047"><span class="hs-identifier hs-var">q1</span></a></span><span> </span><span class="annot"><span class="annottext">Set a -&gt; Set a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227048"><span class="hs-identifier hs-var">q2</span></a></span><span>
+</span><span id="line-56"></span><span>    </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679226769"><span id="local-6989586621679227053"><span id="local-6989586621679227056"><span id="local-6989586621679227060"><span id="local-6989586621679227063"><span id="local-6989586621679227066"><span id="local-6989586621679227069"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226769"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679226769"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-59"></span><span>    </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679227074"><span class="annot"><span class="annottext">&lt;= :: NonDet a -&gt; NonDet a -&gt; Bool
+</span><a href="#local-6989586621679227074"><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;=</span></a></span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-60"></span><span>    </span><span class="annot"><span class="annottext">NonDet a
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-61"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227076"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227076"><span class="hs-identifier hs-var">q1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227077"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227077"><span class="hs-identifier hs-var">q2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227076"><span class="hs-identifier hs-var">q1</span></a></span><span> </span><span class="annot"><span class="annottext">Set a -&gt; Set a -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227077"><span class="hs-identifier hs-var">q2</span></a></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679226768"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226768"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#JoinSemiLattice"><span class="hs-identifier hs-type">JoinSemiLattice</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679226768"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-64"></span><span>    </span><span id="local-6989586621679227082"><span class="annot"><span class="annottext">\/ :: NonDet a -&gt; NonDet a -&gt; NonDet a
+</span><a href="Lattest.Model.BoundedMonad.html#%5C%2F"><span class="hs-operator hs-var hs-var hs-var hs-var">(\/)</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227083"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227083"><span class="hs-identifier hs-var">q1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227084"><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227084"><span class="hs-identifier hs-var">q2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set a -&gt; NonDet a
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Set a -&gt; Set a -&gt; Set a
+forall a. Ord a =&gt; Set a -&gt; Set a -&gt; Set a
+</span><span class="hs-identifier hs-var">Set.union</span></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227083"><span class="hs-identifier hs-var">q1</span></a></span><span> </span><span class="annot"><span class="annottext">Set a
+</span><a href="#local-6989586621679227084"><span class="hs-identifier hs-var">q2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>    </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#%5C%2F"><span class="hs-operator hs-var">(\/)</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">NonDet a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">NonDet a
+forall t. NonDet t
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-comment">-- underspecification acts as top, so is absorbing w.r.t. join</span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#BooleanConfiguration"><span class="hs-identifier hs-type">BooleanConfiguration</span></a></span><span> </span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-68"></span><span>    </span><span id="local-6989586621679227089"><span class="annot"><span class="annottext">asExpr :: NonDet (Expr Bool) -&gt; Expr Bool
+</span><a href="#local-6989586621679227089"><span class="hs-identifier hs-var hs-var hs-var hs-var">asExpr</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span id="local-6989586621679227091"><span class="annot"><span class="annottext">Set (Expr Bool)
+</span><a href="#local-6989586621679227091"><span class="hs-identifier hs-var">qs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set (Expr Bool) -&gt; Expr Bool
+</span><a href="Lattest.Model.Symbolic.Internal.ExprImplsExtension.html#sOr"><span class="hs-identifier hs-var">sOr</span></a></span><span> </span><span class="annot"><span class="annottext">Set (Expr Bool)
+</span><a href="#local-6989586621679227091"><span class="hs-identifier hs-var">qs</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><a href="Lattest.Model.BoundedMonad.html#asExpr"><span class="hs-identifier hs-var">asExpr</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet (Expr Bool)
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#UnderspecNonDet"><span class="hs-identifier hs-var">UnderspecNonDet</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Expr Bool
+</span><a href="Lattest.Model.Symbolic.Internal.ExprImpls.html#sTrue"><span class="hs-identifier hs-var">sTrue</span></a></span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="annot"><span class="hs-comment">{- |
+    Create a non-deterministic concrete transition relation from an explicit list of tuples, with the destination of transitions expressed as lists of locations,
+    where the empty list is mapped to either `forbidden` or `underspecified`, depending on the transition label.
+    Having multiple occurrences of a transition label is interpreted as non-deterministic choice between the destinations.
+-}</span></span><span>
+</span><span id="line-76"></span><span id="local-6989586621679226817"><span id="local-6989586621679226819"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#nonDetConcTransFromListRel"><span class="hs-identifier hs-type">nonDetConcTransFromListRel</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Automaton.html#Completable"><span class="hs-identifier hs-type">Completable</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679226817"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226819"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226817"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226819"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226817"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679226819"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226819"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679226817"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-type">NonDet</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226819"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-77"></span><span id="nonDetConcTransFromListRel"><span class="annot"><span class="annottext">nonDetConcTransFromListRel :: forall t loc.
+(Completable t, Ord loc, Ord t) =&gt;
+[(loc, t, [loc])] -&gt; loc -&gt; Map t (NonDet ((), loc))
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#nonDetConcTransFromListRel"><span class="hs-identifier hs-var hs-var">nonDetConcTransFromListRel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (loc -&gt; Map t (NonDet ((), loc)))
+-&gt; loc -&gt; Map t (NonDet ((), loc))
+forall a. HasCallStack =&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromJust</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (loc -&gt; Map t (NonDet ((), loc)))
+ -&gt; loc -&gt; Map t (NonDet ((), loc)))
+-&gt; ([(loc, t, [loc])] -&gt; Maybe (loc -&gt; Map t (NonDet ((), loc))))
+-&gt; [(loc, t, [loc])]
+-&gt; loc
+-&gt; Map t (NonDet ((), loc))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">(NonDet ((), loc) -&gt; NonDet ((), loc) -&gt; Maybe (NonDet ((), loc)))
+-&gt; ((loc, t, [loc]) -&gt; (loc, t, (), [loc]))
+-&gt; ([loc] -&gt; () -&gt; t -&gt; NonDet ((), loc))
+-&gt; [(loc, t, [loc])]
+-&gt; Maybe (loc -&gt; Map t (NonDet ((), loc)))
+forall loc t (m :: * -&gt; *) tdest te loc'.
+(Ord loc, Ord t) =&gt;
+(m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc)))
+-&gt; (te -&gt; (loc, t, tdest, loc'))
+-&gt; (loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc))
+-&gt; [te]
+-&gt; Maybe (loc -&gt; Map t (m (tdest, loc)))
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#transFromRelWith"><span class="hs-identifier hs-var">transFromRelWith</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679227110"><span class="annot"><span class="annottext">NonDet ((), loc)
+</span><a href="#local-6989586621679227110"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679227111"><span class="annot"><span class="annottext">NonDet ((), loc)
+</span><a href="#local-6989586621679227111"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">NonDet ((), loc) -&gt; Maybe (NonDet ((), loc))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">NonDet ((), loc)
+</span><a href="#local-6989586621679227110"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet ((), loc) -&gt; NonDet ((), loc) -&gt; NonDet ((), loc)
+forall a. JoinSemiLattice a =&gt; a -&gt; a -&gt; a
+</span><a href="Lattest.Model.BoundedMonad.html#%5C%2F"><span class="hs-operator hs-var">\/</span></a></span><span> </span><span class="annot"><span class="annottext">NonDet ((), loc)
+</span><a href="#local-6989586621679227111"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(loc, t, [loc]) -&gt; (loc, t, (), [loc])
+forall a b d. (a, b, d) -&gt; (a, b, (), d)
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#vacuousTrans"><span class="hs-identifier hs-var">vacuousTrans</span></a></span><span> </span><span class="annot"><span class="annottext">[loc] -&gt; () -&gt; t -&gt; NonDet ((), loc)
+forall {a} {act}.
+(Ord a, Completable act) =&gt;
+[a] -&gt; () -&gt; act -&gt; NonDet ((), a)
+</span><a href="#local-6989586621679227113"><span class="hs-identifier hs-var">listToNonDet</span></a></span><span>
+</span><span id="line-78"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-79"></span><span>    </span><span id="local-6989586621679227113"><span class="annot"><span class="annottext">listToNonDet :: [a] -&gt; () -&gt; act -&gt; NonDet ((), a)
+</span><a href="#local-6989586621679227113"><span class="hs-identifier hs-var hs-var">listToNonDet</span></a></span></span><span> </span><span id="local-6989586621679227125"><span class="annot"><span class="annottext">list :: [a]
+</span><a href="#local-6989586621679227125"><span class="hs-identifier hs-var">list</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[a]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">act
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; ((), a)
+forall b. b -&gt; ((), b)
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#vacuousLoc"><span class="hs-identifier hs-var">vacuousLoc</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; ((), a)) -&gt; NonDet a -&gt; NonDet ((), a)
+forall (f :: * -&gt; *) b a.
+(OrdFunctor f, Ord b) =&gt;
+(a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="Data.OrdMonad.html#%3C%23%3E"><span class="hs-operator hs-var">&lt;#&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">Set a -&gt; NonDet a
+forall q. Set q -&gt; NonDet q
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#NonDet"><span class="hs-identifier hs-var">NonDet</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a] -&gt; Set a
+forall a. Ord a =&gt; [a] -&gt; Set a
+</span><span class="hs-identifier hs-var">Set.fromList</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679227125"><span class="hs-identifier hs-var">list</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span>    </span><span class="annot"><a href="#local-6989586621679227113"><span class="hs-identifier hs-var">listToNonDet</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679227127"><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679227127"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">act -&gt; NonDet ((), a)
+forall act (m :: * -&gt; *) any.
+(Completable act, BoundedConfiguration m) =&gt;
+act -&gt; m any
+forall (m :: * -&gt; *) any. BoundedConfiguration m =&gt; act -&gt; m any
+</span><a href="Lattest.Model.Automaton.html#implicitDestination"><span class="hs-identifier hs-var">implicitDestination</span></a></span><span> </span><span class="annot"><span class="annottext">act
+</span><a href="#local-6989586621679227127"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span id="local-6989586621679226831"><span id="local-6989586621679226832"><span id="local-6989586621679226833"><span id="local-6989586621679226834"><span id="local-6989586621679226835"><span id="local-6989586621679226836"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#transFromRelWith"><span class="hs-identifier hs-type">transFromRelWith</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226832"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span>
+</span><span id="line-83"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226833"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226833"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226833"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- the way of combining the monadic transitions resulting from two list elements, or Nothing if they cannot be combined</span><span>
+</span><span id="line-84"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226835"><span class="hs-identifier hs-type">te</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226832"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226836"><span class="hs-identifier hs-type">loc'</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- the way of creating a 4-tuple with all the transition info from a list element</span><span>
+</span><span id="line-85"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226836"><span class="hs-identifier hs-type">loc'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226832"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226833"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- the way of creating a monadic transition result from the transition info of a list element</span><span>
+</span><span id="line-86"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679226835"><span class="hs-identifier hs-type">te</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- the transition relation in a list representation</span><span>
+</span><span id="line-87"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679226832"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226833"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226834"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226831"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span></span></span></span></span></span></span><span> </span><span class="hs-comment">-- a transition function, or Nothing if combining two monadic transitions failed</span><span>
+</span><span id="line-88"></span><span id="transFromRelWith"><span class="annot"><span class="annottext">transFromRelWith :: forall loc t (m :: * -&gt; *) tdest te loc'.
+(Ord loc, Ord t) =&gt;
+(m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc)))
+-&gt; (te -&gt; (loc, t, tdest, loc'))
+-&gt; (loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc))
+-&gt; [te]
+-&gt; Maybe (loc -&gt; Map t (m (tdest, loc)))
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#transFromRelWith"><span class="hs-identifier hs-var hs-var">transFromRelWith</span></a></span></span><span> </span><span id="local-6989586621679227138"><span class="annot"><span class="annottext">m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc))
+</span><a href="#local-6989586621679227138"><span class="hs-identifier hs-var">c'</span></a></span></span><span> </span><span id="local-6989586621679227139"><span class="annot"><span class="annottext">te -&gt; (loc, t, tdest, loc')
+</span><a href="#local-6989586621679227139"><span class="hs-identifier hs-var">fe'</span></a></span></span><span> </span><span id="local-6989586621679227140"><span class="annot"><span class="annottext">loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc)
+</span><a href="#local-6989586621679227140"><span class="hs-identifier hs-var">f'</span></a></span></span><span> </span><span id="local-6989586621679227141"><span class="annot"><span class="annottext">[te]
+</span><a href="#local-6989586621679227141"><span class="hs-identifier hs-var">trans</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-89"></span><span>    </span><span id="local-6989586621679227142"><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227142"><span class="hs-identifier hs-var">tMapMap</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(te
+ -&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+ -&gt; Maybe (Map loc (Map t (m (tdest, loc)))))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+-&gt; [te]
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a b. (a -&gt; b -&gt; b) -&gt; b -&gt; [a] -&gt; b
+forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc)))
+-&gt; (te -&gt; (loc, t, tdest, loc'))
+-&gt; (loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc))
+-&gt; te
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall loc t (m :: * -&gt; *) tdest te loc'.
+(Ord loc, Ord t) =&gt;
+(m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc)))
+-&gt; (te -&gt; (loc, t, tdest, loc'))
+-&gt; (loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc))
+-&gt; te
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+</span><a href="#local-6989586621679227143"><span class="hs-identifier hs-var">addToMap</span></a></span><span> </span><span class="annot"><span class="annottext">m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc))
+</span><a href="#local-6989586621679227138"><span class="hs-identifier hs-var">c'</span></a></span><span> </span><span class="annot"><span class="annottext">te -&gt; (loc, t, tdest, loc')
+</span><a href="#local-6989586621679227139"><span class="hs-identifier hs-var">fe'</span></a></span><span> </span><span class="annot"><span class="annottext">loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc)
+</span><a href="#local-6989586621679227140"><span class="hs-identifier hs-var">f'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+forall k a. Map k a
+</span><span class="hs-identifier hs-var">Map.empty</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[te]
+</span><a href="#local-6989586621679227141"><span class="hs-identifier hs-var">trans</span></a></span><span> </span><span class="hs-comment">-- map from locations to a map from transitions to Dets</span><span>
+</span><span id="line-90"></span><span>    </span><span class="annot"><span class="annottext">(loc -&gt; Map t (m (tdest, loc)))
+-&gt; Maybe (loc -&gt; Map t (m (tdest, loc)))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">((loc -&gt; Map t (m (tdest, loc)))
+ -&gt; Maybe (loc -&gt; Map t (m (tdest, loc))))
+-&gt; (loc -&gt; Map t (m (tdest, loc)))
+-&gt; Maybe (loc -&gt; Map t (m (tdest, loc)))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679227145"><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227145"><span class="hs-identifier hs-var">loc</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Map t (m (tdest, loc))
+-&gt; Maybe (Map t (m (tdest, loc))) -&gt; Map t (m (tdest, loc))
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">Map t (m (tdest, loc))
+forall k a. Map k a
+</span><span class="hs-identifier hs-var">Map.empty</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Map t (m (tdest, loc))) -&gt; Map t (m (tdest, loc)))
+-&gt; Maybe (Map t (m (tdest, loc))) -&gt; Map t (m (tdest, loc))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227145"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="annot"><span class="annottext">loc
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map t (m (tdest, loc)))
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-operator hs-var">`Map.lookup`</span></span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227142"><span class="hs-identifier hs-var">tMapMap</span></a></span><span>
+</span><span id="line-91"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-92"></span><span>    </span><span id="local-6989586621679226856"><span id="local-6989586621679226857"><span id="local-6989586621679226858"><span id="local-6989586621679226859"><span id="local-6989586621679226860"><span id="local-6989586621679226861"><span class="annot"><a href="#local-6989586621679227143"><span class="hs-identifier hs-type">addToMap</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679226857"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226858"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226858"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226858"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226860"><span class="hs-identifier hs-type">te</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226857"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226861"><span class="hs-identifier hs-type">loc'</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226861"><span class="hs-identifier hs-type">loc'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226857"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226858"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679226860"><span class="hs-identifier hs-type">te</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679226857"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226858"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679226857"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226858"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226859"><span class="hs-identifier hs-type">tdest</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226856"><span class="hs-identifier hs-type">loc</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span></span></span></span></span></span></span><span>
+</span><span id="line-93"></span><span>    </span><span id="local-6989586621679227143"><span class="annot"><span class="annottext">addToMap :: forall loc t (m :: * -&gt; *) tdest te loc'.
+(Ord loc, Ord t) =&gt;
+(m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc)))
+-&gt; (te -&gt; (loc, t, tdest, loc'))
+-&gt; (loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc))
+-&gt; te
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+</span><a href="#local-6989586621679227143"><span class="hs-identifier hs-var hs-var">addToMap</span></a></span></span><span> </span><span id="local-6989586621679227158"><span class="annot"><span class="annottext">m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc))
+</span><a href="#local-6989586621679227158"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679227159"><span class="annot"><span class="annottext">te -&gt; (loc, t, tdest, loc')
+</span><a href="#local-6989586621679227159"><span class="hs-identifier hs-var">fe</span></a></span></span><span> </span><span id="local-6989586621679227160"><span class="annot"><span class="annottext">loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc)
+</span><a href="#local-6989586621679227160"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679227161"><span class="annot"><span class="annottext">te
+</span><a href="#local-6989586621679227161"><span class="hs-identifier hs-var">te</span></a></span></span><span> </span><span id="local-6989586621679227162"><span class="annot"><span class="annottext">Maybe (Map loc (Map t (m (tdest, loc))))
+</span><a href="#local-6989586621679227162"><span class="hs-identifier hs-var">maybeTMapMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-94"></span><span>        </span><span id="local-6989586621679227163"><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227163"><span class="hs-identifier hs-var">tMapMap</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe (Map loc (Map t (m (tdest, loc))))
+</span><a href="#local-6989586621679227162"><span class="hs-identifier hs-var">maybeTMapMap</span></a></span><span>
+</span><span id="line-95"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679227164"><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227164"><span class="hs-identifier hs-var">loc</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679227165"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679227166"><span class="annot"><span class="annottext">tdest
+</span><a href="#local-6989586621679227166"><span class="hs-identifier hs-var">tdest</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679227167"><span class="annot"><span class="annottext">loc'
+</span><a href="#local-6989586621679227167"><span class="hs-identifier hs-var">loc'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">te -&gt; (loc, t, tdest, loc')
+</span><a href="#local-6989586621679227159"><span class="hs-identifier hs-var">fe</span></a></span><span> </span><span class="annot"><span class="annottext">te
+</span><a href="#local-6989586621679227161"><span class="hs-identifier hs-var">te</span></a></span><span>
+</span><span id="line-96"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227164"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="annot"><span class="annottext">loc
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map t (m (tdest, loc)))
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-operator hs-var">`Map.lookup`</span></span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227163"><span class="hs-identifier hs-var">tMapMap</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-97"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679227168"><span class="annot"><span class="annottext">Map t (m (tdest, loc))
+</span><a href="#local-6989586621679227168"><span class="hs-identifier hs-var">tMap</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">t -&gt; Map t (m (tdest, loc)) -&gt; Maybe (m (tdest, loc))
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-operator hs-var">`Map.lookup`</span></span><span> </span><span class="annot"><span class="annottext">Map t (m (tdest, loc))
+</span><a href="#local-6989586621679227168"><span class="hs-identifier hs-var">tMap</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-98"></span><span>                </span><span class="annot"><span class="annottext">Maybe (m (tdest, loc))
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Map loc (Map t (m (tdest, loc)))
+ -&gt; Maybe (Map loc (Map t (m (tdest, loc)))))
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">loc
+-&gt; Map t (m (tdest, loc))
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Map loc (Map t (m (tdest, loc)))
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.insert</span></span><span> </span><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227164"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t
+-&gt; m (tdest, loc)
+-&gt; Map t (m (tdest, loc))
+-&gt; Map t (m (tdest, loc))
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.insert</span></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc)
+</span><a href="#local-6989586621679227160"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">loc'
+</span><a href="#local-6989586621679227167"><span class="hs-identifier hs-var">loc'</span></a></span><span> </span><span class="annot"><span class="annottext">tdest
+</span><a href="#local-6989586621679227166"><span class="hs-identifier hs-var">tdest</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map t (m (tdest, loc))
+</span><a href="#local-6989586621679227168"><span class="hs-identifier hs-var">tMap</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227163"><span class="hs-identifier hs-var">tMapMap</span></a></span><span>
+</span><span id="line-99"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679227170"><span class="annot"><span class="annottext">m (tdest, loc)
+</span><a href="#local-6989586621679227170"><span class="hs-identifier hs-var">prevLoc</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-100"></span><span>                    </span><span id="local-6989586621679227171"><span class="annot"><span class="annottext">m (tdest, loc)
+</span><a href="#local-6989586621679227171"><span class="hs-identifier hs-var">combinedLoc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m (tdest, loc) -&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc))
+</span><a href="#local-6989586621679227158"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">m (tdest, loc)
+</span><a href="#local-6989586621679227170"><span class="hs-identifier hs-var">prevLoc</span></a></span><span> </span><span class="annot"><span class="annottext">(m (tdest, loc) -&gt; Maybe (m (tdest, loc)))
+-&gt; m (tdest, loc) -&gt; Maybe (m (tdest, loc))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc)
+</span><a href="#local-6989586621679227160"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">loc'
+</span><a href="#local-6989586621679227167"><span class="hs-identifier hs-var">loc'</span></a></span><span> </span><span class="annot"><span class="annottext">tdest
+</span><a href="#local-6989586621679227166"><span class="hs-identifier hs-var">tdest</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-101"></span><span>                    </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Map loc (Map t (m (tdest, loc)))
+ -&gt; Maybe (Map loc (Map t (m (tdest, loc)))))
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">loc
+-&gt; Map t (m (tdest, loc))
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Map loc (Map t (m (tdest, loc)))
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.insert</span></span><span> </span><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227164"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t
+-&gt; m (tdest, loc)
+-&gt; Map t (m (tdest, loc))
+-&gt; Map t (m (tdest, loc))
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.insert</span></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">m (tdest, loc)
+</span><a href="#local-6989586621679227171"><span class="hs-identifier hs-var">combinedLoc</span></a></span><span> </span><span class="annot"><span class="annottext">Map t (m (tdest, loc))
+</span><a href="#local-6989586621679227168"><span class="hs-identifier hs-var">tMap</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227163"><span class="hs-identifier hs-var">tMapMap</span></a></span><span>
+</span><span id="line-102"></span><span>            </span><span class="annot"><span class="annottext">Maybe (Map t (m (tdest, loc)))
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Map loc (Map t (m (tdest, loc)))
+ -&gt; Maybe (Map loc (Map t (m (tdest, loc)))))
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Maybe (Map loc (Map t (m (tdest, loc))))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">loc
+-&gt; Map t (m (tdest, loc))
+-&gt; Map loc (Map t (m (tdest, loc)))
+-&gt; Map loc (Map t (m (tdest, loc)))
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.insert</span></span><span> </span><span class="annot"><span class="annottext">loc
+</span><a href="#local-6989586621679227164"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t -&gt; m (tdest, loc) -&gt; Map t (m (tdest, loc))
+forall k a. k -&gt; a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.singleton</span></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">loc' -&gt; tdest -&gt; t -&gt; m (tdest, loc)
+</span><a href="#local-6989586621679227160"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">loc'
+</span><a href="#local-6989586621679227167"><span class="hs-identifier hs-var">loc'</span></a></span><span> </span><span class="annot"><span class="annottext">tdest
+</span><a href="#local-6989586621679227166"><span class="hs-identifier hs-var">tdest</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679227165"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map loc (Map t (m (tdest, loc)))
+</span><a href="#local-6989586621679227163"><span class="hs-identifier hs-var">tMapMap</span></a></span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span id="local-6989586621679226838"><span id="local-6989586621679226839"><span id="local-6989586621679226840"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#vacuousTrans"><span class="hs-identifier hs-type">vacuousTrans</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226838"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226839"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226840"><span class="hs-identifier hs-type">d</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679226838"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226839"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226840"><span class="hs-identifier hs-type">d</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-105"></span><span id="vacuousTrans"><span class="annot"><span class="annottext">vacuousTrans :: forall a b d. (a, b, d) -&gt; (a, b, (), d)
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#vacuousTrans"><span class="hs-identifier hs-var hs-var">vacuousTrans</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679227173"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679227173"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679227174"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227174"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679227175"><span class="annot"><span class="annottext">d
+</span><a href="#local-6989586621679227175"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679227173"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227174"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">,</span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><span class="annottext">d
+</span><a href="#local-6989586621679227175"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span id="local-6989586621679226843"><span class="annot"><a href="Lattest.Model.Internal.NonDeterministic.html#vacuousLoc"><span class="hs-identifier hs-type">vacuousLoc</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679226843"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679226843"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-108"></span><span id="vacuousLoc"><span class="annot"><span class="annottext">vacuousLoc :: forall b. b -&gt; ((), b)
+</span><a href="Lattest.Model.Internal.NonDeterministic.html#vacuousLoc"><span class="hs-identifier hs-var hs-var">vacuousLoc</span></a></span></span><span> </span><span id="local-6989586621679227176"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227176"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679227176"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span></pre></body></html>

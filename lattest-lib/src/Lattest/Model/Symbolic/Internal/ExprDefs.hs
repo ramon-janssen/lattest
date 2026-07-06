@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide, prune #-}
 {-
 This is a modified version of:
 TorXakis - Model Based Testing
@@ -126,22 +127,25 @@ instance JSON.FromJSON Constant where
     parseJSON _ = fail "expected Constant JSON"
 
 instance JSON.ToJSON Constant where
-    toJSON (Cbool b) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) $ JSON.empty
-    toJSON (Cint i) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) $ JSON.empty
-    toJSON (Cstring s) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) $ JSON.empty
+    toJSON (Cbool b) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
+    toJSON (Cint i) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
+    toJSON (Cstring s) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
     toJSON (Cfloat f) = JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) $ JSON.empty
+    toJSON (Ccstr _ _) = error "toJSON cstr"
 
 constType :: Constant -> Type
 constType (Cbool _) = BoolType
 constType (Cint _) = IntType
 constType (Cstring _) = StringType
 constType (Cfloat _) = FloatType
+constType (Ccstr _ _) = error "type cstr"
 
 instance Show Constant where
   show (Cbool b) = show b
   show (Cint i) = show i
   show (Cstring t) = show t
   show (Cfloat f) = show f
+  show (Ccstr a b) = show a <> " " <> show b
 
 -- | convert a Constant to an typed value
 class ConstType t where
@@ -200,7 +204,6 @@ data ExprView t where
     GezFloat :: ExprView Double -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
-    At :: {string2 :: ExprView String, position2 :: ExprView Integer} -> ExprView String
     Concat :: [ExprView String] -> ExprView String
 
 deriving instance Eq t => Eq (ExprView t)
@@ -239,7 +242,6 @@ instance Show t => Show (ExprView t) where
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⋀∅"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
-    show (At e1 e2) = show e1 ++ "[" ++ show e2 ++ "]"
     show (Concat []) = "∑'∅"
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
 
@@ -265,7 +267,7 @@ eval = evalView . view
 
 evalView :: ExprView v -> Either String v
 evalView (reduce -> Const v) = Right v
-evalView _ = Left $ "Value Expression is not a constant value"
+evalView _ = Left "Value Expression is not a constant value"
 
 isConst :: ExprView v -> Bool
 isConst (Const _) = True
@@ -320,7 +322,7 @@ reduce (GezFloat (reduce -> (Const x))) = Const $ x >= 0
 reduce (GezFloat (reduce -> e)) = GezFloat e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
-reduce (And (Set.map reduce -> es)) | all isConst es = Const $ foldr (&&) True (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
+reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
 reduce (And (Set.map reduce -> es)) = And es
 --reduce (view -> Vstrinre { })                                  =
 --reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
@@ -329,9 +331,7 @@ reduce (And (Set.map reduce -> es)) = And es
 --reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
 --reduce (view -> Viscstr { })                                   =
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
-reduce (At (reduce -> (Const s)) (reduce -> (Const i))) = Const $ drop (fromIntegral i) s -- TODO are these semantics the same as in SMT2?
-reduce (At (reduce -> e1) (reduce -> e2)) = At e1 e2
-reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concat $ fmap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
+reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concatMap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
 reduce (Concat (fmap reduce -> e)) = Concat e
 --reduce (view -> Vstrinre { })                                  =
 --reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
@@ -350,10 +350,10 @@ freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
 freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Modulo e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (DivideFloat e1 e2) = freeVars' e1 ++ freeVars' e2
-freeVars' (Sum (distinctTermsT -> es)) = concat $ freeVars' <$> es
-freeVars' (SumFloat (distinctTermsT -> es)) = concat $ freeVars' <$> es
-freeVars' (Product (distinctTermsT -> es)) = concat $ freeVars' <$> es
-freeVars' (ProductFloat (distinctTermsT -> es)) = concat $ freeVars' <$> es
+freeVars' (Sum (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (SumFloat (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (ProductFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Length e) = freeVars' e
 freeVars' (EqualInt e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (EqualBool e1 e2) = freeVars' e1 ++ freeVars' e2
@@ -362,12 +362,6 @@ freeVars' (EqualFloat e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
 freeVars' (GezFloat e) = freeVars' e
 freeVars' (Not e) = freeVars' e
-freeVars' (And (Set.toList -> es)) = concat $ freeVars' <$> es
-freeVars' (At e1 e2) = freeVars' e1 ++ freeVars' e2
-freeVars' (Concat es) = concat $ freeVars' <$> es
-
-
-
-
-
+freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
+freeVars' (Concat es) = concatMap freeVars' es
 
