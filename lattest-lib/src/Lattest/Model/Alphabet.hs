@@ -75,7 +75,8 @@ where
 import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..))
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
-import Data.Some (Some)
+import Data.Some (Some (..))
+import Data.List (intercalate)
 
 {- |
     If an input type is an 'TestChoice' to a type of observable actions, this means that
@@ -282,7 +283,7 @@ interactionGate :: SymInteract g -> g
 interactionGate (SymInteract g' _) = g'
 
 instance (Show g) => Show (SymInteract g) where
-    show (SymInteract g' vars) = show g' ++ " " ++ show vars
+  show (SymInteract g' vars) = show g' ++ " [" ++ intercalate "," (map (\(Some v) -> show v) vars) ++ "]"
 
 type SymGuard = Expr Bool
 

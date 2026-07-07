@@ -291,7 +291,7 @@ instance Eq (ExprView t) where
   Concat x == Concat y = x == y
   _ == _ = False
 
-instance Ord t => Ord (ExprView t) where
+instance Ord (ExprView t) where
   compare l r =
     case (l, r) of
       (Var a, Var b) -> compare a b
@@ -340,7 +340,7 @@ instance Ord t => Ord (ExprView t) where
         And{}     -> 11
         Concat{}  -> 12
 
-instance Show t => Show (ExprView t) where
+instance Show (ExprView t) where
     show (Var v) = varName v
     show (Const c) = show c
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
@@ -374,7 +374,7 @@ showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm 
 newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
 -- TODO: which invariants?
 
-instance Show t => Show (Expr t) where
+instance Show (Expr t) where
     show = show . view
 
 -- | Evaluate the provided value expression.

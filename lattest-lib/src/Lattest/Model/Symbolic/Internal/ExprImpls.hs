@@ -51,9 +51,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sConcat
 
 -- * Substitution of var by value
-, VarModel
+, VarModel(..)
 , assign
-, Valuation
+, Valuation(..)
 , Val(..)
 , emptyValuation
 , assignValues
@@ -80,6 +80,7 @@ import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
+import qualified Data.List as List
 
 sConst :: ExprConstraints t => t -> Expr t
 sConst = Expr . Const
@@ -383,8 +384,10 @@ data Val t where
   Val :: ExprConstraints t => { runVal :: t } -> Val t
 deriving instance Eq (Val t)
 deriving instance Ord (Val t)
-deriving instance Show (Val t)
-type Valuation = DMap Variable Val
+instance Show (Val t) where
+  show (Val t) = show t
+newtype Valuation = Valuation { runValuation :: DMap Variable Val }
+  deriving (Eq, Ord)
 instance Has (ComposeC Eq Val) Variable where
   has _ k = k
 instance Has (ComposeC Ord Val) Variable where
@@ -392,26 +395,33 @@ instance Has (ComposeC Ord Val) Variable where
 instance Has (ComposeC Show Val) Variable where
   has _ k = k
 
--- instance Show Valuation where
---     show (Valuation i b s) = "{" ++ List.intercalate "," (printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
---         where
---         printAsAssignments :: Show t => Map.Map (Variable t) t -> [String]
---         printAsAssignments m = printAsAssignment <$> Map.toList m
---         printAsAssignment (v,t) = varName v ++ ":=" ++ show t
+instance Show Valuation where
+  show (Valuation val) = "{" ++ List.intercalate "," (printAsAssignments val) ++ "}"
+    where
+    printAsAssignments :: DMap Variable Val -> [String]
+    printAsAssignments = DMap.foldrWithKey printAsAssignment []
+    printAsAssignment v t strs = (varName v ++ ":=" ++ show t) : strs
 
 assignValues :: [Valuation -> Valuation] -> Valuation
 assignValues = foldr ($) emptyValuation
 
 emptyValuation :: Valuation
-emptyValuation = DMap.empty
+emptyValuation = Valuation DMap.empty
 
-type VarModel = DMap Variable Expr
+newtype VarModel = VarModel {runVarModel :: DMap Variable Expr}
+  deriving (Eq, Ord)
+instance Show VarModel where
+  show (VarModel vm) = "{" ++ List.intercalate ", " (printAsAssignments vm) ++ "}"
+    where
+    printAsAssignments :: DMap Variable Expr -> [String]
+    printAsAssignments = DMap.foldrWithKey printAsAssignment []
+    printAsAssignment v t strs = (varName v ++ ":=" ++ show t) : strs
 
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment = foldr ($) noAssignment
 
 valuationToVarModel :: Valuation -> VarModel
-valuationToVarModel = DMap.map (\(Val v) -> sConst v)
+valuationToVarModel = VarModel . DMap.map (\(Val v) -> sConst v) . runValuation
 
 insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
 insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
@@ -427,19 +437,19 @@ fromConst' = fromConst
 infixr 0 =:
 
 assign :: Variable t -> Expr t -> VarModel -> VarModel
-assign = DMap.insert
+assign v e = VarModel . DMap.insert v e . runVarModel
 
 assignValue :: ExprConstraints t => Variable t -> t -> Valuation -> Valuation
-assignValue v val = DMap.insert v (Val val)
+assignValue v val = Valuation . DMap.insert v (Val val) . runValuation
 
 assignedExpr :: Variable t -> VarModel -> Maybe (Expr t)
-assignedExpr = DMap.lookup
+assignedExpr v = DMap.lookup v . runVarModel
 
 assignedExprWithDefault :: Variable t -> VarModel -> Expr t
-assignedExprWithDefault v = DMap.findWithDefault (sVar v) v
+assignedExprWithDefault v = DMap.findWithDefault (sVar v) v . runVarModel
 
 noAssignment :: VarModel
-noAssignment = DMap.empty
+noAssignment = VarModel DMap.empty
 
 substConst :: Valuation -> Expr t -> Expr t
 substConst valuation = subst (valuationToVarModel valuation)

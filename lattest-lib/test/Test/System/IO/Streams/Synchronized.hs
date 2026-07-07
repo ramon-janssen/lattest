@@ -29,6 +29,7 @@ import System.IO.Streams.Synchronized.Attoparsec(parserToInputStream)
 import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assertWith, monadicIO, run)
+import Control.Concurrent.STM (newTVarIO)
 
 data WaitTime = NoWT | ShortWT | LongWT deriving (Eq, Show, Ord)
 
@@ -114,7 +115,7 @@ prop_jsonStream testInput = monadicIO $ do
     is <- run $ makeReader byteData
     actionStream <- run $ parserToInputStream ((Parse.endOfInput >> pure Nothing) <|> (Just <$> (Parse.skipSpace *> jsonNoDup))) is
     actionStream' <- run $ Streams.map (fromResult . fromJSON) actionStream
-    
+
     -- assert that the parsed objects are equal to the original objects, minus the cut-off
     --return Discard
     void $ checkObjs actionStream' typedData
@@ -153,15 +154,15 @@ prop_jsonStream testInput = monadicIO $ do
                 else b:bytes
         return (a:as,bytes'')
     splitAtRandom :: ByteString -> IO (ByteString,ByteString)
-    splitAtRandom b = 
+    splitAtRandom b =
         if BS.length b > 1
             then do
                 i <- generate $ chooseInt (1, BS.length b - 1)
                 return $ BS.splitAt i b
             else discard
-    encode' = toStrict . (flip snoc $ c2w8 '\n') . encode
+    encode' = toStrict . flip snoc (c2w8 '\n') . encode
     makeReader someData = do
-        tSomeData <- atomically $ newTVar someData
+        tSomeData <- newTVarIO someData
         makeTInputStream (consume tSomeData) (return True)
         where
         consume tSomeData = do

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GADTs #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -27,29 +28,32 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract, IOSuspGateValue)
 import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLattice, atom)
 import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT as SMT
+import Data.Some (Some (..))
+import qualified Data.Dependent.Map as DMap
 
-pvar :: Variable
-pvar = (Variable "p" IntType)
-qvar :: Variable
-qvar = (Variable "q" IntType)
-xvar :: Variable
-xvar = (Variable "x" IntType)
+pvar :: Variable Integer
+pvar = Variable "p" IntType
+qvar :: Variable Integer
+qvar = Variable "q" IntType
+xvar :: Variable Integer
+xvar = Variable "x" IntType
+
 stsExampleInitAssign :: Valuation
-stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+stsExampleInitAssign = Valuation $ DMap.singleton xvar (Val 0)
 
 stsExample :: IOSTS Det Integer String String
 stsExample =
     let p = sVar pvar
         x = sVar xvar
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
+        water = SymInteract (In "water") [Some pvar]
+        ok = SymInteract (Out "ok") [Some pvar]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
@@ -66,38 +70,38 @@ stsExampleIntrpr :: STSIntrp Det Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
-getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpState loc val = pure $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
 
     assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExampleIntrpr)
-    let intrp2 = after stsExampleIntrpr (GateValue (In "water") [Cint 7])
+    let intrp2 = after stsExampleIntrpr (GateValue (In "water") [Some $ Cint 7])
     assertEqual "after water 7: " (getSTSIntrpState 1 7) (stateConf intrp2)
-    let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
+    let intrp3 = after intrp2 (GateValue (Out "ok") [Some $ Cint 7])
     assertEqual "after ok 7: " (getSTSIntrpState 0 7) (stateConf intrp3)
-    let intrp4 = after intrp3 (GateValue (In "water") [Cint 9])
+    let intrp4 = after intrp3 (GateValue (In "water") [Some $ Cint 9])
     assertEqual "after water 9: " (getSTSIntrpState 1 16) (stateConf intrp4)
-    let intrp5 = after intrp4 (GateValue (Out "ok") [Cint 16])
+    let intrp5 = after intrp4 (GateValue (Out "ok") [Some $ Cint 16])
     assertEqual "after ok 16: " (getSTSIntrpState 0 16) (stateConf intrp5)
     let intrp6 = after intrp5 (GateValue (Out "coffee") [])
     assertEqual "after coffee: " (getSTSIntrpState 2 16) (stateConf intrp6)
-    return()
+    return ()
 
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
-    let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [Cint 7])
+    let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [Some $ Cint 7])
     assertThrowsError "gate not in STS alphabet" (stateConf $ intrp1)
     let intrp2 = after stsExampleIntrpr (GateValue (In "water") [])
     assertThrowsError "nr of values unequal to nr of parameters" (stateConf $ intrp2)
-    let intrp3 = after stsExampleIntrpr (GateValue (In "water") [Cbool True])
+    let intrp3 = after stsExampleIntrpr (GateValue (In "water") [Some $ Cbool True])
     assertThrowsError "type of variable and value do not match" (stateConf $ intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
-    let intrp3 = after stsExampleIntrpr (GateValue (Out "ok") [Cint 0]) -- output not enabled
+    let intrp3 = after stsExampleIntrpr (GateValue (Out "ok") [Some $ Cint 0]) -- output not enabled
     assertEqual "after ok: " forbidden (stateConf intrp3)
-    let intrp4 = after stsExampleIntrpr (GateValue (In "water") [Cint 11]) -- value for input does not satisfy guard
+    let intrp4 = after stsExampleIntrpr (GateValue (In "water") [Some $ Cint 11]) -- value for input does not satisfy guard
     assertEqual "after water 11: " underspecified (stateConf intrp4)
     let intrp5 = after stsExampleIntrpr (GateValue (Out "coffee") []) -- value of variable does not satisfy guard
     assertEqual "after coffee: " forbidden (stateConf intrp5)
@@ -139,9 +143,9 @@ data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 -- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
 tExampleCorrect :: (Ord i, Ord o, IsString i, IsString o) => (ImpExampleLoc, Integer) -> Map.Map (GateValue (IOAct i o)) (ImpExampleLoc, Integer)
 tExampleCorrect (L0, x) = Map.fromList $
-    [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
-tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L0, x))]
-tExampleCorrect (L2, _) = Map.fromList $ []
+    [(GateValue (In "water") [Some $ Cint p], (L1, x+p)) | p <- [1..10]] ++ [(GateValue (Out "coffee") [], (L2, 0)) | x > 15]
+tExampleCorrect (L1, x) = Map.fromList  [(GateValue (Out "ok") [Some $ Cint x], (L0, x))]
+tExampleCorrect (L2, _) = mempty
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impExampleCorrect = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -157,40 +161,41 @@ testSTSTestSelection = TestCase $ do
     (verdict, ((observed, _), _)) <- runSMTTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     let checkObserved = go 0 0 observed
     let exampleObserved = [
-          inp "water" [Cint 1],
-          out "ok" [Cint 1],
-          inp "water" [Cint 1],
-          out "ok" [Cint 2],
+        -- TODO: inp, out seem to be the same as inpL, outL?
+          inp "water" [Some $ Cint 1],
+          out "ok"    [Some $ Cint 1],
+          inp "water" [Some $ Cint 1],
+          out "ok"    [Some $ Cint 2],
           GateValue δ [],
-          inp "water" [Cint 1],
-          out "ok" [Cint 3],
-          inp "water" [Cint 1],
-          outL "ok" [Cint 4],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 5],
+          inp "water" [Some $ Cint 1],
+          out "ok"    [Some $ Cint 3],
+          inp "water" [Some $ Cint 1],
+          outL "ok"   [Some $ Cint 4],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 5],
           GateValue δ [],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 6],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 7],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 8],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 9],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 10],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 11],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 12],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 13],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 14],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 15],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 16],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 6],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 7],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 8],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 9],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 10],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 11],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 12],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 13],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 14],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 15],
+          inpL "water" [Some $ Cint 1],
+          outL "ok"    [Some $ Cint 16],
           outL "coffee" [],
           GateValue δ [],
           GateValue δ []
@@ -199,15 +204,16 @@ testSTSTestSelection = TestCase $ do
     assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
-    inpL g vals = GateValue (In (InputAttempt(g, True))) vals
+    inpL g vals = GateValue (In (InputAttempt (g, True))) vals
     outL g vals = GateValue (Out (OutSusp g)) vals
+    go :: Int -> Integer -> [SuspendedIFGateValue String String] -> (Int, Integer)
     go ds waterlevel [] = (ds, waterlevel)
     go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
     go ds waterlevel gv@(GateValue x y:os)
       | x == In (InputAttempt ("water", True))
-      , [Cint w] <- y = go ds (waterlevel+w) os
+      , [Some (Cint w)] <- y = go ds (waterlevel + w) os
       | x == Out (OutSusp "ok")
-      , [Cint w] <- y
+      , [Some (Cint w)] <- y
       , w == waterlevel = go ds waterlevel os
       | x == Out (OutSusp "coffee")
       , [] <- y
@@ -219,8 +225,8 @@ stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integ
 stsExample2 =
     let p = sVar pvar
         x = sVar xvar
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
+        water = SymInteract (In "water") [Some pvar]
+        ok = SymInteract (Out "ok") [Some pvar]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 4
         waterGuard1 = 4 .<= p .&& p .<= 10
@@ -247,7 +253,7 @@ stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
 getSTSValuation :: Integer -> Valuation
-getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSValuation val = Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
@@ -256,25 +262,25 @@ testLatticeCoffeeSTS :: Test
 testLatticeCoffeeSTS = TestCase $ do
      assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2a)
      assertEqual "\ninitial state " (getSTSIntrpState2 0 0 /\ getSTSIntrpState2 2 0) (stateConf stsExampleIntrpr2b)
-     let intrp2a = after stsExampleIntrpr2a (GateValue (In "water") [Cint 3])
+     let intrp2a = after stsExampleIntrpr2a (GateValue (In "water") [Some $ Cint 3])
      assertEqual "2a after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2a)
-     let intrp2b = after stsExampleIntrpr2b (GateValue (In "water") [Cint 3])
+     let intrp2b = after stsExampleIntrpr2b (GateValue (In "water") [Some $ Cint 3])
      assertEqual "2b after water 3: " (getSTSIntrpState2 1 3) (stateConf intrp2b)
-     let intrp3a = after intrp2a (GateValue (Out "ok") [Cint 3])
+     let intrp3a = after intrp2a (GateValue (Out "ok") [Some $ Cint 3])
      assertEqual "2a after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3a)
-     let intrp3b = after intrp2b (GateValue (Out "ok") [Cint 3])
+     let intrp3b = after intrp2b (GateValue (Out "ok") [Some $ Cint 3])
      assertEqual "2b after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3b)
-     let intrp4a = after intrp3a (GateValue (In "water") [Cint 4])
+     let intrp4a = after intrp3a (GateValue (In "water") [Some $ Cint 4])
      assertEqual "2a after water 4: " (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7) (stateConf intrp4a)
-     let intrp4b = after intrp3b (GateValue (In "water") [Cint 4])
+     let intrp4b = after intrp3b (GateValue (In "water") [Some $ Cint 4])
      assertEqual "2b after water 4: "  (getSTSIntrpState2 1 7) (stateConf intrp4b)
-     let intrp5a = after intrp4a (GateValue (Out "ok") [Cint 7])
+     let intrp5a = after intrp4a (GateValue (Out "ok") [Some $ Cint 7])
      assertEqual "2a after ok 7: " (getSTSIntrpState2 0 7) (stateConf intrp5a)
-     let intrp5b = after intrp4b (GateValue (Out "ok") [Cint 7])
+     let intrp5b = after intrp4b (GateValue (Out "ok") [Some $ Cint 7])
      assertEqual "2b after ok 7: " (getSTSIntrpState2 0 7) (stateConf intrp5b)
-     let intrp6a = after intrp5a (GateValue (In "water") [Cint 5])
+     let intrp6a = after intrp5a (GateValue (In "water") [Some $ Cint 5])
      assertEqual "2a after water 5: " (getSTSIntrpState2 2 12) (stateConf intrp6a)
-     let intrp6b = after intrp5b (GateValue (In "water") [Cint 5])
+     let intrp6b = after intrp5b (GateValue (In "water") [Some $ Cint 5])
      assertEqual "2b after water 5: " underspecified (stateConf intrp6b)
 
 
@@ -298,8 +304,8 @@ specParameterized startType endType comp splitFirst =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
-        start = SymInteract (startType "start") [pvar]
-        end = SymInteract (endType "end") [pvar, qvar]
+        start = SymInteract (startType "start") [Some pvar]
+        end = SymInteract (endType "end") [Some pvar, Some qvar]
         done = SymInteract (Out "done") []
         initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
@@ -331,8 +337,8 @@ specParameterized startType endType comp splitFirst =
   * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
 -}
 t1 :: (Ord i, Ord o, Num a1, Num a2, IsString t1, IsString t2, IsString o, Eq a1) => (t1 -> IOAct i o) -> (t2 -> IOAct i o) -> Integer -> Integer -> Integer -> a1 -> Map.Map (GateValue (IOAct i o)) a2
-t1 startType _ p1 _ _ 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
-t1 _ endType _ p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
+t1 startType _ p1 _ _ 0 = Map.fromList $ [((GateValue (startType "start") [Some $ Cint p1]), 1)]
+t1 _ endType _ p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Some $ Cint p2, Some $ Cint q2]), 2)]
 t1 _ _ _ _ _ 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
 t1 _ _ _ _ _ 3 = Map.fromList $ []
 impParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> Integer -> Integer -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
@@ -358,20 +364,20 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
         Nothing -> do
             assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
             assertEqual (testName ++ ": expected conformal trace") [
-                startType' "start" [Cint p1],
-                endType' "end" [Cint p2, Cint q2],
+                startType' "start" [Some $ Cint p1],
+                endType' "end" [Some $ Cint p2, Some $ Cint q2],
                 out "done" [],
                 GateValue δ []
                 ] observed
         Just t -> do
             assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
             assertEqual (testName ++ ": expected nonconformal trace") t observed
-inp :: i -> [Constant] -> GateValue (IOAct (InputAttempt i) o)
-inp g vals = GateValue (In (InputAttempt(g, True))) vals
-inpf :: i -> [Constant] -> GateValue (IOAct (InputAttempt i) o)
-inpf g vals = GateValue (In (InputAttempt(g, False))) vals
-out :: o -> [Constant] -> GateValue (IOAct i (Suspended o))
-out g vals = GateValue (Out (OutSusp g)) vals
+inp :: i -> [Some Constant] -> GateValue (IOAct (InputAttempt i) o)
+inp g = GateValue (In (InputAttempt (g, True)))
+inpf :: i -> [Some Constant] -> GateValue (IOAct (InputAttempt i) o)
+inpf g = GateValue (In (InputAttempt (g, False)))
+out :: o -> [Some Constant] -> GateValue (IOAct i (Suspended o))
+out g = GateValue (Out (OutSusp g))
 
 testLatticeSTSParameterized :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
@@ -385,18 +391,18 @@ testLatticeSTS = concat [
     testLatticeSTSParameterized "a1" inputThenOutput (\/) 2 2 2 Nothing, -- pass: output (2,2) satisfies the first guard
     testLatticeSTSParameterized "a2" inputThenOutput (\/) 2 4 2 Nothing, -- pass: output (4,2) satisfies the second guard
     testLatticeSTSParameterized "a3" inputThenOutput (\/) 2 3 1 Nothing, -- pass: output (3,1) satisfies both guards
-    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]), -- fail: output (4,4) satisfies neither guard
-    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [Cint 2], out "end" [Cint 2, Cint 2]]), -- fail: output (2,2) satisfies the first guards, but not both
-    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 2]]), -- fail: output (4,2) satisfies the second guards, but not both
-    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]), -- fail: output (4,4) satisfies neither guard
+    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [Some $ Cint 2], out "end" [Some $ Cint 4, Some $ Cint 4]]), -- fail: output (4,4) satisfies neither guard
+    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [Some $ Cint 2], out "end" [Some $ Cint 2, Some $ Cint 2]]), -- fail: output (2,2) satisfies the first guards, but not both
+    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [Some $ Cint 2], out "end" [Some $ Cint 4, Some $ Cint 2]]), -- fail: output (4,2) satisfies the second guards, but not both
+    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [Some $ Cint 2], out "end" [Some $ Cint 4, Some $ Cint 4]]), -- fail: output (4,4) satisfies neither guard
     testLatticeSTSParameterized "a8" inputThenOutput (/\) 2 3 1 Nothing, -- pass: output (3,1) satisfies both guards
 
     testLatticeSTSParameterized "b1" outputThenInput (\/) 2 3 1 Nothing, -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested and observed
-    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 3, Cint 1]]) -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested but refused
+    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [Some $ Cint 2], inpf "end" [Some $ Cint 3, Some $ Cint 1]]) -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested but refused
      -- FIXME the next tests are actually unsound: it will pass under the assumption that the test selection (SMT solver) will pick the last two number parameters as input,
      -- but if not, the test case will incorrectly fail. To fix this, change the implementation to accept any (p,q) satisfying any of the guards 〚p+q=4〛 or 〚p-q=2〛
     --testLatticeSTSParameterized "b3" outputThenInput (/\) 2 0 (-2) Nothing, -- pass: (0,-2) is an input that matches one of the guards, so is specified, thus may be tested and in that case will be observed
-    --testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 0, Cint (-2)]]) -- fail: the tester will pick an input that matches one of the guards, but will be rejected by the implementation
+    --testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [Some $ Cint 2], inpf "end" [Some $ Cint 0, Cint (-2)]]) -- fail: the tester will pick an input that matches one of the guards, but will be rejected by the implementation
     ]
     where
     inputThenOutput = True
@@ -417,8 +423,8 @@ specQ =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
-        start = SymInteract (In "start") [pvar]
-        end = SymInteract (Out "end") [pvar, qvar]
+        start = SymInteract (In "start") [Some pvar]
+        end = SymInteract (Out "end") [Some pvar, Some qvar]
         initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd = p .+ q .== p .+ q .+ x
@@ -437,7 +443,7 @@ specQ =
   * p
 -}
 tq :: (Ord g, IsString t, Num a1, Num a2, Eq a1) => (t -> g) -> Integer -> a1 -> Map.Map (GateValue g) a2
-tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [Cint p]), 1)]
+tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [Some $ Cint p]), 1)]
 tq _ _ 1 = Map.fromList $ []
 impQParameterized :: (String -> IOAct String String) -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impQParameterized startType p = do
@@ -453,10 +459,10 @@ testLatticeSTSQuiescentPass testName _ = TestCase $ do
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
     (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
-    
+
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
     assertEqual (testName ++ ": expected conformal trace") [
-                inp "start" [Cint 2],
+                inp "start" [Some $ Cint 2],
                 GateValue δ []
                 ] observed
 
@@ -469,10 +475,10 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
     (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
-    
+
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
-                inp "start" [Cint 2],
+                inp "start" [Some $ Cint 2],
                 GateValue δ []
                 ] observed
 
@@ -485,11 +491,11 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
     (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
-    
+
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
-                inp "start" [Cint 2],
-                out "end" [Cint 42, Cint 42]
+                inp "start" [Some $ Cint 2],
+                out "end" [Some $ Cint 42, Some $ Cint 42]
                 ] observed
 
 
@@ -510,8 +516,8 @@ specUnimplementableParameterized splitFirst =
     let p = sVar pvar
         q = sVar qvar
         x = sVar xvar
-        start = SymInteract (In "start") [pvar]
-        end = SymInteract (Out "end") [pvar, qvar]
+        start = SymInteract (In "start") [Some pvar]
+        end = SymInteract (Out "end") [Some pvar, Some qvar]
         initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
@@ -540,10 +546,10 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
     (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
-    
+
     assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
-                inp "start" [Cint 2],
+                inp "start" [Some $ Cint 2],
                 GateValue δ []
                 ] observed
 

@@ -11,7 +11,7 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr(Valuation,Variable(..))
+import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), runValuation)
 import Lattest.Model.Symbolic.Internal.ExprDefs(eval)
 import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
 import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
@@ -56,7 +56,7 @@ solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
 --data GateValue g = GateValue g [Constant]
 valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
 valuationToGateValue (SymInteract g' params) valuation =
-    GateValue g' $ fmap (getValueForVar valuation) params
+    GateValue g' $ fmap (getValueForVar $ runValuation valuation) params
     where
         getValueForVar :: DMap.DMap Variable E.Val -> Some Variable -> Some E.Constant
         getValueForVar val' (Some var) =

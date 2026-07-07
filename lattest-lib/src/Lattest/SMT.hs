@@ -25,7 +25,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, Type (..), Constant (..), view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation(..), Expr, Type (..), Constant (..), view)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -61,7 +61,7 @@ runSMT = SBV.runSMT . query . flip evalStateT Map.empty
 
 getSolution :: [Some Variable] -> SMT Valuation
 getSolution vs =
-  (\val -> DMap.intersection val $ foldr (\(Some v) -> DMap.insert v (error "dummy variable that should never be evaluated")) mempty vs)
+  (\(Valuation val) -> Valuation $ DMap.intersection val $ foldr (\(Some v) -> DMap.insert v (error "dummy variable that should never be evaluated")) mempty vs)
   . sbvModelToValuation <$> lift getModel
 
 addAssertions :: [Expr Bool] -> SMT ()
@@ -130,7 +130,7 @@ checkSatToSolveProblem = \case
   SBV.DSat _ -> Unknown
 
 sbvModelToValuation :: SMTModel -> Valuation
-sbvModelToValuation = foldr f DMap.empty . modelAssocs
+sbvModelToValuation = Valuation . foldr f DMap.empty . modelAssocs
   where
     f (varname, cv) = case cvVal cv of
       -- booleans for some reason are represented as CInteger with a different 'Kind'

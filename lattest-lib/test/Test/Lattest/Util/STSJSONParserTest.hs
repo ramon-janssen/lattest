@@ -21,8 +21,10 @@ import Test.HUnit
 import Lattest.Model.Alphabet(IOAct(..), SymInteract(..))
 import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
-import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable(..), fromConstantsMap)
+import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable(..), Val (..), Valuation(..))
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
+import qualified Data.Dependent.Map as DMap
+import Data.Some (Some(..))
 
 testDir :: FilePath
 testDir = "./test/Test/Lattest/Util/STSJSONExamples/"
@@ -51,18 +53,18 @@ testSTSJSONParserNominal = TestCase $ do
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
         Right (sts, valuation) -> do
             assertEqual "initial valuation"
-                (fromConstantsMap $ Map.fromList
-                    [ (Variable "counter" IntType,    Cint    5    )
-                    , (Variable "label"   StringType, Cstring ""   )
-                    , (Variable "active"  BoolType,   Cbool   False)
-                    ])
+                (Valuation $
+                 DMap.insert (Variable "counter" IntType)  (Val 5) $
+                 DMap.insert (Variable "label" StringType) (Val "") $
+                 DMap.insert (Variable "active" BoolType)  (Val False)
+                 mempty)
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Variable "label_p"   StringType]
-                    , SymInteract (In  "update")    [Variable "counter_p" IntType   ]
+                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   StringType]
+                    , SymInteract (In  "update")    [Some $ Variable "counter_p" IntType   ]
                     , SymInteract (Out "O1")        []
-                    , SymInteract (Out "confirm")   [Variable "counter_p" IntType   ]
+                    , SymInteract (Out "confirm")   [Some $ Variable "counter_p" IntType   ]
                     ])
                 (alphabet sts)
             assertBool failureMessage (expected == actual)
@@ -71,7 +73,7 @@ testSTSJSONParserNominal = TestCase $ do
                 actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
                 failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
                 expected = [QQ.r|
-current state configuration: ("0",{counter:=5,active:=False,label:=""})
+current state configuration: ("0",{active:=False,counter:=5,label:=""})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
@@ -79,7 +81,7 @@ transitions:
 "0"  ――?"update" [counter_p:Int]⟶  (((counter+-4)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5)) ≥ 0), {counter:=(counter+counter_p)},"1")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Int]⟶  ⊥
-"1"  ――?"register" [label_p:String]⟶  ((label) = (label_p), {counter:=(counter+1), active:=True},"0") ∧ ((active) = (True), {label:=label_p},"0")
+"1"  ――?"register" [label_p:String]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1)},"0")
 "1"  ――?"update" [counter_p:Int]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Int]⟶  ⊥

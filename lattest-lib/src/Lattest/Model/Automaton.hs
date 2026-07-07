@@ -50,7 +50,7 @@ FiniteMenu,
 specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
-Valuation,
+Valuation(..),
 STStdest(STSLoc),
 stsTLoc,
 -- * Auxiliary Automaton Functions
@@ -86,7 +86,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, toConst, ConstType, Val(..))
+import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, toConst, ConstType, Val(..))
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
@@ -494,10 +494,10 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
     move (IntrpState _l1 stateValuation) gv@(GateValue _ gateVals) (Just (SymInteract _ gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
-            valuation = stateValuation `DMap.union` gateValuation
+            valuation = Valuation $ runValuation stateValuation `DMap.union` runValuation gateValuation
         in if not $ evalBool valuation guard
             then implicitDestination gv
-            else let stateValuation2 = DMap.mapWithKey (\var val -> assignNewValue var val valuation assign) stateValuation
+            else let stateValuation2 = Valuation $ DMap.mapWithKey (\var val -> assignNewValue var val valuation assign) $ runValuation stateValuation
                  in BM.ordReturn $ IntrpState l2 stateValuation2
         where
         assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t

@@ -40,9 +40,10 @@ sizeOf' :: SizeOf a => ExprView a -> Int
 sizeOf' (Var _) = 1
 sizeOf' (Const c) = sizeOfTyped c
 sizeOf' (Ite i t e) = sizeOf' i + sizeOf' t + sizeOf' e + 1
-sizeOf' (EqualInt e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (EqualBool e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (EqualString e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
+sizeOf' (Equal t e1 e2) = case t of
+  IntType -> sizeOf' e1 + sizeOf' e2 + 1
+  BoolType -> sizeOf' e1 + sizeOf' e2 + 1
+  StringType -> sizeOf' e1 + sizeOf' e2 + 1
 sizeOf' (Divide e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
 sizeOf' (Modulo e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
 sizeOf' (Sum es) = foldrTerms (\a b -> sizeOf' a + b) 0 es + 1
@@ -50,8 +51,8 @@ sizeOf' (Product es) = foldrTerms (\a b -> sizeOf' a + b) 0 es + 1
 sizeOf' (Length e) = sizeOf' e + 1
 sizeOf' (GezInt e) = sizeOf' e + 1
 sizeOf' (Not e) = sizeOf' e + 1
-sizeOf' (And es) = (sum $ sizeOf' <$> Set.toList es) + 1
-sizeOf' (Concat es) = (sum $ sizeOf' <$> es) + 1
+sizeOf' (And es) = sum (sizeOf' <$> Set.toList es) + 1
+sizeOf' (Concat es) = sum (sizeOf' <$> es) + 1
 
 class SizeOf t
     where
@@ -74,9 +75,11 @@ instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
     shrink (Var _) = []
     shrink (Const c) = Const <$> shrinkConst c
     shrink (Ite i t e) = [Ite i' t' e' | (i', t', e') <- shrink (i, t, e)] ++ shrink t ++ shrink e
-    shrink (EqualInt e1 e2) = [EqualInt e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
-    shrink (EqualBool e1 e2) = [EqualBool e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
-    shrink (EqualString e1 e2) = [EqualString e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
+    shrink (Equal t e1 e2) = [Equal t e1' e2' | (e1', e2') <- case t of
+        IntType -> shrink (e1, e2)
+        BoolType -> shrink (e1, e2)
+        StringType -> shrink (e1, e2)
+      ] ++ [Const True, Const False]
     shrink (Divide e1 e2) = [Divide e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1
     shrink (Modulo e1 e2) = [Modulo e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1 ++ shrink e2
     shrink (Sum _) = [] -- shrinkListExpr (Sum . FM.fromListT) (FM.toListT es)
@@ -129,9 +132,9 @@ instance ConcreteGenExpr Bool where
         arbitraryVar BoolType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
-        CM.liftM2 EqualInt subexpr2 subexpr2,
-        CM.liftM2 EqualBool subexpr2 subexpr2,
-        CM.liftM2 EqualString subexpr2 subexpr2,
+        CM.liftM2 (Equal IntType) subexpr2 subexpr2,
+        CM.liftM2 (Equal BoolType) subexpr2 subexpr2,
+        CM.liftM2 (Equal StringType) subexpr2 subexpr2,
         CM.liftM GezInt subexpr,
         CM.liftM Not subexpr,
         CM.liftM And (Set.fromList <$> genList subexprSqrt)
@@ -192,8 +195,8 @@ prop_symbolicEval e = rightToMaybe (eval e) == localConcreteEval e
     rightToMaybe (Right x) = Just x
     localConcreteEval = concreteEval' . view
 
-arbitraryVar :: Type -> Gen (ExprView t)
-arbitraryVar t = 
+arbitraryVar :: Type t -> Gen (ExprView t)
+arbitraryVar t =
     let prefix = case t of
                     IntType -> 'i'
                     BoolType -> 'b'
@@ -248,7 +251,7 @@ safeZero _ _ 0 = Nothing
 safeZero op n m = Just $ n `op` m
 
 foldOccurList :: TermWrapper t => Integer -> (Integer -> Integer -> Integer) -> (Integer -> Integer -> Integer) -> FreeMonoidX (t (ExprView Integer)) -> Maybe Integer
-foldOccurList zero add mult monoid = (foldr add zero) <$> sequence (maybeEvalTerm <$> FM.toOccurListT monoid)
+foldOccurList zero add mult monoid = foldr add zero <$> mapM maybeEvalTerm (FM.toOccurListT monoid)
     where
     maybeEvalTerm :: (ExprView Integer, Integer) -> Maybe Integer
     maybeEvalTerm (x, n) = case concreteEval' x of
@@ -260,18 +263,19 @@ instance ConcreteEval Bool where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (EqualInt e1 e2) = concreteBinOp (==) e1 e2
-    concreteEval' (EqualBool e1 e2) = concreteBinOp (==) e1 e2
-    concreteEval' (EqualString e1 e2) = concreteBinOp (==) e1 e2
+    concreteEval' (Equal t e1 e2) = case t of
+      IntType -> concreteBinOp (==) e1 e2
+      BoolType -> concreteBinOp (==) e1 e2
+      StringType -> concreteBinOp (==) e1 e2
     concreteEval' (GezInt e) = concreteUnaryOp (>= 0) e
     concreteEval' (Not e) = concreteUnaryOp not e
-    concreteEval' (And es) = fmap and $ sequence (concreteEval' <$> Set.toList es)
+    concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
 
 instance ConcreteEval String where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (Concat es) = concat <$> (sequence $ concreteEval' <$> es)
+    concreteEval' (Concat es) = concat <$> mapM concreteEval' es
 
 concreteUnaryOp :: (ConcreteEval t1) => (t1 -> t2) -> ExprView t1 -> Maybe t2
 concreteUnaryOp op e = do
