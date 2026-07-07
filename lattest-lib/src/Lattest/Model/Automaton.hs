@@ -7,6 +7,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs #-}
 
 {-|
     This module contains the definitions and interpretations of automata models.
@@ -85,7 +86,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
+import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, toConst, ConstType, Val(..))
+import Data.Some (Some (..))
+import Data.EqP (EqP(..))
+import qualified Data.Dependent.Map as DMap
+import Unsafe.Coerce (unsafeCoerce)
 
 ------------
 -- syntax --
@@ -479,7 +484,7 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
             Just i@(SymInteract _ vars) ->
                 if List.length vals /= List.length vars
                     then errorWithoutStackTrace "nr of values unequal to nr of parameters"
-                    else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
+                    else if List.all (\(Some var, Some val) -> varType var `eqp` constType val) (zip vars vals)
                             then Just i
                             else errorWithoutStackTrace "type of variable and value do not match"
 
@@ -489,27 +494,27 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
     move (IntrpState _l1 stateValuation) gv@(GateValue _ gateVals) (Just (SymInteract _ gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
-            valuation = fromConstantsMap $ toConstantsMap stateValuation `Map.union` toConstantsMap gateValuation
+            valuation = stateValuation `DMap.union` gateValuation
         in if not $ evalBool valuation guard
             then implicitDestination gv
-            else let stateValuation2 = Map.mapWithKey (\var val -> assignNewValue var val valuation assign) $ toConstantsMap stateValuation
-                 in BM.ordReturn $ IntrpState l2 $ fromConstantsMap stateValuation2
+            else let stateValuation2 = DMap.mapWithKey (\var val -> assignNewValue var val valuation assign) stateValuation
+                 in BM.ordReturn $ IntrpState l2 stateValuation2
         where
-        assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
-        -- the following case distinctino could be removed if constants were also typed
-        assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
-        assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
-        assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
+        assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t
+        assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal ((\(Cint i) -> Val i) . evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
+        assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal ((\(Cbool b) -> Val b) . evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
+        assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal ((\(Cstring s) -> Val s) . evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
-buildGateValuation :: [Variable] -> [Constant] -> Valuation
+buildGateValuation :: [Some Variable] -> [Some Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
-buildGateValuation gateVars gateVals = assignValues $ (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) <$> zip gateVars gateVals
-evalVal :: (ConstType t, Assignable t) => Valuation -> Expr t -> Constant
+                                              -------------- TODO: this unsafeCoerce should be replaced by a check, which means we need some type tag in Val
+buildGateValuation gateVars gateVals = assignValues $ (\(Some gateVar, Some gateVal) m -> insertIntoValuation gateVar (unsafeCoerce gateVal) m) <$> zip gateVars gateVals
+evalVal :: (ConstType t) => Valuation -> Expr t -> Constant t
 evalVal valuation e = case eval $ substConst valuation e of
     Right v -> toConst v
     Left m -> error $ "evalVal: " ++ m
 evalBool :: Valuation -> Expr Bool -> Bool
-evalBool valuation = toBool . evalVal valuation
+evalBool valuation = (\(Cbool b) -> b) . evalVal valuation
 
 --------------------
 -- STS quiescence --

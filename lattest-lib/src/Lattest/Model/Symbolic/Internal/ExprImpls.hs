@@ -8,8 +8,11 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
-{-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -46,26 +49,12 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sLength
   -- *** Concat operator
 , sConcat
-  -- ** Regular Expression Operators to create Value Expressions
-  -- *** String in Regular Expression operator
---, cstrStrInRe
-  -- ** Algebraic Data Type Operators to create Value Expressions
-  -- *** Algebraic Data Type constructor operator
---, cstrCstr
-  -- *** Algebraic Data Type IsConstructor function
---, cstrIsCstr
-  -- *** Algebraic Data Type Accessor
---, cstrAccess
 
--- to be documented
---, cstrPredef
 -- * Substitution of var by value
 , VarModel
-, Assignable
 , assign
 , Valuation
-, toConstantsMap
-, fromConstantsMap
+, Val(..)
 , emptyValuation
 , assignValues
 , assignValue
@@ -80,71 +69,19 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 where
 
 import           Control.Arrow   (first)
-import qualified Data.List       as List
-import qualified Data.Map        as Map
 import qualified Data.Set        as Set
---import           Text.Regex.TDFA
 
 import qualified Lattest.Model.Symbolic.Internal.Boute as Boute
 import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX        as FMX
 import           Lattest.Model.Symbolic.Internal.Product as Product
---import           Lattest.Model.Symbolic.Expr.RegexXSD2Posix
 import           Lattest.Model.Symbolic.Internal.Sum as Sum
 import           Lattest.Model.Symbolic.Internal.ExprDefs
+import Data.Dependent.Map (DMap)
+import qualified Data.Dependent.Map as DMap
+import Data.Constraint.Extras (Has (..))
+import Data.Constraint.Compose (ComposeC)
 
--- | Create a function call.
--- Preconditions are /not/ checked.
-{-cstrFunc :: (Variable v, Variable w) => Map.Map FuncId (FuncDef v) -> FuncId -> [Expr w] -> Expr w
-cstrFunc fis fi arguments =
-    case Map.lookup fi fis of
-        Nothing ->
-            -- When implementing the body of a recursive function, a function
-            -- call is made while the implementation is not (yet) finished and
-            -- available.
-            Expr (Vfunc fi arguments)
-        Just (FuncDef params body)->
-            case view body of
-                Vconst x -> cons x
-                _        -> if all isConst arguments
-                            then compSubst (Map.fromList (zip params arguments)) fis body
-                            else Expr (Vfunc fi arguments)
-
--- | Apply ADT Constructor of constructor with CstrId and the provided arguments (the list of value expressions).
--- Preconditions are /not/ checked.
-cstrCstr :: CstrId -> [Expr] -> Expr
-cstrCstr c a = if all isConst a
-                then cons (Ccstr c (map toConst a) )
-                else Expr (Vcstr c a)
-    where   toConst :: Expr -> Constant
-            toConst (view -> Vconst v) = v
-            toConst _                  = error "Impossible when all satisfy isConst"
-
--- | Is the provided value expression made by the ADT constructor with CstrId?
--- Preconditions are /not/ checked.
-cstrIsCstr :: CstrId -> Expr -> Expr
-cstrIsCstr c1 (view -> Vcstr c2 _)          = cons (Cbool (c1 == c2) )
-cstrIsCstr c1 (view -> Vconst (Ccstr c2 _)) = cons (Cbool (c1 == c2) )
-cstrIsCstr c e                              = Expr (Viscstr c e)
-
--- | Apply ADT Accessor of constructor with CstrId on field with given position on the provided value expression.
--- Preconditions are /not/ checked.
-cstrAccess :: CstrId -> T.Text -> Int -> Expr -> Expr
-cstrAccess c1 n1 p1 (view -> Vcstr c2 fields) =
-    if c1 == c2 -- prevent crashes due to model errors
-        then fields!!p1
-        else error ("Error in model: Accessing field " ++ show n1 ++ " of constructor " ++ show c1 ++ " on instance from constructor " ++ show c2)
-cstrAccess c1 n1 p1 (view -> Vconst (Ccstr c2 fields)) =
-    if c1 == c2 -- prevent crashes due to model errors
-        then cons (fields!!p1)
-        else error ("Error in model: Accessing field " ++ show n1 ++ " of constructor " ++ show c1 ++ " on value from constructor " ++ show c2)
-cstrAccess c n p e = Expr (Vaccess c n p e)
--}
--- | Is Expr a Constant/Value Expression?
---isConst :: Expr -> Bool
---isConst (view -> Vconst{}) = True
---isConst _                  = False
-
-sConst :: ExprType t => t -> Expr t
+sConst :: ExprConstraints t => t -> Expr t
 sConst = Expr . Const
 
 sTrue :: Expr Bool
@@ -153,23 +90,8 @@ sTrue = sConst True
 sFalse :: Expr Bool
 sFalse = sConst False
 
-class VarExpr t where
-    sVar :: Variable -> Expr t
-
-instance VarExpr Integer where
-    sVar v@(Variable _ IntType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Integer, received " ++ show t
-
-instance VarExpr Bool where
-    sVar v@(Variable _ BoolType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Bool, received " ++ show t
-
-instance VarExpr String where
-    sVar v@(Variable _ StringType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
-
-sVar' :: Variable -> Expr t
-sVar' = Expr . Var
+sVar :: Variable t -> Expr t
+sVar = Expr . Var
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -178,20 +100,8 @@ sIfThenElse (view -> Const True) t _ = t
 sIfThenElse (view -> Const False) _ f = f
 sIfThenElse (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 
--- | Create a variable as a value expression.
--- typeclass because every type has its own ExprView-constructor
-class EqExpr t where
-    (.==) :: Expr t -> Expr t -> Expr Bool
-
-instance EqExpr Integer where
-    (.==) (view -> x) (view -> y) = Expr $ EqualInt x y
-
-instance EqExpr Bool where
-    (.==) (view -> x) (view -> y) = Expr $ EqualBool x y
-
-instance EqExpr String where
-    (.==) (view -> x) (view -> y) = Expr $ EqualString x y
-
+(.==) :: ExprConstraints t => Expr t -> Expr t -> Expr Bool
+x .== y = Expr $ Equal (typeOf' x) (view x) (view y)
 infix 4 .==
 
 {-
@@ -469,123 +379,76 @@ cstrPredef :: PredefKind -> FuncId -> [Expr] -> Expr
 cstrPredef p f a = Expr (Vpredef p f a)
 -}
 
-type TypedValuation t = Map.Map Variable t
-data Valuation = Valuation {
-    intValuation :: TypedValuation Integer,
-    boolValuation :: TypedValuation Bool,
-    stringValuation :: TypedValuation String
-    }
-    deriving (Eq, Ord)
+data Val t where
+  Val :: ExprConstraints t => { runVal :: t } -> Val t
+deriving instance Eq (Val t)
+deriving instance Ord (Val t)
+deriving instance Show (Val t)
+type Valuation = DMap Variable Val
+instance Has (ComposeC Eq Val) Variable where
+  has _ k = k
+instance Has (ComposeC Ord Val) Variable where
+  has _ k = k
+instance Has (ComposeC Show Val) Variable where
+  has _ k = k
 
-instance Show Valuation where
-    show (Valuation i b s) = "{" ++ List.intercalate "," (printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
-        where
-        printAsAssignments :: Show t => Map.Map Variable t -> [String]
-        printAsAssignments m = printAsAssignment <$> Map.toList m
-        printAsAssignment (v,t) = varName v ++ ":=" ++ show t
-
-toConstantsMap :: Valuation -> Map.Map Variable Constant
-toConstantsMap valuation = Map.map Cint (intValuation valuation)
-                            `Map.union` Map.map Cbool (boolValuation valuation)
-                            `Map.union` Map.map Cstring (stringValuation valuation)
-
-fromConstantsMap :: Map.Map Variable Constant -> Valuation
-fromConstantsMap = assignValues . fmap (uncurry insertIntoValuation) . Map.toList
+-- instance Show Valuation where
+--     show (Valuation i b s) = "{" ++ List.intercalate "," (printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s) ++ "}"
+--         where
+--         printAsAssignments :: Show t => Map.Map (Variable t) t -> [String]
+--         printAsAssignments m = printAsAssignment <$> Map.toList m
+--         printAsAssignment (v,t) = varName v ++ ":=" ++ show t
 
 assignValues :: [Valuation -> Valuation] -> Valuation
 assignValues = foldr ($) emptyValuation
 
 emptyValuation :: Valuation
-emptyValuation = Valuation Map.empty Map.empty Map.empty
+emptyValuation = DMap.empty
 
-type TypedVarModel t = Map.Map Variable (Expr t)
-data VarModel = VarModel {
-    intVars :: TypedVarModel Integer,
-    boolVars :: TypedVarModel Bool,
-    stringVars :: TypedVarModel String
-    }
-    deriving (Eq, Ord)
+type VarModel = DMap Variable Expr
 
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment = foldr ($) noAssignment
 
-typedValuationToVarModel :: ExprType t => TypedValuation t -> TypedVarModel t
-typedValuationToVarModel = Map.map sConst
-
 valuationToVarModel :: Valuation -> VarModel
-valuationToVarModel vals = VarModel {
-    intVars = typedValuationToVarModel $ intValuation vals,
-    boolVars = typedValuationToVarModel $ boolValuation vals,
-    stringVars = typedValuationToVarModel $ stringValuation vals
-    }
+valuationToVarModel = DMap.map (\(Val v) -> sConst v)
 
-insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
-insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
-insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
-insertIntoValuation v@(Variable name StringType) c = assignValue v (fromConst' c name StringType :: String)
-fromConst' :: (ConstType a, Show b) => Constant -> String -> b -> a
-fromConst' smtValue name t = case fromConst smtValue of
-    Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
-    Right val -> val
+insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
+insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ StringType) c = assignValue v (fromConst' c)
 
-class Assignable t where
-    assign :: Variable -> Expr t -> VarModel -> VarModel
-    assignValue :: Variable -> t -> Valuation -> Valuation
-    assignedExpr :: Variable -> VarModel -> Maybe (Expr t)
-    assignedExprWithDefault :: Variable -> VarModel -> Expr t
+fromConst' :: ConstType a => Constant a -> a
+fromConst' = fromConst
 
-(=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
+
+(=:) :: Variable t -> Expr t -> VarModel -> VarModel
 (=:) = assign
 infixr 0 =:
 
-instance Assignable Integer where
-    assign v@(Variable _ IntType) e m = m {intVars = Map.insert v e (intVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignValue v@(Variable _ IntType) val m = m {intValuation = Map.insert v val (intValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignedExpr v@(Variable _ IntType) (VarModel ints _bools _strings) = Map.lookup v ints
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
-    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints _bools _strings) = Map.findWithDefault (sVar v) v ints
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
+assign :: Variable t -> Expr t -> VarModel -> VarModel
+assign = DMap.insert
 
-instance Assignable Bool where
-    assign v@(Variable _ BoolType) e m = m {boolVars = Map.insert v e (boolVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignValue v@(Variable _ BoolType) val m = m {boolValuation = Map.insert v val (boolValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignedExpr v@(Variable _ BoolType) (VarModel _ints bools _strings) = Map.lookup v bools
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
-    assignedExprWithDefault v@(Variable _ BoolType) (VarModel _ints bools _strings) = Map.findWithDefault (sVar v) v bools
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
+assignValue :: ExprConstraints t => Variable t -> t -> Valuation -> Valuation
+assignValue v val = DMap.insert v (Val val)
 
-instance Assignable String where
-    assign v@(Variable _ StringType) e m = m {stringVars = Map.insert v e (stringVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignValue v@(Variable _ StringType) val m = m {stringValuation = Map.insert v val (stringValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignedExpr v@(Variable _ StringType) (VarModel _ints _bools strings) = Map.lookup v strings
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
-    assignedExprWithDefault v@(Variable _ StringType) (VarModel _ints _bools strings) = Map.findWithDefault (sVar v) v strings
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
+assignedExpr :: Variable t -> VarModel -> Maybe (Expr t)
+assignedExpr = DMap.lookup
+
+assignedExprWithDefault :: Variable t -> VarModel -> Expr t
+assignedExprWithDefault v = DMap.findWithDefault (sVar v) v
 
 noAssignment :: VarModel
-noAssignment = VarModel Map.empty Map.empty Map.empty
+noAssignment = DMap.empty
 
-instance Show VarModel where
-    show (VarModel ints bools strings) = showMapList $ showList' ints ++ showList' bools ++ showList' strings
-        where
-        showMapList m' = "{" ++ List.intercalate ", " m' ++ "}"
-        showList' m' = showAssign <$> Map.toList m'
-        showAssign (v,e) = varName v ++ ":=" ++ show e
-
-substConst :: Assignable t => Valuation -> Expr t -> Expr t
+substConst :: Valuation -> Expr t -> Expr t
 substConst valuation = subst (valuationToVarModel valuation)
 
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
 --
-subst :: Assignable t => VarModel      -- ^ Map from variables to value expressions.
+subst :: VarModel      -- ^ Map from variables to value expressions.
 {-      -> Map.Map FuncId (FuncDef w e) -- ^ Map from identifiers to their
                                     -- definitions, this is used to replace
                                     -- function calls by their bodies if all
@@ -597,7 +460,7 @@ subst :: Assignable t => VarModel      -- ^ Map from variables to value expressi
 --subst ve _ x   | ve == Map.empty = x
 subst ve x = subst' ve (view x)
 
-subst' :: Assignable t => VarModel -> ExprView t -> Expr t
+subst' :: VarModel -> ExprView t -> Expr t
 subst' _  (Const const')          = sConst const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = sIfThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
@@ -608,9 +471,7 @@ subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (
 subst' ve (Length vexp)           = sLength (subst' ve vexp)
 
 subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
-subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
+subst' ve (Equal _ vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
 

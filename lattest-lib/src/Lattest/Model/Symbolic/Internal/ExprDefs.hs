@@ -11,6 +11,9 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
 ( ExprView(..)
@@ -19,7 +22,6 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , reduce
 , Variable(..)
 , Type(..)
-, allTypes
 , Constant(..)
 , constType
 , ConstType
@@ -30,6 +32,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , typeOf'
 , isConst
 , freeVars
+, ExprConstraints
 )
 where
 
@@ -50,15 +53,43 @@ import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
 
 import qualified Data.Scientific as DS
+import qualified Data.Some.Church as Church
+import Data.Some (Some(..))
+import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
+import Data.Type.Equality ((:~:)(..))
+import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
+import Data.SBV (SymVal)
+import Data.EqP (EqP (..))
+import Data.Maybe (isJust)
+import Data.Constraint.Extras (Has (..))
+import Data.Constraint.Compose (ComposeC)
 
-data Type = IntType | BoolType | StringType deriving (Eq, Ord)
+data Type a where
+  IntType :: Type Integer
+  BoolType :: Type Bool
+  StringType :: Type String
+deriving instance Eq (Type a)
+deriving instance Ord (Type a)
+instance EqP Type where
+  eqp x y = isJust $ geq x y
+instance GEq Type where
+  geq IntType IntType = Just Refl
+  geq BoolType BoolType = Just Refl
+  geq StringType StringType = Just Refl
+  geq _ _ = Nothing
+instance GCompare Type where
+  gcompare = \cases
+    IntType IntType -> GEQ
+    IntType _ -> GLT
+    BoolType BoolType -> GEQ
+    BoolType _ -> GLT
+    StringType StringType -> GEQ
+    _ _ -> GGT
 
-allTypes :: [Type]
-allTypes = [IntType, BoolType, StringType]
 
 class ExprType t where
-    typeOf :: t -> Type
-    typeOf' :: f t -> Type
+    typeOf :: t -> Type t
+    typeOf' :: f t -> Type t
 
 instance ExprType Integer where
     typeOf _ = IntType
@@ -70,110 +101,165 @@ instance ExprType String where
     typeOf _ = StringType
     typeOf' _ = StringType
 
-instance Show Type where
+instance Show (Type a) where
     show IntType = "Int"
     show BoolType = "Bool"
     show StringType = "String"
 
-data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
+data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
+instance GEq Variable where
+  geq (Variable lname ltype) (Variable rname rtype)
+    | lname == rname
+    , Just Refl <- ltype `geq` rtype
+    = Just Refl
+    | otherwise = Nothing
+instance GCompare Variable where
+  gcompare (Variable lname ltype) (Variable rname rtype) =
+    case compare lname rname of
+      LT -> GLT
+      GT -> GGT
+      EQ -> gcompare ltype rtype
+instance GShow Variable where
+  gshowsPrec = defaultGshowsPrec
+instance Has (ComposeC Eq Expr) Variable where
+  has _ k = k
+instance Has (ComposeC Ord Expr) Variable where
+  has v k = case varType v of
+    IntType -> k
+    BoolType -> k
+    StringType -> k
+instance Has (ComposeC Show Expr) Variable where
+  has v k = case varType v of
+    IntType -> k
+    BoolType -> k
+    StringType -> k
 
-instance Show Variable where
+instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
 
-data Constant = -- | Constructor of Boolean constant.
-                Cbool    { toBool :: Bool }
-                -- | Constructor of Integer constant.
-              | Cint     { toInteger :: Integer }
-                -- | Constructor of String constant.
-              | Cstring  { toString :: String }
-                -- | Constructor of constructor constant (value of ADT).
-              | Ccstr    { cstrName :: String, args :: [Constant] }
-{-
-                -- | Constructor of Regular Expression constant.
-              | Cregex   { -- | Regular Expression in XSD format
-                           toXSDRegex :: Text } 
-                                            -- PvdL: performance gain: translate only once,
-                                            --       storing SMT string as well
-                -- | Constructor of ANY constant.
-              | Cany     { sort :: SortId }
--}
-  deriving (Eq, Ord, Read)
-instance JSON.FromJSON Constant where
+data Constant a where
+  Cbool :: Bool -> Constant Bool
+  Cint :: Integer -> Constant Integer
+  Cstring :: String -> Constant String
+deriving instance Eq (Constant a)
+deriving instance Ord (Constant a)
+instance GEq Constant where
+  geq = \cases
+    (Cbool a) (Cbool b) | a == b -> Just Refl
+    (Cint a) (Cint b) | a == b -> Just Refl
+    (Cstring a) (Cstring b) | a == b -> Just Refl
+    _ _ -> Nothing
+instance GCompare Constant where
+  gcompare = \case
+    Cbool a -> \case
+      Cbool b   -> case compare a b of
+        LT -> GLT
+        EQ -> GEQ
+        GT -> GGT
+      Cint{}    -> GLT
+      Cstring{} -> GLT
+
+    Cint a -> \case
+      Cbool{}   -> GGT
+      Cint b    -> case compare a b of
+        LT -> GLT
+        EQ -> GEQ
+        GT -> GGT
+      Cstring{} -> GLT
+
+    Cstring a -> \case
+      Cbool{}   -> GGT
+      Cint{}    -> GGT
+      Cstring b -> case compare a b of
+        LT -> GLT
+        EQ -> GEQ
+        GT -> GGT
+instance GShow Constant where
+  gshowsPrec d = \case
+    Cbool b ->
+      showParen (d > 10) $
+        showString "Cbool " . showsPrec 11 b
+    Cint i ->
+      showParen (d > 10) $
+        showString "Cint " . showsPrec 11 i
+    Cstring s ->
+      showParen (d > 10) $
+        showString "Cstring " . showsPrec 11 s
+instance GRead Constant where
+  greadsPrec d =
+    readParen (d > 10) $ \s ->
+         [ (Church.mkSome (Cbool b), rest)
+         | ("Cbool", s1) <- lex s
+         , (b, rest) <- readsPrec 11 s1
+         ]
+      ++ [ (Church.mkSome (Cint i), rest)
+         | ("Cint", s1) <- lex s
+         , (i, rest) <- readsPrec 11 s1
+         ]
+      ++ [ (Church.mkSome (Cstring str), rest)
+         | ("Cstring", s1) <- lex s
+         , (str, rest) <- readsPrec 11 s1
+         ]
+
+instance JSON.FromJSON (Some Constant) where
     parseJSON (JSON.Object m)
         | not $ JSON.member "value" m = fail "expected Constant with a value field"
         | not $ JSON.member "type" m = fail "expected Constant with a type field"
     parseJSON (JSON.Object m)
-        | JSON.lookup "type" m == Just "bool" = parseBool $ lkup "value" m
-        | JSON.lookup "type" m == Just "int" = parseInt $ lkup "value" m
+        | JSON.lookup "type" m == Just "bool"   = parseBool   $ lkup "value" m
+        | JSON.lookup "type" m == Just "int"    = parseInt    $ lkup "value" m
         | JSON.lookup "type" m == Just "string" = parseString $ lkup "value" m
         where
         lkup :: JSON.Key -> JSON.KeyMap v -> v
         lkup k = Maybe.fromJust . JSON.lookup k
-        parseBool (JSON.Bool b) = return $ Cbool b
+        parseBool (JSON.Bool b) = return $ Some $ Cbool b
         parseBool _ = fail "type indicates bool, but value is not of type bool"
-        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Cint i
+        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Some $ Cint i
         parseInt _ = fail "type indicates int, but value is not of type int"
-        parseString (JSON.String s) = return $ Cstring $ Text.unpack s
+        parseString (JSON.String s) = return $ Some $ Cstring $ Text.unpack s
         parseString _ = fail "type indicates string, but value is not of type string"
     parseJSON _ = fail "expected Constant JSON"
 
-instance JSON.ToJSON Constant where
-    toJSON (Cbool b) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
-    toJSON (Cint i) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
-    toJSON (Cstring s) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
-    toJSON (Ccstr _ _) = error "toJSON cstr"
+instance JSON.ToJSON (Some Constant) where
+    toJSON (Some (Cbool b)) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
+    toJSON (Some (Cint i)) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
+    toJSON (Some (Cstring s)) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
 
-constType :: Constant -> Type
+constType :: Constant a -> Type a
 constType (Cbool _) = BoolType
 constType (Cint _) = IntType
 constType (Cstring _) = StringType
-constType (Ccstr _ _) = error "type cstr"
 
-instance Show Constant where
+instance Show (Constant a) where
   show (Cbool b) = show b
   show (Cint i) = show i
   show (Cstring t) = show t
-  show (Ccstr a b) = show a <> " " <> show b
 
 -- | convert a Constant to an typed value
 class ConstType t where
-    fromConst :: Constant -> Either String t
-    toConst :: t -> Constant
+    fromConst :: Constant t -> t
+    toConst :: t -> Constant t
 
 instance ConstType Bool where
-    fromConst (Cbool b) = Right b
-    fromConst v = Left $ typeError "Bool" v
+    fromConst (Cbool b) = b
     toConst = Cbool
 
 instance ConstType Integer where
-    fromConst (Cint i) = Right i
-    fromConst v = Left $ typeError "Int" v
+    fromConst (Cint i) = i
     toConst = Cint
 
 instance ConstType String where
-    fromConst (Cstring s) = Right s
-    fromConst v = Left $ typeError "String" v
+    fromConst (Cstring s) = s
     toConst = Cstring
-
-typeError :: String -> Constant -> String
-typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
-
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
 
 data ExprView t where
-    Var :: {variable :: Variable} -> ExprView t
-    Const :: ExprType t => {constant :: t} -> ExprView t
+    Var :: {variable :: Variable t} -> ExprView t
+    Const :: ExprConstraints t => {constant :: t} -> ExprView t
     Ite :: {conditional :: ExprView Bool, trueBranch :: ExprView t, falseBranch :: ExprView t} -> ExprView t
-    {-
-    No polymorphic Equal possible, because that would make sensible Eq and Ord instances impossible: Equal 1 2 and Equal
-    "a" "b" are both ExprView Bool's, but an == on those expressions would have to compare 1 == "a" and 2 == "b".
-    Var, Const and Ite don't have this problem because the argument types are forced to be equal through the return type.
-    -}
-    EqualInt :: {leftInt :: ExprView Integer, rightInt :: ExprView Integer} -> ExprView Bool
-    EqualString :: {leftString :: ExprView String, rightString :: ExprView String} -> ExprView Bool
-    EqualBool :: {leftBool :: ExprView Bool, rightBool :: ExprView Bool} -> ExprView Bool
+    Equal :: ExprConstraints t => {eqType :: Type t, left :: ExprView t, right :: ExprView t} -> ExprView Bool
     Divide :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Modulo :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Sum :: FreeSum (ExprView Integer) -> ExprView Integer
@@ -183,9 +269,76 @@ data ExprView t where
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     Concat :: [ExprView String] -> ExprView String
+    -- NOTE: when adding more fields, check the Eq instance
 
-deriving instance Eq t => Eq (ExprView t)
-deriving instance Ord t => Ord (ExprView t)
+type ExprConstraints t = (Eq t, Ord t, Show t, ExprType t, SymVal t)
+
+instance Eq (ExprView t) where
+  Var x == Var y = x == y
+  Const x == Const y = x == y
+  Ite c1 l1 r1 == Ite c2 l2 r2 = c1 == c2 && l1 == l2 && r1 == r2
+  Equal t1 a b == Equal t2 x y
+    | Just Refl <- t1 `geq` t2 = a == x && b == y
+    | otherwise = False
+  Divide a b == Divide x y = a == x && b == y
+  Modulo a b == Modulo x y = a == x && b == y
+  Sum x == Sum y = x == y
+  Product x == Product y = x == y
+  Length x == Length y = x == y
+  GezInt x == GezInt y = x == y
+  Not x == Not y = x == y
+  And x == And y = x == y
+  Concat x == Concat y = x == y
+  _ == _ = False
+
+instance Ord t => Ord (ExprView t) where
+  compare l r =
+    case (l, r) of
+      (Var a, Var b) -> compare a b
+      (Const a, Const b) -> compare a b
+      (Ite c1 l1 r1, Ite c2 l2 r2) ->
+        compare (c1, l1, r1) (c2, l2, r2)
+      (Equal t1 a b, Equal t2 x y) ->
+        case gcompare t1 t2 of
+          GLT -> LT
+          GGT -> GT
+          GEQ -> compare (a,b) (x,y)
+      (Divide a b, Divide x y) ->
+        compare (a, b) (x, y)
+      (Modulo a b, Modulo x y) ->
+        compare (a, b) (x, y)
+      (Sum a, Sum b) ->
+        compare a b
+      (Product a, Product b) ->
+        compare a b
+      (Length a, Length b) ->
+        compare a b
+      (GezInt a, GezInt b) ->
+        compare a b
+      (Not a, Not b) ->
+        compare a b
+      (And a, And b) ->
+        compare a b
+      (Concat a, Concat b) ->
+        compare a b
+      _ ->
+        compare (tag l) (tag r)
+    where
+      tag :: ExprView t -> Int
+      tag = \case
+        Var{}     -> 0
+        Const{}   -> 1
+        Ite{}     -> 2
+        Equal{}   -> 3
+        Divide{}  -> 4
+        Modulo{}  -> 5
+        Sum{}     -> 6
+        Product{} -> 7
+        Length{}  -> 8
+        GezInt{}  -> 9
+        Not{}     -> 10
+        And{}     -> 11
+        Concat{}  -> 12
 
 instance Show t => Show (ExprView t) where
     show (Var v) = varName v
@@ -202,9 +355,7 @@ instance Show t => Show (ExprView t) where
     show (Product es) | es == mempty = "∏∅"
     show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
     show (Length e) = "length(" ++ show e ++ ")"
-    show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-    show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-    show (EqualString e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
+    show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⋀∅"
@@ -219,10 +370,9 @@ showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm 
 
 
 -- | Expr: value expression
--- 1. User can't directly construct Expr (such that invariants will always hold)
--- 2. User can still pattern match on Expr using 'ExprView'
--- 3. Overhead at run-time is zero. See https://wiki.haskell.org/Performance/Data_types#Newtypes
+-- Only 'view' is exported, not the constructor, to safeguard invariants.
 newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
+-- TODO: which invariants?
 
 instance Show t => Show (Expr t) where
     show = show . view
@@ -241,10 +391,6 @@ isConst (Const _) = True
 isConst _ = False
 
 reduce :: ExprView v -> ExprView v
---reduce (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         =
---reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
---reduce (view -> Viscstr { })                                   =
---reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
 reduce (Var v) = Var v
 reduce (Const v) = Const v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
@@ -261,46 +407,26 @@ reduce (Divide (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `divInte
 reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
 reduce (Length (reduce -> (Const s))) = Const $ fromIntegral $ length s
 reduce (Length (reduce -> e)) = Length e
---reduce (view -> Vstrinre { })                                  =
---reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
-
---reduce (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         =
---reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
---reduce (view -> Viscstr { })                                   =
---reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
-reduce (EqualInt (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
-reduce (EqualInt (reduce -> e1) (reduce -> e2)) = EqualInt e1 e2
-reduce (EqualBool (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
-reduce (EqualBool (reduce -> e1) (reduce -> e2)) = EqualBool e1 e2
-reduce (EqualString (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
-reduce (EqualString (reduce -> e1) (reduce -> e2)) = EqualString e1 e2
+reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (Equal t (reduce -> e1) (reduce -> e2)) = Equal t e1 e2
 reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
 reduce (GezInt (reduce -> e)) = GezInt e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
 reduce (And (Set.map reduce -> es)) = And es
---reduce (view -> Vstrinre { })                                  =
---reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
-
---reduce (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         =
---reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
---reduce (view -> Viscstr { })                                   =
---reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
 reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concatMap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
 reduce (Concat (fmap reduce -> e)) = Concat e
---reduce (view -> Vstrinre { })                                  =
---reduce (view -> Vpredef _kd (FuncId _nm _uid _fa fs) _vexps)   =
 
 -- ----------------------------------------------------------------------------------------- --
 --
 -- ----------------------------------------------------------------------------------------- --
 
-freeVars :: Expr t -> Set.Set Variable
+freeVars :: Expr t -> Set.Set (Some Variable)
 freeVars = Set.fromList . freeVars' . view
 
-freeVars' :: ExprView t -> [Variable]
-freeVars' (Var v) = [v]
+freeVars' :: ExprView t -> [Some Variable]
+freeVars' (Var v) = [Some v]
 freeVars' (Const _) = []
 freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
 freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2
@@ -308,9 +434,7 @@ freeVars' (Modulo e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Sum (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Length e) = freeVars' e
-freeVars' (EqualInt e1 e2) = freeVars' e1 ++ freeVars' e2
-freeVars' (EqualBool e1 e2) = freeVars' e1 ++ freeVars' e2
-freeVars' (EqualString e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (Equal _ e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es

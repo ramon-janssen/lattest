@@ -1,7 +1,8 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 module Lattest.SMT (
   SMT,
@@ -24,7 +25,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, fromConstantsMap, Type (..), Constant (..), toConstantsMap, view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, Type (..), Constant (..), view)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -34,13 +35,16 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
+import Data.Some (Some (..))
+import qualified Data.Dependent.Map as DMap
+import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 
 --------------------
 -- exported types and functions
 -- these define the interface to
 -- the SMT backend
 --------------------
-type  Solution v       =  Map.Map v Constant
+type  Solution v       =  Map.Map v (Some Constant)
 data  SolvableProblem  = Sat
                        | Unsat
                        | Unknown
@@ -55,11 +59,9 @@ type SMT = StateT (Map String SBVI.SVal) Query
 runSMT :: SMT a -> IO a
 runSMT = SBV.runSMT . query . flip evalStateT Map.empty
 
-getSolution :: [Variable] -> SMT Valuation
+getSolution :: [Some Variable] -> SMT Valuation
 getSolution vs =
-  fromConstantsMap
-  . (`Map.intersection` Map.fromList (map (,()) vs))
-  . toConstantsMap
+  (\val -> DMap.intersection val $ foldr (\(Some v) -> DMap.insert v (error "dummy variable that should never be evaluated")) mempty vs)
   . sbvModelToValuation <$> lift getModel
 
 addAssertions :: [Expr Bool] -> SMT ()
@@ -69,16 +71,20 @@ addAssertions = mapM_ (lift . constrain <=< exprToSymbolic . view)
 -- SBV wants us to keep track of the symbolic variables
 -- we get on each declaration, and use them to reference
 -- the variable.
-addDeclarations :: [Variable] -> SMT ()
-addDeclarations = mapM_ $ \(Variable nm tp) -> case tp of
+addDeclarations :: [Some Variable] -> SMT ()
+addDeclarations = mapM_ (\(Some v) -> addDeclaration v)
+
+addDeclaration :: forall t. Variable t -> SMT ()
+addDeclaration (Variable nm ty) = case ty of
+  -- case split to get the SymVal instances, the alternative is to attach the constraint to the constructor Variable
   IntType -> do
-    SBVI.SBV v <- freshVar @Integer nm
+    SBVI.SBV v <- freshVar @t nm
     modify $ Map.insert nm v
   BoolType -> do
-    SBVI.SBV v <- freshVar @Bool nm
+    SBVI.SBV v <- freshVar @t nm
     modify $ Map.insert nm v
   StringType -> do
-    SBVI.SBV v <- freshVar @String nm
+    SBVI.SBV v <- freshVar @t nm
     modify $ Map.insert nm v
 
 getSolvable :: SMT SolvableProblem
@@ -98,11 +104,9 @@ exprToSymbolic v = case v of
   Var (Variable nm _tp) -> gets (SBVI.SBV . (Map.! nm))
   Const t -> pure $ literal t
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
-  EqualInt    l r -> (SBV..==) <$> go l <*> go r
-  EqualString l r -> (SBV..==) <$> go l <*> go r
-  EqualBool   l r -> (SBV..==) <$> go l <*> go r
-  Divide x y      -> SBV.sDiv  <$> go x <*> go y
-  Modulo x y      -> SBV.sMod  <$> go x <*> go y
+  Equal _ l r -> (SBV..==) <$> go l <*> go r
+  Divide x y -> SBV.sDiv  <$> go x <*> go y
+  Modulo x y -> SBV.sMod  <$> go x <*> go y
   Sum s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i + sY) <$> go x <*> symY) (pure $ literal 0) s
   Product p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   Length s -> SBV.length <$> go s
@@ -126,12 +130,12 @@ checkSatToSolveProblem = \case
   SBV.DSat _ -> Unknown
 
 sbvModelToValuation :: SMTModel -> Valuation
-sbvModelToValuation = fromConstantsMap . foldr f Map.empty . modelAssocs
+sbvModelToValuation = foldr f DMap.empty . modelAssocs
   where
-    f (varname, cv) = (\(typ, c) -> Map.insert (Variable varname typ) c) $ case cvVal cv of
+    f (varname, cv) = case cvVal cv of
       -- booleans for some reason are represented as CInteger with a different 'Kind'
-      _ | isBoolean cv -> (BoolType, Cbool (cvToBool cv))
-      CInteger i -> (IntType, Cint i)
-      CString s -> (StringType, Cstring s)
+      _ | isBoolean cv -> DMap.insert (Variable varname BoolType) $ Val $ cvToBool cv
+      CInteger i -> DMap.insert (Variable varname IntType) $ Val i
+      CString s -> DMap.insert (Variable varname StringType) $ Val s
       _ -> error "todo: the other SBV types, including lists, sets, arbitrary ADTs, floating point values, etc"
 
