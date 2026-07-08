@@ -86,12 +86,12 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..))
+import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType (..), withExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..))
 
 ------------
 -- syntax --
@@ -514,7 +514,7 @@ evalVal valuation e = case eval $ substConst valuation e of
     Right v -> toConst v
     Left m -> error $ "evalVal: " ++ m
 evalBool :: Valuation -> Expr Bool -> Bool
-evalBool valuation = (\(Cbool b) -> b) . evalVal valuation
+evalBool valuation = fromConst . evalVal valuation
 
 --------------------
 -- STS quiescence --

@@ -13,7 +13,7 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), runValuation)
-import Lattest.Model.Symbolic.Internal.ExprDefs(eval, List (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs(eval, List (..), ExprType)
 import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
 import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
@@ -63,10 +63,11 @@ valuationToGateValue (SymInteract g' params) valuation =
         getValueForVar val' (Some var) =
             case DMap.lookup var val' of
                 Just (E.Val value) -> case varType var of
-                  E.IntType -> Some $ E.Cint value
-                  E.BoolType -> Some $ E.Cbool value
-                  E.StringType -> Some $ E.Cstring value
-                  E.ListType t -> has @E.ConstType t $ Some $ E.Clist t $ map E.toConst $ getList value
+                  E.IntType -> E.int value
+                  E.BoolType -> E.bool value
+                  E.StringType -> E.string value
+                  E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
+                  E.ListType t -> has @ExprType t E.list $ getList value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
 solveGuard :: [Some Variable] -> SymGuard -> SMT (Maybe Valuation)

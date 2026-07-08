@@ -19,6 +19,10 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
 ( ExprView(..)
@@ -27,19 +31,25 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , reduce
 , Variable(..)
 , Type(..)
-, Constant(..)
+, Constant(Constant, CInt, CBool, CString, CList, CTuple)
 , constType
-, ConstType
-, fromConst
-, toConst
+, constValue
+, ConstType(..)
 , ExprType
 , typeOf
 , typeOf'
 , isConst
 , freeVars
 , ExprConstraints
+, ToSBV
 , List(..)
 , withExprConstraints
+, int
+, bool
+, string
+, list
+, tuple
+, toSBV
 )
 where
 
@@ -74,6 +84,8 @@ import qualified Data.Vector as Vec
 import Data.String (IsString(..))
 import Control.Monad ((<=<))
 import Data.Data (Data)
+import Data.Bifunctor (Bifunctor(..))
+import qualified Data.Aeson.Types as JSON
 
 -- avoids overlapping with String in typeclass instances
 newtype List a = List { getList :: [a] }
@@ -83,6 +95,7 @@ data Type a where
   BoolType :: Type Bool
   StringType :: Type String
   ListType :: Type a -> Type (List a)
+  TupleType :: Type a -> Type b -> Type (a,b)
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
 instance (Read a, SymVal a, Data a, Show a) => SymVal (List a) where
@@ -112,6 +125,7 @@ instance Show (Type a) where
     show BoolType = "Bool"
     show StringType = "String"
     show (ListType a) = "[ " ++ show a ++ " ]"
+    show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
 instance ExprType a => Read (Type a) where
   readsPrec _ =
     readParen False $ \s ->
@@ -140,7 +154,12 @@ instance GRead Type where
             return (Church.mkSome $ ListType tp, rest)
 
 withExprConstraints :: Type x -> (ExprConstraints x => r) -> r
-withExprConstraints t k = has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @SymVal t $ has @ExprType t k
+withExprConstraints t k = has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymValToSBV t $ has @EqToSBV t k
+
+class Eq (ToSBV a) => EqToSBV a
+instance Eq (ToSBV a) => EqToSBV a
+class SymVal (ToSBV a) => SymValToSBV a
+instance SymVal (ToSBV a) => SymValToSBV a
 
 instance Has ExprType Type where
   has t k = case t of
@@ -148,6 +167,7 @@ instance Has ExprType Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @ExprType t' k
+    TupleType a b -> has @ExprType a $ has @ExprType b k
 
 instance Has Eq Type where
   has t k = case t of
@@ -155,6 +175,7 @@ instance Has Eq Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Eq t' k
+    TupleType a b -> has @Eq a $ has @Eq b k
 
 instance Has Ord Type where
   has t k = case t of
@@ -162,6 +183,7 @@ instance Has Ord Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Ord t' k
+    TupleType a b -> has @Ord a $ has @Ord b k
 
 instance Has Show Type where
   has t k = case t of
@@ -169,6 +191,7 @@ instance Has Show Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Show t' k
+    TupleType a b -> has @Show a $ has @Show b k
 
 instance Has Read Type where
   has t k = case t of
@@ -176,6 +199,7 @@ instance Has Read Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Read t' k
+    TupleType a b -> has @Read a $ has @Read b k
 
 instance Has Data Type where
   has t k = case t of
@@ -183,6 +207,7 @@ instance Has Data Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Data t' k
+    TupleType a b -> has @Data a $ has @Data b k
 
 instance Has SymVal Type where
   has t k = case t of
@@ -190,6 +215,25 @@ instance Has SymVal Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Show t' $ has @Data t' $ has @Read t' $ has @SymVal t' k
+    TupleType a b -> has @SymVal a $ has @SymVal b k
+
+instance Has EqToSBV Type where
+  has IntType     k = k
+  has BoolType    k = k
+  has StringType  k = k
+  has (ListType t) k = has @EqToSBV t k
+  has (TupleType a b) k =
+    has @EqToSBV a $
+    has @EqToSBV b k
+
+instance Has SymValToSBV Type where
+  has IntType     k = k
+  has BoolType    k = k
+  has StringType  k = k
+  has (ListType t) k = has @SymValToSBV t k
+  has (TupleType a b) k =
+    has @SymValToSBV a $
+    has @SymValToSBV b k
 
 class ExprType t where
     typeOf :: t -> Type t
@@ -207,6 +251,9 @@ instance ExprType String where
 instance ExprType a => ExprType (List a) where
     typeOf _ = ListType $ typeOf undefined
     typeOf' _ = ListType $ typeOf undefined
+instance (ExprType a, ExprType b) => ExprType (a,b) where
+    typeOf _ = TupleType (typeOf undefined) (typeOf undefined)
+    typeOf' _ = TupleType (typeOf undefined) (typeOf undefined)
 
 
 data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
@@ -235,122 +282,59 @@ instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
 
 data Constant a where
-  Cbool :: Bool -> Constant Bool
-  Cint :: Integer -> Constant Integer
-  Cstring :: String -> Constant String
-  Clist :: Type a -> [Constant a] -> Constant (List a)
-deriving instance Eq (Constant a)
-deriving instance Ord (Constant a)
+  Constant :: { constType :: Type a , constValue :: a } -> Constant a
+deriving instance Eq a => Eq (Constant a)
+deriving instance Ord a => Ord (Constant a)
+deriving instance Show a => Show (Constant a)
+deriving instance (Read a, ExprType a) => Read (Constant a)
+
+{-# COMPLETE CBool, CInt, CString, CList, CTuple #-}
+pattern CBool :: () => (a ~ Bool) => a -> Constant a
+pattern CBool b = Constant BoolType b
+pattern CInt :: () => (a ~ Integer) => a -> Constant a
+pattern CInt i = Constant IntType i
+pattern CString :: () => (a ~ String) => a -> Constant a
+pattern CString s = Constant StringType s
+pattern CList :: () => (xs ~ List x) => [x] -> Type x -> Constant xs
+pattern CList xs t = (Constant (ListType t) (List xs))
+pattern CTuple :: () => (ab ~ (a,b)) => a -> b -> Type a -> Type b -> Constant ab
+pattern CTuple a b ta tb = (Constant (TupleType ta tb) (a,b))
+
+int :: Integer -> Some Constant
+int i = Some (CInt i)
+bool :: Bool -> Some Constant
+bool b = Some (CBool b)
+string :: String -> Some Constant
+string s = Some (CString s)
+list :: ExprType a => [a] -> Some Constant
+list xs = Some (CList xs (typeOf' xs))
+tuple :: (ExprType a, ExprType b) => a -> b -> Some Constant
+tuple a b = Some (CTuple a b (typeOf a) (typeOf b))
+
 instance GEq Constant where
-  geq = \cases
-    (Cbool a) (Cbool b) | a == b -> Just Refl
-    (Cint a) (Cint b) | a == b -> Just Refl
-    (Cstring a) (Cstring b) | a == b -> Just Refl
-    _ _ -> Nothing
+  a `geq` b = constType a `geq` constType b
 instance GCompare Constant where
-  gcompare = \case
-    Cbool a -> \case
-      Cbool b   -> case compare a b of
-        LT -> GLT
-        EQ -> GEQ
-        GT -> GGT
-      Cint{}    -> GLT
-      Cstring{} -> GLT
-      Clist{} -> GLT
-
-    Cint a -> \case
-      Cbool{}   -> GGT
-      Cint b    -> case compare a b of
-        LT -> GLT
-        EQ -> GEQ
-        GT -> GGT
-      Cstring{} -> GLT
-      Clist{} -> GLT
-
-    Cstring a -> \case
-      Cbool{}   -> GGT
-      Cint{}    -> GGT
-      Cstring b -> case compare a b of
-        LT -> GLT
-        EQ -> GEQ
-        GT -> GGT
-      Clist{} -> GLT
-
-    Clist ta a -> \case
-      Cbool{}   -> GGT
-      Cint{}    -> GGT
-      Cstring{} -> GLT
-      Clist tb b -> case gcompare ta tb of
-        GLT -> GLT
-        GEQ -> case compare a b of
-          LT -> GLT
-          EQ -> GEQ
-          GT -> GGT
-        GGT -> GGT
+  gcompare a b = case gcompare (constType a) (constType b) of
+    GLT -> GLT
+    GGT -> GGT
+    GEQ -> case has @Ord a $ compare a b of
+      LT -> GLT
+      GT -> GGT
+      EQ -> GEQ
 
 instance GShow Constant where
-  gshowsPrec d = \case
-    Cbool b ->
-      showParen (d > 10) $
-        showString "Cbool " . showsPrec 11 b
-    Cint i ->
-      showParen (d > 10) $
-        showString "Cint " . showsPrec 11 i
-    Cstring s ->
-      showParen (d > 10) $
-        showString "Cstring " . showsPrec 11 s
-    Clist t a ->
-      showParen (d > 10) $
-        showString "Clist @" . showsPrec 11 t . showString " " . showsPrec 11 a
+  gshowsPrec i c = has @Show c $ defaultGshowsPrec i c
 instance GRead Constant where
   greadsPrec _ =
-    readParen False $ \s ->
-         [ (Church.mkSome (Cbool b), rest)
-         | ("Cbool", s1) <- lex s
-         , (b, rest) <- readsPrec 11 s1
-         ]
-      ++ [ (Church.mkSome (Cint i), rest)
-         | ("Cint", s1) <- lex s
-         , (i, rest) <- readsPrec 11 s1
-         ]
-      ++ [ (Church.mkSome (Cstring str), rest)
-         | ("Cstring", s1) <- lex s
-         , (str, rest) <- readsPrec 11 s1
-         ]
-      ++ do -- List monad: I couldn't get the list comprehension syntax to cooperate wrt Some scoping
-      ("Clist", '@':s1) <- lex s
-      (t, s2) <- greadsPrec 11 s1
-      Church.withSome t $ \(tp :: Type t) -> do
-        (xs, rest) <- has @ExprType tp $ readsPrec 11 s2
-        return (Church.mkSome $ Clist tp xs, rest)
-instance ExprType a => Read (Constant a) where
-  readsPrec _ =
-    readParen False $ \s ->
-      case typeOf (undefined :: a) of
-        IntType -> [ (Cint i, rest)
-                   | ("Cint", s1) <- lex s
-                   , (i, rest) <- readsPrec 11 s1
-                   ]
-        BoolType -> [ (Cbool b, rest)
-                   | ("Cbool", s1) <- lex s
-                   , (b, rest) <- readsPrec 11 s1
-                   ]
-        StringType -> [ (Cstring st, rest)
-                   | ("Cstring", s1) <- lex s
-                   , (st, rest) <- readsPrec 11 s1
-                   ]
-        ListType (tp' :: Type t) -> [ (Clist tp' xs, rest)
-                   | ("Clist", '@':s1) <- lex s
-                   , (_tp, s2)  <- has @ExprType tp' $ readsPrec @(Type t) 11 s1
-                   , (xs, rest) <- has @ExprType tp' $ readsPrec 11 s2
-                   ]
+    readParen False $ \s -> do
+    ("Constant", s1) <- lex s
+    (tp', s2) <- greadsPrec 11 s1
+    Church.withSome tp' $ \tp -> do
+      (x, rest) <- has @Read tp $ readsPrec 11 s2
+      return (Church.mkSome (Constant tp x), rest)
 
-instance Has ExprType Constant where
-  has c k = case c of
-    Cint _ -> k
-    Cbool _ -> k
-    Cstring _ -> k
-    Clist t' _ -> has @ExprType t' k
+instance Has c Type => Has c Constant where
+  has (Constant t _) = has @c t
 
 instance JSON.FromJSON (Some Constant) where
     parseJSON (JSON.Object m)
@@ -362,74 +346,86 @@ instance JSON.FromJSON (Some Constant) where
             Some IntType -> parseInt $ lkup "value" m
             Some StringType -> parseString $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
+            Some (TupleType a b) -> parseTuple a b $ lkup "value" m
         where
         parseType (JSON.String (Text.unpack -> s)) = case s of
           "string" -> pure $ Some StringType
           "int" -> pure $ Some IntType
           "bool" -> pure $ Some BoolType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
+          '(':(parseTupleType 0 . init -> (a,b))
+            -> (\(Some a') (Some b') -> Some $ TupleType a' b')
+                      <$> parseType (JSON.String (Text.pack a))
+                      <*> parseType (JSON.String (Text.pack b))
           _ -> fail $ "bad type: " <> s
         parseType _ = fail "type is not a string"
+        -- splits the string at the first comma that isn't part of a new tuple
+        -- inefficient, but simple, and types should never be complicated
+        parseTupleType :: Int -> String -> (String, String)
+        parseTupleType 0 (',':xs) = ("",xs)
+        parseTupleType n ('(':xs) = first ('(':) $ parseTupleType (n+1) xs
+        parseTupleType n (')':xs) = first (')':) $ parseTupleType (n-1) xs
+        parseTupleType n (x:xs)   = first (x:) $ parseTupleType n xs
+        parseTupleType _ [] = error "comma not found in tuple"
         lkup :: JSON.Key -> JSON.KeyMap v -> v
         lkup k = Maybe.fromJust . JSON.lookup k
-        parseBool (JSON.Bool b) = return $ Some $ Cbool b
+        parseBool (JSON.Bool b) = return $ bool b
         parseBool _ = fail "type indicates bool, but value is not of type bool"
-        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Some $ Cint i
+        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ int i
         parseInt _ = fail "type indicates int, but value is not of type int"
-        parseString (JSON.String s) = return $ Some $ Cstring $ Text.unpack s
+        parseString (JSON.String s) = return $ string $ Text.unpack s
         parseString _ = fail "type indicates string, but value is not of type string"
-        parseList t (JSON.Array xs) = Some . Clist t <$> mapM (
-            (\(Some v) -> case has @ExprType v $ typeOf' v `geq` t of
-              Nothing -> fail $ "type indicates list of " <> show t <> ", but at least one element was a " <> show (has @ExprType v $ typeOf' v)
+        parseList t (JSON.Array xs) = has @ExprType t list <$> mapM (unSome t <=< JSON.parseJSON @(Some Constant)) (Vec.toList xs)
+          where
+            unSome :: Type a -> Some Constant -> JSON.Parser a
+            unSome tp (Some (Constant tp' v)) = case tp' `geq` tp of
+              Nothing -> fail $ "type indicates list of " <> show tp <> ", but at least one element was a " <> show tp'
               Just Refl -> pure v
-            )
-            <=< JSON.parseJSON @(Some Constant)
-          ) (Vec.toList xs)
         parseList _ _ = fail "type indicates list, but value is not of type array"
+        parseTuple :: Type a -> Type b -> JSON.Value -> JSON.Parser (Some Constant)
+        parseTuple a b (JSON.Object m')
+          | Just x <- JSON.lookup "left" m'
+          , Just y <- JSON.lookup "right" m'
+          = do
+          Some (Constant xt xv) <- JSON.parseJSON x
+          Some (Constant yt yv) <- JSON.parseJSON y
+          case a `geq` xt of
+            Nothing -> fail "type of left element of tuple doesn't match"
+            Just Refl -> case b `geq` yt of
+              Nothing -> fail "type of right element of tuple doesn't match"
+              Just Refl -> has @ExprType xt $ has @ExprType yt $ return $ tuple xv yv
+        parseTuple _ _ _ = fail "type indicates pair, but value is not of type object"
     parseJSON _ = fail "expected Constant JSON"
 
 instance JSON.ToJSON (Some Constant) where
-    toJSON (Some (Cbool b)) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
-    toJSON (Some (Cint i)) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
-    toJSON (Some (Cstring s)) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
-    toJSON (Some (Clist t xs)) = JSON.Object $ JSON.insert "type" (fromString . showtype $ ListType t)
-                                             $ JSON.insert "value" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some) xs) JSON.empty
+    toJSON (Some v) = case v of
+      CBool b -> JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
+      CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
+      CString s -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
+      CList xs t -> JSON.Object
+        $ JSON.insert "type" (fromString . showtype $ ListType t)
+        $ JSON.insert "value" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
+        JSON.empty
+      CTuple x y a b -> JSON.Object
+        $ JSON.insert "type" (fromString . showtype $ TupleType a b)
+        $ JSON.insert "value" (JSON.Object $ JSON.insert "left" (JSON.toJSON . Some $ Constant a x) $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
+        JSON.empty
       where
         showtype :: Type a -> String
         showtype BoolType = "bool"
         showtype IntType = "int"
         showtype StringType = "string"
         showtype (ListType tp) = "[" <> showtype tp <> "]"
-
-constType :: Constant a -> Type a
-constType c = has @ExprType c $ typeOf' c
-
-instance Show (Constant a) where
-  show (Cbool b) = show b
-  show (Cint i) = show i
-  show (Cstring t) = show t
-  show (Clist _ xs) = show xs
+        showtype (TupleType a b) = "(" <> showtype a <> "," <> showtype b <> ")"
 
 -- | convert a Constant to an typed value
 class ExprType t => ConstType t where
     fromConst :: Constant t -> t
     toConst :: t -> Constant t
 
-instance ConstType Bool where
-    fromConst (Cbool b) = b
-    toConst = Cbool
-
-instance ConstType Integer where
-    fromConst (Cint i) = i
-    toConst = Cint
-
-instance ConstType String where
-    fromConst (Cstring s) = s
-    toConst = Cstring
-
-instance ConstType a => ConstType (List a) where
-    fromConst (Clist _ xs) = List $ map fromConst xs
-    toConst (List xs) = Clist (typeOf undefined) $ map toConst xs
+instance ExprType a => ConstType a where
+  fromConst (Constant _ x) = x
+  toConst x = Constant (typeOf x) x
 
 instance Has ConstType Type where
   has t k = case t of
@@ -437,6 +433,7 @@ instance Has ConstType Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @ConstType t' k
+    TupleType a b -> has @ConstType a $ has @ConstType b k
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
@@ -455,9 +452,28 @@ data ExprView t where
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     Concat :: [ExprView String] -> ExprView String
+    Cons :: ExprView x -> ExprView (List x) -> ExprView (List x)
+    Append :: ExprView (List a) -> ExprView (List a) -> ExprView (List a)
+    LElem :: Type a -> ExprView a -> ExprView (List a) -> ExprView Bool
+    Take :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
+    Drop :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
+    -- TODO: 'map' needs a function type
     -- NOTE: when adding more fields, check the Eq instance
 
-type ExprConstraints t = (Data t, Eq t, Ord t, Show t, ExprType t, SymVal t, ConstType t, Read t)
+type ExprConstraints t = (Data t, Eq t, Ord t, Show t, ExprType t, SymVal (ToSBV t), Eq (ToSBV t), ConstType t, Read t)
+
+type family ToSBV a where
+  ToSBV (List a) = [ToSBV a]
+  ToSBV (a,b) = (ToSBV a, ToSBV b)
+  ToSBV a = a
+
+toSBV :: Type a -> a -> ToSBV a
+toSBV t x = case t of
+  ListType t' -> let List xs = x in map (toSBV t') xs
+  TupleType at bt -> bimap (toSBV at) (toSBV bt) x
+  IntType -> x
+  BoolType -> x
+  StringType -> x
 
 instance Eq (ExprView t) where
   Var x == Var y = x == y
@@ -475,6 +491,13 @@ instance Eq (ExprView t) where
   Not x == Not y = x == y
   And x == And y = x == y
   Concat x == Concat y = x == y
+  Cons x xs == Cons y ys = x == y && xs == ys
+  Append x xs == Append y ys = x == y && xs == ys
+  LElem t1 x y == LElem t2 a b
+    | Just Refl <- t1 `geq` t2 = x == a && y == b
+    | otherwise = False
+  Take x xs == Take y ys = x == y && xs == ys
+  Drop x xs == Drop y ys = x == y && xs == ys
   _ == _ = False
 
 instance Ord (ExprView t) where
@@ -507,6 +530,19 @@ instance Ord (ExprView t) where
         compare a b
       (Concat a, Concat b) ->
         compare a b
+      (Cons x xs, Cons y ys) ->
+        compare (x,xs) (y,ys)
+      (Append as bs, Append xs ys) ->
+        compare (as,bs) (xs,ys)
+      (LElem t1 x xs, LElem t2 y ys) ->
+        case gcompare t1 t2 of
+          GLT -> LT
+          GGT -> GT
+          GEQ -> compare (x,xs) (y,ys)
+      (Take i xs, Take j ys) ->
+        compare (i,xs) (j,ys)
+      (Drop i xs, Drop j ys) ->
+        compare (i,xs) (j,ys)
       _ ->
         compare (tag l) (tag r)
     where
@@ -525,6 +561,12 @@ instance Ord (ExprView t) where
         Not{}     -> 10
         And{}     -> 11
         Concat{}  -> 12
+        Cons{}    -> 13
+        Append{}  -> 14
+        LElem{}   -> 15
+        Take{}    -> 16
+        Drop{}    -> 17
+
 
 instance Show (ExprView t) where
     show (Var v) = varName v
@@ -548,6 +590,11 @@ instance Show (ExprView t) where
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
     show (Concat []) = "∑'∅"
     show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
+    show (Cons x xs) = show x ++ ":" ++ show xs
+    show (Append xs ys) = show xs ++ "++" ++ show ys
+    show (LElem _ x xs) = show x ++ "`elem`" ++ show xs
+    show (Take i xs) = "take " ++ show i ++ " " ++ show xs
+    show (Drop i xs) = "drop " ++ show i ++ " " ++ show xs
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
 showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
@@ -603,6 +650,26 @@ reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map cons
 reduce (And (Set.map reduce -> es)) = And es
 reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concatMap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
 reduce (Concat (fmap reduce -> e)) = Concat e
+reduce (Cons (reduce -> x) (reduce -> xs))
+  | Const a <- x
+  , Const (List as) <- xs = Const $ List $ a : as
+  | otherwise = Cons x xs
+reduce (Append (reduce -> xs) (reduce -> ys))
+  | Const (List as) <- xs
+  , Const (List bs) <- ys = Const $ List $ as ++ bs
+  | otherwise = Append xs ys
+reduce (LElem t (reduce -> x) (reduce -> xs))
+  | Const a <- x
+  , Const (List as) <- xs = Const $ a `elem` as
+  | otherwise = LElem t x xs
+reduce (Take (reduce -> i) (reduce -> xs))
+  | Const j <- i
+  , Const (List as) <- xs = Const $ List $ take (fromInteger j) as
+  | otherwise = Take i xs
+reduce (Drop (reduce -> i) (reduce -> xs))
+  | Const j <- i
+  , Const (List as) <- xs = Const $ List $ drop (fromInteger j) as
+  | otherwise = Drop i xs
 
 -- ----------------------------------------------------------------------------------------- --
 --
@@ -625,4 +692,9 @@ freeVars' (GezInt e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
 freeVars' (Concat es) = concatMap freeVars' es
+freeVars' (Cons e es) = freeVars' e ++ freeVars' es
+freeVars' (Append e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (LElem _ e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (Take e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (Drop e1 e2) = freeVars' e1 ++ freeVars' e2
 

@@ -4,6 +4,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Lattest.SMT (
   SMT,
   SolvableProblem(..),
@@ -17,15 +19,14 @@ module Lattest.SMT (
   runSMT
 ) where
 
-import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
+import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar, SList, SInteger, SBool)
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
-import Data.SBV.Internals( CV(cvVal), CVal(CString, CInteger), SMTModel(modelAssocs),cvToBool )
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation(..), Expr, Type (..), Constant (..), view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation(..), Expr, Type (..), Constant (..), view, ToSBV, toSBV)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -39,6 +40,8 @@ import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 import Data.Constraint.Extras (Has(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (List (..), ExprType (..), ExprConstraints, withExprConstraints)
+import Data.Bifunctor (Bifunctor(..))
 
 --------------------
 -- exported types and functions
@@ -92,10 +95,10 @@ push = lift $ SBV.push 1
 ---------------
 
 -- The main translation between our Exprs and SBV's Symbolic
-exprToSymbolic :: (Show a, SBV.SymVal a) => ExprView a -> SMT (SBV a)
+exprToSymbolic :: ExprConstraints a => ExprView a -> SMT (SBV (ToSBV a))
 exprToSymbolic v = case v of
   Var (Variable nm _tp) -> gets (SBVI.SBV . (Map.! nm))
-  Const t -> pure $ literal t
+  Const c -> pure $ literal $ toSBV (typeOf c) c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   Equal _ l r -> (SBV..==) <$> go l <*> go r
   Divide x y -> SBV.sDiv  <$> go x <*> go y
@@ -111,9 +114,19 @@ exprToSymbolic v = case v of
    -- looked deep enough nor done enough testing to report as a bug.
    -- SBV.and <$> foldr (\b bs -> (SBV..:) <$> go b <*> bs) (pure SBV.nil) (Set.toList xs)
   Concat strs -> SBV.concat <$> foldr (\s ss -> (SBV..:) <$> go s <*> ss) (pure SBV.nil) strs
+  Cons x xs -> case typeOf' xs of
+    ListType t -> withExprConstraints t $ (SBV..:) <$> go x <*> go xs
+  Append xs ys -> case typeOf' xs of
+    ListType t -> withExprConstraints t $ (SBV.++) <$> go xs <*> go ys
+  LElem t x xs -> withExprConstraints t $ SBV.elem <$> go x <*> go xs
+  Take i xs -> case typeOf' xs of
+    ListType t -> withExprConstraints t $ SBV.take <$> go i <*> go xs
+  Drop i xs -> case typeOf' xs of
+    ListType t -> withExprConstraints t $ SBV.drop <$> go i <*> go xs
   where
-    go :: (SBV.SymVal a, Show a) => ExprView a -> SMT (SBV a)
+    go :: ExprConstraints a => ExprView a -> SMT (SBV (ToSBV a))
     go = exprToSymbolic
+
 
 checkSatToSolveProblem :: CheckSatResult -> SolvableProblem
 checkSatToSolveProblem = \case
@@ -122,13 +135,13 @@ checkSatToSolveProblem = \case
   SBV.Unk -> Unknown
   SBV.DSat _ -> Unknown
 
-sbvModelToValuation :: SMTModel -> Valuation
-sbvModelToValuation = Valuation . foldr f DMap.empty . modelAssocs
+sbvModelToValuation :: SBVI.SMTModel -> Valuation
+sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
   where
-    f (varname, cv) = case cvVal cv of
+    f (varname, cv) = case SBVI.cvVal cv of
       -- booleans for some reason are represented as CInteger with a different 'Kind'
-      _ | isBoolean cv -> DMap.insert (Variable varname BoolType) $ Val $ cvToBool cv
-      CInteger i -> DMap.insert (Variable varname IntType) $ Val i
-      CString s -> DMap.insert (Variable varname StringType) $ Val s
+      _ | isBoolean cv -> DMap.insert (Variable varname BoolType) $ Val $ SBVI.cvToBool cv
+      SBVI.CInteger i -> DMap.insert (Variable varname IntType) $ Val i
+      SBVI.CString s -> DMap.insert (Variable varname StringType) $ Val s
       _ -> error "todo: the other SBV types, including lists, sets, arbitrary ADTs, floating point values, etc"
 

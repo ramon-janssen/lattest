@@ -2,6 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -18,11 +19,11 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), Valuation, VarModel, insertIntoValuation, assignValues, Constant(..), int, bool, string, list, ConstType (..))
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (List, withExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs (List, withExprConstraints, Constant (..))
 
 data UntypedExpr
     = UEBool Bool
@@ -305,19 +306,20 @@ buildValuation :: Map.Map String (Some Variable) -> Map.Map String JSON.Value ->
 buildValuation locVarCtx initVal =
     fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, Some var) ->
         case (varType var, Map.lookup name initVal) of
-            (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (Cint (round n)))
-            (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (Cbool b))
-            (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (Cstring (unpack s)))
+            (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CInt (round n)))
+            (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
+            (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CString (unpack s)))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
             (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
         defaultConst :: Type t -> Constant t
-        defaultConst IntType    = Cint 0
-        defaultConst BoolType   = Cbool False
-        defaultConst StringType = Cstring ""
-        defaultConst (ListType t) = Clist t []
+        defaultConst IntType    = CInt 0
+        defaultConst BoolType   = CBool False
+        defaultConst StringType = CString ""
+        defaultConst (ListType t) = CList [] t
+        defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
 
 convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLattice String String String, Valuation)
 convertSTSJson json = do
