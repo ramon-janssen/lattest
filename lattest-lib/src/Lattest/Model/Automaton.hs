@@ -86,11 +86,12 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, toConst, ConstType, Val(..))
+import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..))
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType (..), withExprConstraints)
 
 ------------
 -- syntax --
@@ -501,9 +502,8 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
                  in BM.ordReturn $ IntrpState l2 stateValuation2
         where
         assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t
-        assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal ((\(Cint i) -> Val i) . evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
-        assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal ((\(Cbool b) -> Val b) . evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
-        assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal ((\(Cstring s) -> Val s) . evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
+        assignNewValue var oldVal val' assign' = withExprConstraints (varType var)
+                                               $ maybe oldVal (Val . fromConst . evalVal val') (assignedExpr var assign')
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Some Variable] -> [Some Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)

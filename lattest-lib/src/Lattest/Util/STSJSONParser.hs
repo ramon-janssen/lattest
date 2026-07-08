@@ -22,6 +22,7 @@ import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (List, withExprConstraints)
 
 data UntypedExpr
     = UEBool Bool
@@ -80,7 +81,7 @@ toBoolExpr varmap (UEOp2 "==" e1 e2) = do
         Some IntType    -> (.==) <$> toIntExpr  varmap e1 <*> toIntExpr  varmap e2
         Some BoolType   -> (.==) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
         Some StringType -> (.==) <$> toStrExpr  varmap e1 <*> toStrExpr  varmap e2
-        -- TODO: FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        Some (ListType tp) -> withExprConstraints tp $ (.==) <$> toListExpr tp varmap e1 <*> toListExpr tp varmap e2
 toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toBoolExpr varmap (UEOp2 "==" e1 e2)
 toBoolExpr varmap (UEOp2 "<"  e1 e2) = (.<)  <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toBoolExpr varmap (UEOp2 "<=" e1 e2) = (.<=) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
@@ -99,12 +100,18 @@ toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toIntExpr varmap e1 <*> toIntExp
 toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
 
--- unknown strings are treated as string literals.
+toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (List t))
+toListExpr t varmap e = case e of
+  UEStr name -> lookupVar varmap name (ListType t) sVar
+  -- TODO: add operators on lists
+  _ -> Left $ "not a list expression: " ++ show e
+
 toStrExpr :: VarMap -> UntypedExpr -> Either String (Expr String)
 toStrExpr varmap (UEStr name) =
     case Map.lookup name varmap of
         Just (Some v@(Variable _ StringType)) -> Right (sVar v)
         Just (Some (Variable _ t)) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected String"
+        -- unknown strings are treated as string literals.
         Nothing             -> Right (sConst name)
 toStrExpr varmap (UEOp2 "++" e1 e2)  = (\a b -> sConcat [a, b]) <$> toStrExpr varmap e1 <*> toStrExpr varmap e2
 toStrExpr _   e                    = Left $ "not a string expression: " ++ show e
@@ -310,6 +317,7 @@ buildValuation locVarCtx initVal =
         defaultConst IntType    = Cint 0
         defaultConst BoolType   = Cbool False
         defaultConst StringType = Cstring ""
+        defaultConst (ListType t) = Clist t []
 
 convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLattice String String String, Valuation)
 convertSTSJson json = do

@@ -49,6 +49,7 @@ dependencies:
     - sbv
     - dependent-map
     - constraints-extras
+    - vector
 ghc-options:
 - -Wall
 - -Wcompat

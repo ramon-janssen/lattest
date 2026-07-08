@@ -38,6 +38,7 @@ import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
+import Data.Constraint.Extras (Has(..))
 
 --------------------
 -- exported types and functions
@@ -75,16 +76,8 @@ addDeclarations :: [Some Variable] -> SMT ()
 addDeclarations = mapM_ (\(Some v) -> addDeclaration v)
 
 addDeclaration :: forall t. Variable t -> SMT ()
-addDeclaration (Variable nm ty) = case ty of
-  -- case split to get the SymVal instances, the alternative is to attach the constraint to the constructor Variable
-  IntType -> do
-    SBVI.SBV v <- freshVar @t nm
-    modify $ Map.insert nm v
-  BoolType -> do
-    SBVI.SBV v <- freshVar @t nm
-    modify $ Map.insert nm v
-  StringType -> do
-    SBVI.SBV v <- freshVar @t nm
+addDeclaration (Variable nm ty) = do
+    SBVI.SBV v <- has @SymVal ty $ freshVar @t nm
     modify $ Map.insert nm v
 
 getSolvable :: SMT SolvableProblem

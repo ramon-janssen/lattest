@@ -1,5 +1,6 @@
 {-# OPTIONS_HADDOCK hide, prune #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
@@ -12,13 +13,13 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), runValuation)
-import Lattest.Model.Symbolic.Internal.ExprDefs(eval)
+import Lattest.Model.Symbolic.Internal.ExprDefs(eval, List (..))
 import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
 import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
-import qualified Data.Map as Map
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
+import Data.Constraint.Extras (Has(..))
 
 {-|
     Combine the given guards into one.
@@ -65,6 +66,7 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.IntType -> Some $ E.Cint value
                   E.BoolType -> Some $ E.Cbool value
                   E.StringType -> Some $ E.Cstring value
+                  E.ListType t -> has @E.ConstType t $ Some $ E.Clist t $ map E.toConst $ getList value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
 solveGuard :: [Some Variable] -> SymGuard -> SMT (Maybe Valuation)
