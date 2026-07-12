@@ -13,7 +13,8 @@ module Test.Lattest.Model.STSTest (
     testBranchingPathCondition,
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
-    testComposedCoffeeTreeStructure
+    testComposedCoffeeTreeStructure,
+    testDerivClasses
     )
 where
 
@@ -34,7 +35,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard)
 import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
@@ -274,7 +275,35 @@ composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeCNF String (IOAct String Stri
 composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
 
 testComposedCoffeeTreeStructure :: Test
-testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 1
+testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
+
+-- Unit tests for `derivClasses` in isolation. `derivClasses` partitions the space of a set of destination guards
+-- into "derivative classes": for every subset of the guards it forms a cell (poss, negs) meaning "all guards in
+-- poss hold and all guards in negs fail", then drops the cells that are *syntactically* unsatisfiable. Each surviving
+-- cell must be interpretable by `classDest`, which expects every original guard to land in either `poss` or `negs`.
+--
+-- `sTrue` and `sFalse` are constant-folded, so `derivClasses` can prune their impossible cells; `1 .== 2` is
+-- semantically false but syntactically opaque (an `EqualInt` node, not `sFalse`), so both of its cells survive.
+testDerivClasses :: Test
+testDerivClasses = TestCase $ do
+    let t = sTrue :: SymGuard
+        f = sFalse :: SymGuard
+        g = (1 :: Expr Integer) .== 2 :: SymGuard -- semantically false, but not syntactically sTrue/sFalse
+        cls poss negs = (Set.fromList poss, Set.fromList negs) :: Solve.DerivClassCond
+        assertClasses lbl guards expected =
+            assertEqual lbl (Set.fromList expected) (Solve.derivClasses (guards :: [SymGuard]))
+    -- No guards: exactly one class, the empty partition (representing the unconstrained "True" class).
+    assertClasses "{}"                  []      [cls [] []]
+    -- A single guard: the always-true guard keeps only its "holds" cell; the always-false guard keeps only its
+    -- "fails" cell; the opaque guard keeps both cells (the solver decides later).
+    assertClasses "{sTrue}"             [t]     [cls [t] []]
+    assertClasses "{sFalse}"            [f]     [cls [] [f]]
+    assertClasses "{1==2}"              [g]     [cls [] [g], cls [g] []]
+    -- Combinations: sTrue is forced into poss, sFalse into negs, and the opaque guard splits the survivors.
+    assertClasses "{sTrue,sFalse}"      [t, f]  [cls [t] [f]]
+    assertClasses "{sTrue,1==2}"        [t, g]  [cls [t] [g], cls [t, g] []]
+    assertClasses "{sFalse,1==2}"       [f, g]  [cls [] [f, g], cls [g] [f]]
+    assertClasses "{sTrue,sFalse,1==2}" [t, f, g] [cls [t] [f, g], cls [t, g] [f]]
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"

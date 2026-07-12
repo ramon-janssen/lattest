@@ -15,6 +15,7 @@ SymExecTree(..),
 SymExecNodeElem(..),
 SolveTree(..),
 DerivClassCond,
+derivClasses,
 )
 where
 
@@ -143,18 +144,6 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
     derivChildren pDepth pExecConf interaction =
         let mDestGuards = tDestGuard BM.<#> ((loc BM.<#> pExecConf) BM.>># tDest interaction)
         in Map.fromSet (pathStep pDepth pExecConf interaction) (derivClasses mDestGuards)
-    derivClasses :: Foldable f => f SymGuard -> Set.Set DerivClassCond
-    derivClasses mDestGuards =
-        let elems = Set.fromList $ toList mDestGuards
-        in Set.filter (not . classIsEmpty) $ derivClass elems `Set.map` Set.powerSet elems -- filter is an optimization: remove empty classes (unsat guards)
-        where
-        derivClass :: Set.Set SymGuard -> Set.Set SymGuard -> DerivClassCond
-        derivClass elems elemSubSet = Set.partition (`Set.member` elemSubSet) elems
-        classIsEmpty :: DerivClassCond -> Bool -- should be sound, not necessarily complete (True must mean unsat, but False may also be unsat)
-        classIsEmpty (poss, negs) = any (\c -> sNot c `Set.member` poss) poss -- unsat case: g and ¬g are both positive
-                                    || any (\c -> sNot c `Set.member` negs) negs
-                                    || any (\c -> c == sTrue) negs
-                                    || any (\c -> c == sFalse) poss
     --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract -> DerivClassCond -> SymbExecTree g
     pathStep pDepth pExecConf interact derivClass = symbExecTree (pDepth + 1) (pExecConf BM.>># pathStep' pDepth derivClass interact)
         where
@@ -193,6 +182,19 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
+
+derivClasses :: Foldable f => f SymGuard -> Set.Set DerivClassCond
+derivClasses fGuards =
+    let elems = Set.fromList $ toList fGuards
+    in Set.filter (not . classIsEmpty) $ derivClass elems `Set.map` Set.powerSet elems -- filter is an optimization: remove empty classes (unsat guards)
+    where
+    derivClass :: Set.Set SymGuard -> Set.Set SymGuard -> DerivClassCond
+    derivClass elems elemSubSet = Set.partition (`Set.member` elemSubSet) elems
+    classIsEmpty :: DerivClassCond -> Bool -- should be sound, not necessarily complete (True must mean unsat, but False may also be unsat)
+    classIsEmpty (poss, negs) = any (\c -> sNot c `Set.member` poss) poss -- unsat case: g and ¬g are both positive
+                                || any (\c -> sNot c `Set.member` negs) negs
+                                || any (\c -> c == sTrue) negs
+                                || any (\c -> c == sFalse) poss
 
 indexExpr :: Int -> Expr t -> Expr t
 indexExpr n e = mapExpressionVars (indexVar n) e
