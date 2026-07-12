@@ -87,7 +87,7 @@ data SymExecNodeElem loc = SymExecNodeElem {
     loc :: loc,
     symAssign :: VarModel,
     pathCondition :: SymGuard
-} deriving (Eq, Ord)
+} deriving (Eq, Ord, Show)
 
 data SymExecTree m loc g = SymExecTree {
     node :: m (SymExecNodeElem loc),

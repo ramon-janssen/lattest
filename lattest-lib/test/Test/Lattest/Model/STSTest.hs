@@ -206,24 +206,25 @@ showGate :: SymInteract (IOAct String String) -> String
 showGate (SymInteract (In s) _) = "?" ++ s
 showGate (SymInteract (Out s) _) = "!" ++ s
 
-prettyExecTree :: (BoundedConfiguration m, Foldable m) => Int -> Solve.SymExecTree m Integer (IOAct String String) -> String
+prettyExecTree :: (BoundedConfiguration m, Foldable m, Show (m (Solve.SymExecNodeElem q))) => Int -> Solve.SymExecTree m q (IOAct String String) -> String
 prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
     where
     go d indent t
         | d > maxDepth = [indent ++ "..."]
         -- conclusive (top/bottom) configurations only ever lead to more of themselves, so stop expanding there
-        | isForbidden (Solve.node t) || isUnderspecified (Solve.node t) = [indent ++ "node " ++ showNode (Solve.node t)]
-        | otherwise = (indent ++ "node " ++ showNode (Solve.node t))
+        | isForbidden (Solve.node t) || isUnderspecified (Solve.node t) = [indent ++ "node " ++ show (Solve.node t)]
+        | otherwise = (indent ++ "node " ++ show (Solve.node t))
                     : concatMap (childLines d indent) (Map.toList (Solve.pathChildren t))
     childLines d indent (act, classMap) =
         concatMap (\(dc, sub) -> (indent ++ showGate act ++ " " ++ showClass dc ++ ":") : go (d + 1) (indent ++ "    ") sub)
                   (Map.toList classMap)
-    showNode n
+{-    showNode n
         | isForbidden n = "FORBIDDEN"
         | isUnderspecified n = "UNDERSPECIFIED"
         | otherwise = intercalate " ; " [ "loc=" ++ show (Solve.loc e) ++ " cond=" ++ show (Solve.pathCondition e) | e <- toList n ]
-    showClass (poss, negs) = "[+" ++ showSet poss ++ " -" ++ showSet negs ++ "]"
+-}
     showSet s = "{" ++ intercalate ", " (map show (Set.toList s)) ++ "}"
+    showClass (poss, negs) = "[+" ++ showSet poss ++ " -" ++ showSet negs ++ "]"
 
 prettySolveTree :: Int -> Solve.SolveTree (IOAct String String) -> String
 prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
@@ -243,23 +244,23 @@ testLinearCoffeeTreeStructure :: Test
 testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3 expectedExecTree expectedSolveTree
     where
     expectedExecTree = [QQ.r|
-node loc=0 cond=(x) = (0)
+node [SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}]
 ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
-    node UNDERSPECIFIED
+    node ⊤
 ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-    node loc=1 cond=((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    node [SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=(p+x)}, pathCondition = ((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]
     ?water [+{} -{}]:
-        node UNDERSPECIFIED
+        node ⊤
     !coffee [+{} -{}]:
-        node FORBIDDEN
+        node ⊥
     !ok [+{} -{(x) = (p)}]:
-        node FORBIDDEN
+        node ⊥
     !ok [+{(x) = (p)} -{}]:
-        node loc=0 cond=((x_1) = (p_1))∧((x_2) = (x_1))
+        node [SymExecNodeElem {loc = 0, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1}, pathCondition = ((x_1) = (p_1))∧((x_2) = (x_1))}]
         ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
-            node UNDERSPECIFIED
+            node ⊤
         ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-            node loc=1 cond=((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
+            node [SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1, x_3:=(p_2+x_2)}, pathCondition = ((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)}]
             ?water [+{} -{}]:
                 ...
             !coffee [+{} -{}]:
@@ -269,9 +270,9 @@ node loc=0 cond=(x) = (0)
             !ok [+{(x) = (p)} -{}]:
                 ...
         !coffee [+{} -{((x+-15)) ≥ 0}]:
-            node FORBIDDEN
+            node ⊥
         !coffee [+{((x+-15)) ≥ 0} -{}]:
-            node loc=2 cond=((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)
+            node [SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1, x_3:=x_2}, pathCondition = ((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)}]
             ?water [+{} -{}]:
                 ...
             !coffee [+{} -{}]:
@@ -279,19 +280,19 @@ node loc=0 cond=(x) = (0)
             !ok [+{} -{}]:
                 ...
         !ok [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
 !coffee [+{} -{((x+-15)) ≥ 0}]:
-    node FORBIDDEN
+    node ⊥
 !coffee [+{((x+-15)) ≥ 0} -{}]:
-    node loc=2 cond=((x_1) = (x))∧(((x+-15)) ≥ 0)
+    node [SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=x}, pathCondition = ((x_1) = (x))∧(((x+-15)) ≥ 0)}]
     ?water [+{} -{}]:
-        node UNDERSPECIFIED
+        node ⊤
     !coffee [+{} -{}]:
-        node FORBIDDEN
+        node ⊥
     !ok [+{} -{}]:
-        node FORBIDDEN
+        node ⊥
 !ok [+{} -{}]:
-    node FORBIDDEN
+    node ⊥
 |]
     expectedSolveTree = [QQ.r|
 cond (x) = (0)
@@ -517,79 +518,79 @@ testComplexTreeStructure :: Test
 testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 20 expectedExecTree expectedSolveTree
     where
     expectedExecTree = [QQ.r|
-node loc=0 cond=(x) = (0)
+node SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}
 ?a [+{} -{((-p+20)) ≥ 0, ((p+20)) ≥ 0}]:
-    node UNDERSPECIFIED
+    node ⊤
 ?a [+{((-p+20)) ≥ 0} -{((p+20)) ≥ 0}]:
-    node loc=2 cond=((x_1) = (p))∧(((-p+20)) ≥ 0)
+    node SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((-p+20)) ≥ 0)}
     ?a [+{} -{}]:
-        node UNDERSPECIFIED
+        node ⊤
     !x [+{} -{(p^1⋅x^1) ≥ 0}]:
-        node FORBIDDEN
+        node ⊥
     !x [+{(p^1⋅x^1) ≥ 0} -{}]:
-        node loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
+        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
 ?a [+{((-p+20)) ≥ 0, ((p+20)) ≥ 0} -{}]:
-    node loc=1 cond=((x_1) = (p))∧(((p+20)) ≥ 0) ; loc=2 cond=((x_1) = (p))∧(((-p+20)) ≥ 0)
+    node SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((p+20)) ≥ 0)} ∧ SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((-p+20)) ≥ 0)}
     ?a [+{} -{}]:
-        node UNDERSPECIFIED
+        node ⊤
     !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
-        node FORBIDDEN
+        node ⊥
     !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
-        node FORBIDDEN
+        node ⊥
     !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{(p^1⋅x^1) ≥ 0}]:
-        node FORBIDDEN
+        node ⊥
     !x [+{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{}]:
-        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
+        node (SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))} ∨ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))}) ∧ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
     !x [+{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (3)) = (0)}]:
-        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
+        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))} ∧ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
     !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0}]:
-        node FORBIDDEN
+        node ⊥
     !x [+{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0)}]:
-        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)
+        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))} ∧ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
     !x [+{(p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
-        node FORBIDDEN
+        node ⊥
 ?a [+{((p+20)) ≥ 0} -{((-p+20)) ≥ 0}]:
-    node loc=1 cond=((x_1) = (p))∧(((p+20)) ≥ 0)
+    node SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((p+20)) ≥ 0)}
     ?a [+{} -{}]:
-        node UNDERSPECIFIED
+        node ⊤
     !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
-        node FORBIDDEN
+        node ⊥
     !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0)}]:
-        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0))
+        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
     !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{}]:
-        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (2)) = (0)) ; loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0))
+        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))} ∨ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
     !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0)}]:
-        node loc=3 cond=((x_2) = (x_1))∧(((x_1) % (3)) = (0))
+        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))}
         ?a [+{} -{}]:
-            node UNDERSPECIFIED
+            node ⊤
         !x [+{} -{}]:
-            node FORBIDDEN
+            node ⊥
 !x [+{} -{}]:
-    node FORBIDDEN
+    node ⊥
 |]
     -- The solve tree keeps only the specified (real) branches and carries flat path conditions. It is the chain
     -- loc 0 --a--> loc 1 --a--> (no specified continuation: cond False), since loc 1 is terminal.
@@ -611,12 +612,15 @@ cond (x) = (0)
 
 milkvar :: Variable
 milkvar = (Variable "milk" BoolType)
-milk = sVar qvar
+milk = sVar milkvar
 a = SymInteract (In "a") []
 b = SymInteract (In "b") []
 tea = SymInteract (Out "tea") [pvar]
 espresso = SymInteract (Out "esp") [pvar, milkvar]
 take = SymInteract (In "take") []
+
+composedCoffeeMachineAssign :: Valuation
+composedCoffeeMachineAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 composedCoffeeMachine :: IOSTS FreeLatticeCNF String String String
 composedCoffeeMachine =
@@ -633,287 +637,175 @@ composedCoffeeMachine =
             "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
     in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
-composedCoffeeMachineIntrpr :: STSIntrp NonDet Integer (IOAct String String)
-composedCoffeeMachineIntrpr = interpretSTS stsExample stsExampleInitAssign
+composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeCNF String (IOAct String String)
+composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
 
 testComposedCoffeeTreeStructure :: Test
-testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3 expectedExecTree expectedSolveTree
+testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 1 expectedExecTree expectedSolveTree
     where
     expectedExecTree = [QQ.r|
-node loc=0 cond=(x) = (0)
-?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
-    node UNDERSPECIFIED
-?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-    node loc=1 cond=((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+node SymExecNodeElem {loc = "a0", symAssign = {x:=0}, pathCondition = (x) = (0)} ∧ SymExecNodeElem {loc = "b0", symAssign = {x:=0}, pathCondition = (x) = (0)} ∧ SymExecNodeElem {loc = "c0", symAssign = {x:=0}, pathCondition = (x) = (0)} ∧ SymExecNodeElem {loc = "d0", symAssign = {x:=0}, pathCondition = (x) = (0)}
+?a [+{} -{True}]:
+    node ⊤
+?a [+{True} -{}]:
+    node SymExecNodeElem {loc = "a1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)} ∧ SymExecNodeElem {loc = "d1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)}
+    ?a [+{} -{}]:
+        ...
+    ?b [+{} -{}]:
+        ...
+    ?take [+{} -{}]:
+        ...
     ?water [+{} -{}]:
-        node UNDERSPECIFIED
-    !coffee [+{} -{}]:
-        node FORBIDDEN
-    !ok [+{} -{(x) = (p)}]:
-        node FORBIDDEN
-    !ok [+{(x) = (p)} -{}]:
-        node loc=0 cond=((x_1) = (p_1))∧((x_2) = (x_1))
-        ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
-            node UNDERSPECIFIED
-        ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-            node loc=1 cond=((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
-            ?water [+{} -{}]:
-                ...
-            !coffee [+{} -{}]:
-                ...
-            !ok [+{} -{(x) = (p)}]:
-                ...
-            !ok [+{(x) = (p)} -{}]:
-                ...
-        !coffee [+{} -{((x+-15)) ≥ 0}]:
-            node FORBIDDEN
-        !coffee [+{((x+-15)) ≥ 0} -{}]:
-            node loc=2 cond=((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)
-            ?water [+{} -{}]:
-                ...
-            !coffee [+{} -{}]:
-                ...
-            !ok [+{} -{}]:
-                ...
-        !ok [+{} -{}]:
-            node FORBIDDEN
-!coffee [+{} -{((x+-15)) ≥ 0}]:
-    node FORBIDDEN
-!coffee [+{((x+-15)) ≥ 0} -{}]:
-    node loc=2 cond=((x_1) = (x))∧(((x+-15)) ≥ 0)
+        ...
+    !esp [+{} -{}]:
+        ...
+    !tea [+{} -{True, (p) = (2)}]:
+        ...
+    !tea [+{True} -{(p) = (2)}]:
+        ...
+    !tea [+{True, (p) = (2)} -{}]:
+        ...
+    !tea [+{(p) = (2)} -{True}]:
+        ...
+?b [+{} -{True}]:
+    node ⊤
+?b [+{True} -{}]:
+    node SymExecNodeElem {loc = "b1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)} ∧ SymExecNodeElem {loc = "c1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)} ∧ SymExecNodeElem {loc = "d1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)}
+    ?a [+{} -{}]:
+        ...
+    ?b [+{} -{}]:
+        ...
+    ?take [+{} -{}]:
+        ...
     ?water [+{} -{}]:
-        node UNDERSPECIFIED
-    !coffee [+{} -{}]:
-        node FORBIDDEN
-    !ok [+{} -{}]:
-        node FORBIDDEN
-!ok [+{} -{}]:
-    node FORBIDDEN
+        ...
+    !esp [+{} -{milk, True, (p) = (1)}]:
+        ...
+    !esp [+{milk} -{True, (p) = (1)}]:
+        ...
+    !esp [+{milk, True} -{(p) = (1)}]:
+        ...
+    !esp [+{milk, True, (p) = (1)} -{}]:
+        ...
+    !esp [+{milk, (p) = (1)} -{True}]:
+        ...
+    !esp [+{True} -{milk, (p) = (1)}]:
+        ...
+    !esp [+{True, (p) = (1)} -{milk}]:
+        ...
+    !esp [+{(p) = (1)} -{milk, True}]:
+        ...
+    !tea [+{} -{}]:
+        ...
+?take [+{} -{}]:
+    node ⊤
+?water [+{} -{True}]:
+    node ⊤
+?water [+{True} -{}]:
+    node SymExecNodeElem {loc = "d0", symAssign = {x:=0, x_1:=(p+x)}, pathCondition = (x_1) = ((p+x))}
+    ?a [+{} -{True}]:
+        ...
+    ?a [+{True} -{}]:
+        ...
+    ?b [+{} -{True}]:
+        ...
+    ?b [+{True} -{}]:
+        ...
+    ?take [+{} -{}]:
+        ...
+    ?water [+{} -{True}]:
+        ...
+    ?water [+{True} -{}]:
+        ...
+    !esp [+{} -{}]:
+        ...
+    !tea [+{} -{}]:
+        ...
+!esp [+{} -{}]:
+    node ⊥
+!tea [+{} -{}]:
+    node ⊥
 |]
     expectedSolveTree = [QQ.r|
 cond (x) = (0)
+?a:
+    cond ((x) = (0))∧((x_1) = (x))
+    ?a:
+        ...
+    ?b:
+        ...
+    ?take:
+        ...
+    ?water:
+        ...
+    !esp:
+        ...
+    !tea:
+        ...
+?b:
+    cond ((x) = (0))∧((x_1) = (x))
+    ?a:
+        ...
+    ?b:
+        ...
+    ?take:
+        ...
+    ?water:
+        ...
+    !esp:
+        ...
+    !tea:
+        ...
+?take:
+    cond False
 ?water:
-    cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    cond ((x) = (0))∧((x_1) = ((p+x)))
+    ?a:
+        ...
+    ?b:
+        ...
+    ?take:
+        ...
     ?water:
-        cond False
-    !coffee:
-        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-        ?water:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !ok:
-        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
-        ?water:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧(¬((((x_2+-15)) ≥ 0)∧(¬(((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)))))))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-!coffee:
-    cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-    ?water:
-        cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-        ?water:
-            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !coffee:
-        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-        ?water:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !ok:
-        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-        ?water:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-!ok:
+        ...
+    !esp:
+        ...
+    !tea:
+        ...
+!esp:
     cond (x) = (0)
+    ?a:
+        ...
+    ?b:
+        ...
+    ?take:
+        ...
     ?water:
-        cond (x) = (0)
-        ?water:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !coffee:
-        cond (x) = (0)
-        ?water:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !ok:
-        cond (x) = (0)
-        ?water:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
+        ...
+    !esp:
+        ...
+    !tea:
+        ...
+!tea:
+    cond (x) = (0)
+    ?a:
+        ...
+    ?b:
+        ...
+    ?take:
+        ...
+    ?water:
+        ...
+    !esp:
+        ...
+    !tea:
+        ...
 |]
 
 -- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
 -- assertBool (rather than assertEqual) keeps the printed unicode readable on failure; the expected strings use raw
 -- quasiquotes so the printed output can be pasted straight into the source.
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m) => String -> STSIntrp m Integer (IOAct String String) -> Int -> String -> String -> Test
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, Show (m (Solve.SymExecNodeElem q))) => String -> STSIntrp m q (IOAct String String) -> Int -> String -> String -> Test
 testTreeStructure testName stsIntrpr depth expectedExecTree expectedSolveTree = TestCase $ do
     assertBool (failure (testName ++ ":symbolicExecutionTree") expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
     assertBool (failure (testName ++ ":toSolveTree") expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
