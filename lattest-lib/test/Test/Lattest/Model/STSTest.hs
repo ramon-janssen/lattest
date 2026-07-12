@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -20,11 +19,14 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
-import Data.Maybe(fromJust, isJust)
+import Data.Maybe(fromJust, isJust, catMaybes)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
-import qualified Text.RawString.QQ as QQ
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.UTF8 as UTF8
+import System.FilePath ((</>), takeDirectory)
+import System.Directory (createDirectoryIfMissing)
 
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
@@ -241,374 +243,10 @@ prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
                                     (Map.toList (Solve.traceChildren t))
 
 testLinearCoffeeTreeStructure :: Test
-testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3 expectedExecTree expectedSolveTree
-    where
-    expectedExecTree = [QQ.r|
-node [SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}]
-?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
-    node ⊤
-?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-    node [SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=(p+x)}, pathCondition = ((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]
-    ?water [+{} -{}]:
-        node ⊤
-    !coffee [+{} -{}]:
-        node ⊥
-    !ok [+{} -{(x) = (p)}]:
-        node ⊥
-    !ok [+{(x) = (p)} -{}]:
-        node [SymExecNodeElem {loc = 0, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1}, pathCondition = ((x_1) = (p_1))∧((x_2) = (x_1))}]
-        ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
-            node ⊤
-        ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-            node [SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1, x_3:=(p_2+x_2)}, pathCondition = ((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)}]
-            ?water [+{} -{}]:
-                ...
-            !coffee [+{} -{}]:
-                ...
-            !ok [+{} -{(x) = (p)}]:
-                ...
-            !ok [+{(x) = (p)} -{}]:
-                ...
-        !coffee [+{} -{((x+-15)) ≥ 0}]:
-            node ⊥
-        !coffee [+{((x+-15)) ≥ 0} -{}]:
-            node [SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1, x_3:=x_2}, pathCondition = ((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)}]
-            ?water [+{} -{}]:
-                ...
-            !coffee [+{} -{}]:
-                ...
-            !ok [+{} -{}]:
-                ...
-        !ok [+{} -{}]:
-            node ⊥
-!coffee [+{} -{((x+-15)) ≥ 0}]:
-    node ⊥
-!coffee [+{((x+-15)) ≥ 0} -{}]:
-    node [SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=x}, pathCondition = ((x_1) = (x))∧(((x+-15)) ≥ 0)}]
-    ?water [+{} -{}]:
-        node ⊤
-    !coffee [+{} -{}]:
-        node ⊥
-    !ok [+{} -{}]:
-        node ⊥
-!ok [+{} -{}]:
-    node ⊥
-|]
-    expectedSolveTree = [QQ.r|
-cond (x) = (0)
-?water:
-    cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-    ?water:
-        cond False
-    !coffee:
-        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-        ?water:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !ok:
-        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
-        ?water:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧(¬((((x_2+-15)) ≥ 0)∧(¬(((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)))))))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-!coffee:
-    cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-    ?water:
-        cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-        ?water:
-            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !coffee:
-        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-        ?water:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !ok:
-        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-        ?water:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-!ok:
-    cond (x) = (0)
-    ?water:
-        cond (x) = (0)
-        ?water:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !coffee:
-        cond (x) = (0)
-        ?water:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-    !ok:
-        cond (x) = (0)
-        ?water:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond (x) = (0)
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-|]
+testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3
 
 testComplexTreeStructure :: Test
-testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 20 expectedExecTree expectedSolveTree
-    where
-    expectedExecTree = [QQ.r|
-node SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}
-?a [+{} -{((-p+20)) ≥ 0, ((p+20)) ≥ 0}]:
-    node ⊤
-?a [+{((-p+20)) ≥ 0} -{((p+20)) ≥ 0}]:
-    node SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((-p+20)) ≥ 0)}
-    ?a [+{} -{}]:
-        node ⊤
-    !x [+{} -{(p^1⋅x^1) ≥ 0}]:
-        node ⊥
-    !x [+{(p^1⋅x^1) ≥ 0} -{}]:
-        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-?a [+{((-p+20)) ≥ 0, ((p+20)) ≥ 0} -{}]:
-    node SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((p+20)) ≥ 0)} ∧ SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((-p+20)) ≥ 0)}
-    ?a [+{} -{}]:
-        node ⊤
-    !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
-        node ⊥
-    !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0}]:
-        node ⊥
-    !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{(p^1⋅x^1) ≥ 0}]:
-        node ⊥
-    !x [+{((x) % (2)) = (0), ((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{}]:
-        node (SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))} ∨ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))}) ∧ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-    !x [+{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (3)) = (0)}]:
-        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))} ∧ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-    !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0), (p^1⋅x^1) ≥ 0}]:
-        node ⊥
-    !x [+{((x) % (3)) = (0), (p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0)}]:
-        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))} ∧ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧((p_1^1⋅x_1^1) ≥ 0)}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-    !x [+{(p^1⋅x^1) ≥ 0} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
-        node ⊥
-?a [+{((p+20)) ≥ 0} -{((-p+20)) ≥ 0}]:
-    node SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=p}, pathCondition = ((x_1) = (p))∧(((p+20)) ≥ 0)}
-    ?a [+{} -{}]:
-        node ⊤
-    !x [+{} -{((x) % (2)) = (0), ((x) % (3)) = (0)}]:
-        node ⊥
-    !x [+{((x) % (2)) = (0)} -{((x) % (3)) = (0)}]:
-        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-    !x [+{((x) % (2)) = (0), ((x) % (3)) = (0)} -{}]:
-        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (2)) = (0))} ∨ SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-    !x [+{((x) % (3)) = (0)} -{((x) % (2)) = (0)}]:
-        node SymExecNodeElem {loc = 3, symAssign = {x:=0, x_1:=p, x_2:=x_1}, pathCondition = ((x_2) = (x_1))∧(((x_1) % (3)) = (0))}
-        ?a [+{} -{}]:
-            node ⊤
-        !x [+{} -{}]:
-            node ⊥
-!x [+{} -{}]:
-    node ⊥
-|]
-    -- The solve tree keeps only the specified (real) branches and carries flat path conditions. It is the chain
-    -- loc 0 --a--> loc 1 --a--> (no specified continuation: cond False), since loc 1 is terminal.
-    expectedSolveTree = [QQ.r|
-cond (x) = (0)
-?a:
-    cond ¬((¬(((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)))∧(¬(((x) = (0))∧((x_1) = (p))∧(((-p+20)) ≥ 0)∧(¬(((p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0)))))
-    ?a:
-        cond False
-    !x:
-        cond ¬((¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((-p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (3)) = (0)))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (2)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (3)) = (0)))∧(¬(((-p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((-p+20)) ≥ 0)∧(((p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((x_1) % (2)) = (0)))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((x_1) % (3)) = (0))∧(((p+20)) ≥ 0)∧(¬(((x_1) % (2)) = (0)))∧(¬(((-p+20)) ≥ 0))))∧(¬(((x) = (0))∧((x_1) = (p))∧((x_2) = (x_1))∧(((-p+20)) ≥ 0)∧((p_1^1⋅x_1^1) ≥ 0)∧(¬(((p+20)) ≥ 0)))))
-        ?a:
-            cond False
-        !x:
-            cond False
-!x:
-    cond False
-|]
+testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 3
 
 milkvar :: Variable
 milkvar = (Variable "milk" BoolType)
@@ -641,155 +279,39 @@ composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeCNF String (IOAct String Stri
 composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
 
 testComposedCoffeeTreeStructure :: Test
-testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 1 expectedExecTree expectedSolveTree
-    where
-    expectedExecTree = [QQ.r|
-node SymExecNodeElem {loc = "a0", symAssign = {x:=0}, pathCondition = (x) = (0)} ∧ SymExecNodeElem {loc = "b0", symAssign = {x:=0}, pathCondition = (x) = (0)} ∧ SymExecNodeElem {loc = "c0", symAssign = {x:=0}, pathCondition = (x) = (0)} ∧ SymExecNodeElem {loc = "d0", symAssign = {x:=0}, pathCondition = (x) = (0)}
-?a [+{True} -{}]:
-    node SymExecNodeElem {loc = "a1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)} ∧ SymExecNodeElem {loc = "d1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)}
-    ?a [+{} -{}]:
-        ...
-    ?b [+{} -{}]:
-        ...
-    ?take [+{} -{}]:
-        ...
-    ?water [+{} -{}]:
-        ...
-    !esp [+{} -{}]:
-        ...
-    !tea [+{True} -{(p) = (2)}]:
-        ...
-    !tea [+{True, (p) = (2)} -{}]:
-        ...
-?b [+{True} -{}]:
-    node SymExecNodeElem {loc = "b1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)} ∧ SymExecNodeElem {loc = "c1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)} ∧ SymExecNodeElem {loc = "d1", symAssign = {x:=0, x_1:=x}, pathCondition = (x_1) = (x)}
-    ?a [+{} -{}]:
-        ...
-    ?b [+{} -{}]:
-        ...
-    ?take [+{} -{}]:
-        ...
-    ?water [+{} -{}]:
-        ...
-    !esp [+{milk, True} -{(p) = (1)}]:
-        ...
-    !esp [+{milk, True, (p) = (1)} -{}]:
-        ...
-    !esp [+{True} -{milk, (p) = (1)}]:
-        ...
-    !esp [+{True, (p) = (1)} -{milk}]:
-        ...
-    !tea [+{} -{}]:
-        ...
-?take [+{} -{}]:
-    node ⊤
-?water [+{True} -{}]:
-    node SymExecNodeElem {loc = "d0", symAssign = {x:=0, x_1:=(p+x)}, pathCondition = (x_1) = ((p+x))}
-    ?a [+{True} -{}]:
-        ...
-    ?b [+{True} -{}]:
-        ...
-    ?take [+{} -{}]:
-        ...
-    ?water [+{True} -{}]:
-        ...
-    !esp [+{} -{}]:
-        ...
-    !tea [+{} -{}]:
-        ...
-!esp [+{} -{}]:
-    node ⊥
-!tea [+{} -{}]:
-    node ⊥
-|]
-    expectedSolveTree = [QQ.r|
-cond (x) = (0)
-?a:
-    cond ((x) = (0))∧((x_1) = (x))
-    ?a:
-        ...
-    ?b:
-        ...
-    ?take:
-        ...
-    ?water:
-        ...
-    !esp:
-        ...
-    !tea:
-        ...
-?b:
-    cond ((x) = (0))∧((x_1) = (x))
-    ?a:
-        ...
-    ?b:
-        ...
-    ?take:
-        ...
-    ?water:
-        ...
-    !esp:
-        ...
-    !tea:
-        ...
-?take:
-    cond False
-?water:
-    cond ((x) = (0))∧((x_1) = ((p+x)))
-    ?a:
-        ...
-    ?b:
-        ...
-    ?take:
-        ...
-    ?water:
-        ...
-    !esp:
-        ...
-    !tea:
-        ...
-!esp:
-    cond (x) = (0)
-    ?a:
-        ...
-    ?b:
-        ...
-    ?take:
-        ...
-    ?water:
-        ...
-    !esp:
-        ...
-    !tea:
-        ...
-!tea:
-    cond (x) = (0)
-    ?a:
-        ...
-    ?b:
-        ...
-    ?take:
-        ...
-    ?water:
-        ...
-    !esp:
-        ...
-    !tea:
-        ...
-|]
+testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 1
 
--- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
--- assertBool (rather than assertEqual) keeps the printed unicode readable on failure; the expected strings use raw
--- quasiquotes so the printed output can be pasted straight into the source.
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, Show (m (Solve.SymExecNodeElem q))) => String -> STSIntrp m q (IOAct String String) -> Int -> String -> String -> Test
-testTreeStructure testName stsIntrpr depth expectedExecTree expectedSolveTree = TestCase $ do
-    assertBool (failure (testName ++ ":symbolicExecutionTree") expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
-    assertBool (failure (testName ++ ":toSolveTree") expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
+goldenDir :: FilePath
+goldenDir = "test/expected-test-output"
+
+-- Compare rendered output against a golden file, then always (re)generate it (creating the directory if needed).
+-- Returns a failure message if it did not match, or Nothing if it did. A completely missing golden file is
+-- (re)generated but reported as a failure, so a freshly created baseline is never silently accepted.
+goldenCheck :: String -> FilePath -> String -> IO (Maybe String)
+goldenCheck what path actual = do
+    existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
+    createDirectoryIfMissing True (takeDirectory path)
+    BS.writeFile path (UTF8.fromString actual)
+    return $ case existing of
+        Right expected | expected == actual -> Nothing
+                       | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual)
+        Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " was missing; (re)generated it -- rerun to compare against it")
+
+-- Run all golden checks (so every file is regenerated in one run, even on failure), then fail once if any did not match.
+goldenAssert :: [IO (Maybe String)] -> Assertion
+goldenAssert checks = do
+    failures <- catMaybes <$> sequence checks
+    if null failures then return () else assertFailure (concat failures)
+
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, Show (m (Solve.SymExecNodeElem q))) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
+testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
+    [ goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
+    , goldenCheck (testName ++ ":toSolveTree") (goldenDir </> (testName ++ ".solvetree.txt")) actualSolveTree
+    ]
     where
     tree = Solve.symbolicExecutionTree stsIntrpr
     actualExecTree = "\n" ++ prettyExecTree depth tree
     actualSolveTree = "\n" ++ prettySolveTree depth (Solve.toSolveTree stsIntrpr)
-    failure what e a = "\nprint of " ++ what ++ " does not match, expected:" ++ e ++ "but received:" ++ a
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
@@ -839,26 +361,9 @@ assertThrowsError expectedError someVal = do
         handler ex = return $ Just $ show ex
 
 testPrintSTS :: Test
-testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no assertEquals to avoid printing the unreadable ascii-escaped variant of the tested unicode strings
+testPrintSTS = TestCase $ goldenAssert [ goldenCheck "printSTS" (goldenDir </> "printSTS.txt") actual ]
     where
-    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
-    -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
-    expected = [QQ.r|
-current state configuration: [(0,{x:=0})]
-initial location configuration: [0]
-locations: 0, 1, 2
-transitions:
-0  ――?"water" [p:Int]⟶  [((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)]
-0  ――!"coffee" []⟶  [(((x+-15)) ≥ 0, {},2)]
-0  ――!"ok" [p:Int]⟶  ⊥
-1  ――?"water" [p:Int]⟶  ⊤
-1  ――!"coffee" []⟶  ⊥
-1  ――!"ok" [p:Int]⟶  [((x) = (p), {},0)]
-2  ――?"water" [p:Int]⟶  ⊤
-2  ――!"coffee" []⟶  ⊥
-2  ――!"ok" [p:Int]⟶  ⊥
-|]
+    actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the golden file.
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 
