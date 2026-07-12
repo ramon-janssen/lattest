@@ -167,7 +167,8 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
         classDest (poss, negs) gate globaldest@(STSLoc (guard, _), _)
             | guard `Set.member` poss = BM.ordReturn globaldest
             | guard `Set.member` negs = interactToImplicitLocation gate
-            | otherwise = error "destination guard is not in any derivative class condition" -- this would be a bug in derivClasses or pathStep
+             -- this would be a bug in derivClasses or pathStep
+             | otherwise = error $ "destination guard is not in any derivative class condition\nguard:\n" ++ show guard ++ "\nclass condition:\n" ++ show (Set.toList poss) ++ "\n" ++ show (Set.toList negs)
         addToPath pDepth pVars (poss, negs) (STSLoc (tguard, tassign), tloc) =
             let completedAssign = tassign `varUnion` identityVarModel locVarSet
                 indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
