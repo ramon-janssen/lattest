@@ -13,7 +13,8 @@ module Test.Lattest.Model.STSTest (
     testSTSPathCondition,
     testBranchingPathCondition,
     testLinearCoffeeTreeStructure,
-    testComplexTreeStructure
+    testComplexTreeStructure,
+    testComposedCoffeeTreeStructure
     )
 where
 
@@ -32,7 +33,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, BoundedConfiguration)
+import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
@@ -46,8 +47,10 @@ import qualified Lattest.SMT.SMT as SMT
 
 pvar :: Variable
 pvar = (Variable "p" IntType)
+p = sVar pvar
 qvar :: Variable
 qvar = (Variable "q" IntType)
+q = sVar qvar
 xvar :: Variable
 xvar = (Variable "x" IntType)
 x = sVar xvar
@@ -71,8 +74,7 @@ coffee = SymInteract (Out "coffee") []
 -}
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
-    let p = sVar pvar
-        waterGuard = 1 .<= p .&& p .<= 10
+    let waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
@@ -110,9 +112,7 @@ type Branch = FreeLatticeCNF (STStdest, Integer) -> FreeLatticeCNF (STStdest, In
 -- selects whether unsatisfied guards fall through to top or to bottom.
 branchingSTS :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> IOSTS FreeLatticeCNF Integer String String
 branchingSTS g1 g2 op0 op1 op2 =
-    let p = sVar pvar
-        q = sVar qvar
-        gp = p .>= 5
+    let gp = p .>= 5
         gq = q .>= 5
         asgn = assignment [xvar =: p]
         switches loc = case loc of
@@ -141,7 +141,6 @@ testBranchingPathCondition = TestCase $ do
     _ <- SMT.runSMT smtRef SMT.openSolver
     let disj = (\/) :: Branch
         conj = (/\) :: Branch
-        p = sVar pvar
         isSat guard = SMT.runSMT smtRef $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
         assertSat lbl g = isSat g >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl g = isSat g >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
@@ -192,8 +191,7 @@ outGate = SymInteract (Out "x") [pvar]
 
 treeSTS :: IOSTS FreeLatticeCNF Integer String String
 treeSTS =
-    let p = sVar pvar
-        switches loc = case loc of
+    let switches loc = case loc of
             0 -> Map.fromList [(inGate, ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
             1 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
             2 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
@@ -237,7 +235,7 @@ prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
                                 (Map.toList (Solve.traceChildren t))
 
 testLinearCoffeeTreeStructure :: Test
-testLinearCoffeeTreeStructure = testTreeStructure stsExampleIntrpr 3 expectedExecTree expectedSolveTree
+testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3 expectedExecTree expectedSolveTree
     where
     expectedExecTree = [QQ.r|
 node loc=0 cond=(x) = (0)
@@ -532,11 +530,10 @@ cond (x) = (0)
                 ...
             !ok:
                 ...
-
 |]
 
 testComplexTreeStructure :: Test
-testComplexTreeStructure = testTreeStructure treeIntrpr 20 expectedExecTree expectedSolveTree
+testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 20 expectedExecTree expectedSolveTree
     where
     expectedExecTree = [QQ.r|
 node loc=0 cond=(x) = (0)
@@ -629,6 +626,307 @@ cond (x) = (0)
             cond False
 !x:
     cond False
+|]
+
+milkvar :: Variable
+milkvar = (Variable "milk" BoolType)
+milk = sVar qvar
+a = SymInteract (In "a") []
+b = SymInteract (In "b") []
+tea = SymInteract (Out "tea") [pvar]
+espresso = SymInteract (Out "esp") [pvar, milkvar]
+take = SymInteract (In "take") []
+
+composedCoffeeMachine :: IOSTS FreeLatticeCNF String String String
+composedCoffeeMachine =
+    let initConf = atom "a0" /\ atom "b0" /\ atom "c0" /\ atom "d0":: FreeLatticeCNF String
+        asTransition = \q -> (stsTLoc sTrue noAssignment, q)
+        switches = \q -> case q of
+            "a0" -> Map.fromList [(a, atom (stsTLoc sTrue noAssignment, "a1"))]
+            "a1" -> Map.fromList [(tea, atom (stsTLoc (p .== 2) $ assignment [xvar =: x .- p], "a2"))]
+            "b0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "b1"))]
+            "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== 1) $ assignment [xvar =: x .- p], "b2"))]
+            "c0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "c1"))]
+            "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ assignment [xvar =: x .- p], "c2"))]
+            "d0" -> Map.fromList $ [(water, atom (stsTLoc sTrue $ assignment [xvar =: x .+ p], "d0"))] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
+            "d2" -> Map.fromList [(take, asTransition <#> initConf)]
+    in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
+composedCoffeeMachineIntrpr :: STSIntrp NonDet Integer (IOAct String String)
+composedCoffeeMachineIntrpr = interpretSTS stsExample stsExampleInitAssign
+
+testComposedCoffeeTreeStructure :: Test
+testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3 expectedExecTree expectedSolveTree
+    where
+    expectedExecTree = [QQ.r|
+node loc=0 cond=(x) = (0)
+?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
+    node UNDERSPECIFIED
+?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
+    node loc=1 cond=((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    ?water [+{} -{}]:
+        node UNDERSPECIFIED
+    !coffee [+{} -{}]:
+        node FORBIDDEN
+    !ok [+{} -{(x) = (p)}]:
+        node FORBIDDEN
+    !ok [+{(x) = (p)} -{}]:
+        node loc=0 cond=((x_1) = (p_1))∧((x_2) = (x_1))
+        ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
+            node UNDERSPECIFIED
+        ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
+            node loc=1 cond=((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)
+            ?water [+{} -{}]:
+                ...
+            !coffee [+{} -{}]:
+                ...
+            !ok [+{} -{(x) = (p)}]:
+                ...
+            !ok [+{(x) = (p)} -{}]:
+                ...
+        !coffee [+{} -{((x+-15)) ≥ 0}]:
+            node FORBIDDEN
+        !coffee [+{((x+-15)) ≥ 0} -{}]:
+            node loc=2 cond=((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)
+            ?water [+{} -{}]:
+                ...
+            !coffee [+{} -{}]:
+                ...
+            !ok [+{} -{}]:
+                ...
+        !ok [+{} -{}]:
+            node FORBIDDEN
+!coffee [+{} -{((x+-15)) ≥ 0}]:
+    node FORBIDDEN
+!coffee [+{((x+-15)) ≥ 0} -{}]:
+    node loc=2 cond=((x_1) = (x))∧(((x+-15)) ≥ 0)
+    ?water [+{} -{}]:
+        node UNDERSPECIFIED
+    !coffee [+{} -{}]:
+        node FORBIDDEN
+    !ok [+{} -{}]:
+        node FORBIDDEN
+!ok [+{} -{}]:
+    node FORBIDDEN
+|]
+    expectedSolveTree = [QQ.r|
+cond (x) = (0)
+?water:
+    cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+    ?water:
+        cond False
+    !coffee:
+        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+        ?water:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !ok:
+        cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
+        ?water:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))∧(¬((((x_2+-15)) ≥ 0)∧(¬(((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)))))))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)∧(¬(((x_1) = (p_1))∧(¬(((x_1) = (p_1))∧((x_2) = (x_1))))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+!coffee:
+    cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+    ?water:
+        cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+        ?water:
+            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧(¬(((x+-15)) ≥ 0))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !coffee:
+        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+        ?water:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !ok:
+        cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+        ?water:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond ((x) = (0))∧(¬((((x+-15)) ≥ 0)∧(¬(((x_1) = (x))∧(((x+-15)) ≥ 0)))))
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+!ok:
+    cond (x) = (0)
+    ?water:
+        cond (x) = (0)
+        ?water:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !coffee:
+        cond (x) = (0)
+        ?water:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+    !ok:
+        cond (x) = (0)
+        ?water:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !coffee:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
+        !ok:
+            cond (x) = (0)
+            ?water:
+                ...
+            !coffee:
+                ...
+            !ok:
+                ...
 |]
 
 -- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
@@ -800,10 +1098,7 @@ testSTSTestSelection = TestCase $ do
 -}
 specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLattice a -> FreeLattice a -> FreeLattice a) -> Bool -> IOSTS FreeLattice Integer String String
 specParameterized startType endType comp splitFirst =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
-        start = SymInteract (startType "start") [pvar]
+    let start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         done = SymInteract (Out "done") []
         initConf = pure 0 :: FreeLattice Integer
@@ -924,10 +1219,7 @@ testLatticeSTS = concat [
 -}
 specQ :: IOSTS FreeLattice Integer String String
 specQ =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
-        start = SymInteract (In "start") [pvar]
+    let start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
         initConf = pure 0 :: FreeLattice Integer
         guardStart = 1 .< p .&& p .< 3
@@ -1032,10 +1324,7 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
 -}
 specUnimplementableParameterized :: Bool -> IOSTS FreeLattice Integer String String
 specUnimplementableParameterized splitFirst =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
-        start = SymInteract (In "start") [pvar]
+    let start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
         initConf = pure 0 :: FreeLattice Integer
         guardStart = 1 .< p .&& p .< 3

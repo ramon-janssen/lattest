@@ -86,6 +86,7 @@ makeHUnitTests = do
         testBranchingPathCondition,
         testLinearCoffeeTreeStructure,
         testComplexTreeStructure,
+        testComposedCoffeeTreeStructure,
         testPrintSTS,
         testReadAutFile
         ]
