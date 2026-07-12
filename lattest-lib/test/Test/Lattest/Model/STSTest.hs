@@ -213,18 +213,13 @@ prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
     where
     go d indent t
         | d > maxDepth = [indent ++ "..."]
-        -- conclusive (top/bottom) configurations only ever lead to more of themselves, so stop expanding there
+        -- conclusive (top/bottom) configurations are sinks so stop expanding
         | isForbidden (Solve.node t) || isUnderspecified (Solve.node t) = [indent ++ "node " ++ show (Solve.node t)]
         | otherwise = (indent ++ "node " ++ show (Solve.node t))
                     : concatMap (childLines d indent) (Map.toList (Solve.pathChildren t))
     childLines d indent (act, classMap) =
         concatMap (\(dc, sub) -> (indent ++ showGate act ++ " " ++ showClass dc ++ ":") : go (d + 1) (indent ++ "    ") sub)
                   (Map.toList classMap)
-{-    showNode n
-        | isForbidden n = "FORBIDDEN"
-        | isUnderspecified n = "UNDERSPECIFIED"
-        | otherwise = intercalate " ; " [ "loc=" ++ show (Solve.loc e) ++ " cond=" ++ show (Solve.pathCondition e) | e <- toList n ]
--}
     showSet s = "{" ++ intercalate ", " (map show (Set.toList s)) ++ "}"
     showClass (poss, negs) = "[+" ++ showSet poss ++ " -" ++ showSet negs ++ "]"
 
