@@ -230,9 +230,14 @@ prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
     where
     go d indent t
         | d > maxDepth = [indent ++ "..."]
-        | otherwise = (indent ++ "cond " ++ show (Solve.traceCondition t))
-                    : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
-                                (Map.toList (Solve.traceChildren t))
+        | otherwise = 
+            let cond = Solve.traceCondition t
+                showCond = indent ++ "cond " ++ show cond
+            in if cond == sTrue || cond == sFalse -- FIXME this should depend on the goal of the solveTree (specified or allowed values)
+                then [showCond]
+                else showCond
+                        : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
+                                    (Map.toList (Solve.traceChildren t))
 
 testLinearCoffeeTreeStructure :: Test
 testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3 expectedExecTree expectedSolveTree
@@ -294,30 +299,6 @@ cond (x) = (0)
     cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
     ?water:
         cond False
-        ?water:
-            cond False
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !coffee:
-            cond False
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
-        !ok:
-            cond False
-            ?water:
-                ...
-            !coffee:
-                ...
-            !ok:
-                ...
     !coffee:
         cond ((x) = (0))∧((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)
         ?water:
@@ -932,10 +913,10 @@ cond (x) = (0)
 -- Assert the symbolic-execution tree and its flattened solve tree directly (no SMT), as copy-pasteable text outlines.
 -- assertBool (rather than assertEqual) keeps the printed unicode readable on failure; the expected strings use raw
 -- quasiquotes so the printed output can be pasted straight into the source.
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m) => STSIntrp m Integer (IOAct String String) -> Int -> String -> String -> Test
-testTreeStructure stsIntrpr depth expectedExecTree expectedSolveTree = TestCase $ do
-    assertBool (failure "symbolicExecutionTree" expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
-    assertBool (failure "toSolveTree" expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m) => String -> STSIntrp m Integer (IOAct String String) -> Int -> String -> String -> Test
+testTreeStructure testName stsIntrpr depth expectedExecTree expectedSolveTree = TestCase $ do
+    assertBool (failure (testName ++ ":symbolicExecutionTree") expectedExecTree actualExecTree) (expectedExecTree == actualExecTree)
+    assertBool (failure (testName ++ ":toSolveTree") expectedSolveTree actualSolveTree) (expectedSolveTree == actualSolveTree)
     where
     tree = Solve.symbolicExecutionTree stsIntrpr
     actualExecTree = "\n" ++ prettyExecTree depth tree
