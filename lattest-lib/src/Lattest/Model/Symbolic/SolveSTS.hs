@@ -24,7 +24,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, (.&&), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, (.&&), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -153,6 +153,8 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
         classIsEmpty :: DerivClassCond -> Bool -- should be sound, not necessarily complete (True must mean unsat, but False may also be unsat)
         classIsEmpty (poss, negs) = any (\c -> sNot c `Set.member` poss) poss -- unsat case: g and ¬g are both positive
                                     || any (\c -> sNot c `Set.member` negs) negs
+                                    || any (\c -> c == sTrue) negs
+                                    || any (\c -> c == sFalse) poss
     --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract -> DerivClassCond -> SymbExecTree g
     pathStep pDepth pExecConf interact derivClass = symbExecTree (pDepth + 1) (pExecConf BM.>># pathStep' pDepth derivClass interact)
         where
