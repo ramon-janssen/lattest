@@ -19,7 +19,7 @@ module Lattest.SMT (
   runSMT
 ) where
 
-import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar, SList, SInteger, SBool)
+import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
@@ -40,8 +40,7 @@ import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (List (..), ExprType (..), ExprConstraints, withExprConstraints)
-import Data.Bifunctor (Bifunctor(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints)
 
 --------------------
 -- exported types and functions

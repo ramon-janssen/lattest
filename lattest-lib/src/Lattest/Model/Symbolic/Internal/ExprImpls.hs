@@ -357,6 +357,21 @@ sConcat l =
 --    "a" ++ "b" == "ab"    - concat consecutive string values
 --   remove all nested sConcat, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
+sCons :: Expr x -> Expr (List x) -> Expr (List x)
+sCons (view -> x) (view -> xs) = Expr $ Cons x xs
+
+sAppend :: Expr (List x) -> Expr (List x) -> Expr (List x)
+sAppend (view -> xs) (view -> ys) = Expr $ Append xs ys
+
+sLElem :: ExprType x => Expr x -> Expr (List x) -> Expr Bool
+sLElem (view -> x) (view -> xs) = Expr $ LElem (typeOf' x) x xs
+
+sTake :: Expr Integer -> Expr (List x) -> Expr (List x)
+sTake (view -> i) (view -> xs) = Expr $ Take i xs
+
+sDrop :: Expr Integer -> Expr (List x) -> Expr (List x)
+sDrop (view -> i) (view -> xs) = Expr $ Drop i xs
+
 mergeVals :: [Expr String] -> [Expr String]
 mergeVals []            = []
 mergeVals [x]           = [x]
@@ -429,6 +444,7 @@ insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ StringType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 
 fromConst' :: ConstType a => Constant a -> a
 fromConst' = fromConst
@@ -481,10 +497,16 @@ subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
 subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length vexp)           = sLength (subst' ve vexp)
-
 subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
 subst' ve (Equal _ vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
-
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
+subst' ve (Cons x xs) = has @ExprType x $ sCons (subst' ve x) (subst' ve xs)
+subst' ve (Append xs ys) = sAppend (subst' ve xs) (subst' ve ys)
+subst' ve (LElem t x xs) = has @ExprType t $ sLElem (subst' ve x) (subst' ve xs)
+subst' ve (Take x xs) = sTake (subst' ve x) (subst' ve xs)
+subst' ve (Drop x xs) = sDrop (subst' ve x) (subst' ve xs)
+
+
+

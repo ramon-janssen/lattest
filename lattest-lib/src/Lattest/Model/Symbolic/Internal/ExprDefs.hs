@@ -596,6 +596,27 @@ instance Show (ExprView t) where
     show (Take i xs) = "take " ++ show i ++ " " ++ show xs
     show (Drop i xs) = "drop " ++ show i ++ " " ++ show xs
 
+instance Has ExprType ExprView where
+  has e k = case e of
+    Var v -> has @ExprType (varType v) k
+    Const _ -> k
+    Ite _ x _ -> has @ExprType x k
+    Equal t _ _ -> has @ExprType t k
+    Divide _ _ -> k
+    Modulo _ _ -> k
+    Sum _ -> k
+    Product _ -> k
+    Length _ -> k
+    GezInt _ -> k
+    Not _ -> k
+    And _ -> k
+    Concat _ -> k
+    Cons _ x -> has @ExprType x k
+    Append _ x -> has @ExprType x k
+    LElem t _ _ -> has @ExprType t k
+    Take _ x -> has @ExprType x k
+    Drop _ x -> has @ExprType x k
+
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
 showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
     where

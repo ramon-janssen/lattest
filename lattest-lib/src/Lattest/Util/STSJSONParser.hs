@@ -2,7 +2,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -19,7 +18,7 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), Valuation, VarModel, insertIntoValuation, assignValues, Constant(..), int, bool, string, list, ConstType (..))
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, Type (..), Variable (..), Valuation, VarModel, insertIntoValuation, assignValues, Constant(..))
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
@@ -83,6 +82,7 @@ toBoolExpr varmap (UEOp2 "==" e1 e2) = do
         Some BoolType   -> (.==) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
         Some StringType -> (.==) <$> toStrExpr  varmap e1 <*> toStrExpr  varmap e2
         Some (ListType tp) -> withExprConstraints tp $ (.==) <$> toListExpr tp varmap e1 <*> toListExpr tp varmap e2
+        Some (TupleType a b) -> withExprConstraints (TupleType a b) $ (.==) <$> toTupleExpr a b varmap e1 <*> toTupleExpr a b varmap e2
 toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toBoolExpr varmap (UEOp2 "==" e1 e2)
 toBoolExpr varmap (UEOp2 "<"  e1 e2) = (.<)  <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toBoolExpr varmap (UEOp2 "<=" e1 e2) = (.<=) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
@@ -104,8 +104,14 @@ toIntExpr _   e                    = Left $ "not an integer expression: " ++ sho
 toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (List t))
 toListExpr t varmap e = case e of
   UEStr name -> lookupVar varmap name (ListType t) sVar
-  -- TODO: add operators on lists
+  -- TODO: add operators that return lists
   _ -> Left $ "not a list expression: " ++ show e
+
+toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
+toTupleExpr t1 t2 varmap e = case e of
+  UEStr name -> lookupVar varmap name (TupleType t1 t2) sVar
+  -- TODO: add operators that return tuples
+  _ -> Left $ "not a tuple expression: " ++ show e
 
 toStrExpr :: VarMap -> UntypedExpr -> Either String (Expr String)
 toStrExpr varmap (UEStr name) =
@@ -248,6 +254,8 @@ buildAssignment varMap name def = do
         IntType    -> (v =:) <$> toIntExpr  varMap expr
         BoolType   -> (v =:) <$> toBoolExpr varMap expr
         StringType -> (v =:) <$> toStrExpr  varMap expr
+        ListType t -> (v =:) <$> toListExpr t varMap expr
+        TupleType a b -> (v =:) <$> toTupleExpr a b varMap expr
 
 buildAssignmentMap
     :: VarMap
