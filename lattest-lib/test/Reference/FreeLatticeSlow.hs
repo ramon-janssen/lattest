@@ -1,5 +1,4 @@
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}

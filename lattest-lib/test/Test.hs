@@ -8,9 +8,7 @@ import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
-import qualified Lattest.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
-import qualified Data.Maybe as M
 
 import Test.Tasty
 import Test.Tasty.Runners as Tasty
