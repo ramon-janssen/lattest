@@ -85,6 +85,7 @@ makeHUnitTests = do
         --testSTSPathCondition,
         --testBranchingPathCondition,
         testDerivClasses,
+        testDestinationGuards,
         testLinearCoffeeTreeStructure,
         testComplexTreeStructure,
         testComposedCoffeeTreeStructure,

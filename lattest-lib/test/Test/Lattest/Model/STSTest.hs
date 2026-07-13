@@ -14,7 +14,8 @@ module Test.Lattest.Model.STSTest (
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
-    testDerivClasses
+    testDerivClasses,
+    testDestinationGuards
     )
 where
 
@@ -270,6 +271,8 @@ composedCoffeeMachine =
             "d0" -> Map.fromList $ [(water, atom (stsTLoc sTrue $ assignment [xvar =: x .+ p], "d0"))] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
             "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
+            -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
+            _ -> Map.fromList [(gate, underspecified) | gate <- [water, a, b, tea, espresso, take]]
     in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
 composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeCNF String (IOAct String String)
 composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
@@ -279,11 +282,7 @@ testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMac
 
 -- Unit tests for `derivClasses` in isolation. `derivClasses` partitions the space of a set of destination guards
 -- into "derivative classes": for every subset of the guards it forms a cell (poss, negs) meaning "all guards in
--- poss hold and all guards in negs fail", then drops the cells that are *syntactically* unsatisfiable. Each surviving
--- cell must be interpretable by `classDest`, which expects every original guard to land in either `poss` or `negs`.
---
--- `sTrue` and `sFalse` are constant-folded, so `derivClasses` can prune their impossible cells; `1 .== 2` is
--- semantically false but syntactically opaque (an `EqualInt` node, not `sFalse`), so both of its cells survive.
+-- poss hold and all guards in negs fail", then drops the cells that are *syntactically* unsatisfiable.
 testDerivClasses :: Test
 testDerivClasses = TestCase $ do
     let t = sTrue :: SymGuard
@@ -304,6 +303,29 @@ testDerivClasses = TestCase $ do
     assertClasses "{sTrue,1==2}"        [t, g]  [cls [t] [g], cls [t, g] []]
     assertClasses "{sFalse,1==2}"       [f, g]  [cls [] [f, g], cls [g] [f]]
     assertClasses "{sTrue,sFalse,1==2}" [t, f, g] [cls [t] [f, g], cls [t, g] [f]]
+
+testDestinationGuards :: Test
+testDestinationGuards = TestCase $ do
+    let destTo l g = atom (stsTLoc g noAssignment, l) :: FreeLatticeCNF (STStdest, String)
+        -- an OUTPUT interaction: enabled only at "d1" (guard sTrue); unenabled elsewhere -> forbidden (⊥)
+        tOut l = if l == "d1" then destTo "d2" sTrue else forbidden
+        -- an INPUT interaction: enabled only at "L1" (guard sTrue); unenabled elsewhere -> unspecified (⊤)
+        tIn l = if l == "L1" then destTo "L1'" sTrue else underspecified
+        guardsOf tDest cfg = Set.fromList (Solve.destinationGuards tDest cfg)
+    -- The crash scenario: output enabled at d1, forbidden at the meet-siblings b1/c1. ⊥ must NOT absorb sTrue.
+    assertEqual "meet with forbidden (⊥) siblings keeps the enabled guard"
+        (Set.fromList [sTrue]) (guardsOf tOut (atom "d1" /\ atom "b1" /\ atom "c1"))
+    -- The dual: input enabled at L1, unspecified at the join-sibling L2. ⊤ must NOT absorb sTrue.
+    assertEqual "join with unspecified (⊤) sibling keeps the enabled guard"
+        (Set.fromList [sTrue]) (guardsOf tIn (atom "L1" \/ atom "L2"))
+    -- Sanity: when every location leaves the interaction neutral, there are genuinely no guards to collect.
+    assertEqual "all-forbidden meet collects no guards"
+        Set.empty (guardsOf tOut (atom "b1" /\ atom "c1"))
+    -- Sanity: distinct guards from independently-enabled locations are all collected.
+    let oneEqTwo = (1 :: Expr Integer) .== 2 :: SymGuard
+        tTwo l = case l of "L1" -> destTo "L1'" sTrue; "L2" -> destTo "L2'" oneEqTwo; _ -> forbidden
+    assertEqual "distinct enabled guards are all collected"
+        (Set.fromList [sTrue, oneEqTwo]) (guardsOf tTwo (atom "L1" /\ atom "L2"))
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
