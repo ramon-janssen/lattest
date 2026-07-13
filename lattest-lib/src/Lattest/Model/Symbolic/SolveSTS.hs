@@ -163,11 +163,10 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
             let completedAssign = tassign `varUnion` identityVarModel locVarSet
                 indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
                 pathLoc = tloc
-                pathAssigns = indexedAssign 
-                pathAssign = pVars `varUnion` indexedAssign
-                -- TODO the assigment could also be included in the pathCondition via substitution, resulting in less intermediate variables
+                -- add the indexedAssign to the path condition. Don't substitute by the previous assignment, although this reduces the number
+                -- of variables (eliminating all state variables of previous steps) this could also cause an exponential blowup
                 pathCondition = varsToGuard indexedAssign .&& indexExpr pDepth tguard
-            in SymExecNodeElem pathLoc pathAssign pathCondition
+            in SymExecNodeElem pathLoc indexedAssign pathCondition
     -- administration boilerplate: add indices to variables
     indexLeft :: Int -> VarModel -> VarModel
     indexLeft 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead

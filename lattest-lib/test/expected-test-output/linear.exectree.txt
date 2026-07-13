@@ -3,7 +3,7 @@ node [SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}]
 ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
     node ⊤
 ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-    node [SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=(p+x)}, pathCondition = ((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]
+    node [SymExecNodeElem {loc = 1, symAssign = {x_1:=(p+x)}, pathCondition = ((x_1) = ((p+x)))∧(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]
     ?water [+{} -{}]:
         node ⊤
     !coffee [+{} -{}]:
@@ -11,11 +11,11 @@ node [SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}]
     !ok [+{} -{(x) = (p)}]:
         node ⊥
     !ok [+{(x) = (p)} -{}]:
-        node [SymExecNodeElem {loc = 0, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1}, pathCondition = ((x_1) = (p_1))∧((x_2) = (x_1))}]
+        node [SymExecNodeElem {loc = 0, symAssign = {x_2:=x_1}, pathCondition = ((x_1) = (p_1))∧((x_2) = (x_1))}]
         ?water [+{} -{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)}]:
             node ⊤
         ?water [+{(((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0)} -{}]:
-            node [SymExecNodeElem {loc = 1, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1, x_3:=(p_2+x_2)}, pathCondition = ((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)}]
+            node [SymExecNodeElem {loc = 1, symAssign = {x_3:=(p_2+x_2)}, pathCondition = ((x_3) = ((p_2+x_2)))∧(((-p_2+10)) ≥ 0)∧(((p_2+-1)) ≥ 0)}]
             ?water [+{} -{}]:
                 ...
             !coffee [+{} -{}]:
@@ -27,7 +27,7 @@ node [SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}]
         !coffee [+{} -{((x+-15)) ≥ 0}]:
             node ⊥
         !coffee [+{((x+-15)) ≥ 0} -{}]:
-            node [SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=(p+x), x_2:=x_1, x_3:=x_2}, pathCondition = ((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)}]
+            node [SymExecNodeElem {loc = 2, symAssign = {x_3:=x_2}, pathCondition = ((x_3) = (x_2))∧(((x_2+-15)) ≥ 0)}]
             ?water [+{} -{}]:
                 ...
             !coffee [+{} -{}]:
@@ -39,7 +39,7 @@ node [SymExecNodeElem {loc = 0, symAssign = {x:=0}, pathCondition = (x) = (0)}]
 !coffee [+{} -{((x+-15)) ≥ 0}]:
     node ⊥
 !coffee [+{((x+-15)) ≥ 0} -{}]:
-    node [SymExecNodeElem {loc = 2, symAssign = {x:=0, x_1:=x}, pathCondition = ((x_1) = (x))∧(((x+-15)) ≥ 0)}]
+    node [SymExecNodeElem {loc = 2, symAssign = {x_1:=x}, pathCondition = ((x_1) = (x))∧(((x+-15)) ≥ 0)}]
     ?water [+{} -{}]:
         node ⊤
     !coffee [+{} -{}]:
