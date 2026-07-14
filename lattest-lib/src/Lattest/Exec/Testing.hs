@@ -56,7 +56,7 @@ import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Control.Exception(catch,evaluate)
 
 --import Control.DeepSeq(force)
-import System.IO.Streams.Synchronized (Streamed(..))
+import Lattest.Streams.Synchronized (Streamed(..))
 import Data.Kind (Constraint, Type)
 
 -- | The controller of an experiment.

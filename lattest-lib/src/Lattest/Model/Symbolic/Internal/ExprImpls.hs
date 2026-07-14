@@ -346,6 +346,7 @@ cstrSum' ms =
 
 getConst :: ExprView e -> e
 getConst (Const c) = c
+getConst _ = error "Not Const"
 
 isSumF :: ExprView Double -> Bool
 isSumF (SumFloat _) = True
@@ -550,10 +551,10 @@ sLength (view -> v)             = Expr (Length v)
 sConcat :: [Expr String] -> Expr String
 sConcat l =
     let n = (mergeVals . flatten . filter (sConst "" /= ) ) l in
-        case Prelude.length n of
-           0 -> sConst ""
-           1 -> head n
-           _ -> Expr (Concat $ fmap view n)
+        case n of
+          [] -> sConst ""
+          [x] -> x
+          _ -> Expr (Concat $ fmap view n)
 
 -- implementation details:
 -- Properties incorporated

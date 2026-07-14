@@ -66,7 +66,7 @@ inferOperandType varmap lhs rhs =
         varOperandType _            = Nothing
         literalOperandType (UEBool _)  = Just BoolType
         literalOperandType (UENumber n)
-          | Left _ <- floatingOrInteger n = Just FloatType
+          | Left _ <- floatingOrInteger @Double @Integer n = Just FloatType
         literalOperandType _           = Nothing
 
 toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)

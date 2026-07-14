@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts   #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module System.IO.Streams.Synchronized.Attoparsec (
+module Lattest.Streams.Synchronized.Attoparsec (
 parseFromStream,
 parserToInputStream
 )
@@ -70,7 +70,7 @@ parseFromStream' stateVar blockUntilFinished is = do
 errorContext :: IsString a => IResult a r -> (a, [String], String)
 errorContext (Fail residual ctx msg) = (residual, ctx, msg)
 errorContext (Partial _) = ("", [], "")
-errorContext (Done residual _) = (residual, [],"")
+errorContext (Done residual _) = (residual, [], "")
 
 isFinished :: IResult a b -> Bool
 isFinished (Partial _) = False
