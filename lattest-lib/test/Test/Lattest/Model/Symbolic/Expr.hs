@@ -1,7 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Test.Lattest.Model.Symbolic.Expr (
 prop_evalSymbolic,
@@ -307,7 +308,7 @@ testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
 
 testEvalEmptyProduct :: Test
-testEvalEmptyProduct = testEvalExpression (sProduct []) "empty product evaluation incorrect"
+testEvalEmptyProduct = testEvalExpression (sProduct @Integer ([])) "empty product evaluation incorrect"
 
 testSolveExpression :: Expr Bool -> Test
 testSolveExpression guard = TestCase $ do

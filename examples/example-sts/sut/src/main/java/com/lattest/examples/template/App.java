@@ -14,27 +14,27 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class App {
 	static class Implementation {
-		private Integer state = 0;
+		private double state = 0;
 		private boolean confirmInput = false;
 	
 		private void processInput(GateValue input) {
 			assert input.gate.equals("water");
 			assert input.values.size() == 1;
-			assert input.values.get(0).type == "int";
-			Integer intParam = (Integer) input.values.get(0).value;
-			if (state != null) {
+			assert input.values.get(0).type == "float";
+			double intParam = (double) input.values.get(0).value;
+			if (state != -1) {
 				state += intParam;
 			}
 			confirmInput = true;
 		}
 		
 		private GateValue generateOutput() {
-			if (state != null && !confirmInput && state >= 15) {
-				state = null;
+			if (state != -1 && !confirmInput && state >= 15) {
+				state = -1;
 				return new GateValue("coffee", Collections.emptyList());
-			} else if (confirmInput && state != null) {
+			} else if (confirmInput && state != -1) {
 				confirmInput = false;
-				return new GateValue("ok", Collections.singletonList(new GateValueParameter("int", state)));
+				return new GateValue("ok", Collections.singletonList(new GateValueParameter("float", state)));
 			}
 			return null;
 		}
@@ -122,7 +122,7 @@ public class App {
 								impl.processInput((GateValue) jsonInput);
 								System.out.println("(" + startingState + ") ---?" + jsonInput + "---> " + impl.toString());
 							} catch (Exception e) {
-								System.out.println("failed parsing input as int: " + jsonInput);
+								System.out.println("failed parsing input as double: " + jsonInput);
 								throw e;
 							}
 						}

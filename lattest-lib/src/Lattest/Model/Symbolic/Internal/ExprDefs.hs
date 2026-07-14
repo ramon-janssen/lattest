@@ -49,12 +49,12 @@ import           Lattest.Model.Symbolic.Internal.Sum
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
 
-import qualified Data.Scientific as DS
+import Data.Scientific (toRealFloat, fromFloatDigits, floatingOrInteger)
 
-data Type = IntType | BoolType | StringType deriving (Eq, Ord)
+data Type = IntType | BoolType | StringType | FloatType deriving (Eq, Ord)
 
 allTypes :: [Type]
-allTypes = [IntType, BoolType, StringType]
+allTypes = [IntType, BoolType, StringType, FloatType]
 
 class ExprType t where
     typeOf :: t -> Type
@@ -69,11 +69,15 @@ instance ExprType Bool where
 instance ExprType String where
     typeOf _ = StringType
     typeOf' _ = StringType
+instance ExprType Double where
+    typeOf _ = FloatType
+    typeOf' _ = FloatType
 
 instance Show Type where
     show IntType = "Int"
     show BoolType = "Bool"
     show StringType = "String"
+    show FloatType = "Float"
 
 data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
 
@@ -86,6 +90,8 @@ data Constant = -- | Constructor of Boolean constant.
               | Cint     { toInteger :: Integer }
                 -- | Constructor of String constant.
               | Cstring  { toString :: String }
+                -- | Constructor of floating-point constant.
+              | Cfloat   { toFloat :: Double }
                 -- | Constructor of constructor constant (value of ADT).
               | Ccstr    { cstrName :: String, args :: [Constant] }
 {-
@@ -106,33 +112,39 @@ instance JSON.FromJSON Constant where
         | JSON.lookup "type" m == Just "bool" = parseBool $ lkup "value" m
         | JSON.lookup "type" m == Just "int" = parseInt $ lkup "value" m
         | JSON.lookup "type" m == Just "string" = parseString $ lkup "value" m
+        | JSON.lookup "type" m == Just "float" = parseFloat $ lkup "value" m
         where
         lkup :: JSON.Key -> JSON.KeyMap v -> v
         lkup k = Maybe.fromJust . JSON.lookup k
         parseBool (JSON.Bool b) = return $ Cbool b
         parseBool _ = fail "type indicates bool, but value is not of type bool"
-        parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ Cint i
+        parseInt (JSON.Number (floatingOrInteger @Double -> Right i)) = return $ Cint i
         parseInt _ = fail "type indicates int, but value is not of type int"
         parseString (JSON.String s) = return $ Cstring $ Text.unpack s
         parseString _ = fail "type indicates string, but value is not of type string"
+        parseFloat (JSON.Number n) = return $ Cfloat $ toRealFloat n
+        parseFloat _ = fail "type indicates float, but value is not of type float"
     parseJSON _ = fail "expected Constant JSON"
 
 instance JSON.ToJSON Constant where
     toJSON (Cbool b) = JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
     toJSON (Cint i) = JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
     toJSON (Cstring s) = JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
+    toJSON (Cfloat f) = JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
     toJSON (Ccstr _ _) = error "toJSON cstr"
 
 constType :: Constant -> Type
 constType (Cbool _) = BoolType
 constType (Cint _) = IntType
 constType (Cstring _) = StringType
+constType (Cfloat _) = FloatType
 constType (Ccstr _ _) = error "type cstr"
 
 instance Show Constant where
   show (Cbool b) = show b
   show (Cint i) = show i
   show (Cstring t) = show t
+  show (Cfloat f) = show f
   show (Ccstr a b) = show a <> " " <> show b
 
 -- | convert a Constant to an typed value
@@ -155,6 +167,12 @@ instance ConstType String where
     fromConst v = Left $ typeError "String" v
     toConst = Cstring
 
+instance ConstType Double where
+    fromConst (Cfloat f) = Right f
+    fromConst (Cint i) = Right (fromInteger i)
+    fromConst v = Left $ typeError "Float" v
+    toConst = Cfloat
+
 typeError :: String -> Constant -> String
 typeError received expected = "Type mismatch - " ++ show expected ++ " expected, got " ++ received ++ "\n"
 
@@ -174,12 +192,17 @@ data ExprView t where
     EqualInt :: {leftInt :: ExprView Integer, rightInt :: ExprView Integer} -> ExprView Bool
     EqualString :: {leftString :: ExprView String, rightString :: ExprView String} -> ExprView Bool
     EqualBool :: {leftBool :: ExprView Bool, rightBool :: ExprView Bool} -> ExprView Bool
+    EqualFloat :: {leftFloat :: ExprView Double, rightFloat :: ExprView Double} -> ExprView Bool
     Divide :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Modulo :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
+    DivideFloat :: {dividendF :: ExprView Double, divisorF :: ExprView Double} -> ExprView Double
     Sum :: FreeSum (ExprView Integer) -> ExprView Integer
+    SumFloat :: FreeSum (ExprView Double) -> ExprView Double
     Product :: FreeProduct (ExprView Integer) -> ExprView Integer
+    ProductFloat :: FreeProduct (ExprView Double) -> ExprView Double
     Length :: ExprView String -> ExprView Integer
     GezInt :: ExprView Integer -> ExprView Bool
+    GezFloat :: ExprView Double -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     Concat :: [ExprView String] -> ExprView String
@@ -193,6 +216,7 @@ instance Show t => Show (ExprView t) where
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
     show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
     show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
+    show (DivideFloat e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
     show (Sum es) | es == mempty = "∑∅"
     show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
         where
@@ -201,11 +225,21 @@ instance Show t => Show (ExprView t) where
         showSumTerm n t = show n ++ "⋅" ++ t
     show (Product es) | es == mempty = "∏∅"
     show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
+    show (SumFloat es) | es == mempty = "∑∅"
+    show (SumFloat es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
+        where
+        showSumTerm (-1)     t = "-" ++ t
+        showSumTerm 1 t = t
+        showSumTerm n t = show n ++ "⋅" ++ t
+    show (ProductFloat es) | es == mempty = "∏∅"
+    show (ProductFloat es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es
     show (Length e) = "length(" ++ show e ++ ")"
     show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualString e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
+    show (EqualFloat e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
+    show (GezFloat e) = "(" ++ show e ++ ") ≥ 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⋀∅"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
@@ -251,14 +285,21 @@ reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 el
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
 reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) = SumFloat es
 reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) = ProductFloat es
 reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
 reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y
 reduce (Modulo (reduce -> e1) (reduce -> e2)) = Modulo e1 e2
 reduce (Divide (reduce -> e1) (reduce -> e2@(Const 0))) = Divide e1 e2 -- leave divisions by zero as expressions
 reduce (Divide (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `divInteger` y
 reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
+reduce (DivideFloat (reduce -> e1) (reduce -> e2@(Const 0))) = DivideFloat e1 e2 -- leave divisions by zero as expressions
+reduce (DivideFloat (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x / y
+reduce (DivideFloat (reduce -> e1) (reduce -> e2)) = DivideFloat e1 e2
 reduce (Length (reduce -> (Const s))) = Const $ fromIntegral $ length s
 reduce (Length (reduce -> e)) = Length e
 --reduce (view -> Vstrinre { })                                  =
@@ -274,8 +315,12 @@ reduce (EqualBool (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 reduce (EqualBool (reduce -> e1) (reduce -> e2)) = EqualBool e1 e2
 reduce (EqualString (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 reduce (EqualString (reduce -> e1) (reduce -> e2)) = EqualString e1 e2
+reduce (EqualFloat (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (EqualFloat (reduce -> e1) (reduce -> e2)) = EqualFloat e1 e2
 reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
 reduce (GezInt (reduce -> e)) = GezInt e
+reduce (GezFloat (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezFloat (reduce -> e)) = GezFloat e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
@@ -305,13 +350,18 @@ freeVars' (Const _) = []
 freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
 freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Modulo e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (DivideFloat e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Sum (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (SumFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (ProductFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Length e) = freeVars' e
 freeVars' (EqualInt e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (EqualBool e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (EqualString e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (EqualFloat e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
+freeVars' (GezFloat e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
 freeVars' (Concat es) = concatMap freeVars' es

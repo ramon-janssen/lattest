@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testSTSHappyFlowFloat,
     testLatticeCoffeeSTS,
     testErrorThrowingGates,
     testSTSUnHappyFlow,
@@ -28,7 +30,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLattice, atom)
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction)
 import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -46,8 +48,8 @@ stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 stsExample :: IOSTS Det Integer String String
 stsExample =
-    let p = sVar pvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
@@ -87,11 +89,11 @@ testSTSHappyFlow = TestCase $ do
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
     let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [Cint 7])
-    assertThrowsError "gate not in STS alphabet" (stateConf $ intrp1)
+    assertThrowsError "gate not in STS alphabet" (stateConf intrp1)
     let intrp2 = after stsExampleIntrpr (GateValue (In "water") [])
-    assertThrowsError "nr of values unequal to nr of parameters" (stateConf $ intrp2)
+    assertThrowsError "nr of values unequal to nr of parameters: 0 values and 1 variables" (stateConf intrp2)
     let intrp3 = after stsExampleIntrpr (GateValue (In "water") [Cbool True])
-    assertThrowsError "type of variable and value do not match" (stateConf $ intrp3)
+    assertThrowsError "type of variable and value do not match. Variables: [p:Int], Values: [True]" (stateConf intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
@@ -214,11 +216,58 @@ testSTSTestSelection = TestCase $ do
       , waterlevel > 15 = go ds waterlevel os
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
+pvarf :: Variable
+pvarf = (Variable "p" FloatType)
+xvarf :: Variable
+xvarf = (Variable "x" FloatType)
+
+stsExampleInitAssignFloat :: Valuation
+stsExampleInitAssignFloat = fromConstantsMap $ Map.singleton xvarf (Cfloat (0.0 :: Double))
+
+stsExampleFloat :: IOSTS FreeLattice Integer String String
+stsExampleFloat =
+    let p = sVar pvarf :: Expr Double
+        x = sVar xvarf :: Expr Double
+        water = SymInteract (In "water") [pvarf]
+        ok = SymInteract (Out "ok") [pvarf]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .<= p .&& p .<= 10
+        waterAssign = assignment [xvarf =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= sConst (14.5 :: Double)
+        initConf = disjunction [0] :: FreeLattice Integer
+        switches = \case
+            0 -> Map.fromList [(water,   disjunction [(stsTLoc waterGuard waterAssign, 1)]),
+                                (coffee, disjunction [(stsTLoc coffeeGuard noAssignment, 2)])]
+            1 -> Map.fromList [(ok,      disjunction [(stsTLoc okGuard noAssignment, 0)])]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrprFloat :: STSIntrp FreeLattice Integer (IOAct String String)
+stsExampleIntrprFloat = interpretSTS stsExampleFloat stsExampleInitAssignFloat
+
+getSTSIntrpStateFloat :: Integer -> Double -> FreeLattice (IntrpState Integer)
+getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
+
+testSTSHappyFlowFloat :: Test
+testSTSHappyFlowFloat = TestCase $ do
+    -- assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrpr)
+    let intrp2 = after stsExampleIntrprFloat (GateValue (In "water") [Cfloat (7.5 :: Double)])
+    assertEqual "after water 7.5: " (getSTSIntrpStateFloat 1 (7.5 :: Double)) (stateConf intrp2)
+    -- let intrp3 = after intrp2 (GateValue (Out "ok") [Cfloat 7.5])
+    -- assertEqual "after ok 7.5: " (getSTSIntrpStateFloat 0 (7.5 :: Double)) (stateConf intrp3)
+    -- let intrp4 = after intrp3 (GateValue (In "water") [Cfloat 8.5])
+    -- assertEqual "after water 8.5: " (getSTSIntrpStateFloat 1 (16.0 :: Double)) (stateConf intrp4)
+    -- let intrp5 = after intrp4 (GateValue (Out "ok") [Cfloat 16.0])
+    -- assertEqual "after ok 16.0: " (getSTSIntrpStateFloat 0 (16.0 :: Double)) (stateConf intrp5)
+    -- let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    -- assertEqual "after coffee: " (getSTSIntrpStateFloat 2 (16.0 :: Double)) (stateConf intrp6)
+    return()
+
 
 stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =
-    let p = sVar pvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         water = SymInteract (In "water") [pvar]
         ok = SymInteract (Out "ok") [pvar]
         coffee = SymInteract (Out "coffee") []
@@ -295,9 +344,9 @@ testLatticeCoffeeSTS = TestCase $ do
 -}
 specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> IOSTS FreeLatticeSlow Integer String String
 specParameterized startType endType comp splitFirst =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        q = sVar qvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         start = SymInteract (startType "start") [pvar]
         end = SymInteract (endType "end") [pvar, qvar]
         done = SymInteract (Out "done") []
@@ -414,9 +463,9 @@ testLatticeSTS = concat [
 -}
 specQ :: IOSTS FreeLatticeSlow Integer String String
 specQ =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        q = sVar qvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
         initConf = pure 0 :: FreeLatticeSlow Integer
@@ -507,9 +556,9 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
 -}
 specUnimplementableParameterized :: Bool -> IOSTS FreeLatticeSlow Integer String String
 specUnimplementableParameterized splitFirst =
-    let p = sVar pvar
-        q = sVar qvar
-        x = sVar xvar
+    let p = sVar pvar :: Expr Integer
+        q = sVar qvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
         start = SymInteract (In "start") [pvar]
         end = SymInteract (Out "end") [pvar, qvar]
         initConf = pure 0 :: FreeLatticeSlow Integer

@@ -478,10 +478,12 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
             Nothing -> errorWithoutStackTrace "gate not in STS alphabet"
             Just i@(SymInteract _ vars) ->
                 if List.length vals /= List.length vars
-                    then errorWithoutStackTrace "nr of values unequal to nr of parameters"
+                    then errorWithoutStackTrace $
+                      "nr of values unequal to nr of parameters: " <> show (List.length vals) <> " values and " <> show (List.length vars) <> " variables"
                     else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
                             then Just i
-                            else errorWithoutStackTrace "type of variable and value do not match"
+                            else errorWithoutStackTrace $
+                              "type of variable and value do not match. Variables: " <> show vars <> ", Values: " <> show vals
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
@@ -500,6 +502,7 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
         assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
         assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
         assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
+        assignNewValue var@(Variable _ FloatType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Double))
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Variable] -> [Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
