@@ -15,7 +15,7 @@ import Lattest.Model.Alphabet(IOAct(..), Suspended(..), IOSuspAct)
 import Lattest.Adapter.Adapter(send, Adapter(..), close, observe)
 import qualified Lattest.Adapter.Adapter as Adap
 import qualified Lattest.Adapter.StandardAdapters as SA
-import System.IO.Streams.Synchronized(fromBuffer)
+import Lattest.Streams.Synchronized(fromBuffer)
 
 import Control.Concurrent(threadDelay)
 import Control.Concurrent.STM.TQueue(TQueue, newTQueueIO, writeTQueue, readTQueue)

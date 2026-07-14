@@ -22,10 +22,9 @@ import qualified Data.ByteString as BS(splitAt,length)
 import Data.Functor(void)
 import qualified Data.List as List(splitAt)
 import GHC.Conc(atomically, newTVar, readTVar, writeTVar)
-import System.IO.Streams.Synchronized()
-import System.IO.Streams.Synchronized (tryReadIO, Streamed(Available), consumeBufferedWith, makeTInputStream)
-import qualified System.IO.Streams.Synchronized as Streams (hasInput,read,map)
-import System.IO.Streams.Synchronized.Attoparsec(parserToInputStream)
+import Lattest.Streams.Synchronized (tryReadIO, Streamed(Available), consumeBufferedWith, makeTInputStream)
+import qualified Lattest.Streams.Synchronized as Streams (hasInput,read,map)
+import Lattest.Streams.Synchronized.Attoparsec(parserToInputStream)
 import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assertWith, monadicIO, run)
