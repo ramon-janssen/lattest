@@ -75,7 +75,9 @@ import Data.Some (Some(..))
 import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
-import Data.SBV (SymVal, HasKind)
+import Data.SBV (SymVal(..), HasKind)
+import qualified Data.SBV.Internals as SBVI
+import Test.QuickCheck.Arbitrary (Arbitrary(..))
 import Data.EqP (EqP (..))
 import Data.Maybe (isJust)
 import Data.Constraint.Extras (Has (..))
@@ -98,7 +100,13 @@ data Type a where
   TupleType :: Type a -> Type b -> Type (a,b)
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
-instance (Read a, SymVal a, Data a, Show a) => SymVal (List a) where
+instance (SymVal a) => SymVal (List a) where
+  literal (List xs) = case literal xs of
+    SBVI.SBV sval -> SBVI.SBV sval
+  fromCV xs = List (fromCV xs)
+  minMaxBound = Nothing
+instance Arbitrary a => Arbitrary (List a) where
+  arbitrary = List <$> arbitrary
 instance EqP Type where
   eqp x y = isJust $ geq x y
 instance GEq Type where
