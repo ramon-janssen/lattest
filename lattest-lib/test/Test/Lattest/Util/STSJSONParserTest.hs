@@ -2,6 +2,7 @@
 
 module Test.Lattest.Util.STSJSONParserTest
     ( testSTSJSONParserNominal
+    , testSTSJSONParserNominalFloat
     , testSTSJSONParserUnknownType
     , testSTSJSONParserAssignmentTypeMismatch
     , testSTSJSONParserGuardTypeMismatch
@@ -14,14 +15,13 @@ module Test.Lattest.Util.STSJSONParserTest
     ) where
 
 import Data.List (isInfixOf)
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Text.RawString.QQ as QQ
 import Test.HUnit
 import Lattest.Model.Alphabet(IOAct(..), SymInteract(..))
 import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
-import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable(..), Val (..), Valuation(..))
+import Lattest.Model.Symbolic.Expr(Type(..), Variable(..), Val (..), Valuation(..))
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
 import qualified Data.Dependent.Map as DMap
 import Data.Some (Some(..))
@@ -37,7 +37,6 @@ assertErrorContains label errsubstr (Left err) =
     assertBool
         (label ++ ": expected error to contain '" ++ errsubstr ++ "', got: " ++ err)
         (errsubstr `isInfixOf` err)
-
 
 {-|
 Evaluate nominal case with:
@@ -89,6 +88,54 @@ transitions:
 "2"  ――?"update" [counter_p:Int]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
 "2"  ――!"confirm" [counter_p:Int]⟶  ⊥
+|]
+
+{-|
+Evaluate nominal case with float variables
+-}
+testSTSJSONParserNominalFloat :: Test
+testSTSJSONParserNominalFloat = TestCase $ do
+    result <- stsFromJSONFile (testDir ++ "nominal_float_types.json")
+    case result of
+        Left err -> assertFailure ("expected successful parse, got: " ++ err)
+        Right (sts, valuation) -> do
+            assertEqual "initial valuation"
+                (Valuation $
+                    DMap.insert (Variable "counter" FloatType)  (Val 0.0) $
+                    DMap.insert (Variable "label"   StringType) (Val "") $
+                    DMap.insert (Variable "active"  BoolType)   (Val False)
+                    mempty)
+                valuation
+            assertEqual "alphabet"
+                (Set.fromList
+                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   StringType]
+                    , SymInteract (In  "update")    [Some $ Variable "counter_p" FloatType  ]
+                    , SymInteract (Out "O1")        []
+                    , SymInteract (Out "confirm")   [Some $ Variable "counter_p" FloatType  ]
+                    ])
+                (alphabet sts)
+            assertBool failureMessage (expected == actual)
+                where
+                intrpsts = interpretSTS sts valuation
+                actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
+                failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+                expected = [QQ.r|
+current state configuration: ("0",{active:=False,counter:=0.0,label:=""})
+initial location configuration: "0"
+locations: "0", "1", "2"
+transitions:
+"0"  ――?"register" [label_p:String]⟶  ⊤
+"0"  ――?"update" [counter_p:Float]⟶  (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1") ∧ (((counter+-5.5)) ≥ 0, {active:=False},"2")
+"0"  ――!"O1" []⟶  ⊥
+"0"  ――!"confirm" [counter_p:Float]⟶  ⊥
+"1"  ――?"register" [label_p:String]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0")
+"1"  ――?"update" [counter_p:Float]⟶  ⊤
+"1"  ――!"O1" []⟶  ⊥
+"1"  ――!"confirm" [counter_p:Float]⟶  ⊥
+"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"update" [counter_p:Float]⟶  ⊤
+"2"  ――!"O1" []⟶  (True, {},"0")
+"2"  ――!"confirm" [counter_p:Float]⟶  ⊥
 |]
 
 ----- Non-nominal cases -----
@@ -145,6 +192,7 @@ testSTSJSONParserMissingGates = TestCase $ do
 stsJSONParserTests :: [Test]
 stsJSONParserTests =
     [ testSTSJSONParserNominal
+    , testSTSJSONParserNominalFloat
     , testSTSJSONParserUnknownType
     , testSTSJSONParserAssignmentTypeMismatch
     , testSTSJSONParserGuardTypeMismatch

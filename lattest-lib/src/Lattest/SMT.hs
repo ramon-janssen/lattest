@@ -100,12 +100,16 @@ exprToSymbolic v = case v of
   Const c -> pure $ literal $ toSBV (typeOf c) c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   Equal _ l r -> (SBV..==) <$> go l <*> go r
-  Divide x y -> SBV.sDiv  <$> go x <*> go y
+  Divide      x y -> SBV.sDiv  <$> go x <*> go y
+  DivideFloat x y -> (/)       <$> go x <*> go y
   Modulo x y -> SBV.sMod  <$> go x <*> go y
-  Sum s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i + sY) <$> go x <*> symY) (pure $ literal 0) s
-  Product p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
+  Sum      s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i               + sY) <$> go x <*> symY) (pure $ literal 0) s
+  SumFloat s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
+  Product      p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
+  ProductFloat p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   Length s -> SBV.length <$> go s
-  GezInt i -> (SBV..>= literal 0) <$> go i
+  GezInt   i -> (SBV..>= literal 0) <$> go i
+  GezFloat f -> (SBV..>= literal 0) <$> go f
   Not b -> SBV.sNot <$> go b
   And xs -> foldr (\b bs -> (SBV..&&) <$> go b <*> bs) (pure $ literal True) (Set.toList xs)
    -- The below version errors because SBV doesn't properly declare some variable
@@ -142,5 +146,6 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       _ | isBoolean cv -> DMap.insert (Variable varname BoolType) $ Val $ SBVI.cvToBool cv
       SBVI.CInteger i -> DMap.insert (Variable varname IntType) $ Val i
       SBVI.CString s -> DMap.insert (Variable varname StringType) $ Val s
+      SBVI.CDouble d -> DMap.insert (Variable varname FloatType) $ Val d
       _ -> error "todo: the other SBV types, including lists, sets, arbitrary ADTs, floating point values, etc"
 

@@ -8,8 +8,9 @@ module Lattest.Model.Symbolic.Expr
 , view
 , ExprView(..)
 , Type(..)
-, Constant(CInt, CBool, CString, CList, CTuple)
+, Constant(CInt, CBool, CString, CList, CTuple, CFloat)
 , int
+, float
 , bool
 , string
 , list

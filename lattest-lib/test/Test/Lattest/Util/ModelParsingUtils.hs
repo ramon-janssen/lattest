@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 module Test.Lattest.Util.ModelParsingUtils (
 testReadAutFile
 )

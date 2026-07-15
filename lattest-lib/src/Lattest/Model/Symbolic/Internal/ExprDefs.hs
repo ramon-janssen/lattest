@@ -4,6 +4,7 @@ This is a modified version of:
 TorXakis - Model Based Testing
 See LICENSE in the parent Symbolic folder.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDeriving #-}
@@ -31,7 +32,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , reduce
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CBool, CString, CList, CTuple)
+, Constant(Constant, CInt, CFloat, CBool, CString, CList, CTuple)
 , constType
 , constValue
 , ConstType(..)
@@ -45,6 +46,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , List(..)
 , withExprConstraints
 , int
+, float
 , bool
 , string
 , list
@@ -69,6 +71,7 @@ import           Lattest.Model.Symbolic.Internal.Sum
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
 
+import Data.Scientific (fromFloatDigits)
 import qualified Data.Scientific as DS
 import qualified Data.Some.Church as Church
 import Data.Some (Some(..))
@@ -94,31 +97,39 @@ newtype List a = List { getList :: [a] }
   deriving (Ord, Eq, Show, Read, Data, HasKind)
 data Type a where
   IntType :: Type Integer
+  FloatType :: Type Double
   BoolType :: Type Bool
   StringType :: Type String
   ListType :: Type a -> Type (List a)
   TupleType :: Type a -> Type b -> Type (a,b)
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
-instance (SymVal a) => SymVal (List a) where
+instance (SymVal a, ExprConstraints a) => SymVal (List a) where
   literal (List xs) = case literal xs of
     SBVI.SBV sval -> SBVI.SBV sval
   fromCV xs = List (fromCV xs)
+#if MIN_VERSION_sbv(12,0,0)
+  -- This field was added to SymVal in sbv-12.0, and the default instance requires Bounded (which a list is not)
   minMaxBound = Nothing
+#endif
 instance Arbitrary a => Arbitrary (List a) where
   arbitrary = List <$> arbitrary
 instance EqP Type where
   eqp x y = isJust $ geq x y
 instance GEq Type where
   geq IntType IntType = Just Refl
+  geq FloatType FloatType = Just Refl
   geq BoolType BoolType = Just Refl
   geq StringType StringType = Just Refl
   geq (ListType a) (ListType b) = (\Refl -> Refl) <$> geq a b
+  geq (TupleType a b) (TupleType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
   geq _ _ = Nothing
 instance GCompare Type where
   gcompare = \cases
     IntType IntType -> GEQ
     IntType _ -> GLT
+    FloatType FloatType -> GEQ
+    FloatType _ -> GLT
     BoolType BoolType -> GEQ
     BoolType _ -> GLT
     StringType StringType -> GEQ
@@ -128,12 +139,6 @@ instance GCompare Type where
       GLT -> GLT
       GEQ -> GEQ
     _ _ -> GGT
-instance Show (Type a) where
-    show IntType = "Int"
-    show BoolType = "Bool"
-    show StringType = "String"
-    show (ListType a) = "[ " ++ show a ++ " ]"
-    show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
 instance ExprType a => Read (Type a) where
   readsPrec _ =
     readParen False $ \s ->
@@ -151,6 +156,9 @@ instance GRead Type where
       ++ [ (Church.mkSome IntType, rest)
          | ("Int", rest) <- lex s
          ]
+      ++ [ (Church.mkSome FloatType, rest)
+         | ("Float", rest) <- lex s
+         ]
       ++ [ (Church.mkSome BoolType, rest)
          | ("Bool", rest) <- lex s
          ]
@@ -160,6 +168,7 @@ instance GRead Type where
           ("]", rest) <- lex s2
           Church.withSome t $ \(tp :: Type t) -> do
             return (Church.mkSome $ ListType tp, rest)
+      -- TODO test lists, make tuples
 
 withExprConstraints :: Type x -> (ExprConstraints x => r) -> r
 withExprConstraints t k = has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymValToSBV t $ has @EqToSBV t k
@@ -172,6 +181,7 @@ instance SymVal (ToSBV a) => SymValToSBV a
 instance Has ExprType Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @ExprType t' k
@@ -180,6 +190,7 @@ instance Has ExprType Type where
 instance Has Eq Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @Eq t' k
@@ -188,6 +199,7 @@ instance Has Eq Type where
 instance Has Ord Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @Ord t' k
@@ -196,6 +208,7 @@ instance Has Ord Type where
 instance Has Show Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @Show t' k
@@ -204,6 +217,7 @@ instance Has Show Type where
 instance Has Read Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @Read t' k
@@ -212,6 +226,7 @@ instance Has Read Type where
 instance Has Data Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @Data t' k
@@ -220,13 +235,15 @@ instance Has Data Type where
 instance Has SymVal Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
-    ListType t' -> has @Show t' $ has @Data t' $ has @Read t' $ has @SymVal t' k
+    ListType t' -> withExprConstraints t' $ has @SymVal t' k
     TupleType a b -> has @SymVal a $ has @SymVal b k
 
 instance Has EqToSBV Type where
   has IntType     k = k
+  has FloatType   k = k
   has BoolType    k = k
   has StringType  k = k
   has (ListType t) k = has @EqToSBV t k
@@ -236,6 +253,7 @@ instance Has EqToSBV Type where
 
 instance Has SymValToSBV Type where
   has IntType     k = k
+  has FloatType   k = k
   has BoolType    k = k
   has StringType  k = k
   has (ListType t) k = has @SymValToSBV t k
@@ -253,6 +271,9 @@ instance ExprType Integer where
 instance ExprType Bool where
     typeOf _ = BoolType
     typeOf' _ = BoolType
+instance ExprType Double where
+    typeOf _ = FloatType
+    typeOf' _ = FloatType
 instance ExprType String where
     typeOf _ = StringType
     typeOf' _ = StringType
@@ -263,6 +284,13 @@ instance (ExprType a, ExprType b) => ExprType (a,b) where
     typeOf _ = TupleType (typeOf undefined) (typeOf undefined)
     typeOf' _ = TupleType (typeOf undefined) (typeOf undefined)
 
+instance Show (Type a) where
+    show IntType = "Int"
+    show BoolType = "Bool"
+    show StringType = "String"
+    show FloatType = "Float"
+    show (ListType t) = "[" ++ show t ++ "]"
+    show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
 
 data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
 instance GEq Variable where
@@ -296,11 +324,13 @@ deriving instance Ord a => Ord (Constant a)
 deriving instance Show a => Show (Constant a)
 deriving instance (Read a, ExprType a) => Read (Constant a)
 
-{-# COMPLETE CBool, CInt, CString, CList, CTuple #-}
+{-# COMPLETE CBool, CInt, CFloat, CString, CList, CTuple #-}
 pattern CBool :: () => (a ~ Bool) => a -> Constant a
 pattern CBool b = Constant BoolType b
 pattern CInt :: () => (a ~ Integer) => a -> Constant a
 pattern CInt i = Constant IntType i
+pattern CFloat :: () => (a ~ Double) => a -> Constant a
+pattern CFloat f = Constant FloatType f
 pattern CString :: () => (a ~ String) => a -> Constant a
 pattern CString s = Constant StringType s
 pattern CList :: () => (xs ~ List x) => [x] -> Type x -> Constant xs
@@ -312,6 +342,8 @@ int :: Integer -> Some Constant
 int i = Some (CInt i)
 bool :: Bool -> Some Constant
 bool b = Some (CBool b)
+float :: Double -> Some Constant
+float f = Some (CFloat f)
 string :: String -> Some Constant
 string s = Some (CString s)
 list :: ExprType a => [a] -> Some Constant
@@ -320,7 +352,9 @@ tuple :: (ExprType a, ExprType b) => a -> b -> Some Constant
 tuple a b = Some (CTuple a b (typeOf a) (typeOf b))
 
 instance GEq Constant where
-  a `geq` b = constType a `geq` constType b
+  a `geq` b = case constType a `geq` constType b of
+    Just Refl -> if has @Eq (constType a) $ constValue a == constValue b then Just Refl else Nothing
+    Nothing -> Nothing
 instance GCompare Constant where
   gcompare a b = case gcompare (constType a) (constType b) of
     GLT -> GLT
@@ -352,6 +386,7 @@ instance JSON.FromJSON (Some Constant) where
         | Just val <- JSON.lookup "type" m = parseType val >>= \case
             Some BoolType -> parseBool $ lkup "value" m
             Some IntType -> parseInt $ lkup "value" m
+            Some FloatType -> parseFloat $ lkup "value" m
             Some StringType -> parseString $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
             Some (TupleType a b) -> parseTuple a b $ lkup "value" m
@@ -359,6 +394,7 @@ instance JSON.FromJSON (Some Constant) where
         parseType (JSON.String (Text.unpack -> s)) = case s of
           "string" -> pure $ Some StringType
           "int" -> pure $ Some IntType
+          "float" -> pure $ Some FloatType
           "bool" -> pure $ Some BoolType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
           '(':(parseTupleType 0 . init -> (a,b))
@@ -383,6 +419,8 @@ instance JSON.FromJSON (Some Constant) where
         parseInt _ = fail "type indicates int, but value is not of type int"
         parseString (JSON.String s) = return $ string $ Text.unpack s
         parseString _ = fail "type indicates string, but value is not of type string"
+        parseFloat (JSON.Number (DS.toRealFloat -> f)) = return $ float f
+        parseFloat _ = fail "type indicates float, but value is not of type float"
         parseList t (JSON.Array xs) = has @ExprType t list <$> mapM (unSome t <=< JSON.parseJSON @(Some Constant)) (Vec.toList xs)
           where
             unSome :: Type a -> Some Constant -> JSON.Parser a
@@ -409,6 +447,7 @@ instance JSON.ToJSON (Some Constant) where
     toJSON (Some v) = case v of
       CBool b -> JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
       CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
+      CFloat f -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
       CString s -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack s) JSON.empty
       CList xs t -> JSON.Object
         $ JSON.insert "type" (fromString . showtype $ ListType t)
@@ -422,6 +461,7 @@ instance JSON.ToJSON (Some Constant) where
         showtype :: Type a -> String
         showtype BoolType = "bool"
         showtype IntType = "int"
+        showtype FloatType = "float"
         showtype StringType = "string"
         showtype (ListType tp) = "[" <> showtype tp <> "]"
         showtype (TupleType a b) = "(" <> showtype a <> "," <> showtype b <> ")"
@@ -438,6 +478,7 @@ instance ExprType a => ConstType a where
 instance Has ConstType Type where
   has t k = case t of
     IntType -> k
+    FloatType -> k
     BoolType -> k
     StringType -> k
     ListType t' -> has @ConstType t' k
@@ -453,10 +494,14 @@ data ExprView t where
     Equal :: ExprConstraints t => {eqType :: Type t, left :: ExprView t, right :: ExprView t} -> ExprView Bool
     Divide :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Modulo :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
+    DivideFloat :: {dividendF :: ExprView Double, divisorF :: ExprView Double} -> ExprView Double
     Sum :: FreeSum (ExprView Integer) -> ExprView Integer
+    SumFloat :: FreeSum (ExprView Double) -> ExprView Double
     Product :: FreeProduct (ExprView Integer) -> ExprView Integer
+    ProductFloat :: FreeProduct (ExprView Double) -> ExprView Double
     Length :: ExprView String -> ExprView Integer
     GezInt :: ExprView Integer -> ExprView Bool
+    GezFloat :: ExprView Double -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     Concat :: [ExprView String] -> ExprView String
@@ -480,6 +525,7 @@ toSBV t x = case t of
   ListType t' -> let List xs = x in map (toSBV t') xs
   TupleType at bt -> bimap (toSBV at) (toSBV bt) x
   IntType -> x
+  FloatType -> x
   BoolType -> x
   StringType -> x
 
@@ -491,11 +537,15 @@ instance Eq (ExprView t) where
     | Just Refl <- t1 `geq` t2 = a == x && b == y
     | otherwise = False
   Divide a b == Divide x y = a == x && b == y
+  DivideFloat a b == DivideFloat x y = a == x && b == y
   Modulo a b == Modulo x y = a == x && b == y
   Sum x == Sum y = x == y
+  SumFloat x == SumFloat y = x == y
   Product x == Product y = x == y
+  ProductFloat x == ProductFloat y = x == y
   Length x == Length y = x == y
   GezInt x == GezInt y = x == y
+  GezFloat x == GezFloat y = x == y
   Not x == Not y = x == y
   And x == And y = x == y
   Concat x == Concat y = x == y
@@ -522,15 +572,23 @@ instance Ord (ExprView t) where
           GEQ -> compare (a,b) (x,y)
       (Divide a b, Divide x y) ->
         compare (a, b) (x, y)
+      (DivideFloat a b, DivideFloat x y) ->
+        compare (a, b) (x, y)
       (Modulo a b, Modulo x y) ->
         compare (a, b) (x, y)
       (Sum a, Sum b) ->
         compare a b
+      (SumFloat a, SumFloat b) ->
+        compare a b
       (Product a, Product b) ->
+        compare a b
+      (ProductFloat a, ProductFloat b) ->
         compare a b
       (Length a, Length b) ->
         compare a b
       (GezInt a, GezInt b) ->
+        compare a b
+      (GezFloat a, GezFloat b) ->
         compare a b
       (Not a, Not b) ->
         compare a b
@@ -574,6 +632,10 @@ instance Ord (ExprView t) where
         LElem{}   -> 15
         Take{}    -> 16
         Drop{}    -> 17
+        DivideFloat{} -> 18
+        SumFloat{} -> 19
+        ProductFloat{} -> 20
+        GezFloat{} -> 21
 
 
 instance Show (ExprView t) where
@@ -582,6 +644,7 @@ instance Show (ExprView t) where
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
     show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
     show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
+    show (DivideFloat e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
     show (Sum es) | es == mempty = "∑∅"
     show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
         where
@@ -590,9 +653,18 @@ instance Show (ExprView t) where
         showSumTerm n t = show n ++ "⋅" ++ t
     show (Product es) | es == mempty = "∏∅"
     show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
+    show (SumFloat es) | es == mempty = "∑∅"
+    show (SumFloat es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
+        where
+        showSumTerm (-1)     t = "-" ++ t
+        showSumTerm 1 t = t
+        showSumTerm n t = show n ++ "⋅" ++ t
+    show (ProductFloat es) | es == mempty = "∏∅"
+    show (ProductFloat es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es
     show (Length e) = "length(" ++ show e ++ ")"
     show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
+    show (GezFloat e) = "(" ++ show e ++ ") ≥ 0"
     show (Not e) = "¬(" ++ show e ++ ")"
     show (And (Set.toList -> [])) = "⋀∅"
     show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
@@ -611,11 +683,15 @@ instance Has ExprType ExprView where
     Ite _ x _ -> has @ExprType x k
     Equal t _ _ -> has @ExprType t k
     Divide _ _ -> k
+    DivideFloat _ _ -> k
     Modulo _ _ -> k
     Sum _ -> k
+    SumFloat _ -> k
     Product _ -> k
+    ProductFloat _ -> k
     Length _ -> k
     GezInt _ -> k
+    GezFloat _ -> k
     Not _ -> k
     And _ -> k
     Concat _ -> k
@@ -659,20 +735,29 @@ reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 el
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
 reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) = SumFloat es
 reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
 reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) = ProductFloat es
 reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
 reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y
 reduce (Modulo (reduce -> e1) (reduce -> e2)) = Modulo e1 e2
 reduce (Divide (reduce -> e1) (reduce -> e2@(Const 0))) = Divide e1 e2 -- leave divisions by zero as expressions
 reduce (Divide (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `divInteger` y
 reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
+reduce (DivideFloat (reduce -> e1) (reduce -> e2@(Const 0))) = DivideFloat e1 e2 -- leave divisions by zero as expressions
+reduce (DivideFloat (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x / y
+reduce (DivideFloat (reduce -> e1) (reduce -> e2)) = DivideFloat e1 e2
 reduce (Length (reduce -> (Const s))) = Const $ fromIntegral $ length s
 reduce (Length (reduce -> e)) = Length e
 reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 reduce (Equal t (reduce -> e1) (reduce -> e2)) = Equal t e1 e2
 reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
 reduce (GezInt (reduce -> e)) = GezInt e
+reduce (GezFloat (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezFloat (reduce -> e)) = GezFloat e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
@@ -713,11 +798,15 @@ freeVars' (Const _) = []
 freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
 freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Modulo e1 e2) = freeVars' e1 ++ freeVars' e2
+freeVars' (DivideFloat e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Sum (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (SumFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (ProductFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Length e) = freeVars' e
 freeVars' (Equal _ e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
+freeVars' (GezFloat e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
 freeVars' (Concat es) = concatMap freeVars' es

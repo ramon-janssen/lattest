@@ -64,6 +64,7 @@ valuationToGateValue (SymInteract g' params) valuation =
             case DMap.lookup var val' of
                 Just (E.Val value) -> case varType var of
                   E.IntType -> E.int value
+                  E.FloatType -> E.float value
                   E.BoolType -> E.bool value
                   E.StringType -> E.string value
                   E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y

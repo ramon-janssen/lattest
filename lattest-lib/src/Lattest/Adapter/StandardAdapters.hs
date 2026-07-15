@@ -82,8 +82,8 @@ import Network.Utils (niceSocketsDo, connectTCP)
 import System.IO.Streams as Streams (makeOutputStream, OutputStream, write, writeTo)
 import System.IO.Streams.Combinators(contramap)
 import System.IO.Streams.Network(socketToStreams)
-import System.IO.Streams.Synchronized(TInputStream, duplicate, fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, fromInputStreamBuffered, makeTInputStream, hasInput)
-import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
+import Lattest.Streams.Synchronized(TInputStream, duplicate, fromBuffer, mergeBufferedWith, mapUnbuffered, fromTMVar, readAll, fromInputStreamBuffered, makeTInputStream, hasInput)
+import qualified Lattest.Streams.Synchronized as Streams (read, unRead)
 import System.Random(RandomGen)
 
 import qualified Data.Attoparsec.ByteString.Char8 as Parse

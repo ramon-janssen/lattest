@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module Test.Lattest.Model.BoundedMonad (
 prop_latticeIsCNF,
@@ -45,8 +44,8 @@ instance (Arbitrary a, Ord a) => Arbitrary (LatticeOp a) where
             ]
             where
                 sub = arbitrary' (n - 1)
-                wrapInBind n' a = Bind a <$> (arbitraryMapping n' $ Set.toList $ freeVars a)
-                arbitraryMapping n' vars = Map.fromList <$> sequence (arbitraryIdPlusLatticeOp n' <$> vars)
+                wrapInBind n' a = Bind a <$> arbitraryMapping n' (Set.toList $ freeVars a)
+                arbitraryMapping n' vars = Map.fromList <$> mapM (arbitraryIdPlusLatticeOp n') vars
                 arbitraryIdPlusLatticeOp n' a = do
                     l <- arbitrary' n'
                     return (a, l)
@@ -55,7 +54,7 @@ instance (Arbitrary a, Ord a) => Arbitrary (LatticeOp a) where
     shrink (Var _) = [Top, Bot]
     shrink (Join x y) = [Join x' y' | (x', y') <- shrink (x, y)] ++ shrink x ++ shrink y
     shrink (Meet x y) = [Meet x' y' | (x', y') <- shrink (x, y)] ++ shrink x ++ shrink y
-    shrink (Bind l subs) = [let subs' = Map.restrictKeys subs (freeVars l') in if Map.null subs then l' else (Bind l' subs') | l' <- shrink l]
+    shrink (Bind l subs) = [let subs' = Map.restrictKeys subs (freeVars l') in if Map.null subs then l' else Bind l' subs' | l' <- shrink l]
                             ++ [Bind l subs' | subs' <- simplifiedSubs]
         where
         simplifiedSubs = [ Map.insert var sub subs | (var,sub) <- Map.toList subs, _ <- shrink sub ]
@@ -64,14 +63,14 @@ constructLattice :: (BM.BoundedConfiguration l, BM.JoinSemiLattice (l a), BM.Mee
 constructLattice Top = BM.underspecified
 constructLattice Bot = BM.forbidden
 constructLattice (Var a) = BM.ordReturn a
-constructLattice (Join x y) = (constructLattice x) BM.\/ (constructLattice y)
-constructLattice (Meet x y) = (constructLattice x) BM./\ (constructLattice y)
+constructLattice (Join x y) = constructLattice x BM.\/ constructLattice y
+constructLattice (Meet x y) = constructLattice x BM./\ constructLattice y
 constructLattice (Bind l subs) =
-    let subs' = Map.map constructLattice subs 
-    in (constructLattice l) `BM.ordBind` (subs' Map.!) 
+    let subs' = Map.map constructLattice subs
+    in constructLattice l `BM.ordBind` (subs' Map.!)
 
 prop_latticeIsCNF :: (Ord a, Show a) => LatticeOp a -> Bool
-prop_latticeIsCNF l = 
+prop_latticeIsCNF l =
     let cnf = constructLattice l
         standard = constructLattice l
         outcome = (cnfToLattice $ cnf) == standard

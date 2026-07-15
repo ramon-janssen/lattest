@@ -1,5 +1,4 @@
-{-# OPTIONS_HADDOCK hide, prune #-}
-module System.IO.Streams.Synchronized (
+module Lattest.Streams.Synchronized (
 TInputStream,
 read,
 readAll,

@@ -8,6 +8,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 
 {-|
     This module contains the definitions and interpretations of automata models.
@@ -85,13 +86,14 @@ import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import GHC.Stack(CallStack,callStack)
+import GHC.Stack(CallStack,callStack, HasCallStack)
 import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..), Constant (Constant))
+import Data.Constraint.Extras (Has(..))
 
 ------------
 -- syntax --
@@ -277,7 +279,7 @@ after intrpr act' =
     in intrpr { stateConf = stateConf' }
     -}
 
-afterInternal' :: (StepSemantics m loc q t tdest act, Ord t, Ord q, Ord (m q), Monad execM) =>
+afterInternal' :: (HasCallStack, StepSemantics m loc q t tdest act, Ord t, Ord q, Ord (m q), Monad execM) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
 afterInternal' internalTakeTransition alph transMap act q = do
@@ -294,12 +296,12 @@ afterInternal' internalTakeTransition alph transMap act q = do
             moveAlongTransition :: (StepSemantics m loc q t tdest act) => q -> act -> t -> (tdest, loc) -> m q
             moveAlongTransition q' act' t'' (tdest, loc) = move q' act' (Just (t'', tdest)) loc
         where
-        lookupAction :: Ord k => Map k a -> k -> a
+        lookupAction :: (Ord k) => Map k a -> k -> a
         lookupAction m k = case Map.lookup k m of
             Just v -> v
             Nothing -> throw $ ActionOutsideAlphabet callStack
 {-
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
+after' :: (HasCallStack, StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
 after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> move q act (nothingTTdest transMap) BM.<#> mloc
         where
@@ -317,7 +319,7 @@ after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act
 -}
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q), Show t, Show (m (tdest, loc))) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -484,10 +486,16 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
             Nothing -> errorWithoutStackTrace "gate not in STS alphabet"
             Just i@(SymInteract _ vars) ->
                 if List.length vals /= List.length vars
-                    then errorWithoutStackTrace "nr of values unequal to nr of parameters"
+                    then errorWithoutStackTrace $
+                      "nr of values unequal to nr of parameters: " <> show (List.length vals) <> " values and " <> show (List.length vars) <> " variables"
                     else if List.all (\(Some var, Some val) -> varType var `eqp` constType val) (zip vars vals)
                             then Just i
-                            else errorWithoutStackTrace "type of variable and value do not match"
+                            else errorWithoutStackTrace $
+                              "type of variable and value do not match. Variables: ["
+                              <> List.intercalate ", " (map (\(Some v) -> show v) vars)
+                              <> "], Values: ["
+                              <> List.intercalate ", " (map (\(Some (Constant t v)) -> has @Show t $ show v) vals)
+                              <> "]"
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 

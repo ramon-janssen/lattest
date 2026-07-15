@@ -1,6 +1,6 @@
 name:                lattest-lib
 version:             0.1.0.0
-#synopsis:
+synopsis: Model-based testing framework
 description: |
   Welcome to Lattest, the latest attested lattice testing tech!
 
@@ -10,36 +10,31 @@ description: |
   For details on setting up such a test, see "Lattest.Exec.Testing"
 homepage:            https://github.com/ramon-janssen/lattest
 license:             BSD3
+license-file:        LICENSE
 author:              Ramon Janssen
+maintainer:          David van Balen
 copyright:           2023 Ramon Janssen
 category:            Testing
 extra-source-files:
-- README.md
 - CHANGELOG.md
 
 dependencies:
     - MissingH >= 1.6.0 && < 1.7
     - aeson >= 2.2.3.0 && < 2.4
-    - array >= 0.5.8 && < 0.6
     - attoparsec >= 0.14.4 && < 0.15
     - attoparsec-aeson >= 2.2.2 && < 2.3
-    - attoparsec-data >= 1.0.5 && < 1.1
     - base >= 4.19.2 && < 4.22
     - bytestring >= 0.12.1 && < 0.13
     - cassava >= 0.5.3.2 && < 0.6
     - containers >= 0.6.8 && < 0.8
     - either >= 5.0.2 && < 5.1
     - extra >= 1.7.16 && < 1.9
-    - filepath >=1.4.301.0 && < 1.6
     - io-streams >= 1.5.2 && < 1.6
     - list-shuffle >= 1.0.0 && < 1.1
     - mtl >= 2.3.1 && < 2.4
     - network >= 3.2.7.0 && < 3.3
     - parallel >= 3.2.2.0 && < 3.4
-    - process >= 1.6.25 && < 1.7
     - random >= 1.2.1.3 && < 1.4
-    - raw-strings-qq >= 1.1 && < 1.2
-    - regex-tdfa >= 1.3.2 && < 1.4
     - scientific >= 0.3.8 && < 0.4
     - stm >= 2.5.3 && < 2.6
     - text >= 2.1.1 && < 2.2
@@ -47,7 +42,7 @@ dependencies:
     - unbounded-delays >= 0.1.1 && < 0.2
     - some >= 1.0.6 && <1.2
     - QuickCheck >= 2.15.0.1 && <2.17
-    - sbv
+    - sbv >= 11.0 && <15
     - dependent-map
     - constraints-extras
     - vector
@@ -60,7 +55,9 @@ ghc-options:
 - -Wmissing-export-lists
 - -Wmissing-home-modules
 - -Wredundant-constraints
-
+- -Wno-simplifiable-class-constraints
+- -Wno-unused-top-binds
+- -Wno-orphans
 library:
   source-dirs: src
   other-modules:
@@ -72,9 +69,6 @@ library:
   - Lattest.Model.Symbolic.Internal.Sum
   - Lattest.Model.Symbolic.SolveSTS
   - Lattest.Util.IOUtils
-  build-tools:
-  - happy
-  - alex
 
 # currently no need for a standalone application, 'running' can be done via stack ghci
 #executables:
@@ -94,8 +88,8 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - lattest-lib
+    - raw-strings-qq >= 1.1 && < 1.2
     - lattices >= 2.2.1 && < 2.3
     - HUnit >= 1.6.2.0
     - tasty >= 1.5.3
     - tasty-quickcheck
-    - utf8-string >= 1.0.2

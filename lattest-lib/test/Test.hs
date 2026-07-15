@@ -35,13 +35,13 @@ quickCheckTests = testGroup "Quickcheck"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
 --    quickCheckWithTimeoutWithNumWithSize prop_solveSymbolic 100 2
-  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
-  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
+  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith (15 :: Int) "consumeBufferedWith"
+  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) (10000 :: Int) "latticeIsCNF"
   ]
 
     where
-    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> 
+    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop (100 :: Int)
+    quickCheckWithTimeoutWithNum prop _ name = testProperty name $ \testparam -> 
       within (durationSeconds * 1000000) $ withMaxSize 20 $
       -- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
       noShrinking $ prop testparam
@@ -81,11 +81,13 @@ makeHUnitTests = do
         testRandomFIncorrectOutput,
         testRandomFIncorrectInput,
         testSTSHappyFlow,
+        testSTSHappyFlowFloat,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testPrintSTS,
         testReadAutFile,
         testSTSJSONParserNominal,
+        testSTSJSONParserNominalFloat,
         testSTSJSONParserUnknownType,
         testSTSJSONParserUnsupportedGuardOperand,
         testSTSJSONParserUnsupportedAssignmentOperand,

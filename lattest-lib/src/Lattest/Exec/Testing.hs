@@ -56,7 +56,7 @@ import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 import Control.Exception(catch,evaluate)
 
 --import Control.DeepSeq(force)
-import System.IO.Streams.Synchronized (Streamed(..))
+import Lattest.Streams.Synchronized (Streamed(..))
 import Data.Kind (Constraint, Type)
 
 -- | The controller of an experiment.
@@ -213,7 +213,7 @@ class RunTester tdest where
     -> IO (Verdict, r)
 
 instance RunTester () where
-  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q))
+  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q), Show t, Show (m ((),loc)))
   runTester = runLTSTester
 
 instance RunTester STStdest where

@@ -1,6 +1,6 @@
 # Model-based Testing with Alternating Interface Automata
 
-For documentation, check out this repository locally, and open lattest-lib/docs/index.html (github doesn't render HTML directly in the web-interface).
+For documentation, see https://hackage.haskell.org/package/lattest-lib, or the generate-docs script to build documentation for unpublished changes.
 
 To compile and test the library, in the lattest-lib folder, run `stack test`.
 

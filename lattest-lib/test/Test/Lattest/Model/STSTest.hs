@@ -2,9 +2,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testSTSHappyFlowFloat,
     testLatticeCoffeeSTS,
     testErrorThrowingGates,
     testSTSUnHappyFlow,
@@ -17,7 +19,6 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
-import Data.Maybe(fromJust)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -28,13 +29,12 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract, IOSuspGateValue)
-import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified,forbidden, FreeLattice, atom)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction)
 import Reference.FreeLatticeSlow(FreeLatticeSlow)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
-import qualified Lattest.SMT as SMT
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 
@@ -60,7 +60,7 @@ stsExample =
         okGuard = x .== p
         coffeeGuard = x .>= 15
         initConf = return 0
-        switches = \q -> case q of
+        switches = \case
             0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
                                 (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
             1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
@@ -74,7 +74,6 @@ getSTSIntrpState loc val = pure $ IntrpState loc $ Valuation $ DMap.singleton (V
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
-
     assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExampleIntrpr)
     let intrp2 = after stsExampleIntrpr (GateValue (In "water") [int 7])
     assertEqual "after water 7: " (getSTSIntrpState 1 7) (stateConf intrp2)
@@ -91,11 +90,11 @@ testSTSHappyFlow = TestCase $ do
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
     let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [int 7])
-    assertThrowsError "gate not in STS alphabet" (stateConf $ intrp1)
+    assertThrowsError "gate not in STS alphabet" (stateConf intrp1)
     let intrp2 = after stsExampleIntrpr (GateValue (In "water") [])
-    assertThrowsError "nr of values unequal to nr of parameters" (stateConf $ intrp2)
+    assertThrowsError "nr of values unequal to nr of parameters: 0 values and 1 variables" (stateConf intrp2)
     let intrp3 = after stsExampleIntrpr (GateValue (In "water") [bool True])
-    assertThrowsError "type of variable and value do not match" (stateConf $ intrp3)
+    assertThrowsError "type of variable and value do not match. Variables: [p:Int], Values: [True]" (stateConf intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
@@ -204,8 +203,8 @@ testSTSTestSelection = TestCase $ do
     assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
-    inpL g vals = GateValue (In (InputAttempt (g, True))) vals
-    outL g vals = GateValue (Out (OutSusp g)) vals
+    inpL g = GateValue (In (InputAttempt (g, True)))
+    outL g = GateValue (Out (OutSusp g))
     go :: Int -> Integer -> [SuspendedIFGateValue String String] -> (Int, Integer)
     go ds waterlevel [] = (ds, waterlevel)
     go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
@@ -220,6 +219,53 @@ testSTSTestSelection = TestCase $ do
       , waterlevel > 15 = go ds waterlevel os
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
+pvarf :: Variable Double
+pvarf = Variable "p" FloatType
+xvarf :: Variable Double
+xvarf = Variable "x" FloatType
+
+stsExampleInitAssignFloat :: Valuation
+stsExampleInitAssignFloat = Valuation $ DMap.singleton xvarf (Val 0.0)
+
+stsExampleFloat :: IOSTS FreeLattice Integer String String
+stsExampleFloat =
+    let p = sVar pvarf :: Expr Double
+        x = sVar xvarf :: Expr Double
+        water = SymInteract (In "water") [Some pvarf]
+        ok = SymInteract (Out "ok") [Some pvarf]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .<= p .&& p .<= 10
+        waterAssign = assignment [xvarf =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= sConst (14.5 :: Double)
+        initConf = disjunction [0] :: FreeLattice Integer
+        switches = \case
+            0 -> Map.fromList [(water,   disjunction [(stsTLoc waterGuard waterAssign, 1)]),
+                                (coffee, disjunction [(stsTLoc coffeeGuard noAssignment, 2)])]
+            1 -> Map.fromList [(ok,      disjunction [(stsTLoc okGuard noAssignment, 0)])]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrprFloat :: STSIntrp FreeLattice Integer (IOAct String String)
+stsExampleIntrprFloat = interpretSTS stsExampleFloat stsExampleInitAssignFloat
+
+getSTSIntrpStateFloat :: Integer -> Double -> FreeLattice (IntrpState Integer)
+getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ Valuation $ DMap.singleton (Variable "x" FloatType) (Val val)]
+
+testSTSHappyFlowFloat :: Test
+testSTSHappyFlowFloat = TestCase $ do
+    -- assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrprFloat)
+    let intrp2 = after stsExampleIntrprFloat (GateValue (In "water") [float 7.5])
+    assertEqual "after water 7.5: " (getSTSIntrpStateFloat 1 (7.5 :: Double)) (stateConf intrp2)
+    -- let intrp3 = after intrp2 (GateValue (Out "ok") [Cfloat 7.5])
+    -- assertEqual "after ok 7.5: " (getSTSIntrpStateFloat 0 (7.5 :: Double)) (stateConf intrp3)
+    -- let intrp4 = after intrp3 (GateValue (In "water") [Cfloat 8.5])
+    -- assertEqual "after water 8.5: " (getSTSIntrpStateFloat 1 (16.0 :: Double)) (stateConf intrp4)
+    -- let intrp5 = after intrp4 (GateValue (Out "ok") [Cfloat 16.0])
+    -- assertEqual "after ok 16.0: " (getSTSIntrpStateFloat 0 (16.0 :: Double)) (stateConf intrp5)
+    -- let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    -- assertEqual "after coffee: " (getSTSIntrpStateFloat 2 (16.0 :: Double)) (stateConf intrp6)
+    return ()
+
 
 stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =
@@ -232,14 +278,13 @@ stsExample2 =
         waterGuard1 = 4 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
-        coffeeGuard = x .>= 15
         initConf = atom 0
-        switches = \q -> case q of
+        switches = \case
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1) /\ atom (stsTLoc waterGuard1 waterAssign, 2) )]
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
         initConf2 = atom 0 /\ atom 2
-        switches2 = \q -> case q of
+        switches2 = \case
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1))]
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.fromList [(water, atom (stsTLoc waterGuard1 waterAssign, 3))]
@@ -314,14 +359,14 @@ specParameterized startType endType comp splitFirst =
         assignX = assignment [xvar =: p]
         switches =
             if splitFirst
-                then \s -> case s of
+                then \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) `comp` pure (stsTLoc guardStart assignX, 2))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
                         2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 4))]
                         3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
                         4 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
                         5 -> Map.empty
-                else \s -> case s of
+                else \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) `comp` pure (stsTLoc guardEnd2 noAssignment, 3))]
                         2 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
@@ -337,10 +382,10 @@ specParameterized startType endType comp splitFirst =
   * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
 -}
 t1 :: (Ord i, Ord o, Num a1, Num a2, IsString t1, IsString t2, IsString o, Eq a1) => (t1 -> IOAct i o) -> (t2 -> IOAct i o) -> Integer -> Integer -> Integer -> a1 -> Map.Map (GateValue (IOAct i o)) a2
-t1 startType _ p1 _ _ 0 = Map.fromList $ [((GateValue (startType "start") [int p1]), 1)]
-t1 _ endType _ p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [int p2, int q2]), 2)]
-t1 _ _ _ _ _ 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
-t1 _ _ _ _ _ 3 = Map.fromList $ []
+t1 startType _ p1 _ _ 0 = Map.fromList [(GateValue (startType "start") [int p1], 1)]
+t1 _ endType _ p2 q2 1 = Map.fromList [(GateValue (endType "end") [int p2, int q2], 2)]
+t1 _ _ _ _ _ 2 = Map.fromList [(GateValue (Out "done") [], 3)]
+t1 _ _ _ _ _ 3 = Map.empty
 impParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> Integer -> Integer -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impParameterized startType endType p1 p2 q2 = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -429,7 +474,7 @@ specQ =
         guardStart = 1 .< p .&& p .< 3
         guardEnd = p .+ q .== p .+ q .+ x
         assignX = assignment [xvar =: p]
-        switches = \s -> case s of
+        switches = \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd noAssignment, 2))]
                         2 -> Map.empty
@@ -443,8 +488,8 @@ specQ =
   * p
 -}
 tq :: (Ord g, IsString t, Num a1, Num a2, Eq a1) => (t -> g) -> Integer -> a1 -> Map.Map (GateValue g) a2
-tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [int p]), 1)]
-tq _ _ 1 = Map.fromList $ []
+tq startType p 0 = Map.fromList [(GateValue (startType "start") [int p], 1)]
+tq _ _ 1 = Map.empty
 impQParameterized :: (String -> IOAct String String) -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impQParameterized startType p = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tq startType p) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -525,12 +570,12 @@ specUnimplementableParameterized splitFirst =
         assignX = assignment [xvar =: p]
         switches =
             if splitFirst
-                then \s -> case s of
+                then \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) /\ pure (stsTLoc guardStart assignX, 2))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
                         2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 3))]
                         3 -> Map.empty
-                else \s -> case s of
+                else \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) /\ pure (stsTLoc guardEnd2 noAssignment, 3))]
                         2 -> Map.empty

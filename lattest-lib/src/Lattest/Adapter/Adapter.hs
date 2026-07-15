@@ -20,10 +20,10 @@ import Data.Attoparsec.ByteString(Parser)
 import Data.ByteString(ByteString)
 import System.IO.Streams (OutputStream)
 import System.IO.Streams.Combinators(contramap)
-import System.IO.Streams.Synchronized(TInputStream, tryReadIO, Streamed)
-import System.IO.Streams.Synchronized.Attoparsec (parserToInputStream)
+import Lattest.Streams.Synchronized(TInputStream, tryReadIO, Streamed)
+import Lattest.Streams.Synchronized.Attoparsec (parserToInputStream)
 import qualified System.IO.Streams as Streams (write)
-import qualified System.IO.Streams.Synchronized as Streams (map,read)
+import qualified Lattest.Streams.Synchronized as Streams (map,read)
 
 -- | An adapter to a (usually external) system. Uses two channels for interaction: one to send input commands, and one to receive outputs.
 data Adapter act i = Adapter {

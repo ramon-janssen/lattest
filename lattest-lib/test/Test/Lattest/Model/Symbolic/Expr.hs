@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Test.Lattest.Model.Symbolic.Expr (
 prop_evalSymbolic,
@@ -17,10 +17,9 @@ where
 
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
-import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(Expr), List (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs(List (..))
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT as SMT
-import qualified Data.List as List
 
 import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
@@ -133,6 +132,7 @@ arbitraryVar t =
     let prefix :: Type a -> String
         prefix tp = case tp of
                     IntType -> "i"
+                    FloatType -> "f"
                     BoolType -> "b"
                     StringType -> "s"
                     ListType x -> "[" ++ prefix x ++ "]"
@@ -179,20 +179,20 @@ instance ConcreteEval Integer where
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
     concreteEval' (Modulo e1 e2) = concreteBinOpMaybe (safeZero mod) e1 e2
     concreteEval' (Length e) = concreteUnaryOp (Prelude.toInteger . length) e
-    concreteEval' (Sum es) = foldOccurList 0 (+) (*) es
-    concreteEval' (Product es) = foldOccurList 1 (*) (^) es
+    concreteEval' (Sum es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* i) <$> x)) (Just 0) es
+    concreteEval' (Product es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0) es
 
-safeZero :: (Integer -> Integer -> Integer) -> (Integer -> Integer -> Maybe Integer)
+instance ConcreteEval Double where
+    concreteEval' (Var _) = Nothing
+    concreteEval' (Const c) = Just c
+    concreteEval' (Ite i t e) = concreteIfThenElse i t e
+    concreteEval' (SumFloat es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* fromInteger i) <$> x)) (Just 0.0) es
+    concreteEval' (ProductFloat es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0.0) es
+    concreteEval' (DivideFloat e1 e2) = concreteBinOpMaybe (safeZero (/)) e1 e2
+
+safeZero :: (Num a, Eq a) => (a -> a -> a) -> (a -> a -> Maybe a)
 safeZero _ _ 0 = Nothing
 safeZero op n m = Just $ n `op` m
-
-foldOccurList :: TermWrapper t => Integer -> (Integer -> Integer -> Integer) -> (Integer -> Integer -> Integer) -> FreeMonoidX (t (ExprView Integer)) -> Maybe Integer
-foldOccurList zero add mult monoid = foldr add zero <$> mapM maybeEvalTerm (FM.toOccurListT monoid)
-    where
-    maybeEvalTerm :: (ExprView Integer, Integer) -> Maybe Integer
-    maybeEvalTerm (x, n) = case concreteEval' x of
-        Just y -> Just (y `mult` n)
-        Nothing -> Nothing
 
 
 instance ConcreteEval Bool where
@@ -201,6 +201,7 @@ instance ConcreteEval Bool where
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Equal t e1 e2) = has @ConcreteEval t $ concreteBinOp (==) e1 e2
     concreteEval' (GezInt e) = concreteUnaryOp (>= 0) e
+    concreteEval' (GezFloat e) = concreteUnaryOp (>= 0) e
     concreteEval' (Not e) = concreteUnaryOp not e
     concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
     concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y (List ys) -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
@@ -230,6 +231,7 @@ instance (ConcreteEval a, ConcreteEval b) => ConcreteEval (a,b) where
 instance Has ConcreteEval Type where
   has tp k = case tp of
     IntType -> k
+    FloatType -> k
     StringType -> k
     BoolType -> k
     ListType t -> has @ConcreteEval t k
@@ -269,7 +271,7 @@ testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
 
 testEvalEmptyProduct :: Test
-testEvalEmptyProduct = testEvalExpression (sProduct []) "empty product evaluation incorrect"
+testEvalEmptyProduct = testEvalExpression (sProduct @Integer []) "empty product evaluation incorrect"
 
 testSolveExpression :: Expr Bool -> Test
 testSolveExpression guard = TestCase $ do
@@ -278,10 +280,8 @@ testSolveExpression guard = TestCase $ do
         Nothing -> return ()
         Just valuation ->
             let val = substConst valuation guard
-            in case concreteEval val of
-                Nothing -> return () -- we may generate an expression which can have an undefined value, e.g. division by zero, for which the SMT solver may pick an arbitrary valuation
-                --Just sat -> Trace.trace (show valuation) $ assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
-                Just sat -> assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
+            in CM.forM_ (concreteEval val)
+                $ \sat -> assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
 
 testEvalNegativeModulo :: Test
 testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"
