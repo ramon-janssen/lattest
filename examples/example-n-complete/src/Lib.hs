@@ -4,11 +4,9 @@ module Lib
     ) where
 
 import Lattest.Model.Alphabet(IOAct(..))
-import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
+import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs)
 import Lattest.Model.StandardAutomata
 import Lattest.Model.Automaton(reachable)
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
-import Lattest.Exec.StandardTestControllers
 import qualified Lattest.Exec.StandardTestControllers.CompleteTestSuite as CTS
 import Control.DeepSeq(NFData)
 import GHC.Generics (Generic)
