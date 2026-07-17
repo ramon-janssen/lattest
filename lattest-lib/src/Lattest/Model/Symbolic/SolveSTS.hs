@@ -7,10 +7,11 @@
 
 module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
-interactsToGuard,
-interactsToGuard',
+interactsToSpecifiedCondition,
+interactsToAllowedCondition,
 symbolicExecutionTree,
-toSolveTree,
+toSpecifiedTree,
+toAllowedTree,
 SymExecTree(..),
 SymExecNodeElem(..),
 SolveTree(..),
@@ -22,7 +23,7 @@ where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..))
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
-import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
+import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
@@ -98,32 +99,44 @@ data SymExecTree m loc g = SymExecTree {
 
 type DerivClassCond = (Set.Set SymGuard, Set.Set SymGuard) -- set of positive and negative guards, corresponding to a guard (∀ left) ∧ ¬(∃ right)
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToGuard intrpr interacts = interactsToGuard' (symbolicExecutionTree intrpr) interacts
+interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToSpecifiedCondition intrpr interacts = interactsToGuard' asDualExpr (symbolicExecutionTree intrpr) interacts
 
-interactsToGuard' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => SymExecTree m loc (IOAct i o) -> [IOSymInteract i o] -> SymGuard
-interactsToGuard' tree interacts = interactsToGuard'' 0 interacts tree
+interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToAllowedCondition intrpr interacts = interactsToGuard' asDualExpr (symbolicExecutionTree intrpr) interacts
+
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToGuard f intrpr interacts = interactsToGuard' f (symbolicExecutionTree intrpr) interacts
+
+interactsToGuard' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> SymExecTree m loc (IOAct i o) -> [IOSymInteract i o] -> SymGuard
+interactsToGuard' f tree interacts = interactsToGuard'' f 0 interacts tree
     where
-    interactsToGuard'' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => Int -> [IOSymInteract i o] -> SymExecTree m loc (IOAct i o) -> SymGuard
-    interactsToGuard'' n [] tree = asDualExpr $ const sTrue BM.<#> node tree -- This should be `nodeCondition tree` if you want the resulting expression to also capture the assignments after the last step
-    interactsToGuard'' n (x:xs) tree =
+    interactsToGuard'' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> Int -> [IOSymInteract i o] -> SymExecTree m loc (IOAct i o) -> SymGuard
+    interactsToGuard'' f n [] tree = f $ const sTrue BM.<#> node tree -- This should be `nodeCondition f tree` if you want the resulting expression to also capture the assignments after the last step
+    interactsToGuard'' f n (x:xs) tree =
         let derivBranches = Map.assocs $ pathChildren tree Map.! x
-            derivBranchConditions = derivBranchAsCond n xs <$> derivBranches
-        in nodeCondition tree .&& sOr (Set.fromList derivBranchConditions)
-    derivBranchAsCond :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => Int -> [IOSymInteract i o] -> (DerivClassCond, SymExecTree m loc (IOAct i o)) -> Expr Bool
-    derivBranchAsCond n xs (classCond, children) = classCondToGuard n classCond .&& interactsToGuard'' (n+1) xs children
-    nodeCondition :: (BM.BoundedMonad m, BooleanConfiguration m) => SymExecTree m loc g -> SymGuard
-    nodeCondition = asDualExpr . BM.ordMap pathCondition . node
+            derivBranchConditions = derivBranchAsCond f n xs <$> derivBranches
+        in nodeCondition f tree .&& sOr (Set.fromList derivBranchConditions)
+    derivBranchAsCond :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> Int -> [IOSymInteract i o] -> (DerivClassCond, SymExecTree m loc (IOAct i o)) -> Expr Bool
+    derivBranchAsCond f n xs (classCond, children) = classCondToGuard n classCond .&& interactsToGuard'' f (n+1) xs children
+    nodeCondition :: (BM.BoundedMonad m, BooleanConfiguration m) => (m (Expr Bool) -> SymGuard) -> SymExecTree m loc g -> SymGuard
+    nodeCondition f = f . BM.ordMap pathCondition . node
     classCondToGuard :: Int -> DerivClassCond -> SymGuard
     classCondToGuard pDepth (poss,negs) = sAnd (Set.map (indexExpr pDepth) poss) .&& sNot (sOr (Set.map (indexExpr pDepth) negs))
 
-toSolveTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
-toSolveTree intrpr = toSolveTree'  intrpr []
+toSpecifiedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toSpecifiedTree = toSolveTree asDualExpr
+
+toAllowedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toAllowedTree = toSolveTree asExpr
+
+toSolveTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toSolveTree f intrpr = toSolveTree' f intrpr []
     where
-    toSolveTree' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SolveTree (IOAct i o)
-    toSolveTree' intrpr pref = 
-        let children = Map.fromSet (\x -> toSolveTree' intrpr (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
-        in SolveTree (interactsToGuard intrpr pref) children
+    toSolveTree' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SolveTree (IOAct i o)
+    toSolveTree' f intrpr pref =
+        let children = Map.fromSet (\x -> toSolveTree' f intrpr (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
+        in SolveTree (interactsToGuard f intrpr pref) children
 
 symbolicExecutionTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, Ord (m (Expr Bool))) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SymExecTree m loc (IOAct i o)
 symbolicExecutionTree = symbolicExecutionTree' ioInteractToImpliticLocation

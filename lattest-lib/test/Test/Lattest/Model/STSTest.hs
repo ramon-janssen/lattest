@@ -38,7 +38,7 @@ import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyP
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard)
 import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
-import Lattest.Model.Symbolic.SolveSTS(interactsToGuard)
+import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import Data.List(intercalate)
@@ -160,26 +160,26 @@ testBranchingPathCondition = TestCase $ do
               | (kind, g1, g2) <- [ ("in", gateA, gateB), ("out", gateAo, gateBo) ]
               , (nm, o0, o1, o2) <- combos
               , (tn, tr) <- [ ("[a]", [g1]), ("[a,b]", [g1, g2]) ]
-              , let g = interactsToGuard (branchingIntrpr g1 g2 o0 o1 o2) tr ]
+              , let g = interactsToSpecifiedCondition (branchingIntrpr g1 g2 o0 o1 o2) tr ]
     -- 2. INPUT branch on [a]: disjunction is strictly stronger than conjunction (it requires both guards).
-    let inD = interactsToGuard (branchingIntrpr gateA gateB disj disj disj) [gateA]
-        inC = interactsToGuard (branchingIntrpr gateA gateB conj conj conj) [gateA]
+    let inD = interactsToSpecifiedCondition (branchingIntrpr gateA gateB disj disj disj) [gateA]
+        inC = interactsToSpecifiedCondition (branchingIntrpr gateA gateB conj conj conj) [gateA]
     assertImplies    "input [a]: disjunction ⟹ conjunction" inD inC
     assertNotImplies "input [a]: conjunction ⇏ disjunction" inC inD
     assertUnsat "input [a] disjunction with p<5 (needs p>=5 AND q>=5)" (inD .&& (p .<= 4))
     assertSat   "input [a] conjunction with p<5 (q>=5 alone suffices)" (inC .&& (p .<= 4))
     -- 3. OUTPUT branch on [a]: mirrored -- conjunction is strictly stronger than disjunction.
-    let outD = interactsToGuard (branchingIntrpr gateAo gateBo disj disj disj) [gateAo]
-        outC = interactsToGuard (branchingIntrpr gateAo gateBo conj conj conj) [gateAo]
+    let outD = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo disj disj disj) [gateAo]
+        outC = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo conj conj conj) [gateAo]
     assertImplies    "output [a]: conjunction ⟹ disjunction" outC outD
     assertNotImplies "output [a]: disjunction ⇏ conjunction" outD outC
     assertUnsat "output [a] conjunction with p<5 (needs p>=5 AND q>=5)" (outC .&& (p .<= 4))
     assertSat   "output [a] disjunction with p<5 (q>=5 alone suffices)" (outD .&& (p .<= 4))
     -- 4. The same input/output contrast one branching level deeper, on trace [a,b].
-    let inDAB = interactsToGuard (branchingIntrpr gateA gateB disj disj disj) [gateA, gateB]
-        inCAB = interactsToGuard (branchingIntrpr gateA gateB conj conj conj) [gateA, gateB]
-        outDAB = interactsToGuard (branchingIntrpr gateAo gateBo disj disj disj) [gateAo, gateBo]
-        outCAB = interactsToGuard (branchingIntrpr gateAo gateBo conj conj conj) [gateAo, gateBo]
+    let inDAB = interactsToSpecifiedCondition (branchingIntrpr gateA gateB disj disj disj) [gateA, gateB]
+        inCAB = interactsToSpecifiedCondition (branchingIntrpr gateA gateB conj conj conj) [gateA, gateB]
+        outDAB = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo disj disj disj) [gateAo, gateBo]
+        outCAB = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo conj conj conj) [gateAo, gateBo]
     assertImplies    "input [a,b]: all-disjunction ⟹ all-conjunction" inDAB inCAB
     assertNotImplies "input [a,b]: all-conjunction ⇏ all-disjunction" inCAB inDAB
     assertImplies    "output [a,b]: all-conjunction ⟹ all-disjunction" outCAB outDAB
@@ -352,12 +352,14 @@ goldenAssert checks = do
 testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, Show (m (Solve.SymExecNodeElem q))) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
 testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
     [ goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
-    , goldenCheck (testName ++ ":toSolveTree") (goldenDir </> (testName ++ ".solvetree.txt")) actualSolveTree
+    , goldenCheck (testName ++ ":toSpecifiedTree") (goldenDir </> (testName ++ ".specifiedtree.txt")) actualSpecifiedTree
+    , goldenCheck (testName ++ ":toAllowedTree") (goldenDir </> (testName ++ ".allowedtree.txt")) actualAllowedTree
     ]
     where
     tree = Solve.symbolicExecutionTree stsIntrpr
     actualExecTree = "\n" ++ prettyExecTree depth tree
-    actualSolveTree = "\n" ++ prettySolveTree depth (Solve.toSolveTree stsIntrpr)
+    actualSpecifiedTree = "\n" ++ prettySolveTree depth (Solve.toSpecifiedTree stsIntrpr)
+    actualAllowedTree = "\n" ++ prettySolveTree depth (Solve.toAllowedTree stsIntrpr)
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
@@ -787,7 +789,7 @@ testSTSPathCondition = TestCase $ do
     _ <- SMT.runSMT smtRef SMT.openSolver
     let -- is the given guard satisfiable, according to the SMT solver?
         isSat guard = SMT.runSMT smtRef $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
-        pathCond = interactsToGuard stsExampleIntrpr
+        pathCond = interactsToSpecifiedCondition stsExampleIntrpr
         assertSat lbl prefix = isSat (pathCond prefix) >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl prefix = isSat (pathCond prefix) >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
         -- guards against a regression to True: a tautology's negation is unsatisfiable
