@@ -16,7 +16,7 @@ SymExecNodeElem(..),
 SolveTree(..),
 DerivClassCond,
 derivClasses,
-destinationGuards,
+destinationGuards', -- FIXME move this to an internal module, exposed for testing only
 )
 where
 
@@ -134,39 +134,38 @@ symbolicExecutionTree = symbolicExecutionTree' ioInteractToImpliticLocation
 symbolicExecutionTree' :: (BM.BoundedMonad m, Foldable m, Ord g, Ord loc, Ord (m (Expr Bool))) => (forall x.(g -> m x)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> SymExecTree m loc g
 symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.ordMap initializeExecNodeElem $ stateConf intrpr
     where
-    initializeExecNodeElem (IntrpState loc vals) =
-        let initialVarModel = indexLeft 0 $ valuationToVarModel vals
-        in SymExecNodeElem loc initialVarModel $ varsToGuard initialVarModel
+    initializeExecNodeElem (IntrpState loc vals) = -- a monadic element within the initial node
+        let initialVarModel = indexLeft 0 $ valuationToVarModel vals -- the initial assignment are at index 0
+        in SymExecNodeElem loc initialVarModel $ varsToGuard initialVarModel -- the guard is that assignment as condition
     --symbExecTree :: Int -> m (SymGuard, loc, VarModel) -> SymbExecTree g
-    symbExecTree pDepth execConf = SymExecTree execConf $ children pDepth execConf
+    symbExecTree pDepth execConf = SymExecTree execConf $ children pDepth execConf -- construct an execution tree from a node by recursively creating children
     --children :: Int -> m (SymGuard, loc, VarModel) -> Map.Map (SymInteract g) (SymbExecTree g)
-    children pDepth pExecConf = Map.fromSet (derivChildren pDepth pExecConf) (alphabet $ syntacticAutomaton intrpr)
+    children pDepth pExecConf = Map.fromSet (derivChildren pDepth pExecConf) (alphabet $ syntacticAutomaton intrpr) -- create a child for every symbolic interaction in the alphabet
     --pathClasses :: Int -> m (SymGuard, loc, VarModel) -> SymInteract g -> Map.Map DerivClassCond (SymExecTree m loc g)
-    derivChildren pDepth pExecConf interaction =
-        let mDestGuards = destinationGuards (tDest interaction) (loc BM.<#> pExecConf)
-        in Map.fromSet (pathStep pDepth pExecConf interaction) (derivClasses mDestGuards)
+    derivChildren pDepth pExecConf interaction = -- within a symbolic interaction child, create a node for every derivative class condition
+        let mDestGuards = destinationGuards intrpr interaction (loc BM.<#> pExecConf) -- get the flat list of syntactic guards from the configuration
+        in Map.fromSet (pathStep pDepth pExecConf interaction) (derivClasses mDestGuards) -- construct derivative classes from the syntactic guards
     --pathStep :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> m (SymGuard, loc, VarModel) -> SymInteract -> DerivClassCond -> SymbExecTree g
-    pathStep pDepth pExecConf interact derivClass = symbExecTree (pDepth + 1) (pExecConf BM.>># pathStep' pDepth derivClass interact)
+    pathStep pDepth pExecConf interact derivClass = symbExecTree (pDepth + 1) (pExecConf BM.>># pathStep' pDepth derivClass interact) -- build subtrees from child nodes, which are constructed by a monadic bind of a single step
         where
         --pathStep' :: (Ord g, Ord loc, BM.OrdFunctor m) => Int -> DerivClassCond -> SymInteract g -> (SymGuard, loc, VarModel) -> m (SymGuard, loc, VarModel)
-        pathStep' pDepth derivClass interact@(SymInteract gate _) (SymExecNodeElem pLoc pVars _) =
-            let mtdestloc = tDest interact pLoc
-                classmtdestloc = mtdestloc BM.>># classDest derivClass gate
-            in BM.ordMap (addToPath pDepth pVars derivClass) classmtdestloc
+        pathStep' pDepth derivClass interact@(SymInteract gate _) (SymExecNodeElem pLoc pVars _) = -- a single tree step from a node element
+            let mtdestloc = tDest intrpr interact pLoc -- the destination from the parent location
+                classmtdestloc = mtdestloc BM.>># classDest derivClass gate -- the destination modulo guards according to the derivative class
+            in BM.ordMap (addToPath pDepth pVars derivClass) classmtdestloc -- build a path condition step, taking the derivative class into account
         --classDest :: DerivClassCond -> gate -> (STStdest, a) -> m (STStdest, a)
-        classDest (poss, negs) gate globaldest@(STSLoc (guard, _), _)
-            | guard `Set.member` poss = BM.ordReturn globaldest
-            | guard `Set.member` negs = interactToImplicitLocation gate
-             -- this would be a bug in derivClasses or pathStep
+        classDest (poss, negs) gate globaldest@(STSLoc (guard, _), _) -- transform the destination to take the derivative class into account
+            | guard `Set.member` poss = BM.ordReturn globaldest -- satisfied guards are kept as they are
+            | guard `Set.member` negs = interactToImplicitLocation gate -- unsatisfied guards are treated as the implicit configuration
+             -- the following would be a bug in derivClasses or pathStep
              | otherwise = error $ "destination guard is not in any derivative class condition\nguard:\n" ++ show guard ++ "\nclass condition:\n" ++ show (Set.toList poss) ++ "\n" ++ show (Set.toList negs)
-        addToPath pDepth pVars (poss, negs) (STSLoc (tguard, tassign), tloc) =
-            let completedAssign = tassign `varUnion` identityVarModel locVarSet
-                indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign
-                pathLoc = tloc
-                -- add the indexedAssign to the path condition. Don't substitute by the previous assignment, although this reduces the number
-                -- of variables (eliminating all state variables of previous steps) this could also cause an exponential blowup
-                pathCondition = varsToGuard indexedAssign .&& indexExpr pDepth tguard
-            in SymExecNodeElem pathLoc indexedAssign pathCondition
+        addToPath pDepth pVars (poss, negs) (STSLoc (tguard, tassign), tloc) = -- build a path condition step based on the destination
+            let completedAssign = tassign `varUnion` identityVarModel locVarSet -- the assignment may be partial, assume the identity mapping for missing variables
+                indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign -- transform the syntactic mapping to a semantic (indexed) mapping
+                -- add the indexedAssign to the path condition. Don't (equivalently) substitute by the previous assignment: although substitution
+                -- would reduce the number of variables (eliminating all state variables of previous steps) this could also cause an exponential blowup
+                pathCondition = varsToGuard indexedAssign .&& indexExpr pDepth tguard -- the contribution to the path condition by this step
+            in SymExecNodeElem tloc indexedAssign pathCondition -- store the locations and assignments for the next node, and the path condition as main result
     -- administration boilerplate: add indices to variables
     indexLeft :: Int -> VarModel -> VarModel
     indexLeft 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
@@ -175,12 +174,14 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
     indexRight 0 = id -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     indexRight n = mapVarExprs $ indexVar n
     --tDest :: SymInteract g -> loc -> m (STStdest (SymGuard, SymAssign), loc)
-    tDest interact loc = Maybe.fromMaybe (throw $ ActionOutsideAlphabet callStack) $ Map.lookup interact (transRel (syntacticAutomaton intrpr) loc)
     locVarSet =
         let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
+
+tDest :: Ord t => AutIntrpr m loc q t tdest act -> t -> loc -> m (tdest, loc)
+tDest intrpr interact loc = Maybe.fromMaybe (throw $ ActionOutsideAlphabet callStack) $ Map.lookup interact (transRel (syntacticAutomaton intrpr) loc)
 
 {-|
     Collect the destination guards reachable via a single interaction from the locations of a configuration.
@@ -188,12 +189,18 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
     The locations are enumerated structurally (via 'Foldable'), rather than by binding the destination lookup through the
     configuration monad, since we don't want top and bottom to annihalate guards of other configurations. 
 -}
-destinationGuards :: Foldable m => (loc -> m (STStdest, loc)) -> m loc -> [SymGuard]
-destinationGuards destForInteraction mLocs =
-    [ tDestGuard dest | pLoc <- toList mLocs, dest <- toList (destForInteraction pLoc) ]
+destinationGuards :: (Ord t, Foldable m) => AutIntrpr m loc q t STStdest act -> t -> m loc -> [SymGuard]
+--destinationGuards :: Foldable m => AutIntrpr t1 loc0 q0 t2 STStdest act0 -> t2 -> t0 loc0 -> [SymGuard]
+destinationGuards intrpr interact mLocs =
+    let destForInteraction = tDest intrpr interact
+    in destinationGuards' destForInteraction mLocs
 
-tDestGuard :: (STStdest, loc) -> SymGuard
-tDestGuard (STSLoc (g, _), _) = g
+destinationGuards' :: Foldable m => (loc -> m (STStdest, loc)) -> m loc -> [SymGuard]
+destinationGuards' destForInteraction mLocs =
+    [ tDestGuard dest | pLoc <- toList mLocs, dest <- toList (destForInteraction pLoc) ]
+    where
+    tDestGuard :: (STStdest, loc) -> SymGuard
+    tDestGuard (STSLoc (g, _), _) = g
 
 derivClasses :: Foldable f => f SymGuard -> Set.Set DerivClassCond
 derivClasses fGuards =

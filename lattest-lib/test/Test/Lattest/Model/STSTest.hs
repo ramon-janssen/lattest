@@ -311,7 +311,7 @@ testDestinationGuards = TestCase $ do
         tOut l = if l == "d1" then destTo "d2" sTrue else forbidden
         -- an INPUT interaction: enabled only at "L1" (guard sTrue); unenabled elsewhere -> unspecified (⊤)
         tIn l = if l == "L1" then destTo "L1'" sTrue else underspecified
-        guardsOf tDest cfg = Set.fromList (Solve.destinationGuards tDest cfg)
+        guardsOf tDest cfg = Set.fromList (Solve.destinationGuards' tDest cfg)
     -- The crash scenario: output enabled at d1, forbidden at the meet-siblings b1/c1. ⊥ must NOT absorb sTrue.
     assertEqual "meet with forbidden (⊥) siblings keeps the enabled guard"
         (Set.fromList [sTrue]) (guardsOf tOut (atom "d1" /\ atom "b1" /\ atom "c1"))
