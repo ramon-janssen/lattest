@@ -233,7 +233,7 @@ prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
         | otherwise = 
             let cond = Solve.traceCondition t
                 showCond = indent ++ "cond " ++ show cond
-            in if cond == sTrue || cond == sFalse -- FIXME this should depend on the goal of the solveTree (specified or allowed values)
+            in if cond == sFalse -- the solve tree has conditions that are monononically decreasing as you go down the tree, so False is a leaf
                 then [showCond]
                 else showCond
                         : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
