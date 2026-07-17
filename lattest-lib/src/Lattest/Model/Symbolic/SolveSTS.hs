@@ -161,12 +161,12 @@ symbolicExecutionTree' interactToImplicitLocation intrpr = symbExecTree 0 $ BM.o
             | guard `Set.member` negs = interactToImplicitLocation gate -- unsatisfied guards are treated as the implicit configuration
              -- the following would be a bug in derivClasses or pathStep
              | otherwise = error $ "destination guard is not in any derivative class condition\nguard:\n" ++ show guard ++ "\nclass condition:\n" ++ show (Set.toList poss) ++ "\n" ++ show (Set.toList negs)
-        addToPath pDepth pVars (poss, negs) (STSLoc (tguard, tassign), tloc) = -- build a path condition step based on the destination
+        addToPath pDepth pVars (poss, negs) (STSLoc (_, tassign), tloc) = -- build a path condition step based on the destination
             let completedAssign = tassign `varUnion` identityVarModel locVarSet -- the assignment may be partial, assume the identity mapping for missing variables
                 indexedAssign = indexLeft (pDepth + 1) $ indexRight pDepth completedAssign -- transform the syntactic mapping to a semantic (indexed) mapping
                 -- add the indexedAssign to the path condition. Don't (equivalently) substitute by the previous assignment: although substitution
                 -- would reduce the number of variables (eliminating all state variables of previous steps) this could also cause an exponential blowup
-                pathCondition = varsToGuard indexedAssign .&& indexExpr pDepth tguard -- the contribution to the path condition by this step
+                pathCondition = varsToGuard indexedAssign  -- the contribution to the path condition by this step
             in SymExecNodeElem tloc indexedAssign pathCondition -- store the locations and assignments for the next node, and the path condition as main result
     -- administration boilerplate: add indices to variables
     indexLeft :: Int -> VarModel -> VarModel

@@ -15,7 +15,7 @@ node SymExecNodeElem {loc = "a0", symAssign = {x:=0}, pathCondition = (x) = (0)}
     !tea [+{True} -{(p) = (2)}]:
         node ⊥
     !tea [+{True, (p) = (2)} -{}]:
-        node SymExecNodeElem {loc = "a2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = ((p_1) = (2))∧((x_2) = ((-p_1+x_1)))} ∧ SymExecNodeElem {loc = "d2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))}
+        node SymExecNodeElem {loc = "a2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))} ∧ SymExecNodeElem {loc = "d2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))}
         ?a [+{} -{}]:
             node ⊤
         ?b [+{} -{}]:
@@ -53,7 +53,7 @@ node SymExecNodeElem {loc = "a0", symAssign = {x:=0}, pathCondition = (x) = (0)}
     !esp [+{milk, True} -{(p) = (1)}]:
         node ⊥
     !esp [+{milk, True, (p) = (1)} -{}]:
-        node SymExecNodeElem {loc = "b2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = ((p_1) = (1))∧((x_2) = ((-p_1+x_1)))} ∧ SymExecNodeElem {loc = "c2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (milk_1)∧((x_2) = ((-p_1+x_1)))} ∧ SymExecNodeElem {loc = "d2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))}
+        node SymExecNodeElem {loc = "b2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))} ∧ SymExecNodeElem {loc = "c2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))} ∧ SymExecNodeElem {loc = "d2", symAssign = {x_2:=(-p_1+x_1)}, pathCondition = (x_2) = ((-p_1+x_1))}
         ?a [+{} -{}]:
             node ⊤
         ?b [+{} -{}]:
