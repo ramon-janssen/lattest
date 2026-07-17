@@ -26,7 +26,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, (.&&), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
+import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -105,7 +105,7 @@ interactsToGuard' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord
 interactsToGuard' tree interacts = interactsToGuard'' 0 interacts tree
     where
     interactsToGuard'' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => Int -> [IOSymInteract i o] -> SymExecTree m loc (IOAct i o) -> SymGuard
-    interactsToGuard'' n [] tree = nodeCondition tree
+    interactsToGuard'' n [] tree = sConst $ not . BM.isUnderspecified $ node tree -- This should be `nodeCondition tree` if you want the resulting expression to also capture the assignments after the last step
     interactsToGuard'' n (x:xs) tree =
         let derivBranches = Map.assocs $ pathChildren tree Map.! x
             derivBranchConditions = derivBranchAsCond n xs <$> derivBranches
