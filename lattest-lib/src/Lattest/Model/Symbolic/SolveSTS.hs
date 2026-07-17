@@ -107,9 +107,11 @@ interactsToGuard' tree interacts = interactsToGuard'' 0 interacts tree
     interactsToGuard'' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => Int -> [IOSymInteract i o] -> SymExecTree m loc (IOAct i o) -> SymGuard
     interactsToGuard'' n [] tree = nodeCondition tree
     interactsToGuard'' n (x:xs) tree =
-        let derivBranches = Map.assocs $ (pathChildren tree) Map.! x
-            derivBranchConditions = uncurry (.&&) <$> first (classCondToGuard n) <$> second (interactsToGuard'' (n+1) xs) <$> derivBranches
+        let derivBranches = Map.assocs $ pathChildren tree Map.! x
+            derivBranchConditions = derivBranchAsCond n xs <$> derivBranches
         in nodeCondition tree .&& sOr (Set.fromList derivBranchConditions)
+    derivBranchAsCond :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => Int -> [IOSymInteract i o] -> (DerivClassCond, SymExecTree m loc (IOAct i o)) -> Expr Bool
+    derivBranchAsCond n xs (classCond, children) = classCondToGuard n classCond .&& interactsToGuard'' (n+1) xs children
     nodeCondition :: (BM.BoundedMonad m, BooleanConfiguration m) => SymExecTree m loc g -> SymGuard
     nodeCondition = asDualExpr . BM.ordMap pathCondition . node
     classCondToGuard :: Int -> DerivClassCond -> SymGuard
