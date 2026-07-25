@@ -14,8 +14,8 @@ module Test.Lattest.Model.STSTest (
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
-    testDerivClasses,
-    testDestinationGuards,
+--    testDerivClasses,
+--    testDestinationGuards,
     testConjunctionOfDifferentValuations
     )
 where
@@ -211,7 +211,7 @@ showGate :: SymInteract (IOAct String String) -> String
 showGate (SymInteract (In s) _) = "?" ++ s
 showGate (SymInteract (Out s) _) = "!" ++ s
 
-prettyExecTree :: (BoundedConfiguration m, Foldable m, Show (m (Solve.SymExecNodeElem q))) => Int -> Solve.SymExecTree m q (IOAct String String) -> String
+{-prettyExecTree :: (BoundedConfiguration m, Foldable m, Show (m (Solve.SymExecNodeElem q))) => Int -> Solve.SymExecTree m q (IOAct String String) -> String
 prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
     where
     go d indent t
@@ -225,7 +225,7 @@ prettyExecTree maxDepth t0 = unlines (go 0 "" t0)
                   (Map.toList classMap)
     showSet s = "{" ++ intercalate ", " (map show (Set.toList s)) ++ "}"
     showClass (poss, negs) = "[+" ++ showSet poss ++ " -" ++ showSet negs ++ "]"
-
+-}
 prettySolveTree :: Int -> Solve.SolveTree (IOAct String String) -> String
 prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
     where
@@ -234,7 +234,7 @@ prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
         | otherwise = 
             let cond = Solve.traceCondition t
                 showCond = indent ++ "cond " ++ show cond
-            in if cond == sFalse -- the solve tree has conditions that are monononically decreasing as you go down the tree, so False is a leaf
+            in if cond == sFalse -- the solve tree has conditions that are monononically decreasing as you go down the tree, so False is a sink
                 then [showCond]
                 else showCond
                         : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
@@ -284,6 +284,7 @@ testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMac
 -- Unit tests for `derivClasses` in isolation. `derivClasses` partitions the space of a set of destination guards
 -- into "derivative classes": for every subset of the guards it forms a cell (poss, negs) meaning "all guards in
 -- poss hold and all guards in negs fail", then drops the cells that are *syntactically* unsatisfiable.
+{-
 testDerivClasses :: Test
 testDerivClasses = TestCase $ do
     let t = sTrue :: SymGuard
@@ -327,7 +328,7 @@ testDestinationGuards = TestCase $ do
         tTwo l = case l of "L1" -> destTo "L1'" sTrue; "L2" -> destTo "L2'" oneEqTwo; _ -> forbidden
     assertEqual "distinct enabled guards are all collected"
         (Set.fromList [sTrue, oneEqTwo]) (guardsOf tTwo (atom "L1" /\ atom "L2"))
-
+-}
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
 
@@ -350,15 +351,16 @@ goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
 
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, Show (m (Solve.SymExecNodeElem q))) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
 testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
-    [ goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
-    , goldenCheck (testName ++ ":toSpecifiedTree") (goldenDir </> (testName ++ ".specifiedtree.txt")) actualSpecifiedTree
+    [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
+    , -}
+      goldenCheck (testName ++ ":toSpecifiedTree") (goldenDir </> (testName ++ ".specifiedtree.txt")) actualSpecifiedTree
     , goldenCheck (testName ++ ":toAllowedTree") (goldenDir </> (testName ++ ".allowedtree.txt")) actualAllowedTree
     ]
     where
-    tree = Solve.symbolicExecutionTree stsIntrpr
-    actualExecTree = "\n" ++ prettyExecTree depth tree
+    --tree = Solve.symbolicExecutionTree stsIntrpr
+    --actualExecTree = "\n" ++ prettyExecTree depth tree
     actualSpecifiedTree = "\n" ++ prettySolveTree depth (Solve.toSpecifiedTree stsIntrpr)
     actualAllowedTree = "\n" ++ prettySolveTree depth (Solve.toAllowedTree stsIntrpr)
 
