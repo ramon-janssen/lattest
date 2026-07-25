@@ -15,7 +15,8 @@ module Test.Lattest.Model.STSTest (
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
     testDerivClasses,
-    testDestinationGuards
+    testDestinationGuards,
+    testConjunctionOfDifferentValuations
     )
 where
 
@@ -808,3 +809,25 @@ testSTSPathCondition = TestCase $ do
     assertNotTautology  "[water, ok, water, ok]" [water, ok, water, ok]
     assertSat           "[water, ok, water, ok, coffee]" [water, ok, water, ok, coffee]
     assertNotTautology  "[water, ok, water, ok, coffee]" [water, ok, water, ok, coffee]
+
+stsConjOfDifferentVals :: IOSTS FreeLatticeCNF Integer String String
+stsConjOfDifferentVals =
+    let switches loc = case loc of
+            0 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment [xvar =: (1 :: Expr Integer)]), 1) /\ ordReturn (stsTLoc sTrue (assignment [xvar =: (2 :: Expr Integer)]), 2))]
+            1 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 1))]
+            2 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 2))]
+            _ -> Map.empty
+    in automaton (ordReturn 0 :: FreeLatticeCNF Integer) (Set.fromList [outGate]) switches
+
+getSTSIntrpState' :: Integer ->  Integer -> FreeLatticeCNF (IntrpState Integer)
+getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+
+stsConjOfDifferentValsIntrpr :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+stsConjOfDifferentValsIntrpr = interpretSTS treeSTS branchInitAssign
+
+testConjunctionOfDifferentValuations :: Test
+testConjunctionOfDifferentValuations = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsConjOfDifferentValsIntrpr)
+    let intrp2 = after stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0])
+    assertEqual "after x: " forbidden (stateConf intrp2)
+
