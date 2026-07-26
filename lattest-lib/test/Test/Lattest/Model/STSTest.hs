@@ -269,7 +269,7 @@ composedCoffeeMachine =
             "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== 1) $ assignment [xvar =: x .- p], "b2"))]
             "c0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "c1"))]
             "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ assignment [xvar =: x .- p], "c2"))]
-            "d0" -> Map.fromList $ [(water, atom (stsTLoc sTrue $ assignment [xvar =: x .+ p], "d0"))] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            "d0" -> Map.fromList $ [(water, atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], "d0"))] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
             "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
             -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
