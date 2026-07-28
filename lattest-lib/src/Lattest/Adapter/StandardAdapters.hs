@@ -74,7 +74,7 @@ import Data.Time.Clock(getCurrentTime,addUTCTime,diffUTCTime,NominalDiffTime,sec
 
 import Debug.Trace(trace) -- FIXME find a better alternative
 
-import GHC.Conc(forkIO, newTVarIO, TVar, retry, atomically, writeTVar, readTVar, STM, orElse)
+import GHC.Conc(forkIO, newTVarIO, TVar, retry, atomically, writeTVar, readTVar, STM, orElse, killThread)
 
 import Network.Socket(HostName, PortNumber)
 import Network.Utils (niceSocketsDo, connectTCP)
@@ -566,11 +566,12 @@ connectSocketAdapterWith :: SocketSettings act i -> IO (Adapter ByteString ByteS
 connectSocketAdapterWith settings = niceSocketsDo $ do
     socket <- connectTCP (hostName settings) (portNumber settings)
     (actionBytes, inputCommandBytes) <- socketToStreams socket
-    forkedActionBytes <- fromInputStreamBuffered actionBytes
+    (threadid, forkedActionBytes) <- fromInputStreamBuffered actionBytes
     return $ Adapter {
         inputCommandsToSut = inputCommandBytes,
         actionsFromSut = forkedActionBytes,
-        close = Socket.gracefulClose socket 1000
+        -- when the adapter is closed, we first kill the thread, to prevent it from throwing errors when we kill its socket
+        close = killThread threadid >> Socket.gracefulClose socket 1000
     }
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs in JSON format.
