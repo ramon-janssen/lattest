@@ -190,6 +190,10 @@ isProperSupersetOfAny sets a = any (isProperSupersetOf a) (Set.toList sets)
 instance OM.OrdFunctor FreeLattice where
     ordMap f (FreeLattice x) = FreeLattice $ Set.map (Set.map f) x
 
+instance OM.OrdTraversable FreeLattice where
+    ordTraverse f (FreeLattice x) = FreeLattice <$> ordTraverse (ordTraverse f) x
+    ordSequenceA (FreeLattice x) = FreeLattice <$> ordTraverse ordSequenceA x
+
 instance Ord a => JoinSemiLattice (FreeLattice a) where
     (FreeLattice x) \/ (FreeLattice y) = FreeLattice $ Set.map Set.unions $ nAryCartesianProduct $ Set.fromList [x,y]
 

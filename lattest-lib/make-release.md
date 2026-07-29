@@ -1,4 +1,8 @@
-- Check the changelog, increment version number, check version bounds on dependencies, etc.
+# Check:
+- changelog
+- increment version number
+- version bounds on dependencies
+- run the examples
 
 # HACKAGE:
 - Make an updated lattest-lib.cabal (e.g. by invoking stack)
