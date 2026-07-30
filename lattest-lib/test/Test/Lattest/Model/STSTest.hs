@@ -250,17 +250,17 @@ getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ fromConstantsMap $
 
 testSTSHappyFlowFloat :: Test
 testSTSHappyFlowFloat = TestCase $ do
-    -- assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrpr)
+    assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrprFloat)
     let intrp2 = after stsExampleIntrprFloat (GateValue (In "water") [Cfloat (7.5 :: Double)])
     assertEqual "after water 7.5: " (getSTSIntrpStateFloat 1 (7.5 :: Double)) (stateConf intrp2)
-    -- let intrp3 = after intrp2 (GateValue (Out "ok") [Cfloat 7.5])
-    -- assertEqual "after ok 7.5: " (getSTSIntrpStateFloat 0 (7.5 :: Double)) (stateConf intrp3)
-    -- let intrp4 = after intrp3 (GateValue (In "water") [Cfloat 8.5])
-    -- assertEqual "after water 8.5: " (getSTSIntrpStateFloat 1 (16.0 :: Double)) (stateConf intrp4)
-    -- let intrp5 = after intrp4 (GateValue (Out "ok") [Cfloat 16.0])
-    -- assertEqual "after ok 16.0: " (getSTSIntrpStateFloat 0 (16.0 :: Double)) (stateConf intrp5)
-    -- let intrp6 = after intrp5 (GateValue (Out "coffee") [])
-    -- assertEqual "after coffee: " (getSTSIntrpStateFloat 2 (16.0 :: Double)) (stateConf intrp6)
+    let intrp3 = after intrp2 (GateValue (Out "ok") [Cfloat 7.5])
+    assertEqual "after ok 7.5: " (getSTSIntrpStateFloat 0 (7.5 :: Double)) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (In "water") [Cfloat 8.5])
+    assertEqual "after water 8.5: " (getSTSIntrpStateFloat 1 (16.0 :: Double)) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (Out "ok") [Cfloat 16.0])
+    assertEqual "after ok 16.0: " (getSTSIntrpStateFloat 0 (16.0 :: Double)) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateFloat 2 (16.0 :: Double)) (stateConf intrp6)
     return()
 
 
