@@ -2,9 +2,6 @@ module Lib
     ( run
     ) where
 
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
-import qualified Data.Maybe as Maybe
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.Alphabet (IOSuspGateValue, GateValue)
 import           Lattest.Model.StandardAutomata
@@ -22,11 +19,7 @@ run = do
 
     let model = interpretSTSQuiescent sts initVal
 
-    let cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = Maybe.fromJust (Config.getProc cfg)
     putStrLn "starting SMT solver..."
-    smtRef <- SMT.createSMTRef smtProc smtLog
 
     putStrLn "connecting to SUT..."
     let quiescenceMillis = 300
@@ -43,7 +36,7 @@ run = do
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
         testSelector =
-            randomDataOrWaitForOutputTestSelectorFromSeed smtRef randomSeed probabilityOfWaitForOutput
+            randomDataOrWaitForOutputTestSelectorFromSeed randomSeed probabilityOfWaitForOutput
             `untilCondition` stopAfterSteps nrSteps
             `observingOnly` traceObserver
             `andObserving` stateObserver
