@@ -1,5 +1,5 @@
 name:                lattest-lib
-version:             0.1.0.0
+version:             0.1.1
 synopsis: Model-based testing framework
 description: |
   Welcome to Lattest, the latest attested lattice testing tech!

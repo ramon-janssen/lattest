@@ -8,6 +8,9 @@ and this project adheres to the
 
 ## Unreleased
 
+## 0.1.1 - 2026-07-15
+Bugfix patch: adds instance OrdTraversable FreeLattice, and properly kills the reading thread before its socket is closed.
+
 ## 0.1.0.0 - 2026-07-14
 First release
 
