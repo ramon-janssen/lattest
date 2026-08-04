@@ -250,7 +250,7 @@ milkvar :: Variable
 milkvar = (Variable "milk" BoolType)
 milk = sVar milkvar
 a = SymInteract (In "a") []
-b = SymInteract (In "b") []
+b = SymInteract (In "b") [pvar]
 tea = SymInteract (Out "tea") [pvar]
 espresso = SymInteract (Out "esp") [pvar, milkvar]
 take = SymInteract (In "take") []
@@ -264,12 +264,12 @@ composedCoffeeMachine =
         asTransition = \q -> (stsTLoc sTrue noAssignment, q)
         switches = \q -> case q of
             "a0" -> Map.fromList [(a, atom (stsTLoc sTrue noAssignment, "a1"))]
-            "a1" -> Map.fromList [(tea, atom (stsTLoc (p .== 2) $ assignment [xvar =: x .- p], "a2"))]
-            "b0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "b1"))]
-            "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== 1) $ assignment [xvar =: x .- p], "b2"))]
+            "a1" -> Map.fromList [(tea, atom (stsTLoc (p .== 2) $ noAssignment, "a2"))]
+            "b0" -> Map.fromList [(b, atom (stsTLoc sTrue $ assignment [xvar =: p], "b1"))]
+            "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== x) $ noAssignment, "b2"))]
             "c0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "c1"))]
-            "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ assignment [xvar =: x .- p], "c2"))]
-            "d0" -> Map.fromList $ [(water, atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], "d0"))] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ noAssignment, "c2"))]
+            "d0" -> Map.fromList $ [(water,      foldr (/\) underspecified [atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])      ] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
             "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
             -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
