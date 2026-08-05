@@ -9,27 +9,33 @@ import           Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT as SMT
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import qualified Data.Dependent.Map as DMap
 import qualified Data.Maybe as Maybe
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.StandardAutomata
 import           Lattest.Exec.Testing(TestController(..), Verdict(..), runSMTTester, Verdict(Pass))
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
+import Lattest.SMT (Some(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (List(..))
 
-pvar = (Variable "p" FloatType)
-xvar = (Variable "x" FloatType)
+pvar = Variable "p" IntType
+-- xvar = Variable "x" IntType
+xsvar = Variable "xs" (ListType IntType)
 
-stsExample :: IOSTS Det Double String String
+
+stsExample :: IOSTS Det Int String String
 stsExample =
     let p = sVar pvar
-        x = sVar xvar
-        water = Alph.SymInteract (In "water") [pvar]
-        ok = Alph.SymInteract (Out "ok") [pvar]
+        -- x = sVar xvar
+        xs = sVar xsvar
+        water = Alph.SymInteract (In "water") [Some pvar]
+        ok = Alph.SymInteract (Out "ok") [Some pvar]
         coffee = Alph.SymInteract (Out "coffee") []
-        waterGuard = 1 .<= p .&& p .<= 10
-        waterAssign = assignment [xvar =: x .+ p]
-        okGuard = x .== p
-        coffeeGuard = x .>= (15 :: Expr Double)
+        waterGuard = p .== 1
+        waterAssign = assignment [xsvar =: p `sCons` xs]
+        okGuard = sLength xs .== p
+        coffeeGuard = sLength xs .>= 15
         initConf = return 0
         switches = \q -> case q of
             0 -> Map.fromList [(water, pure (Aut.stsTLoc waterGuard waterAssign, 1)),
@@ -38,7 +44,7 @@ stsExample =
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 
-stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+stsExampleInitAssign = Valuation $ DMap.singleton xsvar $ Val $ List []
 
 model = interpretSTSQuiescent stsExample stsExampleInitAssign
 

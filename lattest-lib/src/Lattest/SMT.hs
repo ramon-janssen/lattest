@@ -16,7 +16,8 @@ module Lattest.SMT (
   getSolvable,
   pop,
   push,
-  runSMT
+  runSMT,
+  Some(..)
 ) where
 
 import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
@@ -107,7 +108,8 @@ exprToSymbolic v = case v of
   SumFloat s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
   Product      p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   ProductFloat p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
-  Length s -> SBV.length <$> go s
+  StrLength s -> SBV.length <$> go s
+  Length t x -> withExprConstraints t $ SBV.length <$> go x
   GezInt   i -> (SBV..>= literal 0) <$> go i
   GezFloat f -> (SBV..>= literal 0) <$> go f
   Not b -> SBV.sNot <$> go b

@@ -48,7 +48,7 @@ instance ConcreteGenExpr Integer where
         CM.liftM2 Modulo subexpr2 subexpr2,
         CM.liftM Sum (FM.fromListT <$> genList subexpr2),
         CM.liftM Product (FM.fromListT <$> genList subexprSqrt),
-        CM.liftM Length subexpr
+        CM.liftM StrLength subexpr
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
@@ -178,7 +178,7 @@ instance ConcreteEval Integer where
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
     concreteEval' (Modulo e1 e2) = concreteBinOpMaybe (safeZero mod) e1 e2
-    concreteEval' (Length e) = concreteUnaryOp (Prelude.toInteger . length) e
+    concreteEval' (StrLength e) = concreteUnaryOp (Prelude.toInteger . length) e
     concreteEval' (Sum es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* i) <$> x)) (Just 0) es
     concreteEval' (Product es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0) es
 

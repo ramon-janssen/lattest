@@ -499,7 +499,7 @@ data ExprView t where
     SumFloat :: FreeSum (ExprView Double) -> ExprView Double
     Product :: FreeProduct (ExprView Integer) -> ExprView Integer
     ProductFloat :: FreeProduct (ExprView Double) -> ExprView Double
-    Length :: ExprView String -> ExprView Integer
+    StrLength :: ExprView String -> ExprView Integer
     GezInt :: ExprView Integer -> ExprView Bool
     GezFloat :: ExprView Double -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
@@ -507,6 +507,7 @@ data ExprView t where
     Concat :: [ExprView String] -> ExprView String
     Cons :: ExprView x -> ExprView (List x) -> ExprView (List x)
     Append :: ExprView (List a) -> ExprView (List a) -> ExprView (List a)
+    Length :: Type a -> ExprView (List a) -> ExprView Integer
     LElem :: Type a -> ExprView a -> ExprView (List a) -> ExprView Bool
     Take :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
     Drop :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
@@ -543,7 +544,9 @@ instance Eq (ExprView t) where
   SumFloat x == SumFloat y = x == y
   Product x == Product y = x == y
   ProductFloat x == ProductFloat y = x == y
-  Length x == Length y = x == y
+  StrLength x == StrLength y = x == y
+  Length a x == Length b y
+    | Just Refl <- a `geq` b = x == y
   GezInt x == GezInt y = x == y
   GezFloat x == GezFloat y = x == y
   Not x == Not y = x == y
@@ -584,8 +587,12 @@ instance Ord (ExprView t) where
         compare a b
       (ProductFloat a, ProductFloat b) ->
         compare a b
-      (Length a, Length b) ->
+      (StrLength a, StrLength b) ->
         compare a b
+      (Length a x, Length b y) -> case gcompare a b of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
       (GezInt a, GezInt b) ->
         compare a b
       (GezFloat a, GezFloat b) ->
@@ -636,6 +643,7 @@ instance Ord (ExprView t) where
         SumFloat{} -> 19
         ProductFloat{} -> 20
         GezFloat{} -> 21
+        StrLength{} -> 22
 
 
 instance Show (ExprView t) where
@@ -661,7 +669,8 @@ instance Show (ExprView t) where
         showSumTerm n t = show n ++ "⋅" ++ t
     show (ProductFloat es) | es == mempty = "∏∅"
     show (ProductFloat es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es
-    show (Length e) = "length(" ++ show e ++ ")"
+    show (StrLength e) = "length(" ++ show e ++ ")"
+    show (Length _ e) = "length(" ++ show e ++ ")"
     show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
     show (GezFloat e) = "(" ++ show e ++ ") ≥ 0"
@@ -689,7 +698,8 @@ instance Has ExprType ExprView where
     SumFloat _ -> k
     Product _ -> k
     ProductFloat _ -> k
-    Length _ -> k
+    StrLength _ -> k
+    Length t _ -> has @ExprType t k
     GezInt _ -> k
     GezFloat _ -> k
     Not _ -> k
@@ -750,8 +760,10 @@ reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
 reduce (DivideFloat (reduce -> e1) (reduce -> e2@(Const 0))) = DivideFloat e1 e2 -- leave divisions by zero as expressions
 reduce (DivideFloat (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x / y
 reduce (DivideFloat (reduce -> e1) (reduce -> e2)) = DivideFloat e1 e2
-reduce (Length (reduce -> (Const s))) = Const $ fromIntegral $ length s
-reduce (Length (reduce -> e)) = Length e
+reduce (StrLength (reduce -> (Const s))) = Const $ fromIntegral $ length s
+reduce (StrLength (reduce -> e)) = StrLength e
+reduce (Length _ (reduce -> Const (List xs))) = Const $ fromIntegral $ length xs
+reduce (Length t (reduce -> e)) = Length t e
 reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 reduce (Equal t (reduce -> e1) (reduce -> e2)) = Equal t e1 e2
 reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
@@ -803,7 +815,8 @@ freeVars' (Sum (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (SumFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (ProductFloat (distinctTermsT -> es)) = concatMap freeVars' es
-freeVars' (Length e) = freeVars' e
+freeVars' (Length _ e) = freeVars' e
+freeVars' (StrLength e) = freeVars' e
 freeVars' (Equal _ e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
 freeVars' (GezFloat e) = freeVars' e

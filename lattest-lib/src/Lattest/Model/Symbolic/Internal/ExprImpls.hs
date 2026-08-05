@@ -48,9 +48,17 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sIsNonNegative
   -- ** String Operators to create Value Expressions
   -- *** Length operator
-, sLength
+, sStrLength
   -- *** Concat operator
 , sConcat
+  -- ** List operations
+, sLength
+, sCons
+, sNil
+, sAppend
+, sElem
+, sTake
+, sDrop
 
 -- * Substitution of var by value
 , VarModel(..)
@@ -416,7 +424,7 @@ infixl 7 .%
 sIsNonNegativeInt :: Expr Integer -> Expr Bool
 -- Simplification Values
 sIsNonNegativeInt (view -> Const v) = sConst (0 <= v)
-sIsNonNegativeInt (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
+sIsNonNegativeInt (view -> StrLength _)   = sConst True        -- length of string is always Greater or equal to zero
 sIsNonNegativeInt (view -> ve)         = Expr (GezInt ve)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided floating-point value expression.
@@ -447,9 +455,9 @@ instance ExprNum Double where
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
-sLength :: Expr String -> Expr Integer
-sLength (view -> Const s) = sConst (Prelude.toInteger (length s))
-sLength (view -> v)             = Expr (Length v)
+sStrLength :: Expr String -> Expr Integer
+sStrLength (view -> Const s) = sConst (Prelude.toInteger (length s))
+sStrLength (view -> v)             = Expr (StrLength v)
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
@@ -467,14 +475,20 @@ sConcat l =
 --    "a" ++ "b" == "ab"    - concat consecutive string values
 --   remove all nested sConcat, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
+sLength :: Expr (List x) -> Expr Integer
+sLength (view -> x) = Expr $ Length (case has @ExprType x $ typeOf' x of ListType t -> t) x
+
 sCons :: Expr x -> Expr (List x) -> Expr (List x)
 sCons (view -> x) (view -> xs) = Expr $ Cons x xs
+
+sNil :: ExprConstraints x => Expr (List x)
+sNil = Expr $ Const $ List []
 
 sAppend :: Expr (List x) -> Expr (List x) -> Expr (List x)
 sAppend (view -> xs) (view -> ys) = Expr $ Append xs ys
 
-sLElem :: ExprType x => Expr x -> Expr (List x) -> Expr Bool
-sLElem (view -> x) (view -> xs) = Expr $ LElem (typeOf' x) x xs
+sElem :: Expr x -> Expr (List x) -> Expr Bool
+sElem (view -> x) (view -> xs) = Expr $ LElem (has @ExprType x $ typeOf' x) x xs
 
 sTake :: Expr Integer -> Expr (List x) -> Expr (List x)
 sTake (view -> i) (view -> xs) = Expr $ Take i xs
@@ -610,7 +624,8 @@ subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subs
 subst' ve (SumFloat s)            = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (ProductFloat p)        = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
-subst' ve (Length vexp)           = sLength (subst' ve vexp)
+subst' ve (StrLength vexp)           = sStrLength (subst' ve vexp)
+subst' ve (Length _ vexp) = sLength $ subst' ve vexp
 subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
 subst' ve (Equal _ vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (GezFloat v)              = sIsNonNegative (subst' ve v)
@@ -619,7 +634,7 @@ subst' ve (Not vexp)                = sNot (subst' ve vexp)
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
 subst' ve (Cons x xs) = has @ExprType x $ sCons (subst' ve x) (subst' ve xs)
 subst' ve (Append xs ys) = sAppend (subst' ve xs) (subst' ve ys)
-subst' ve (LElem t x xs) = has @ExprType t $ sLElem (subst' ve x) (subst' ve xs)
+subst' ve (LElem t x xs) = has @ExprType t $ sElem (subst' ve x) (subst' ve xs)
 subst' ve (Take x xs) = sTake (subst' ve x) (subst' ve xs)
 subst' ve (Drop x xs) = sDrop (subst' ve x) (subst' ve xs)
 
