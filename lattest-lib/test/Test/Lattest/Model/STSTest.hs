@@ -13,7 +13,8 @@ module Test.Lattest.Model.STSTest (
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
-    testComposedSeTreeStructure
+    testComposedSeTreeStructure,
+    testConcreteTraceSpecifiedAllowedCorrespondence
     )
 where
 
@@ -34,8 +35,8 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard)
-import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice(..), FreeLatticeCNF(..), atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
+import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice(..), FreeLatticeCNF(..), atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified,isSpecified,isAllowed,specifiedness,Specifiedness(..), ordReturn, (<#>), BoundedConfiguration)
 import Algebra.Lattice.Free(Free(..))
 import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
@@ -256,6 +257,76 @@ testComposedSeTreeStructure = TestCase $ goldenAssert
         goldenCheck "composed:interactsToSeTree [water,b,espresso]" (goldenDir </> "composed.setree.water.b.espresso.txt")
         ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water, b, espresso]))
     ]
+
+-- Concrete-trace correspondence between the semantic model and the symbolic guards.
+--
+-- Uses the same model as `testComposedCoffeeTreeStructure` (the composed coffee machine) and the same traces as
+-- `testComposedSeTreeStructure` (?water, ?water?b, ?water?b?esp and a couple of variations), but with concrete
+-- parameter values filled in so the traces become concrete. For each concrete trace two independently-computed
+-- verdicts are compared:
+--
+--   (1) SEMANTIC: run the *concrete* trace through the model with `after` (as in `testSTSHappyFlow`) and inspect the
+--       resulting state configuration -- is it forbidden, underspecified, or neither (indefinite)?
+--   (2) SYMBOLIC: substitute the concrete parameter values (indexed per trace position, matching the `_n` naming of
+--       the symbolic guards) into the specified guard (`interactsToSpecifiedCondition`, asDualExpr) and the allowed
+--       guard (`interactsToAllowedCondition`, asExpr), and evaluate each to a concrete True/False.
+--
+-- The two must correspond: `asDualExpr`/specified means "not underspecified" and `asExpr`/allowed means "not
+-- forbidden", so the specified guard evaluates to True iff the concrete configuration is specified, and the allowed
+-- guard to True iff the concrete configuration is allowed.
+
+-- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
+type ConcreteStep = (IOSymInteract String String, [Constant])
+
+-- | The concrete gate value of a step, for feeding to `after`.
+stepGateValue :: ConcreteStep -> GateValue (IOAct String String)
+stepGateValue (SymInteract g _, vals) = GateValue g vals
+
+-- | Build the valuation that fills the symbolic guards: the parameter `v` of the interaction at trace position `n`
+-- appears in the guards as `v_n` (matching `indexVar` in SolveSTS.hs), and is bound here to its concrete value.
+traceValuation :: [ConcreteStep] -> Valuation
+traceValuation steps = fromConstantsMap $ Map.unions $ zipWith stepConstMap [0..] steps
+    where
+    stepConstMap n (SymInteract _ vars, vals) = Map.fromList $ zipWith (\var val -> (indexVar n var, val)) vars vals
+    indexVar n (Variable name t) = Variable (name ++ "_" ++ show n) t
+
+testConcreteTraceSpecifiedAllowedCorrespondence :: Test
+testConcreteTraceSpecifiedAllowedCorrespondence = TestList
+    [ correspondenceCase "[water 3]"                         -- neither: input, guard x<10 holds (x=0)
+        [(water, [Cint 3])] Indefinite
+    , correspondenceCase "[water 3, water 5]"                -- neither: second water still has x=3<10
+        [(water, [Cint 3]), (water, [Cint 5])] Indefinite
+    , correspondenceCase "[water 12, water 5]"               -- underspecified: second water blocked, x=12>=10
+        [(water, [Cint 12]), (water, [Cint 5])] Underspecified
+    , correspondenceCase "[water 3, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
+        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
+    , correspondenceCase "[water 3, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
+        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
+    , correspondenceCase "[water 3, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
+        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
+    ]
+    where
+    correspondenceCase label steps expectedSpecifiedness = TestCase $ do
+        let symTrace = fst <$> steps
+            gateValues = stepGateValue <$> steps
+            valuation = traceValuation steps
+            -- (1) semantic verdict: the state configuration after running the concrete trace
+            finalConf = stateConf $ foldl after composedCoffeeMachineIntrpr gateValues
+            -- (2) symbolic verdict: fill the concrete values into the guards and evaluate to a constant
+            specifiedGuard = interactsToSpecifiedCondition composedCoffeeMachineIntrpr symTrace
+            allowedGuard = interactsToAllowedCondition composedCoffeeMachineIntrpr symTrace
+        -- sanity check: the chosen values really drive the trace to the specifiedness we expect
+        assertEqual (label ++ ": concrete specifiedness") expectedSpecifiedness (specifiedness finalConf)
+        specifiedVal <- assertEvaluatesToBool (label ++ ": specified guard") (substConst valuation specifiedGuard)
+        allowedVal <- assertEvaluatesToBool (label ++ ": allowed guard") (substConst valuation allowedGuard)
+        -- the correspondence: specified <-> not underspecified, allowed <-> not forbidden
+        assertEqual (label ++ ": specified guard vs. isSpecified") (isSpecified finalConf) specifiedVal
+        assertEqual (label ++ ": allowed guard vs. isAllowed") (isAllowed finalConf) allowedVal
+    -- a fully-substituted guard must reduce to a constant boolean; anything else means a variable leaked through
+    assertEvaluatesToBool :: String -> Expr Bool -> IO Bool
+    assertEvaluatesToBool label g = case eval g of
+        Right b -> return b
+        Left err -> assertFailure (label ++ " did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")")
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
