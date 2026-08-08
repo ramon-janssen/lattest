@@ -81,6 +81,7 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , insertIntoValuation
 , substConst
 , subst
+, substVarModel
 , assignedExpr
 , assignment
 , noAssignment
@@ -671,6 +672,16 @@ instance Show VarModel where
 
 substConst :: Assignable t => Valuation -> Expr t -> Expr t
 substConst valuation e = subst (valuationToVarModel valuation) e
+
+-- | Apply a substitution to the right-hand-side expressions of a 'VarModel', leaving its keys untouched.
+-- Composing substitutions this way lets an assignment be resolved against an accumulated substitution:
+-- @substVarModel sigma assign@ rewrites every value-expression in @assign@ according to @sigma@.
+substVarModel :: VarModel -> VarModel -> VarModel
+substVarModel sigma (VarModel ints bools strings) = VarModel {
+    intVars = Map.map (subst sigma) ints,
+    boolVars = Map.map (subst sigma) bools,
+    stringVars = Map.map (subst sigma) strings
+    }
 
 -- | Substitute variables by value expressions in a value expression.
 --

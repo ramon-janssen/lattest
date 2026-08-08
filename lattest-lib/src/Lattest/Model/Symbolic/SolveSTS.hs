@@ -30,7 +30,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
+import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -91,12 +91,20 @@ interactsToAllowedCondition intrpr interacts = interactsToGuard asDualExpr intrp
 
 
 
-data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord)
+-- | The symbolic state a step is expanded from. It carries, besides the location:
+--
+--   * the /raw/ assignment of the transition that led into this state (its right-hand sides still mention state
+--     variables), used to compute how the current state variables were assigned, and
+--   * the /accumulated substitution/, mapping every (indexed) state variable seen so far to an expression over
+--     interaction variables only.
+--
+-- The accumulated substitution is what lets us substitute state variables out of the interaction guards, rather than
+-- constraining them with a separate assignment guard.
+data SymIntrpState loc = SymIntrpState loc VarModel VarModel deriving (Eq, Ord)
 
 intrpStateToSym :: IntrpState a -> SymIntrpState a
 intrpStateToSym (IntrpState loc vals) =
-    let abstractVarModel = valuationToVarModel vals
-    in SymIntrpState loc abstractVarModel
+    SymIntrpState loc (valuationToVarModel vals) noAssignment -- no state variables resolved yet at the start of the trace
 
 -- | A quantified 'Ord' constraint on the state-configuration monad, needed to map the intermediate 'SeTree'
 -- (and its 'SeBranch'es) into the (ordered) monad while building it.
@@ -110,7 +118,10 @@ type OrdConfig m = (forall a. Ord a => Ord (m a)) :: Constraint
 -}
 data SeTree m
     = SeLeaf SymGuard                 -- ^ a terminal guard: the end of the trace has been reached
-    | SeSeq SymGuard (m (SeBranch m)) -- ^ a sequential step: an assignment guard, conjoined with a monadic choice of branches
+    | SeSeq VarModel (m (SeBranch m)) -- ^ a sequential step: the (resolved) assignment applied at this step, kept for
+                                      --   inspection only — it is /not/ folded into the guard — together with a monadic
+                                      --   choice of branches. State variables are substituted out of the branch guards
+                                      --   using this assignment, so the folded guard mentions interaction variables only.
     | SeConf (m (SeTree m))           -- ^ the (monadic) state configuration the trace starts from
 
 -- | A single branch of a step: the if-then-else on a transition guard.
@@ -143,14 +154,15 @@ interactsToGuard f intrpr interacts = foldSeTree f (interactsToSeTree intrpr int
     configuration to a guard (e.g. via 'asExpr' for the allowed condition, or 'asDualExpr' for the specified one);
     it is the only place where the specified/allowed distinction enters, so both conditions share the same tree.
 
-    Structurally: a sequential step becomes a conjunction of the assignment guard with the folded branches, and each
-    if-then-else branch becomes @(guard ∧ then) ∨ (¬guard ∧ else)@ where the else falls through to the implicit
-    destination.
+    Structurally: a sequential step folds to just its branches (the assignment carried by the step is not conjoined —
+    it has already been substituted into the branch guards, see 'seStep'), and each if-then-else branch becomes
+    @(guard ∧ then) ∨ (¬guard ∧ else)@ where the else falls through to the implicit destination. Because the
+    assignments are substituted rather than conjoined, the resulting guard mentions interaction variables only.
 -}
 foldSeTree :: BM.OrdFunctor m => (m SymGuard -> SymGuard) -> SeTree m -> SymGuard
 foldSeTree _ (SeLeaf g) = g
 foldSeTree f (SeConf c) = f (foldSeTree f BM.<#> c)
-foldSeTree f (SeSeq assignGuard branches) = assignGuard .&& f (foldSeBranch f BM.<#> branches)
+foldSeTree f (SeSeq _assign branches) = f (foldSeBranch f BM.<#> branches)
 
 foldSeBranch :: BM.OrdFunctor m => (m SymGuard -> SymGuard) -> SeBranch m -> SymGuard
 foldSeBranch f (SeIte guard thenTree implicit) =
@@ -184,8 +196,11 @@ interactsToSeTree intrpr interacts =
     ioInteractToImpliticLocation (SymInteract (In _) _) = BM.underspecified -- this shouldn't be hard-coded
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
 
--- | Build one step of the intermediate tree: an assignment guard, together with a monadic choice of if-then-else
--- branches (one per transition), each continuing with the expansion of its destination state.
+-- | Build one step of the intermediate tree: the assignment that produced the current state (resolved to interaction
+-- variables), together with a monadic choice of if-then-else branches (one per transition), each continuing with the
+-- expansion of its destination state. The guard of each branch has its state variables substituted away using the
+-- accumulated assignment, so that only interaction variables remain — instead of adding an assignment guard as a
+-- conjunct that constrains the (internal, invisible) state variables.
 seStep :: (BM.OrdFunctor m, OrdConfig m)
     => Int -- ^ Step number
     -> m SymGuard -- ^ implicit transition destination if a guard is false
@@ -193,12 +208,18 @@ seStep :: (BM.OrdFunctor m, OrdConfig m)
     -> (loc -> m (SymGuard, VarModel, loc)) -- ^ transition function
     -> SymIntrpState loc -- ^ The current state to step from
     -> SeTree m -- ^ resulting subtree
-seStep n implicit expand t (SymIntrpState ploc pvars) = SeSeq (varsToGuard indexedAssign) (seStep' BM.<#> t ploc)
+seStep n implicit expand t (SymIntrpState ploc prevAssign sigma) = SeSeq resolvedAssign (seStep' BM.<#> t ploc)
     where
-    indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
+    -- the assignment that produced the current state's variable values, in SSA form: {x_n := E(vars_{n-1})}
+    indexedAssign = indexLeft n $ indexRight (n-1) prevAssign -- n-1 should be safe: at n=0, all assigned expressions should be constants
+    -- resolve its right-hand sides against the substitution accumulated so far, so they mention interaction variables
+    -- only, then extend the accumulated substitution with it (its keys x_n are fresh, so the union does not clash)
+    resolvedAssign = substVarModel sigma indexedAssign
+    sigma' = resolvedAssign `varUnion` sigma
     seStep' (tguard, completedAssign, tloc) =
-        let indexedGuard = indexExpr n tguard
-        in SeIte indexedGuard (expand (SymIntrpState tloc completedAssign)) implicit
+        -- index the transition guard, then substitute every state variable away, leaving interaction variables only
+        let indexedGuard = subst sigma' (indexExpr n tguard)
+        in SeIte indexedGuard (expand (SymIntrpState tloc completedAssign sigma')) implicit
     indexLeft :: Int -> VarModel -> VarModel
     indexLeft n' = mapVars $ indexVar n'
     indexRight :: Int -> VarModel -> VarModel

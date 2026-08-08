@@ -1,32 +1,32 @@
 
 configuration:
   ∧ (4 conjuncts):
-    step [assign: (x_0) = (0)], branches:
+    step [subst: {x_0:=0}], branches:
       ⊤ (underspecified)
-    step [assign: (x_0) = (0)], branches:
+    step [subst: {x_0:=0}], branches:
       ⊤ (underspecified)
-    step [assign: (x_0) = (0)], branches:
+    step [subst: {x_0:=0}], branches:
       ⊤ (underspecified)
-    step [assign: (x_0) = (0)], branches:
+    step [subst: {x_0:=0}], branches:
       ∧ (4 conjuncts):
-        if ¬(((x_0+-10)) ≥ 0) then
-            step [assign: (x_1) = ((p_0+x_0))], branches:
+        if True then
+            step [subst: {x_1:=p_0}], branches:
               ⊤ (underspecified)
         else: ⊤
-        if ¬(((x_0+-10)) ≥ 0) then
-            step [assign: (x_1) = ((p_0+x_0))], branches:
+        if True then
+            step [subst: {x_1:=p_0}], branches:
               if True then
                   leaf: True
               else: ⊤
         else: ⊤
-        if ¬(((x_0+-10)) ≥ 0) then
-            step [assign: (x_1) = ((p_0+x_0))], branches:
+        if True then
+            step [subst: {x_1:=p_0}], branches:
               if True then
                   leaf: True
               else: ⊤
         else: ⊤
-        if ¬(((x_0+-10)) ≥ 0) then
-            step [assign: (x_1) = ((p_0+x_0))], branches:
+        if True then
+            step [subst: {x_1:=p_0}], branches:
               if True then
                   leaf: True
               else: ⊤
