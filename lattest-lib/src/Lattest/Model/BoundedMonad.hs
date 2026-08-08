@@ -38,7 +38,7 @@ Det(..),
 NonDet(..),
 nonDet,
 -- ** Distributive lattice
-FreeLattice,
+FreeLattice(FreeLattice),
 atom,
 top,
 bot,
