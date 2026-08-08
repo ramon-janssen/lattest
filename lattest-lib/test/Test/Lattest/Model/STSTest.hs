@@ -14,12 +14,15 @@ module Test.Lattest.Model.STSTest (
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
     testComposedSeTreeStructure,
-    testConcreteTraceSpecifiedAllowedCorrespondence
+    testConcreteTraceSpecifiedAllowedCorrespondence,
+    prop_specifiedAllowedCorrespondence,
+    composedCoffeeMachineIntrpr
     )
 where
 
 import Prelude hiding (take)
 import Test.HUnit
+import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
 import Data.Maybe(fromJust, isJust, catMaybes)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
@@ -33,7 +36,7 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
+import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice(..), FreeLatticeCNF(..), atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified,isSpecified,isAllowed,specifiedness,Specifiedness(..), ordReturn, (<#>), BoundedConfiguration)
@@ -327,6 +330,56 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
     assertEvaluatesToBool label g = case eval g of
         Right b -> return b
         Left err -> assertFailure (label ++ " did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")")
+
+-- QuickCheck version of the same correspondence, with the concrete traces *generated* instead of hand-picked.
+--
+-- The interactions and their symbolic parameters are read from the model's alphabet (not hard-coded), and every
+-- parameter is filled with a randomly-chosen value of its declared type. The property is parametric in the model, so
+-- any STS interpreter over String gates can be checked; below it is applied to the composed coffee machine, but a
+-- future model only needs to be passed to `prop_specifiedAllowedCorrespondence` to be covered.
+
+-- | Generate a concrete value for a symbolic parameter, based only on its declared type. The ranges are deliberately
+-- small: the example models are toy examples, so large integers would only slow things down without exercising new
+-- behaviour (guards compare against small constants like 2, 10).
+genConstantForType :: Variable -> Gen Constant
+genConstantForType (Variable _ IntType)    = Cint <$> choose (-5, 20)
+genConstantForType (Variable _ BoolType)   = Cbool <$> elements [False, True]
+genConstantForType (Variable _ StringType) = Cstring <$> elements ["", "a", "b", "c"]
+
+-- | Generate a concrete trace over a model's alphabet: pick interactions (and hence their symbolic parameters) from
+-- the syntactic automaton, then fill in a value for each parameter. Traces are kept short, both because the toy
+-- models are shallow and because the non-normalising FreeLattice configuration grows with the trace length.
+genConcreteTrace :: STSIntrp m loc (IOAct String String) -> Gen [ConcreteStep]
+genConcreteTrace intrpr = do
+    let alph = Set.toList $ alphabet $ syntacticAutomaton intrpr
+    len <- choose (0, 4)
+    vectorOf len $ do
+        interaction@(SymInteract _ vars) <- elements alph
+        vals <- traverse genConstantForType vars
+        return (interaction, vals)
+
+-- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
+-- parametric in the model. For every generated concrete trace: the specified guard evaluates to True exactly when
+-- the concrete configuration is specified (not underspecified), and the allowed guard exactly when it is allowed
+-- (not forbidden).
+prop_specifiedAllowedCorrespondence ::
+    (BoundedMonad m, Foldable m, BooleanConfiguration m, (forall a. Ord a => Ord (m a)), Ord loc)
+    => STSIntrp m loc (IOAct String String) -> Property
+prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ \steps ->
+    let symTrace = fst <$> steps
+        gateValues = stepGateValue <$> steps
+        valuation = traceValuation steps
+        finalConf = stateConf $ foldl after intrpr gateValues
+        specifiedGuard = interactsToSpecifiedCondition intrpr symTrace
+        allowedGuard = interactsToAllowedCondition intrpr symTrace
+    in counterexample ("trace: " ++ show gateValues) $
+            checkGuard "specified" (isSpecified finalConf) (substConst valuation specifiedGuard)
+       .&&. checkGuard "allowed"   (isAllowed finalConf)    (substConst valuation allowedGuard)
+    where
+    checkGuard name expected g = case eval g of
+        Right b  -> counterexample (name ++ " guard evaluated to " ++ show b ++ ", expected " ++ show expected) (b == expected)
+        Left err -> counterexample (name ++ " guard did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")") False
+
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"

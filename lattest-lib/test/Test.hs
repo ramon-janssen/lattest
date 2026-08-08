@@ -42,6 +42,8 @@ runQuickCheckTests = do
 --    quickCheckWithTimeoutWithNumWithSize (prop_solveSymbolic smtRef) 100 2
     quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
     quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000
+    -- concrete-trace specified/allowed correspondence, with traces generated from the model alphabet
+    quickCheck $ within (durationSeconds * 1000000) (withMaxSuccess 200 (prop_specifiedAllowedCorrespondence composedCoffeeMachineIntrpr))
 
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
