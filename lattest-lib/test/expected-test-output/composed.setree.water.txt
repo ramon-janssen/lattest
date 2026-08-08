@@ -1,0 +1,9 @@
+
+configuration:
+  ∧ (2 conjuncts):
+    step [assign: (x_0) = (0)], branches:
+      ⊤ (underspecified)
+    step [assign: (x_0) = (0)], branches:
+      if ¬(((x_0+-10)) ≥ 0) then
+          leaf: True
+      else: ⊤
