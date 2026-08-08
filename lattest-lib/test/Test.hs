@@ -89,6 +89,7 @@ makeHUnitTests = do
         testComposedCoffeeTreeStructure,
         testComposedSeTreeStructure,
         testConjunctionOfDifferentValuations,
+        testConcreteTraceSpecifiedAllowedCorrespondence,
         testPrintSTS,
         testReadAutFile
         ]

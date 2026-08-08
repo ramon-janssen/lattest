@@ -93,7 +93,7 @@ interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfigur
 interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, OrdConfig m) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToAllowedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
+interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
 
 
 
