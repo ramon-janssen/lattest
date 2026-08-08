@@ -85,6 +85,7 @@ makeHUnitTests = do
         testLinearCoffeeTreeStructure,
         testComplexTreeStructure,
         testComposedCoffeeTreeStructure,
+        testComposedSeTreeStructure,
         testPrintSTS,
         testReadAutFile
         ]

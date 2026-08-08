@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -12,6 +13,7 @@ module Test.Lattest.Model.STSTest (
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
+    testComposedSeTreeStructure
     )
 where
 
@@ -33,7 +35,7 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard)
-import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
+import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF(..), atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
@@ -193,7 +195,7 @@ composedCoffeeMachine =
             "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== x) $ noAssignment, "b2"))]
             "c0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "c1"))]
             "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ noAssignment, "c2"))]
-            "d0" -> Map.fromList $ [(water,      foldr (/\) underspecified [atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])      ] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
             "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
             -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
@@ -204,6 +206,46 @@ composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeM
 
 testComposedCoffeeTreeStructure :: Test
 testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
+
+-- Pretty-print the intermediate symbolic-execution tree (`Solve.SeTree`) as an indented outline. The monad is fixed
+-- to `FreeLatticeCNF` (the composed coffee machine's configuration monad) so that we can render its ∧/∨/⊤/⊥ structure
+-- directly, interleaved with the sequence/if-then-else structure of the tree. This shows the intermediate structure
+-- *before* it is folded (by `Solve.foldSeTree`) into a single, hard-to-read boolean guard.
+prettySeTree :: Solve.SeTree FreeLatticeCNF -> String
+prettySeTree t0 = unlines (goTree "" t0)
+    where
+    goTree ind (Solve.SeLeaf g)  = [ind ++ "leaf: " ++ show g]
+    goTree ind (Solve.SeConf c)  = (ind ++ "configuration:") : goConf (ind ++ "  ") goTree c
+    goTree ind (Solve.SeSeq g b) = (ind ++ "step [assign: " ++ show g ++ "], branches:") : goConf (ind ++ "  ") goBranch b
+    goBranch ind (Solve.SeIte g thn els) =
+           [ind ++ "if " ++ show g ++ " then"]
+        ++ goTree (ind ++ "    ") thn
+        ++ [ind ++ "else: " ++ show els]
+    -- render a FreeLatticeCNF layer (a conjunction of disjunctions), recursing into each element via `sub`
+    goConf :: String -> (String -> x -> [String]) -> FreeLatticeCNF x -> [String]
+    goConf ind _   c | isUnderspecified c = [ind ++ "⊤ (underspecified)"]
+                     | isForbidden c      = [ind ++ "⊥ (forbidden)"]
+    goConf ind sub (FreeLatticeCNF conj) =
+        case map Set.toList (Set.toList conj) of
+            [dis] -> goDisj ind sub dis
+            conjuncts -> (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
+                         : concatMap (goDisj (ind ++ "  ") sub) conjuncts
+    goDisj ind sub dis =
+        case dis of
+            [e] -> sub ind e
+            es  -> (ind ++ "∨ (" ++ show (length es) ++ " disjuncts):") : concatMap (sub (ind ++ "  ")) es
+
+-- Show the intermediate tree-like structure for the trace ?water !b ?esp on the composed coffee machine, as a golden
+-- test. The same tree folds (via `Solve.foldSeTree asDualExpr`/`asExpr`) to the specified/allowed guards.
+testComposedSeTreeStructure :: Test
+testComposedSeTreeStructure = TestCase $ goldenAssert
+    [ goldenCheck "composed:interactsToSeTree [water]" (goldenDir </> "composed.setree.water.txt")
+        ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water])),
+        goldenCheck "composed:interactsToSeTree [water,b]" (goldenDir </> "composed.setree.water.b.txt")
+        ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water, b])),
+        goldenCheck "composed:interactsToSeTree [water,b,espresso]" (goldenDir </> "composed.setree.water.b.espresso.txt")
+        ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water, b, espresso]))
+    ]
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
@@ -227,7 +269,7 @@ goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
 
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
+testTreeStructure :: (BoundedMonad m, Foldable m, (forall a. Ord a => Ord (m a)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
 testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
     [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
     , -}
