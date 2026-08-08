@@ -35,7 +35,9 @@ import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard)
-import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF(..), atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
+import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice(..), FreeLatticeCNF(..), atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
+import Algebra.Lattice.Free(Free(..))
+import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
@@ -43,7 +45,7 @@ import Data.List(intercalate)
 import Data.Foldable(toList)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.Expr
+import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 import qualified Lattest.SMT.Config as Config
 import qualified Lattest.SMT.SMT as SMT
 
@@ -184,34 +186,36 @@ take = SymInteract (In "take") []
 composedCoffeeMachineAssign :: Valuation
 composedCoffeeMachineAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
-composedCoffeeMachine :: IOSTS FreeLatticeCNF String String String
+composedCoffeeMachine :: IOSTS FreeLattice String String String
 composedCoffeeMachine =
-    let initConf = atom "a0" /\ atom "b0" /\ atom "c0" /\ atom "d0":: FreeLatticeCNF String
+    let initConf = ordReturn "a0" /\ ordReturn "b0" /\ ordReturn "c0" /\ ordReturn "d0":: FreeLattice String
         asTransition = \q -> (stsTLoc sTrue noAssignment, q)
         switches = \q -> case q of
-            "a0" -> Map.fromList [(a, atom (stsTLoc sTrue noAssignment, "a1"))]
-            "a1" -> Map.fromList [(tea, atom (stsTLoc (p .== 2) $ noAssignment, "a2"))]
-            "b0" -> Map.fromList [(b, atom (stsTLoc sTrue $ assignment [xvar =: p], "b1"))]
-            "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== x) $ noAssignment, "b2"))]
-            "c0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "c1"))]
-            "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ noAssignment, "c2"))]
-            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
-            "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
+            "a0" -> Map.fromList [(a, ordReturn (stsTLoc sTrue noAssignment, "a1"))]
+            "a1" -> Map.fromList [(tea, ordReturn (stsTLoc (p .== 2) $ noAssignment, "a2"))]
+            "b0" -> Map.fromList [(b, ordReturn (stsTLoc sTrue $ assignment [xvar =: p], "b1"))]
+            "b1" -> Map.fromList [(espresso, ordReturn (stsTLoc (p .== x) $ noAssignment, "b2"))]
+            "c0" -> Map.fromList [(b, ordReturn (stsTLoc sTrue noAssignment, "c1"))]
+            "c1" -> Map.fromList [(espresso, ordReturn (stsTLoc (milk) $ noAssignment, "c2"))]
+            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [ordReturn (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(input, ordReturn (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            "d1" -> Map.fromList [(output, ordReturn (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
             -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
             _ -> Map.fromList [(gate, underspecified) | gate <- [water, a, b, tea, espresso, take]]
     in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
-composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeCNF String (IOAct String String)
+composedCoffeeMachineIntrpr :: STSIntrp FreeLattice String (IOAct String String)
 composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
 
 testComposedCoffeeTreeStructure :: Test
 testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
 
 -- Pretty-print the intermediate symbolic-execution tree (`Solve.SeTree`) as an indented outline. The monad is fixed
--- to `FreeLatticeCNF` (the composed coffee machine's configuration monad) so that we can render its ∧/∨/⊤/⊥ structure
--- directly, interleaved with the sequence/if-then-else structure of the tree. This shows the intermediate structure
--- *before* it is folded (by `Solve.foldSeTree`) into a single, hard-to-read boolean guard.
-prettySeTree :: Solve.SeTree FreeLatticeCNF -> String
+-- to `FreeLattice` (the composed coffee machine's configuration monad) so that we can render its ∧/∨/⊤/⊥ structure
+-- directly, interleaved with the sequence/if-then-else structure of the tree. Unlike the CNF representation, the free
+-- lattice does not normalise or deduplicate, so structurally-equal subtrees are *not* merged: the shape of the tree
+-- follows the trace one-to-one. This shows the intermediate structure *before* it is folded (by `Solve.foldSeTree`)
+-- into a single, hard-to-read boolean guard.
+prettySeTree :: Solve.SeTree FreeLattice -> String
 prettySeTree t0 = unlines (goTree "" t0)
     where
     goTree ind (Solve.SeLeaf g)  = [ind ++ "leaf: " ++ show g]
@@ -221,19 +225,25 @@ prettySeTree t0 = unlines (goTree "" t0)
            [ind ++ "if " ++ show g ++ " then"]
         ++ goTree (ind ++ "    ") thn
         ++ [ind ++ "else: " ++ show els]
-    -- render a FreeLatticeCNF layer (a conjunction of disjunctions), recursing into each element via `sub`
-    goConf :: String -> (String -> x -> [String]) -> FreeLatticeCNF x -> [String]
-    goConf ind _   c | isUnderspecified c = [ind ++ "⊤ (underspecified)"]
-                     | isForbidden c      = [ind ++ "⊥ (forbidden)"]
-    goConf ind sub (FreeLatticeCNF conj) =
-        case map Set.toList (Set.toList conj) of
-            [dis] -> goDisj ind sub dis
-            conjuncts -> (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
-                         : concatMap (goDisj (ind ++ "  ") sub) conjuncts
-    goDisj ind sub dis =
-        case dis of
-            [e] -> sub ind e
-            es  -> (ind ++ "∨ (" ++ show (length es) ++ " disjuncts):") : concatMap (sub (ind ++ "  ")) es
+    -- render a FreeLattice layer, recursing into each atom via `sub`. Chains of the same operator are flattened into an
+    -- n-ary ∧/∨ so the output lines up with the CNF renderer, but no merging of equal subtrees happens.
+    goConf :: String -> (String -> x -> [String]) -> FreeLattice x -> [String]
+    goConf ind _   (FreeLattice Top)    = [ind ++ "⊤ (underspecified)"]
+    goConf ind _   (FreeLattice Bottom) = [ind ++ "⊥ (forbidden)"]
+    goConf ind sub (FreeLattice (Levitate free)) = goFree ind sub free
+    goFree ind sub (Var e) = sub ind e
+    goFree ind sub free@(_ :/\: _) =
+        let conjuncts = meets free
+        in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
+           : concatMap (goFree (ind ++ "  ") sub) conjuncts
+    goFree ind sub free@(_ :\/: _) =
+        let disjuncts = joins free
+        in (ind ++ "∨ (" ++ show (length disjuncts) ++ " disjuncts):")
+           : concatMap (goFree (ind ++ "  ") sub) disjuncts
+    meets (x :/\: y) = meets x ++ meets y
+    meets other      = [other]
+    joins (x :\/: y) = joins x ++ joins y
+    joins other      = [other]
 
 -- Show the intermediate tree-like structure for the trace ?water !b ?esp on the composed coffee machine, as a golden
 -- test. The same tree folds (via `Solve.foldSeTree asDualExpr`/`asExpr`) to the specified/allowed guards.

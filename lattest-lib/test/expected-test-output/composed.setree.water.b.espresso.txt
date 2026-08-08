@@ -1,6 +1,10 @@
 
 configuration:
-  ∧ (2 conjuncts):
+  ∧ (4 conjuncts):
+    step [assign: (x_0) = (0)], branches:
+      ⊤ (underspecified)
+    step [assign: (x_0) = (0)], branches:
+      ⊤ (underspecified)
     step [assign: (x_0) = (0)], branches:
       ⊤ (underspecified)
     step [assign: (x_0) = (0)], branches:
