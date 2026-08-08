@@ -296,7 +296,7 @@ prettySeTree t0 = unlines (goTree "" t0)
     where
     goTree ind (Solve.SeLeaf g)  = [ind ++ "leaf: " ++ show g]
     goTree ind (Solve.SeConf c)  = (ind ++ "configuration:") : goConf (ind ++ "  ") goTree c
-    goTree ind (Solve.SeSeq g b) = (ind ++ "step [assign: " ++ show g ++ "], branches:") : goConf (ind ++ "  ") goBranch b
+    goTree ind (Solve.SeSeq assign b) = (ind ++ "step [subst: " ++ show assign ++ "], branches:") : goConf (ind ++ "  ") goBranch b
     goBranch ind (Solve.SeIte g thn els) =
            [ind ++ "if " ++ show g ++ " then"]
         ++ goTree (ind ++ "    ") thn
