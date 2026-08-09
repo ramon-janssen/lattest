@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -15,11 +14,14 @@ where
 
 import Prelude hiding (take)
 import Test.HUnit
-import Data.Maybe(fromJust)
+import Data.Maybe(fromJust, isJust, catMaybes)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
-import qualified Text.RawString.QQ as QQ
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.UTF8 as UTF8
+import System.FilePath ((</>), takeDirectory)
+import System.Directory (createDirectoryIfMissing)
 
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
@@ -29,6 +31,8 @@ import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyP
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
 import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
+import Data.List(intercalate)
+import Data.Foldable(toList)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr
@@ -64,6 +68,28 @@ stsExample =
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
+
+goldenDir :: FilePath
+goldenDir = "test/expected-test-output"
+
+-- Compare rendered output against a golden file, then always (re)generate it (creating the directory if needed).
+-- Returns a failure message if it did not match, or Nothing if it did. A completely missing golden file is
+-- (re)generated but reported as a failure, so a freshly created baseline is never silently accepted.
+goldenCheck :: String -> FilePath -> String -> IO (Maybe String)
+goldenCheck what path actual = do
+    existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
+    createDirectoryIfMissing True (takeDirectory path)
+    BS.writeFile path (UTF8.fromString actual)
+    return $ case existing of
+        Right expected | expected == actual -> Nothing
+                       | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual)
+        Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " was missing; (re)generated it -- rerun to compare against it")
+
+-- Run all golden checks (so every file is regenerated in one run, even on failure), then fail once if any did not match.
+goldenAssert :: [IO (Maybe String)] -> Assertion
+goldenAssert checks = do
+    failures <- catMaybes <$> sequence checks
+    if null failures then return () else assertFailure (concat failures)
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
@@ -113,26 +139,9 @@ assertThrowsError expectedError someVal = do
         handler ex = return $ Just $ show ex
 
 testPrintSTS :: Test
-testPrintSTS = TestCase $ assertBool failureMessage (expected == actual) -- no assertEquals to avoid printing the unreadable ascii-escaped variant of the tested unicode strings
+testPrintSTS = TestCase $ goldenAssert [ goldenCheck "printSTS" (goldenDir </> "printSTS.txt") actual ]
     where
-    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the "expected" below.
-    -- fancy quasiquotes to allow direct copy-pasting of the printed expected string into the source code below. With newline at start and end for readability.
-    expected = [QQ.r|
-current state configuration: [(0,{x:=0})]
-initial location configuration: [0]
-locations: 0, 1, 2
-transitions:
-0  ――?"water" [p:Int]⟶  [((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)]
-0  ――!"coffee" []⟶  [(((x+-15)) ≥ 0, {},2)]
-0  ――!"ok" [p:Int]⟶  ⊥
-1  ――?"water" [p:Int]⟶  ⊤
-1  ――!"coffee" []⟶  ⊥
-1  ――!"ok" [p:Int]⟶  [((x) = (p), {},0)]
-2  ――?"water" [p:Int]⟶  ⊤
-2  ――!"coffee" []⟶  ⊥
-2  ――!"ok" [p:Int]⟶  ⊥
-|]
+    actual = "\n" ++ prettyPrintIntrp stsExampleIntrpr ++ "\n" -- newlines before and after to match those of the golden file.
 
 data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 
