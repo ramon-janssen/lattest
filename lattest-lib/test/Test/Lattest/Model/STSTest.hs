@@ -55,6 +55,17 @@ water = SymInteract (In "water") [pvar]
 ok = SymInteract (Out "ok") [pvar]
 coffee = SymInteract (Out "coffee") []
 
+{-
+               !coffee
+       x=0     [x>=15] 
+       --> 0 ----------> 2
+          / ^
+?water(p) | | !ok(p)
+[1<=p<=10]| |  [p=x]
+  x:=x+p  | |
+          v /
+           1
+-}
 stsExample :: IOSTS NonDet Integer String String
 stsExample =
     let waterGuard = 1 .<= p .&& p .<= 10
