@@ -200,7 +200,7 @@ instance Show t => Show (ExprView t) where
         showSumTerm 1 t = t
         showSumTerm n t = show n ++ "⋅" ++ t
     show (Product es) | es == mempty = "∏∅"
-    show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
+    show (Product es) = showFreeMonoid "⋅" (\n t -> t ++ "^" ++ show n) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
     show (Length e) = "length(" ++ show e ++ ")"
     show (EqualInt e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
     show (EqualBool e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
@@ -278,6 +278,7 @@ reduce (EqualString (reduce -> e1) (reduce -> e2)) = EqualString e1 e2
 reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
 reduce (GezInt (reduce -> e)) = GezInt e
 reduce (Not (reduce -> (Const b))) = Const $ not b
+reduce (Not (reduce -> (Not e))) = e
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ foldr (&&) True (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
 reduce (And (Set.map reduce -> es)) = And es
