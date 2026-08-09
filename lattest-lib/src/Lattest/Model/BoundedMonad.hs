@@ -381,5 +381,8 @@ instance BooleanConfiguration FreeLattice where
         asExpr' (x :\/: y) = asExpr' x E..|| asExpr' y
         asExpr' (x :/\: y) = asExpr' x E..&& asExpr' y
 
+instance BooleanConfiguration FreeLatticeCNF where
+    asExpr (FreeLatticeCNF x) = Set.foldr (E..&&) E.sTrue $ Set.map (Set.foldr (E..||) E.sFalse) x
+
 asDualExpr :: (OrdFunctor m, BooleanConfiguration m) => m (E.Expr Bool) -> E.Expr Bool
 asDualExpr m = E.sNot $ asExpr $ E.sNot OM.<#> m
