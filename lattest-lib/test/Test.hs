@@ -82,6 +82,9 @@ makeHUnitTests = do
         testSTSHappyFlow,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
+        testLinearCoffeeTreeStructure,
+        testComplexTreeStructure,
+        testComposedCoffeeTreeStructure,
         testPrintSTS,
         testReadAutFile
         ]

@@ -8,7 +8,10 @@ module Test.Lattest.Model.STSTest (
     testPrintSTS,
     testSTSTestSelection,
     testLatticeSTS,
-    testLatticeSTSQuiescence
+    testLatticeSTSQuiescence,
+    testLinearCoffeeTreeStructure,
+    testComplexTreeStructure,
+    testComposedCoffeeTreeStructure,
     )
 where
 
@@ -27,10 +30,13 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
+import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad((/\), (\/), FreeLattice, NonDet(..), nonDet, underspecified,forbidden)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard)
+import Lattest.Model.BoundedMonad(BoundedMonad, BooleanConfiguration, (/\), (\/), FreeLattice, FreeLatticeCNF, atom, NonDet(..), nonDet, underspecified,forbidden,isForbidden,isUnderspecified, ordReturn, (<#>), BoundedConfiguration)
+import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
+import qualified Lattest.Model.Symbolic.SolveSTS as Solve
+import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import Data.List(intercalate)
 import Data.Foldable(toList)
 import qualified Data.Map as Map
@@ -82,6 +88,123 @@ stsExample =
 stsExampleIntrpr :: STSIntrp NonDet Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
+-- Interactions and STS for the branching tests, using the CNF lattice monad (FreeLatticeCNF).
+-- Input variants (unsatisfied guard -> underspecified/top) and output variants (unsatisfied guard -> forbidden/bottom).
+gateA = SymInteract (In "a") [pvar, qvar]
+gateB = SymInteract (In "b") [pvar, qvar]
+gateAo = SymInteract (Out "a") [pvar, qvar]
+gateBo = SymInteract (Out "b") [pvar, qvar]
+
+branchInitAssign :: Valuation
+branchInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+
+-- A depth-2 binary-branching STS over the CNF monad:
+--   loc 0 --a--> {loc 1, loc 2}   combined with op0
+--   loc 1 --b--> {loc 3, loc 4}   combined with op1
+--   loc 2 --b--> {loc 5, loc 6}   combined with op2
+-- Each branch has exactly two outgoing transitions, combined by either disjunction (\/) or conjunction (/\).
+-- The two destination guards at each branch are gp (p>=5) and gq (q>=5) on two independent parameters p and q, so
+-- they are orthogonal: all four cells of the value-partition (neither / p-only / q-only / both) are satisfiable and
+-- routed differently, and the choice of branch operator is observable in the resulting path condition.
+type Branch = FreeLatticeCNF (STStdest, Integer) -> FreeLatticeCNF (STStdest, Integer) -> FreeLatticeCNF (STStdest, Integer)
+
+-- The first-level gate g1 is used at loc 0; the second-level gate g2 at locs 1 and 2. Passing input or output gates
+-- selects whether unsatisfied guards fall through to top or to bottom.
+branchingSTS :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> IOSTS FreeLatticeCNF Integer String String
+branchingSTS g1 g2 op0 op1 op2 =
+    let gp = p .>= 5
+        gq = q .>= 5
+        asgn = assignment [xvar =: p]
+        switches loc = case loc of
+            0 -> Map.fromList [(g1, atom (stsTLoc gp asgn, 1) `op0` atom (stsTLoc gq asgn, 2))]
+            1 -> Map.fromList [(g2, atom (stsTLoc gp noAssignment, 3) `op1` atom (stsTLoc gq noAssignment, 4))]
+            2 -> Map.fromList [(g2, atom (stsTLoc gp noAssignment, 5) `op2` atom (stsTLoc gq noAssignment, 6))]
+            _ -> Map.empty
+    in automaton (atom 0 :: FreeLatticeCNF Integer) (Set.fromList [g1, g2]) switches
+
+branchingIntrpr :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> STSIntrp FreeLatticeCNF Integer (IOAct String String)
+branchingIntrpr g1 g2 op0 op1 op2 = interpretSTS (branchingSTS g1 g2 op0 op1 op2) branchInitAssign
+
+-- A minimal STS for asserting the tree structures directly (rather than via the SMT solver):
+--   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
+-- One input gate keeps the symbolic-execution tree narrow enough to read.
+inGate :: SymInteract (IOAct String String)
+inGate = SymInteract (In "a") [pvar]
+outGate :: SymInteract (IOAct String String)
+outGate = SymInteract (Out "x") [pvar]
+
+treeSTS :: IOSTS FreeLatticeCNF Integer String String
+treeSTS =
+    let switches loc = case loc of
+            0 -> Map.fromList [(inGate, ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
+            1 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
+            2 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
+            _ -> Map.empty
+    in automaton (ordReturn 0 :: FreeLatticeCNF Integer) (Set.fromList [inGate, outGate]) switches
+
+treeIntrpr :: STSIntrp FreeLatticeCNF Integer (IOAct String String)
+treeIntrpr = interpretSTS treeSTS branchInitAssign
+
+-- Pretty-printers for the (infinite) trees, bounded to a maximum depth, rendered as an indented outline.
+showGate :: SymInteract (IOAct String String) -> String
+showGate (SymInteract (In s) _) = "?" ++ s
+showGate (SymInteract (Out s) _) = "!" ++ s
+
+prettySolveTree :: Int -> Solve.SolveTree (IOAct String String) -> String
+prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
+    where
+    go d indent t
+        | d > maxDepth = [indent ++ "..."]
+        | otherwise = 
+            let cond = Solve.traceCondition t
+                showCond = indent ++ "cond " ++ show cond
+            in if cond == sFalse -- the solve tree has conditions that are monononically decreasing as you go down the tree, so False is a sink
+                then [showCond]
+                else showCond
+                        : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
+                                    (Map.toList (Solve.traceChildren t))
+
+testLinearCoffeeTreeStructure :: Test
+testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3
+
+testComplexTreeStructure :: Test
+testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 3
+
+milkvar :: Variable
+milkvar = (Variable "milk" BoolType)
+milk = sVar milkvar
+a = SymInteract (In "a") []
+b = SymInteract (In "b") [pvar]
+tea = SymInteract (Out "tea") [pvar]
+espresso = SymInteract (Out "esp") [pvar, milkvar]
+take = SymInteract (In "take") []
+
+composedCoffeeMachineAssign :: Valuation
+composedCoffeeMachineAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+
+composedCoffeeMachine :: IOSTS FreeLatticeCNF String String String
+composedCoffeeMachine =
+    let initConf = atom "a0" /\ atom "b0" /\ atom "c0" /\ atom "d0":: FreeLatticeCNF String
+        asTransition = \q -> (stsTLoc sTrue noAssignment, q)
+        switches = \q -> case q of
+            "a0" -> Map.fromList [(a, atom (stsTLoc sTrue noAssignment, "a1"))]
+            "a1" -> Map.fromList [(tea, atom (stsTLoc (p .== 2) $ noAssignment, "a2"))]
+            "b0" -> Map.fromList [(b, atom (stsTLoc sTrue $ assignment [xvar =: p], "b1"))]
+            "b1" -> Map.fromList [(espresso, atom (stsTLoc (p .== x) $ noAssignment, "b2"))]
+            "c0" -> Map.fromList [(b, atom (stsTLoc sTrue noAssignment, "c1"))]
+            "c1" -> Map.fromList [(espresso, atom (stsTLoc (milk) $ noAssignment, "c2"))]
+            "d0" -> Map.fromList $ [(water,      foldr (/\) underspecified [atom (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])      ] ++ [(input, atom (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            "d1" -> Map.fromList [(output, atom (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
+            "d2" -> Map.fromList [(take, asTransition <#> initConf)]
+            -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
+            _ -> Map.fromList [(gate, underspecified) | gate <- [water, a, b, tea, espresso, take]]
+    in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
+composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeCNF String (IOAct String String)
+composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
+
+testComposedCoffeeTreeStructure :: Test
+testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
+
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
 
@@ -103,6 +226,19 @@ goldenAssert :: [IO (Maybe String)] -> Assertion
 goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
+
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
+testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
+    [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
+    , -}
+      goldenCheck (testName ++ ":toSpecifiedTree") (goldenDir </> (testName ++ ".specifiedtree.txt")) actualSpecifiedTree
+    , goldenCheck (testName ++ ":toAllowedTree") (goldenDir </> (testName ++ ".allowedtree.txt")) actualAllowedTree
+    ]
+    where
+    --tree = Solve.symbolicExecutionTree stsIntrpr
+    --actualExecTree = "\n" ++ prettyExecTree depth tree
+    actualSpecifiedTree = "\n" ++ prettySolveTree depth (Solve.toSpecifiedTree stsIntrpr)
+    actualAllowedTree = "\n" ++ prettySolveTree depth (Solve.toAllowedTree stsIntrpr)
 
 getSTSIntrpState :: Integer ->  Integer -> NonDet (IntrpState Integer)
 getSTSIntrpState loc val = nonDet [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)]
