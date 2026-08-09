@@ -128,7 +128,7 @@ randomTestSelectorFromGen g = selector g randomSelectTest (\s _ _ _ -> return $ 
 {- |
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration.
 -}
-randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+randomDataTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, Ord (m SymGuard))
     => SMTRef -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i))
 randomDataTestSelector smt = do
     r <- initStdGen
@@ -138,7 +138,7 @@ randomDataTestSelector smt = do
     A 'TestSelector' that picks inputs uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed.
 -}
-randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+randomDataTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, Ord (m SymGuard))
     => SMTRef -> Int -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (StdGen,SMTRef) (GateValue i)
 randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt (mkStdGen i)
 
@@ -146,11 +146,11 @@ randomDataTestSelectorFromSeed smt i = randomDataTestSelectorFromGen smt (mkStdG
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, based on the
     given random generator, with arbitrary data values as picked by the given SMT solver. Will immediately stop if it cannot find any possible data values for any input gate.
 -}
-randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard), RandomGen g)
+randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, Ord (m SymGuard), RandomGen g)
     => SMTRef -> g -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (g,SMTRef) (GateValue i)
 randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossible (\s _ _ _ -> return $ Just s)
     where
-    solveRandomIfPossible :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard), RandomGen g)
+    solveRandomIfPossible :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, Ord (m SymGuard), RandomGen g)
         => (g,SMTRef) -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, (g,SMTRef)))
     solveRandomIfPossible (g'',smtRef') intrpr _ = do
         (maybeGateValue, (g', smtRef'')) <- solveRandomInput (g'',smtRef') maybeFromIOAct intrpr
@@ -164,7 +164,7 @@ randomDataTestSelectorFromGen smtRef g = selector (g, smtRef) solveRandomIfPossi
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, with arbitrary
     data values as picked by the given SMT solver. See 'randomDataOrWaitForOutputTestSelectorFromGen' for details.
 -}
-randomDataOrWaitForOutputTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+randomDataOrWaitForOutputTestSelector :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, Ord (m SymGuard))
     => SMTRef -> Double -> IO (TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (StdGen,SMTRef) (Maybe (GateValue i)))
 randomDataOrWaitForOutputTestSelector smt pWait = do
     r <- initStdGen
@@ -174,7 +174,7 @@ randomDataOrWaitForOutputTestSelector smt pWait = do
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, starting with
     the given random seed., with arbitrary data values as picked by the given SMT solver. See 'randomDataOrWaitForOutputTestSelectorFromGen' for details.
 -}
-randomDataOrWaitForOutputTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Ord i, Ord o, Ord (m SymGuard))
+randomDataOrWaitForOutputTestSelectorFromSeed :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, Ord (m SymGuard))
     => SMTRef -> Int -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (StdGen,SMTRef) (Maybe (GateValue i))
 randomDataOrWaitForOutputTestSelectorFromSeed smt i pWait = randomDataOrWaitForOutputTestSelectorFromGen smt (mkStdGen i) pWait
 
@@ -184,11 +184,11 @@ randomDataOrWaitForOutputTestSelectorFromSeed smt i pWait = randomDataOrWaitForO
     for an output value instead, with the givene probability (clamped to [0,1]). Will always wait for an output if it cannot find any possible data
     values for any input gate.
 -}
-randomDataOrWaitForOutputTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
+randomDataOrWaitForOutputTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, RandomGen g, Ord (m SymGuard))
     => SMTRef -> g -> Double -> TestSelector m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) (g,SMTRef) (Maybe (GateValue i))
 randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRef) (solveRandomOrWait pWait) (\s _ _ _ -> return $ Just s)
     where
-    solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Ord i, Ord o, RandomGen g, Ord (m SymGuard))
+    solveRandomOrWait :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, RandomGen g, Ord (m SymGuard))
         => Double -> (g,SMTRef) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i' o) -> m (IntrpState loc) -> IO (Maybe (Maybe (GateValue i), (g,SMTRef)))
     solveRandomOrWait pWait' (g'',smtRef') intrpr _ =
         let (doWait, g') = flipCoin g'' pWait'
@@ -199,8 +199,8 @@ randomDataOrWaitForOutputTestSelectorFromGen smtRef g pWait = selector (g, smtRe
     maybeFromIFInteraction (SymInteract (In i) vars) = Just $ SymInteract i vars
     maybeFromIFInteraction (SymInteract _ _) = Nothing
 
-solveRandomInput :: (BM.OrdMonad m, BooleanConfiguration m, Ord g, Ord (m SymGuard), RandomGen r)
-    => (r,SMTRef) -> (SymInteract g -> Maybe (SymInteract i)) -> AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') -> IO (Maybe (GateValue i), (r,SMTRef))
+solveRandomInput :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r)
+    => (r,SMTRef) -> (IOSymInteract i o -> Maybe (SymInteract sub)) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> IO (Maybe (GateValue sub), (r,SMTRef))
 solveRandomInput (g,smtRef) f intrpr = do
     (maybeGateValue, g') <- runSMT smtRef $ solveRandomInteraction intrpr f g
     return $ (maybeGateValue, (g', smtRef)) -- append the new state to the solved value, if any
