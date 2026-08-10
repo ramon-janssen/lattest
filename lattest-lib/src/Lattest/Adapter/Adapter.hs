@@ -15,18 +15,15 @@ where
 
 import Prelude hiding (map)
 
---import Lattest.Util.ReadynessInputStream (ReadynessInputStream(..), duplicate, forkEagerInputStream)
-
+import Control.Monad.STM(atomically)
 import Data.Attoparsec.ByteString(Parser)
 import Data.ByteString(ByteString)
-import Control.Monad.STM(atomically)
-import qualified System.IO.Streams as Streams (write)
-import qualified System.IO.Streams.Synchronized as Streams (read)
 import System.IO.Streams (OutputStream)
-import System.IO.Streams.Synchronized(TInputStream, tryReadIO, tryReadIO', Streamed)
-import qualified System.IO.Streams.Synchronized as Streams (map)
-import System.IO.Streams.Synchronized.Attoparsec (parserToInputStream)
 import System.IO.Streams.Combinators(contramap)
+import Lattest.Streams.Synchronized(TInputStream, tryReadIO, Streamed)
+import Lattest.Streams.Synchronized.Attoparsec (parserToInputStream)
+import qualified System.IO.Streams as Streams (write)
+import qualified Lattest.Streams.Synchronized as Streams (map,read)
 
 -- | An adapter to a (usually external) system. Uses two channels for interaction: one to send input commands, and one to receive outputs.
 data Adapter act i = Adapter {
@@ -60,16 +57,9 @@ data Adapter act i = Adapter {
 tryObserve :: Adapter act i -> IO (Streamed act)
 tryObserve = tryReadIO . actionsFromSut
 
-tryObserve' :: Adapter act i -> IO (Maybe act)
-tryObserve' = tryReadIO' . actionsFromSut
-
 -- | Send an input to the adapter.
 send :: i -> Adapter act i -> IO ()
 send i adap = Streams.write (Just i) (inputCommandsToSut adap)
-
-sendMaybe :: Maybe i -> Adapter act i -> IO ()
-sendMaybe Nothing adap = close adap -- TODO does this close adaps too eagerly?
-sendMaybe (Just i) adap = send i adap
 
 {-|
     Observe in a blocking manner, with two possible outcomes:

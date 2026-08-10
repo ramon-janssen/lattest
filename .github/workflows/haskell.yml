@@ -1,0 +1,155 @@
+name: Haskell CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  stack:
+    strategy:
+      matrix:
+        ghcversion: [9.8.4, 9.10.3, 9.12.4]
+    name: testsuite
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: haskell-actions/setup@v2
+      id: setup
+      with:
+        ghc-version: ${{ matrix.ghcversion }}
+        enable-stack: true
+        stack-version: 'latest'
+
+    - name: Restore cached stackwork
+      id: cache1
+      uses: actions/cache/restore@v4
+      env:
+        cache-name: cache1
+      with:
+        path: lattest-lib/.stack-work
+        key: stackwork-${{ matrix.ghcversion }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        restore-keys: |
+          stackwork-${{ matrix.ghcversion }}-{{ env.cache-name }}-
+    - name: Restore cached stackdir
+      id: cache2
+      uses: actions/cache/restore@v4
+      env:
+        cache-name: cache2
+      with:
+        path: ~/.stack
+        key: stack-${{ matrix.ghcversion }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        restore-keys: |
+          stack-${{ matrix.ghcversion }}-${{ env.cache-name }}-
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install z3
+        cd lattest-lib
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --system-ghc --only-dependencies --stack-yaml "stack-${{ matrix.ghcversion }}.yaml"
+
+    - name: Cache stackwork
+      uses: actions/cache/save@v4
+      if: steps.cache1.outputs.cache-hit != 'true'
+      with:
+        path: lattest-lib/.stack-work
+        key: ${{ steps.cache1.outputs.cache-primary-key }}
+        
+    - name: Cache stack
+      uses: actions/cache/save@v4
+      if: steps.cache2.outputs.cache-hit != 'true'
+      with:
+        path: ~/.stack
+        key: ${{ steps.cache2.outputs.cache-primary-key }}
+
+    - name: Build
+      run: |
+        cd lattest-lib
+        stack build lattest-lib:lib lattest-lib:test:lattest-test --no-run-tests --system-ghc --stack-yaml "stack-${{ matrix.ghcversion }}.yaml"
+    - name: Run tests
+      run: |
+        cd lattest-lib
+        stack test --system-ghc --stack-yaml "stack-${{ matrix.ghcversion }}.yaml"
+
+    - name: Set up JDK for example SUTs
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: maven
+
+    - name: Point examples at the local lattest-lib build
+      run: |
+        set -euo pipefail
+        resolver_line=$(grep '^resolver:' "lattest-lib/stack-${{ matrix.ghcversion }}.yaml")
+        for exdir in examples/*/; do
+          ex=$(basename "$exdir")
+          [ -f "$exdir/stack.yaml" ] || continue
+          sed -i -E \
+            -e "s|^resolver:.*|$resolver_line|" \
+            -e "s|^- lattest-lib-[0-9]+(\.[0-9]+)*\$|- ../../lattest-lib|" \
+            "$exdir/stack.yaml"
+        done
+
+    - name: Run examples against their Java SUTs
+      run: |
+        set -uo pipefail
+        for exdir in examples/*/; do
+          ex=$(basename "$exdir")
+          [ -f "$exdir/stack.yaml" ] || continue
+          echo "::group::$ex"
+          sut_log="$RUNNER_TEMP/$ex-sut.log"
+          sut_pid=""
+
+          if [ -f "$exdir/sut/pom.xml" ]; then
+            timeout -k 30 300 bash -c 'cd "$1/sut" && mvn -q -B install' _ "$exdir"
+            if [ $? -ne 0 ]; then
+              echo "::endgroup::"
+              echo "Building the SUT for $ex failed"
+              exit 1
+            fi
+
+            (cd "$exdir/sut" && mvn -q -B exec:java > "$sut_log" 2>&1) &
+            sut_pid=$!
+
+            ready=0
+            for i in $(seq 1 30); do
+              if (exec 3<>/dev/tcp/127.0.0.1/2929) 2>/dev/null; then
+                exec 3<&- 3>&-
+                ready=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$ready" -ne 1 ]; then
+              echo "SUT for $ex never opened port 2929"
+              cat "$sut_log" || true
+              kill -9 "$sut_pid" 2>/dev/null || true
+              echo "::endgroup::"
+              exit 1
+            fi
+          fi
+
+          timeout -k 30 600 bash -c 'cd "$1" && stack build --system-ghc --stack-yaml stack.yaml && stack run --system-ghc --stack-yaml stack.yaml' _ "$exdir"
+          status=$?
+
+          if [ -n "$sut_pid" ]; then
+            kill -9 "$sut_pid" 2>/dev/null || true
+            wait "$sut_pid" 2>/dev/null || true
+          fi
+          echo "::endgroup::"
+
+          if [ "$status" -ne 0 ]; then
+            echo "Example $ex failed"
+            [ -f "$sut_log" ] && cat "$sut_log"
+            exit 1
+          fi
+        done

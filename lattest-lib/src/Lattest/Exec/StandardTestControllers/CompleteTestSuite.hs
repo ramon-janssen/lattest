@@ -40,10 +40,10 @@ accessSeqSelector aut targetState =
     where
     accSeqSelectTest [] _ _ = return $ Right True
     accSeqSelectTest (l:ls) _ _ = return $ case l of
-        In i -> Left (Just i, (l:ls))
-        _ -> Left (Nothing, (l:ls))
+        In i -> Left (Just i, l:ls)
+        _ -> Left (Nothing, l:ls)
     accSeqUpdateTest [] _ _ _ = return $ Right True
-    accSeqUpdateTest (l:ls) _ label _ = return $ if (asSuspended l) == label then Left ls else Right False
+    accSeqUpdateTest (l:ls) _ label _ = return $ if asSuspended l == label then Left ls else Right False
 
 {- | A TestController that selects inputs according to the adaptive distinguishing sequence of the given automaton
 -}
@@ -71,7 +71,7 @@ adgTestSelector aut delta =
             Nil -> Right Set.empty
             Prefix l next -> if ioact == In l then Left next else error "Error: expected to have selected an input but seeing some ioact"
             Plus ls ->
-                let nextList = concat $ fmap getNextState ls
+                let nextList = concatMap getNextState ls
                 in case nextList of
                     [next] -> Left next
                     _ -> error "ADG error: expected to have observed one output or quiescence"
@@ -79,9 +79,9 @@ adgTestSelector aut delta =
                 getNextState ev = case ev of
                     Nil -> []
                     Prefix l next -> if l == delta
-                                        then if ioact == Out Quiescence then [next] else []
-                                     else if ioact == Out (OutSusp l) then [next] else []
-                    Plus ls' -> concat $ fmap getNextState ls'
+                                        then [next | ioact == Out Quiescence]
+                                     else [next | ioact == Out (OutSusp l)]
+                    Plus ls' -> concatMap getNextState ls'
 
 {- | A TestController that yields tests that tries to take an access sequence to the targetState and then executes the adaptive distinguishing sequence
 -}
@@ -96,17 +96,16 @@ nCompleteSingleState model seed nrSteps delta targetState observer = do
 {- | Runs tests from nCompleteSingleState for each given targetState and seed
 -}
 runNCompleteTestSuite :: (Ord q, Ord l, Show q, Show l) => IO (Adapter (IOAct l l) l) -> AutSyntax Det q (IOAct l l) () -> Int -> l -> [(q, Int)] -> IO [(q, Verdict, ([IOSuspAct l l], Maybe (Det q)))]
-runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds = do
-        results <- forM targetStatesAndSeeds $ \(targetState,seed) -> do
+runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
+        forM targetStatesAndSeeds $ \(targetState,seed) -> do
             putStrLn "connecting..."
             adap <- adapter
             imp <- withQuiescenceMillis 200 adap
             let model = interpretQuiescentConcrete spec
             putStrLn "starting test..."
-            putStrLn $ "accessing state: " ++ (show targetState)
+            putStrLn $ "accessing state: " ++ show targetState
             selector <- testSelector model seed targetState
             (verdict,(observed, maybeMq)) <- runTester model selector imp
             close adap
             return (targetState, verdict, (observed, maybeMq))
-        return results
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
