@@ -5,17 +5,19 @@ module Lib
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
+import Lattest.Exec.Testing(runTester)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Adapter.Adapter(send, Adapter(..), close, observe)
+import Lattest.Adapter.Adapter(Adapter(..), close)
 import Lattest.Util.ModelParsingUtils(dumpLTSdot, readAutFile)
 import Lattest.Util.ReportUtils(writeResults, flushResults, initResultsFile, TestResult(..))
-import Control.Monad (forM_, foldM)
+import Control.Monad (foldM)
 import qualified Data.Sequence as Seq
 
+nrSteps, nrTests, initialSeed :: Int
 nrSteps = 10
 nrTests = 12
 initialSeed = 111
+csvPath :: String
 csvPath = "results.csv"
 
 runMultipleTests :: IO ()
@@ -44,7 +46,7 @@ runMultipleTests = do
             -- Initialize CSV file for results (with default header)
             initResultsFile csvPath Nothing
             putStrLn "Starting tests..."
-            
+
             finalRevBuf <- foldM (\revBuf i -> do
                 putStrLn $ "\n--- Test #" ++ show i ++ " ---"
                 putStrLn "Connecting..."
@@ -55,14 +57,15 @@ runMultipleTests = do
                                 `observingOnly` printActions
                                 `observingOnly` traceObserver
                                 `andObserving` stateObserver
-                (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+                (verdict, (observed, _)) <- runTester model testSelector imp
                 close adap
                 writeResults csvPath [TestResult i (show verdict) (show observed)] revBuf 5
-                ) (Seq.empty) [1..nrTests]
-            
+                ) Seq.empty [1..nrTests]
+
             putStrLn "\nAll tests completed."
             -- Flush any remaining results to CSV
             flushResults csvPath finalRevBuf
 
             -- Dump the DOT file with the specification
             dumpLTSdot "LTS.dot" transitions
+

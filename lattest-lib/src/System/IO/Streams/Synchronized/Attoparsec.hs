@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns       #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts   #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
@@ -13,15 +11,14 @@ import           Control.Exception(Exception)
 import           Control.Monad(unless)
 import           Data.String(IsString)
 import           Control.Monad.Extra((||^), (&&^))
-import qualified Data.Attoparsec.ByteString as C8(parse,feed)
-import qualified Data.Attoparsec.ByteString as C8(Parser)
+import qualified Data.Attoparsec.ByteString as C8(parse,feed, Parser)
 import           Data.Attoparsec.Types(Parser,IResult(..))
 import           Data.ByteString(ByteString)
 import qualified Data.ByteString as C8(null)
 import           Data.List(intercalate)
 
-import           System.IO.Streams.Synchronized (TInputStream,makeTInputStream,hasInput)
-import qualified System.IO.Streams.Synchronized as Streams (read, unRead)
+import           Lattest.Streams.Synchronized (TInputStream,makeTInputStream,hasInput)
+import qualified Lattest.Streams.Synchronized as Streams (read, unRead)
 import Control.Concurrent.STM.TVar(TVar, newTVarIO, writeTVar, readTVar)
 import Control.Concurrent.STM(STM, throwSTM)
 
@@ -73,12 +70,13 @@ parseFromStream' stateVar blockUntilFinished is = do
 errorContext :: IsString a => IResult a r -> (a, [String], String)
 errorContext (Fail residual ctx msg) = (residual, ctx, msg)
 errorContext (Partial _) = ("", [], "")
+errorContext (Done residual _) = (residual, [],"")
 
-isFinished :: (IResult a b) -> Bool
+isFinished :: IResult a b -> Bool
 isFinished (Partial _) = False
 isFinished _ = True
 
-data ParseException = ParseException String
+newtype ParseException = ParseException String
 
 instance Exception ParseException
 instance Show ParseException where

@@ -5,13 +5,15 @@ module Lib
 
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
-import Lattest.Model.StandardAutomata(automaton, ioAlphabet, nonDetConcTransFromMRel,interpretQuiescentConcrete, atom, top, bot, (\/), (/\),)
+import Lattest.Model.StandardAutomata(automaton, ioAlphabet, nonDetConcTransFromMRel,interpretQuiescentConcrete, atom, top, (\/), (/\), FreeLattice,)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester)
+import Lattest.Exec.Testing(runTester)
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
 data GState = Q0G | Q1G | Q2G | Q3G | Q4G | Q5G | Q6G | Q7G | Q8G | Q9G | Q10G deriving (Eq, Ord, Show)
+
+q0G,q1G ,q2G ,q3G ,q4G ,q5G ,q6G ,q7G ,q8G ,q9G,q10G :: FreeLattice GState
 q0G = atom Q0G
 q1G = atom Q1G
 q2G = atom Q2G
@@ -58,12 +60,13 @@ testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nr
 someFunc :: IO ()
 --someFunc = withSocketsDo $ do
 someFunc = do
-    putStrLn $ "connecting..."
+    putStrLn "connecting..."
     adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct GIn GOut) GIn) -- the adapter connects, with explicit typing because it should know how to parse incoming data
     imp <- withQuiescenceMillis 200 adap
     let model = interpretQuiescentConcrete sG
-    putStrLn $ "starting test..."
+    putStrLn "starting test..."
     (verdict, (observed, maybeMq)) <- runTester model testSelector imp
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed
     putStrLn $ "final state: " ++ show maybeMq
+

@@ -5,7 +5,7 @@ module Lib
 import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
+import Lattest.Exec.Testing(runTester)
 import Lattest.Exec.StandardTestControllers
 --import Network.Socket(withSocketsDo)
 

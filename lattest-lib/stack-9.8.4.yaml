@@ -1,0 +1,17 @@
+# Resolver to choose a 'specific' stackage snapshot or a compiler version.
+# A snapshot resolver dictates the compiler version and the set of packages
+# to be used for project dependencies.
+#
+# lts-23.28 is currently (june 2026) the latest snapshot for ghc-9.8.4
+resolver: lts-23.28
+
+# User packages to be built.
+packages:
+- .
+
+# Dependency packages to be pulled from upstream that are not in the resolver.
+# These entries can reference officially published versions as well as
+# forks / in-progress versions pinned to a git hash.
+#
+extra-deps:
+- QuickCheck-2.15.0.1@sha256:ff732606dd8b3f76e3cb87a26516583d183729bf540085228c82adf037aca8bf,8751 # for witnesses

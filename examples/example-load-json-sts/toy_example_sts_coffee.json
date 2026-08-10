@@ -1,0 +1,91 @@
+{
+    "id": "sts",
+    "description": "Toy example",
+    "initial_location": 0,
+    "gate_id_type": "string",
+    "location_id_type": "integer",
+    "locationVariables": {
+        "waterlevel": {
+            "type": "integer"
+        }
+    },
+    "parameters": {
+        "waterlevel_p": {
+            "type": "integer"
+        }
+    },
+    "initialValuation": {
+        "waterlevel": 0
+    },
+    "attributes": {},
+    "locations": [0, 1, 2],
+    "inputGates": {
+        "In1": {
+            "text": "the user provides water",
+            "shortname": "water",
+            "parameters": ["waterlevel_p"]
+        }
+    },
+    "outputGates": {
+        "Out1": {
+            "text": "the system is ok",
+            "shortname": "ok",
+            "parameters": ["waterlevel_p"]
+        },
+        "Out2": {
+            "text": "the system provides coffee",
+            "shortname": "coffee",
+            "parameters": []
+        }
+    },
+    "guards": {
+        "G1": { "lhs": "waterlevel", "op": "==", "rhs": "waterlevel_p" },
+        "G2": {
+            "lhs": { "lhs": 1, "op": "<=", "rhs": "waterlevel_p" },
+            "op": "&&",
+            "rhs": { "lhs": "waterlevel_p", "op": "<=", "rhs": 10 }
+        },
+        "G3": { "lhs": "waterlevel", "op": ">=", "rhs": 15 },
+        "G4": { "lhs": "waterlevel_p", "op": "==", "rhs": 1 }
+    },
+    "assignments": {
+        "A1": {
+            "target": "waterlevel",
+            "expression": { "lhs": "waterlevel", "op": "+", "rhs": "waterlevel_p" }
+        },
+        "A2": {
+            "target": "waterlevel",
+            "expression": { "lhs": "waterlevel", "op": "-", "rhs": 10 }
+        }
+    },
+    "switches": {
+        "r_1": {
+            "init_loc": 0,
+            "gate": "In1",
+            "guard": "G2",
+            "assignments": ["A1"],
+            "end_loc": 1
+        },
+        "r_2": {
+            "init_loc": 0,
+            "gate": "Out2",
+            "guard": "G3",
+            "assignments": ["A2"],
+            "end_loc": 0
+        },
+        "r_3": {
+            "init_loc": 1,
+            "gate": "Out1",
+            "guard": "G1",
+            "assignments": [],
+            "end_loc": 0
+        },
+        "r_4": {
+            "init_loc": 0,
+            "gate": "In1",
+            "guard": "G4",
+            "assignments": [],
+            "end_loc": 0
+        }
+    }   
+}

@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 import Test.Lattest.Adapter.StandardAdapters
 import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.NComplete
@@ -9,51 +7,58 @@ import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
-import qualified Lattest.SMT.Config as Config
-import qualified Lattest.SMT.SMT as SMT
+import Test.Lattest.Util.STSJSONParserTest
+import qualified Lattest.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
-
 import qualified Data.Maybe as M
-import Data.Functor(void)
-import System.Timeout(timeout)
-import Test.HUnit hiding (Path, path, assert)
-import Test.QuickCheck
+
+import Test.Tasty
+import Test.Tasty.Runners as Tasty
+import Test.Tasty.Providers as Tasty
+import Test.HUnit as HUnit
+import Test.Tasty.QuickCheck
 
 durationSeconds :: Int
-durationSeconds = 2
+durationSeconds = 3
 
 main :: IO ()
 main = do
-    -- unit tests, for fully written out scenarios
-    putStrLn ">>>>>>> HUNIT TEST <<<<<<<<<"
     hunitTests <- makeHUnitTests
-    void $ timeout (durationSeconds * 10000000) $ runTestTT hunitTests
-    -- property tests
-    putStrLn ">>>>>>> QUICKCHECK TEST <<<<<<<<<"
-    void $ runQuickCheckTests
+    defaultMain $ 
+      localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run multiple times in parallel
+      testGroup "Lattest-tests"
+        [ hunitTests
+        , quickCheckTests
+        ]
 
-runQuickCheckTests :: IO ()
-runQuickCheckTests = do
-    quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property)
-    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
+quickCheckTests :: TestTree
+quickCheckTests = testGroup "Quickcheck"
+  [ quickCheckWithTimeout (prop_jsonStream :: [(Int,Bool,Bool)] -> Property) "jsonStream"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
---    smtRef <- createTestSMTRef
---    quickCheckWithTimeoutWithNumWithSize (prop_solveSymbolic smtRef) 100 2
-    quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15
-    quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000
-    -- concrete-trace specified/allowed correspondence, with traces generated from the model alphabet
-    quickCheck $ within (durationSeconds * 1000000) (withMaxSuccess 200 (prop_specifiedAllowedCorrespondence composedCoffeeMachineIntrpr))
+--    quickCheckWithTimeoutWithNumWithSize prop_solveSymbolic 100 2
+  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
+  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
+  -- concrete-trace specified/allowed correspondence, with traces generated from the model alphabet
+  , testProperty "specifiedAllowedCorrespondence" $
+      within (durationSeconds * 1000000) $ withMaxSuccess 200 $
+      prop_specifiedAllowedCorrespondence composedCoffeeMachineIntrpr
+  ]
 
     where
     quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n = quickCheck $ \testparam -> within (durationSeconds * 1000000) (withMaxSuccess n (prop testparam))
+    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> 
+      within (durationSeconds * 1000000) $ withMaxSize 20 $
+      -- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
+      noShrinking $ prop testparam
 
 
-makeHUnitTests :: IO Test
+makeHUnitTests :: IO TestTree
 makeHUnitTests = do
-    smt <- createTestSMTRef
-    return $ TestList $
+    return $
+      localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run in parallel
+      singleTest "unit tests" $
+      TestList $
         [
         testAccSeq,
         testADG,
@@ -82,6 +87,7 @@ makeHUnitTests = do
         testRandomFIncorrectOutput,
         testRandomFIncorrectInput,
         testSTSHappyFlow,
+        testSTSHappyFlowFloat,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         --testSTSPathCondition,
@@ -93,18 +99,34 @@ makeHUnitTests = do
         testConjunctionOfDifferentValuations,
         testConcreteTraceSpecifiedAllowedCorrespondence,
         testPrintSTS,
-        testReadAutFile
+        testReadAutFile,
+        testSTSJSONParserNominal,
+        testSTSJSONParserNominalFloat,
+        testSTSJSONParserUnknownType,
+        testSTSJSONParserUnsupportedGuardOperand,
+        testSTSJSONParserUnsupportedAssignmentOperand,
+        testSTSJSONParserMissingSwitches,
+        testSTSJSONParserMissingGates,
+        testSTSJSONParserAssignmentTypeMismatch,
+        testSTSJSONParserGuardTypeMismatch,
+        testSTSJSONParserGateIdDup,
+        testLatticeCoffeeSTS
         ]
         ++ testLatticeSTS
         ++ testLatticeSTSQuiescence
         ++ evalTests
-        ++ fmap ($ smt) solveTests
+        ++ solveTests
 
-
-createTestSMTRef :: IO SMT.SMTRef
-createTestSMTRef =
-    let cfg = Config.changeLog Config.defaultConfig False
-        smtLog = Config.smtLog cfg
-        smtProc = M.fromJust (Config.getProc cfg)
-    in SMT.createSMTRef smtProc smtLog
+-- TODO: This wraps HUnit tests into a Tasty test.
+-- The reason we need this wrapper, is that plain HUnit
+-- does not set the exit code, making CI runs pass even
+-- when tests fail.
+-- Instead, we should migrate the HUnit tests to
+-- tasty-hunit, which exposes a very similar interface.
+instance Tasty.IsTest HUnit.Test where
+  run _ t _ = runTestTT t >>= \c ->
+    if errors c + failures c > 0
+      then return $ testFailed (show c)
+      else return $ testPassed (show c)
+  testOptions = pure []
 
