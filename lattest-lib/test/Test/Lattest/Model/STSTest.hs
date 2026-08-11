@@ -23,7 +23,11 @@ module Test.Lattest.Model.STSTest (
     testConjunctionOfDifferentValuations,
     testConcreteTraceSpecifiedAllowedCorrespondence,
     prop_specifiedAllowedCorrespondence,
-    composedCoffeeMachineIntrpr
+    composedCoffeeMachineIntrpr,
+    testPrintSeqCompSTS,
+    testSeqComposedSTS,
+    testSeqComposedAtSTS,
+    testSequentiallyAtRequiresClosedLocation
     )
 where
 
@@ -44,7 +48,7 @@ import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
-import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
+import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
@@ -1060,3 +1064,102 @@ testConjunctionOfDifferentValuations = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsConjOfDifferentValsIntrpr)
     let intrp2 = after stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0])
     assertEqual "after x: " forbidden (stateConf intrp2)
+
+stsExtension :: IOSTS Det Integer String String
+stsExtension =
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
+        coffeeDone = SymInteract (Out "coffeeDone") [pvar]
+        error = SymInteract (Out "error") []
+        doneGuard = x .== p
+        initConf = return 0
+        switches q = case q of
+            0 -> Map.fromList [(coffeeDone, pure (stsTLoc doneGuard noAssignment, 1)),
+                                (error, pure (stsTLoc sTrue noAssignment, 0))]
+            1 -> Map.empty
+            _ -> Map.empty
+    in automaton initConf (Set.fromList [error,coffeeDone]) switches
+
+stsSeqComposed :: STSIntrp Det String (IOAct String String)
+stsSeqComposed = interpretSTS (stsExample |> stsExtension) stsExampleInitAssign
+
+stsSeqComposedAt :: STSIntrp Det String (IOAct String String)
+stsSeqComposedAt = interpretSTS (sequentiallyAt stsExample 2 stsExtension) stsExampleInitAssign
+
+getSTSIntrpStateStr :: String -> Integer -> Det (IntrpState String)
+getSTSIntrpStateStr loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+
+testPrintSeqCompSTS :: Test
+testPrintSeqCompSTS = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsSeqComposed ++ "\n"
+    expected = [QQ.r|
+current state configuration: ("0",{x:=0})
+initial location configuration: "0"
+locations: "0", "1", "2", "3"
+transitions:
+"0"  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},"1")
+"0"  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},"2")
+"0"  ――!"coffeeDone" [p:Int]⟶  -forbidden-
+"0"  ――!"error" []⟶  -forbidden-
+"0"  ――!"ok" [p:Int]⟶  -forbidden-
+"1"  ――?"water" [p:Int]⟶  -underspecified-
+"1"  ――!"coffee" []⟶  -forbidden-
+"1"  ――!"coffeeDone" [p:Int]⟶  -forbidden-
+"1"  ――!"error" []⟶  -forbidden-
+"1"  ――!"ok" [p:Int]⟶  ((x) = (p), {},"0")
+"2"  ――?"water" [p:Int]⟶  -underspecified-
+"2"  ――!"coffee" []⟶  -forbidden-
+"2"  ――!"coffeeDone" [p:Int]⟶  ((x) = (p), {},"3")
+"2"  ――!"error" []⟶  (True, {},"2")
+"2"  ――!"ok" [p:Int]⟶  -forbidden-
+"3"  ――?"water" [p:Int]⟶  -underspecified-
+"3"  ――!"coffee" []⟶  -forbidden-
+"3"  ――!"coffeeDone" [p:Int]⟶  -forbidden-
+"3"  ――!"error" []⟶  -forbidden-
+"3"  ――!"ok" [p:Int]⟶  -forbidden-
+|]
+
+testSeqComposedSTS :: Test
+testSeqComposedSTS = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateStr "0" 0) (stateConf stsSeqComposed)
+    let intrp2 = after stsSeqComposed (GateValue (In "water") [Cint 7])
+    assertEqual "after water 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
+    assertEqual "after ok 7: " (getSTSIntrpStateStr "0" 7) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (In "water") [Cint 9])
+    assertEqual "after water 9: " (getSTSIntrpStateStr "1" 16) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (Out "ok") [Cint 16])
+    assertEqual "after ok 16: " (getSTSIntrpStateStr "0" 16) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "2" 16) (stateConf intrp6)
+    let intrp7 = after intrp6 (GateValue (Out "error") [])
+    assertEqual "after error: " (getSTSIntrpStateStr "2" 16) (stateConf intrp7)
+    let intrp8 = after intrp7 (GateValue (Out "coffeeDone") [Cint 16])
+    assertEqual "after coffeeDone: " (getSTSIntrpStateStr "3" 16) (stateConf intrp8)
+    return()
+
+testSequentiallyAtRequiresClosedLocation :: Test
+testSequentiallyAtRequiresClosedLocation = TestCase $
+    assertThrowsError "sequentiallyAt: location 1 is not closed (it has outgoing transitions)" (sequentiallyAt stsExample 1 stsExtension)
+
+-- Using |> and sequentiallyAt should yield the same result.
+testSeqComposedAtSTS :: Test
+testSeqComposedAtSTS = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateStr "0" 0) (stateConf stsSeqComposedAt)
+    let intrp2 = after stsSeqComposedAt (GateValue (In "water") [Cint 7])
+    assertEqual "after water 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
+    assertEqual "after ok 7: " (getSTSIntrpStateStr "0" 7) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (In "water") [Cint 9])
+    assertEqual "after water 9: " (getSTSIntrpStateStr "1" 16) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (Out "ok") [Cint 16])
+    assertEqual "after ok 16: " (getSTSIntrpStateStr "0" 16) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "2" 16) (stateConf intrp6)
+    let intrp7 = after intrp6 (GateValue (Out "error") [])
+    assertEqual "after error: " (getSTSIntrpStateStr "2" 16) (stateConf intrp7)
+    let intrp8 = after intrp7 (GateValue (Out "coffeeDone") [Cint 16])
+    assertEqual "after coffeeDone: " (getSTSIntrpStateStr "3" 16) (stateConf intrp8)
+    return()
