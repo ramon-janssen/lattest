@@ -57,7 +57,10 @@ reachable,
 reachableFrom,
 prettyPrint,
 prettyPrintFrom,
-prettyPrintIntrp
+prettyPrintIntrp,
+-- * Sequential Composition
+sequentiallyAt,
+(|>)
 )
 where
 
@@ -609,6 +612,61 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 acc' = acc `Set.union` new
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
+
+------------------------------
+-- sequential composition --
+------------------------------
+
+-- | A location is closed if none of its outgoing transitions are specified, i.e. every transition is either forbidden or underspecified.
+isClosedLocation :: BoundedConfiguration m => AutSyntax m loc t tdest -> loc -> Bool
+isClosedLocation aut loc = not (any BM.isIndefinite (Map.elems (transRel aut loc)))
+
+{- |
+    Sequentially compose two automata: sequentiallyAt sts1 loc sts2 merges sts2 into sts1 at the given location of sts1, which must be
+    closed. The result has a joint alphabet and fresh String locations.
+-}
+sequentiallyAt :: (Ord loc1, Ord loc2, Show loc1, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, String)), Completable t) =>
+    AutSyntax m loc1 t tdest -> loc1 -> AutSyntax m loc2 t tdest -> AutSyntax m String t tdest
+sequentiallyAt sts1 mergeLoc sts2
+    | not (mergeLoc `Set.member` locs1) = errorWithoutStackTrace $ "sequentiallyAt: location " ++ show mergeLoc ++ " is not reachable in the first automaton"
+    | not (isClosedLocation sts1 mergeLoc) = errorWithoutStackTrace $ "sequentiallyAt: location " ++ show mergeLoc ++ " is not closed (it has outgoing transitions)"
+    | otherwise = automaton newInitConf newAlphabet switches
+    where
+    locs1 = reachable sts1
+    locs2 = reachable sts2
+    initLocs2 = Set.fromList $ Foldable.toList $ initConf sts2
+    otherLocs2 = locs2 `Set.difference` initLocs2
+
+    n1 = Set.size locs1
+    -- create a new (string) label for each location in the new automaton
+    label1 l = show (Set.findIndex l locs1)
+    label2 l
+        | l `Set.member` initLocs2 = label1 mergeLoc
+        | otherwise = show (n1 + Set.findIndex l otherLocs2)
+
+    newAlphabet = alphabet sts1 `Set.union` alphabet sts2
+    newInitConf = label1 BM.<#> initConf sts1
+
+    switches1 = Map.fromList
+        [ (label1 l1, Map.map (BM.ordMap (second label1)) (transRel sts1 l1))
+        | l1 <- Set.toList locs1, l1 /= mergeLoc ]
+    switches2 = Map.fromList
+        [ (label2 l2, Map.map (BM.ordMap (second label2)) (transRel sts2 l2))
+        | l2 <- Set.toList otherLocs2 ]
+    mergeSwitch = Map.singleton (label1 mergeLoc) $ Map.fromSet mergedTransition (alphabet sts2)
+    mergedTransition t = BM.ordJoin $ (\l2 -> BM.ordMap (second label2) (trans sts2 l2 t)) BM.<#> initConf sts2
+
+    allSwitches = switches1 `Map.union` switches2 `Map.union` mergeSwitch
+    switches loc = Map.findWithDefault Map.empty loc allSwitches
+
+infixl 1 |>
+-- | Sequentially compose two automata at the unique closed location of the first. Throws an error if the first automaton does not have exactly one closed location.
+(|>) :: (Ord loc1, Ord loc2, Show loc1, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, String)), Completable t) =>
+    AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m String t tdest
+sts1 |> sts2 = case Set.toList $ Set.filter (isClosedLocation sts1) (reachable sts1) of
+    [loc] -> sequentiallyAt sts1 loc sts2
+    []    -> errorWithoutStackTrace "(|>): the first automaton has no closed location to sequentially compose at"
+    _     -> errorWithoutStackTrace "(|>): the first automaton has multiple closed locations; use `sequentiallyAt` to pick one explicitly"
 
 
 
