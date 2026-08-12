@@ -627,8 +627,8 @@ isSinkLocation aut loc = not (any BM.isIndefinite (Map.elems (transRel aut loc))
     Sequentially compose two automata: sequentiallyAt sts1 locs sts2 merges sts2 into sts1 at the given locations of sts1, which must be
     sink. The result has a joint alphabet and fresh String locations.
 -}
-sequentiallyAt :: (Ord loc1, Ord loc2, Show loc1, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, String)), Completable t) =>
-    AutSyntax m loc1 t tdest -> [loc1] -> AutSyntax m loc2 t tdest -> AutSyntax m String t tdest
+sequentiallyAt :: (Ord loc1, Ord loc2, Show loc1, Show loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 (loc1, loc2))), Completable t) =>
+    AutSyntax m loc1 t tdest -> [loc1] -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 (loc1, loc2)) t tdest
 sequentiallyAt sts1 mergeLocs sts2
     | null mergeLocs = errorWithoutStackTrace $ "sequentiallyAt: no locations given to merge at"
     | not (all (`Set.member` locs1) mergeLocs) = errorWithoutStackTrace $ "sequentiallyAt: one or more locations are not reachable in the first automaton"
@@ -641,18 +641,11 @@ sequentiallyAt sts1 mergeLocs sts2
     otherLocs2 = locs2 `Set.difference` initLocs2
     mergeLocSet = Set.fromList mergeLocs
 
-    mergeLocsSeq = Seq.fromList mergeLocs
-    mergeLocAt i = Seq.index mergeLocsSeq i
+    label1 = Left
 
-    n1 = Set.size locs1
-    n2 = Set.size otherLocs2
-    mergeIndex = Map.fromList (zip mergeLocs [0 ..])
-
-    -- create a new (string) label for each location in the new automaton
-    label1 l = show (Set.findIndex l locs1)
-    label2 i l
-        | l `Set.member` initLocs2 = label1 (mergeLocAt i)
-        | otherwise = show (n1 + i * n2 + Set.findIndex l otherLocs2)
+    label2 mLoc l
+        | l `Set.member` initLocs2 = Left mLoc
+        | otherwise                = Right (mLoc, l)
 
     newAlphabet = alphabet sts1 `Set.union` alphabet sts2
     newInitConf = label1 BM.<#> initConf sts1
@@ -660,21 +653,24 @@ sequentiallyAt sts1 mergeLocs sts2
     switches1 = Map.fromList
         [ (label1 l1, Map.map (BM.ordMap (second label1)) (transRel sts1 l1))
         | l1 <- Set.toList locs1, l1 `Set.notMember` mergeLocSet ]
+
     switches2 = Map.fromList
-        [ (label2 i l2, Map.map (BM.ordMap (second (label2 i))) (transRel sts2 l2))
-        | (mLoc, i) <- Map.toList mergeIndex, l2 <- Set.toList otherLocs2 ]
+        [ (label2 mLoc l2, Map.map (BM.ordMap (second (label2 mLoc))) (transRel sts2 l2))
+        | mLoc <- mergeLocs, l2 <- Set.toList otherLocs2 ]
+
     mergeSwitch = Map.fromList
-        [ (label1 mLoc, Map.fromSet (mergedTransition i) (alphabet sts2))
-        | (mLoc, i) <- Map.toList mergeIndex ]
-    mergedTransition i t = BM.ordJoin $ (\l2 -> BM.ordMap (second (label2 i)) (trans sts2 l2 t)) BM.<#> initConf sts2
+        [ (label1 mLoc, Map.fromSet (mergedTransition mLoc) (alphabet sts2))
+        | mLoc <- mergeLocs ]
+    mergedTransition mLoc t =
+        BM.ordJoin $ (\l2 -> BM.ordMap (second (label2 mLoc)) (trans sts2 l2 t)) BM.<#> initConf sts2
 
     allSwitches = switches1 `Map.union` switches2 `Map.union` mergeSwitch
     switches loc = Map.findWithDefault Map.empty loc allSwitches
 
 infixl 1 |>
 -- | Sequentially compose two automata at all sink locations of the first. Throws an error if the first automaton does not have any sink locations.
-(|>) :: (Ord loc1, Ord loc2, Show loc1, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, String)), Completable t) =>
-    AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m String t tdest
+(|>) :: (Ord loc1, Ord loc2, Show loc1, Show loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 (loc1, loc2))), Completable t) =>
+    AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 (loc1, loc2)) t tdest
 sts1 |> sts2 = case Set.toList $ Set.filter (isSinkLocation sts1) (reachable sts1) of
     []      -> errorWithoutStackTrace "(|>): the first automaton has no sink location to sequentially compose at"
     locList -> sequentiallyAt sts1 locList sts2
