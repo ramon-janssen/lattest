@@ -27,7 +27,8 @@ module Test.Lattest.Model.STSTest (
     testPrintSeqCompSTS,
     testSeqComposedSTS,
     testSeqComposedAtSTS,
-    testSequentiallyAtRequiresClosedLocation
+    testSequentiallyAtRequiresSinkLocation,
+    testSeqComposedAtSingleLocSTS
     )
 where
 
@@ -1065,26 +1066,33 @@ testConjunctionOfDifferentValuations = TestCase $ do
     let intrp2 = after stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0])
     assertEqual "after x: " forbidden (stateConf intrp2)
 
-stsExtension :: IOSTS Det Integer String String
-stsExtension =
+-- Define an STS with two sink locations to sequentially compose with the example STS.
+stsPrelude :: IOSTS Det Integer String String
+stsPrelude =
     let p = sVar pvar :: Expr Integer
         x = sVar xvar :: Expr Integer
-        coffeeDone = SymInteract (Out "coffeeDone") [pvar]
+        startEmpty = SymInteract (In "startEmpty") []
+        startWithWater = SymInteract (In "startWithWater") [pvar]
         error = SymInteract (Out "error") []
-        doneGuard = x .== p
+        waterAssign = assignment [xvar =: x .+ p]
         initConf = return 0
         switches q = case q of
-            0 -> Map.fromList [(coffeeDone, pure (stsTLoc doneGuard noAssignment, 1)),
+            0 -> Map.fromList [(startEmpty, pure (stsTLoc sTrue noAssignment, 1)),
+                                (startWithWater, pure (stsTLoc sTrue waterAssign, 2)),
                                 (error, pure (stsTLoc sTrue noAssignment, 0))]
             1 -> Map.empty
+            2 -> Map.empty
             _ -> Map.empty
-    in automaton initConf (Set.fromList [error,coffeeDone]) switches
+    in automaton initConf (Set.fromList [startEmpty, startWithWater, error]) switches
 
 stsSeqComposed :: STSIntrp Det String (IOAct String String)
-stsSeqComposed = interpretSTS (stsExample |> stsExtension) stsExampleInitAssign
+stsSeqComposed = interpretSTS (stsPrelude |> stsExample) stsExampleInitAssign
 
 stsSeqComposedAt :: STSIntrp Det String (IOAct String String)
-stsSeqComposedAt = interpretSTS (sequentiallyAt stsExample 2 stsExtension) stsExampleInitAssign
+stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExample) stsExampleInitAssign
+
+stsSeqComposedAtOne :: STSIntrp Det String (IOAct String String)
+stsSeqComposedAtOne = interpretSTS (sequentiallyAt stsPrelude [1] stsExample) stsExampleInitAssign
 
 getSTSIntrpStateStr :: String -> Integer -> Det (IntrpState String)
 getSTSIntrpStateStr loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
@@ -1097,69 +1105,128 @@ testPrintSeqCompSTS = TestCase $ assertBool failureMessage (expected == actual)
     expected = [QQ.r|
 current state configuration: ("0",{x:=0})
 initial location configuration: "0"
-locations: "0", "1", "2", "3"
+locations: "0", "1", "2", "3", "4", "5", "6"
 transitions:
-"0"  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},"1")
-"0"  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},"2")
-"0"  ――!"coffeeDone" [p:Int]⟶  -forbidden-
-"0"  ――!"error" []⟶  -forbidden-
+"0"  ――?"startEmpty" []⟶  (True, {},"1")
+"0"  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},"2")
+"0"  ――?"water" [p:Int]⟶  -underspecified-
+"0"  ――!"coffee" []⟶  -forbidden-
+"0"  ――!"error" []⟶  (True, {},"0")
 "0"  ――!"ok" [p:Int]⟶  -forbidden-
-"1"  ――?"water" [p:Int]⟶  -underspecified-
-"1"  ――!"coffee" []⟶  -forbidden-
-"1"  ――!"coffeeDone" [p:Int]⟶  -forbidden-
+"1"  ――?"startEmpty" []⟶  -underspecified-
+"1"  ――?"startWithWater" [p:Int]⟶  -underspecified-
+"1"  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},"3")
+"1"  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},"4")
 "1"  ――!"error" []⟶  -forbidden-
-"1"  ――!"ok" [p:Int]⟶  ((x) = (p), {},"0")
-"2"  ――?"water" [p:Int]⟶  -underspecified-
-"2"  ――!"coffee" []⟶  -forbidden-
-"2"  ――!"coffeeDone" [p:Int]⟶  ((x) = (p), {},"3")
-"2"  ――!"error" []⟶  (True, {},"2")
+"1"  ――!"ok" [p:Int]⟶  -forbidden-
+"2"  ――?"startEmpty" []⟶  -underspecified-
+"2"  ――?"startWithWater" [p:Int]⟶  -underspecified-
+"2"  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},"5")
+"2"  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},"6")
+"2"  ――!"error" []⟶  -forbidden-
 "2"  ――!"ok" [p:Int]⟶  -forbidden-
+"3"  ――?"startEmpty" []⟶  -underspecified-
+"3"  ――?"startWithWater" [p:Int]⟶  -underspecified-
 "3"  ――?"water" [p:Int]⟶  -underspecified-
 "3"  ――!"coffee" []⟶  -forbidden-
-"3"  ――!"coffeeDone" [p:Int]⟶  -forbidden-
 "3"  ――!"error" []⟶  -forbidden-
-"3"  ――!"ok" [p:Int]⟶  -forbidden-
+"3"  ――!"ok" [p:Int]⟶  ((x) = (p), {},"1")
+"4"  ――?"startEmpty" []⟶  -underspecified-
+"4"  ――?"startWithWater" [p:Int]⟶  -underspecified-
+"4"  ――?"water" [p:Int]⟶  -underspecified-
+"4"  ――!"coffee" []⟶  -forbidden-
+"4"  ――!"error" []⟶  -forbidden-
+"4"  ――!"ok" [p:Int]⟶  -forbidden-
+"5"  ――?"startEmpty" []⟶  -underspecified-
+"5"  ――?"startWithWater" [p:Int]⟶  -underspecified-
+"5"  ――?"water" [p:Int]⟶  -underspecified-
+"5"  ――!"coffee" []⟶  -forbidden-
+"5"  ――!"error" []⟶  -forbidden-
+"5"  ――!"ok" [p:Int]⟶  ((x) = (p), {},"2")
+"6"  ――?"startEmpty" []⟶  -underspecified-
+"6"  ――?"startWithWater" [p:Int]⟶  -underspecified-
+"6"  ――?"water" [p:Int]⟶  -underspecified-
+"6"  ――!"coffee" []⟶  -forbidden-
+"6"  ――!"error" []⟶  -forbidden-
+"6"  ――!"ok" [p:Int]⟶  -forbidden-
 |]
 
 testSeqComposedSTS :: Test
 testSeqComposedSTS = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpStateStr "0" 0) (stateConf stsSeqComposed)
-    let intrp2 = after stsSeqComposed (GateValue (In "water") [Cint 7])
-    assertEqual "after water 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp2)
-    let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
-    assertEqual "after ok 7: " (getSTSIntrpStateStr "0" 7) (stateConf intrp3)
-    let intrp4 = after intrp3 (GateValue (In "water") [Cint 9])
-    assertEqual "after water 9: " (getSTSIntrpStateStr "1" 16) (stateConf intrp4)
-    let intrp5 = after intrp4 (GateValue (Out "ok") [Cint 16])
-    assertEqual "after ok 16: " (getSTSIntrpStateStr "0" 16) (stateConf intrp5)
-    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
-    assertEqual "after coffee: " (getSTSIntrpStateStr "2" 16) (stateConf intrp6)
-    let intrp7 = after intrp6 (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpStateStr "2" 16) (stateConf intrp7)
-    let intrp8 = after intrp7 (GateValue (Out "coffeeDone") [Cint 16])
-    assertEqual "after coffeeDone: " (getSTSIntrpStateStr "3" 16) (stateConf intrp8)
+    let intrp1 = after stsSeqComposed (GateValue (Out "error") [])
+    assertEqual "after error: " (getSTSIntrpStateStr "0" 0) (stateConf intrp1)
+    -- branch 1: startEmpty
+    let intrp2 = after intrp1 (GateValue (In "startEmpty") [])
+    assertEqual "after startEmpty: " (getSTSIntrpStateStr "1" 0) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (In "water") [Cint 7])
+    assertEqual "after water 7: " (getSTSIntrpStateStr "3" 7) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (Out "ok") [Cint 7])
+    assertEqual "after ok 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (In "water") [Cint 9])
+    assertEqual "after water 9: " (getSTSIntrpStateStr "3" 16) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "ok") [Cint 16])
+    assertEqual "after ok 16: " (getSTSIntrpStateStr "1" 16) (stateConf intrp6)
+    let intrp7 = after intrp6 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "4" 16) (stateConf intrp7)
+    -- branch 2: startWithWater
+    let intrp8 = after intrp1 (GateValue (In "startWithWater") [Cint 16])
+    assertEqual "after startWithWater: " (getSTSIntrpStateStr "2" 16) (stateConf intrp8)
+    let intrp9 = after intrp8 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "6" 16) (stateConf intrp9)
     return()
 
-testSequentiallyAtRequiresClosedLocation :: Test
-testSequentiallyAtRequiresClosedLocation = TestCase $
-    assertThrowsError "sequentiallyAt: location 1 is not closed (it has outgoing transitions)" (sequentiallyAt stsExample 1 stsExtension)
+testSequentiallyAtRequiresSinkLocation :: Test
+testSequentiallyAtRequiresSinkLocation = TestCase $
+    assertThrowsError "sequentiallyAt: one or more locations are not sink (they have outgoing transitions)" (sequentiallyAt stsExample [1] stsPrelude)
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedAtSTS :: Test
 testSeqComposedAtSTS = TestCase $ do
-    assertEqual "\ninitial state " (getSTSIntrpStateStr "0" 0) (stateConf stsSeqComposedAt)
-    let intrp2 = after stsSeqComposedAt (GateValue (In "water") [Cint 7])
-    assertEqual "after water 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp2)
-    let intrp3 = after intrp2 (GateValue (Out "ok") [Cint 7])
-    assertEqual "after ok 7: " (getSTSIntrpStateStr "0" 7) (stateConf intrp3)
-    let intrp4 = after intrp3 (GateValue (In "water") [Cint 9])
-    assertEqual "after water 9: " (getSTSIntrpStateStr "1" 16) (stateConf intrp4)
-    let intrp5 = after intrp4 (GateValue (Out "ok") [Cint 16])
-    assertEqual "after ok 16: " (getSTSIntrpStateStr "0" 16) (stateConf intrp5)
-    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
-    assertEqual "after coffee: " (getSTSIntrpStateStr "2" 16) (stateConf intrp6)
-    let intrp7 = after intrp6 (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpStateStr "2" 16) (stateConf intrp7)
-    let intrp8 = after intrp7 (GateValue (Out "coffeeDone") [Cint 16])
-    assertEqual "after coffeeDone: " (getSTSIntrpStateStr "3" 16) (stateConf intrp8)
+    assertEqual "\ninitial state " (getSTSIntrpStateStr "0" 0) (stateConf stsSeqComposed)
+    let intrp1 = after stsSeqComposedAt (GateValue (Out "error") [])
+    assertEqual "after error: " (getSTSIntrpStateStr "0" 0) (stateConf intrp1)
+    -- branch 1: startEmpty
+    let intrp2 = after intrp1 (GateValue (In "startEmpty") [])
+    assertEqual "after startEmpty: " (getSTSIntrpStateStr "1" 0) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (In "water") [Cint 7])
+    assertEqual "after water 7: " (getSTSIntrpStateStr "3" 7) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (Out "ok") [Cint 7])
+    assertEqual "after ok 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (In "water") [Cint 9])
+    assertEqual "after water 9: " (getSTSIntrpStateStr "3" 16) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "ok") [Cint 16])
+    assertEqual "after ok 16: " (getSTSIntrpStateStr "1" 16) (stateConf intrp6)
+    let intrp7 = after intrp6 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "4" 16) (stateConf intrp7)
+    -- branch 2: startWithWater
+    let intrp8 = after intrp1 (GateValue (In "startWithWater") [Cint 16])
+    assertEqual "after startWithWater: " (getSTSIntrpStateStr "2" 16) (stateConf intrp8)
+    let intrp9 = after intrp8 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "6" 16) (stateConf intrp9)
+    return()
+
+testSeqComposedAtSingleLocSTS :: Test
+testSeqComposedAtSingleLocSTS = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateStr "0" 0) (stateConf stsSeqComposed)
+    let intrp1 = after stsSeqComposedAtOne (GateValue (Out "error") [])
+    assertEqual "after error: " (getSTSIntrpStateStr "0" 0) (stateConf intrp1)
+    -- branch 1: startEmpty
+    let intrp2 = after intrp1 (GateValue (In "startEmpty") [])
+    assertEqual "after startEmpty: " (getSTSIntrpStateStr "1" 0) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (In "water") [Cint 7])
+    assertEqual "after water 7: " (getSTSIntrpStateStr "3" 7) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (Out "ok") [Cint 7])
+    assertEqual "after ok 7: " (getSTSIntrpStateStr "1" 7) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (In "water") [Cint 9])
+    assertEqual "after water 9: " (getSTSIntrpStateStr "3" 16) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "ok") [Cint 16])
+    assertEqual "after ok 16: " (getSTSIntrpStateStr "1" 16) (stateConf intrp6)
+    let intrp7 = after intrp6 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpStateStr "4" 16) (stateConf intrp7)
+    -- branch 2: startWithWater
+    let intrp8 = after intrp1 (GateValue (In "startWithWater") [Cint 16])
+    assertEqual "after startWithWater: " (getSTSIntrpStateStr "2" 16) (stateConf intrp8)
+    let intrp9 = after intrp8 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " forbidden (stateConf intrp9)
     return()
