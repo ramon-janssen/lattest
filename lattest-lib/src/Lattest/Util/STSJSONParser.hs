@@ -26,6 +26,7 @@ import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (List, withExprConstraints, Constant (..))
+import Data.SBV (RCSet (..))
 
 data UntypedExpr
     = UEBool Bool
@@ -89,7 +90,9 @@ toBoolExpr varmap (UEOp2 "==" e1 e2) = do
         Some StringType -> (.==) <$> toStrExpr   varmap e1 <*> toStrExpr   varmap e2
         Some FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
         Some (ListType tp) -> withExprConstraints tp $ (.==) <$> toListExpr tp varmap e1 <*> toListExpr tp varmap e2
+        Some (SetType _) -> error "no eq on rcsets"
         Some (TupleType a b) -> withExprConstraints (TupleType a b) $ (.==) <$> toTupleExpr a b varmap e1 <*> toTupleExpr a b varmap e2
+        Some (SumType a b) -> withExprConstraints (SumType a b) $ (.==) <$> toEitherExpr a b varmap e1 <*> toEitherExpr a b varmap e2
 toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toBoolExpr varmap (UEOp2 "==" e1 e2)
 toBoolExpr varmap (UEOp2 "<"  e1 e2) = toComparisonExpr (.<)  varmap e1 e2
 toBoolExpr varmap (UEOp2 "<=" e1 e2) = toComparisonExpr (.<=) varmap e1 e2
@@ -124,10 +127,22 @@ toListExpr t varmap e = case e of
   -- TODO: add operators that return lists
   _ -> Left $ "not a list expression: " ++ show e
 
+toSetExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (RCSet t))
+toSetExpr t varmap e = case e of
+  UEStr name -> lookupVar varmap name (SetType t) sVar
+  -- TODO: add operators that return sets
+  _ -> Left $ "not a list expression: " ++ show e
+
 toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
 toTupleExpr t1 t2 varmap e = case e of
   UEStr name -> lookupVar varmap name (TupleType t1 t2) sVar
   -- TODO: add operators that return tuples
+  _ -> Left $ "not a tuple expression: " ++ show e
+
+toEitherExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (Either a b))
+toEitherExpr t1 t2 varmap e = case e of
+  UEStr name -> lookupVar varmap name (SumType t1 t2) sVar
+  -- TODO: add operators that return eithers
   _ -> Left $ "not a tuple expression: " ++ show e
 
 toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
@@ -285,7 +300,9 @@ buildAssignment varMap name def = do
         BoolType   -> (v =:) <$> toBoolExpr varMap expr
         StringType -> (v =:) <$> toStrExpr  varMap expr
         ListType t -> (v =:) <$> toListExpr t varMap expr
+        SetType t -> (v =:) <$> toSetExpr t varMap expr
         TupleType a b -> (v =:) <$> toTupleExpr a b varMap expr
+        SumType a b -> (v =:) <$> toEitherExpr a b varMap expr
 
 buildAssignmentMap
     :: VarMap
@@ -359,7 +376,9 @@ buildValuation locVarCtx initVal =
         defaultConst BoolType   = CBool False
         defaultConst StringType = CString ""
         defaultConst (ListType t) = CList [] t
+        defaultConst (SetType t) = withExprConstraints t $ CSet (RegularSet mempty) t
         defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
+        defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
 
 convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLattice String String String, Valuation)
 convertSTSJson json = do

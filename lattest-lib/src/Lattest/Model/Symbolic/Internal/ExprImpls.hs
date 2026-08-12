@@ -569,7 +569,9 @@ insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ StringType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 
 fromConst' :: ConstType a => Constant a -> a
 fromConst' = fromConst

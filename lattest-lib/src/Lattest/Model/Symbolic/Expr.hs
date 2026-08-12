@@ -14,7 +14,9 @@ module Lattest.Model.Symbolic.Expr
 , bool
 , string
 , list
+, set
 , tuple
+, option
 , constType
 , ConstType
 , fromConst

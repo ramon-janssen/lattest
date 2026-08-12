@@ -32,7 +32,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , reduce
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CFloat, CBool, CString, CList, CTuple)
+, Constant(Constant, CInt, CFloat, CBool, CString, CList, CTuple, CSet, CSum)
 , constType
 , constValue
 , ConstType(..)
@@ -50,7 +50,9 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , bool
 , string
 , list
+, set
 , tuple
+, option
 , toSBV
 )
 where
@@ -78,7 +80,7 @@ import Data.Some (Some(..))
 import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
-import Data.SBV (SymVal(..), HasKind)
+import Data.SBV (SymVal(..), HasKind, RCSet (..))
 import qualified Data.SBV.Internals as SBVI
 import Test.QuickCheck.Arbitrary (Arbitrary(..))
 import Data.EqP (EqP (..))
@@ -91,7 +93,6 @@ import Control.Monad ((<=<))
 import Data.Data (Data)
 import Data.Bifunctor (Bifunctor(..))
 import qualified Data.Aeson.Types as JSON
-import Data.Typeable (TypeRep)
 
 -- avoids overlapping with String in typeclass instances
 newtype List a = List { getList :: [a] }
@@ -102,8 +103,10 @@ data Type a where
   BoolType :: Type Bool
   StringType :: Type String
   ListType :: Type a -> Type (List a)
+  SetType :: Type a -> Type (RCSet a)
   TupleType :: Type a -> Type b -> Type (a,b)
-  ADTType :: ExprConstraints a => TypeRep a -> Type a
+  SumType :: Type a -> Type b -> Type (Either a b)
+
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
 instance (SymVal a, ExprConstraints a) => SymVal (List a) where
@@ -124,8 +127,9 @@ instance GEq Type where
   geq BoolType BoolType = Just Refl
   geq StringType StringType = Just Refl
   geq (ListType a) (ListType b) = (\Refl -> Refl) <$> geq a b
+  geq (SetType a) (SetType b) = (\Refl -> Refl) <$> geq a b
   geq (TupleType a b) (TupleType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
-  geq (ADTType a) (ADTType b) = geq a b
+  geq (SumType a b) (SumType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
   geq _ _ = Nothing
 instance GCompare Type where
   gcompare = \cases
@@ -141,7 +145,28 @@ instance GCompare Type where
       GGT -> GGT
       GLT -> GLT
       GEQ -> GEQ
-    _ _ -> GGT
+    (ListType _) _ -> GLT
+    (SetType a) (SetType b) -> case gcompare a b of
+      GGT -> GGT
+      GLT -> GLT
+      GEQ -> GEQ
+    (SetType _) _ -> GLT
+    (TupleType a b) (TupleType c d) -> case gcompare a c of
+      GGT -> GGT
+      GLT -> GLT
+      GEQ -> case gcompare b d of
+        GGT -> GGT
+        GLT -> GLT
+        GEQ -> GEQ
+    (TupleType _ _) _ -> GLT
+    (SumType a b) (SumType c d) -> case gcompare a c of
+      GGT -> GGT
+      GLT -> GLT
+      GEQ -> case gcompare b d of
+        GGT -> GGT
+        GLT -> GLT
+        GEQ -> GEQ
+    (SumType _ _) _ -> GLT
 instance ExprType a => Read (Type a) where
   readsPrec _ =
     readParen False $ \s ->
@@ -171,13 +196,15 @@ instance GRead Type where
           ("]", rest) <- lex s2
           Church.withSome t $ \(tp :: Type t) -> do
             return (Church.mkSome $ ListType tp, rest)
-      -- TODO test lists, make tuples
+      ++ error "TODO test lists, make tuples, sets, eithers"
 
 withExprConstraints :: Type x -> (ExprConstraints x => r) -> r
-withExprConstraints t k = has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymValToSBV t $ has @EqToSBV t k
+withExprConstraints t k = has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymValToSBV t $ has @EqToSBV t $ has @OrdToSBV t k
 
 class Eq (ToSBV a) => EqToSBV a
 instance Eq (ToSBV a) => EqToSBV a
+class Ord (ToSBV a) => OrdToSBV a
+instance Ord (ToSBV a) => OrdToSBV a
 class SymVal (ToSBV a) => SymValToSBV a
 instance SymVal (ToSBV a) => SymValToSBV a
 
@@ -188,7 +215,10 @@ instance Has ExprType Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @ExprType t' k
+    SetType t' -> has @ExprType t' k
     TupleType a b -> has @ExprType a $ has @ExprType b k
+    SumType a b -> has @ExprType a $ has @ExprType b k
+
 
 instance Has Eq Type where
   has t k = case t of
@@ -197,7 +227,9 @@ instance Has Eq Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Eq t' k
+    SetType _ -> error "no eq on RCSet"
     TupleType a b -> has @Eq a $ has @Eq b k
+    SumType a b -> has @Eq a $ has @Eq b k
 
 instance Has Ord Type where
   has t k = case t of
@@ -206,7 +238,9 @@ instance Has Ord Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Ord t' k
+    SetType _ -> error "no Ord on RCSet"
     TupleType a b -> has @Ord a $ has @Ord b k
+    SumType a b -> has @Ord a $ has @Ord b k
 
 instance Has Show Type where
   has t k = case t of
@@ -215,7 +249,9 @@ instance Has Show Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Show t' k
+    SetType t' -> has @Show t' k
     TupleType a b -> has @Show a $ has @Show b k
+    SumType a b -> has @Show a $ has @Show b k
 
 instance Has Read Type where
   has t k = case t of
@@ -224,7 +260,9 @@ instance Has Read Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Read t' k
+    SetType t' -> error "todo: read rcset" -- has @Read t' k
     TupleType a b -> has @Read a $ has @Read b k
+    SumType a b -> has @Read a $ has @Read b k
 
 instance Has Data Type where
   has t k = case t of
@@ -233,7 +271,9 @@ instance Has Data Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @Data t' k
+    SetType t' -> has @Data t' $ has @Ord t' k
     TupleType a b -> has @Data a $ has @Data b k
+    SumType a b -> has @Data a $ has @Data b k
 
 instance Has SymVal Type where
   has t k = case t of
@@ -242,7 +282,9 @@ instance Has SymVal Type where
     BoolType -> k
     StringType -> k
     ListType t' -> withExprConstraints t' $ has @SymVal t' k
+    SetType t' -> withExprConstraints t' $ has @Ord t' $ has @SymVal t' k
     TupleType a b -> has @SymVal a $ has @SymVal b k
+    SumType a b -> has @SymVal a $ has @SymVal b k
 
 instance Has EqToSBV Type where
   has IntType     k = k
@@ -250,9 +292,27 @@ instance Has EqToSBV Type where
   has BoolType    k = k
   has StringType  k = k
   has (ListType t) k = has @EqToSBV t k
+  has (SetType t) k = error "no eq on rcset" -- has @Eq t k
   has (TupleType a b) k =
     has @EqToSBV a $
     has @EqToSBV b k
+  has (SumType a b) k =
+    has @EqToSBV a $
+    has @EqToSBV b k
+
+instance Has OrdToSBV Type where
+  has IntType     k = k
+  has FloatType   k = k
+  has BoolType    k = k
+  has StringType  k = k
+  has (ListType t) k = has @OrdToSBV t k
+  has (SetType t) k = error "no ord on rcset" -- has @Eq t k
+  has (TupleType a b) k =
+    has @OrdToSBV a $
+    has @OrdToSBV b k
+  has (SumType a b) k =
+    has @OrdToSBV a $
+    has @OrdToSBV b k
 
 instance Has SymValToSBV Type where
   has IntType     k = k
@@ -260,7 +320,11 @@ instance Has SymValToSBV Type where
   has BoolType    k = k
   has StringType  k = k
   has (ListType t) k = has @SymValToSBV t k
+  has (SetType t) k = has @SymValToSBV t $ has @OrdToSBV t k
   has (TupleType a b) k =
+    has @SymValToSBV a $
+    has @SymValToSBV b k
+  has (SumType a b) k =
     has @SymValToSBV a $
     has @SymValToSBV b k
 
@@ -283,9 +347,15 @@ instance ExprType String where
 instance ExprType a => ExprType (List a) where
     typeOf _ = ListType $ typeOf undefined
     typeOf' _ = ListType $ typeOf undefined
+instance ExprType a => ExprType (RCSet a) where
+    typeOf _ = SetType $ typeOf undefined
+    typeOf' _ = SetType $ typeOf undefined
 instance (ExprType a, ExprType b) => ExprType (a,b) where
     typeOf _ = TupleType (typeOf undefined) (typeOf undefined)
     typeOf' _ = TupleType (typeOf undefined) (typeOf undefined)
+instance (ExprType a, ExprType b) => ExprType (Either a b) where
+    typeOf _ = SumType (typeOf undefined) (typeOf undefined)
+    typeOf' _ = SumType (typeOf undefined) (typeOf undefined)
 
 instance Show (Type a) where
     show IntType = "Int"
@@ -293,7 +363,9 @@ instance Show (Type a) where
     show StringType = "String"
     show FloatType = "Float"
     show (ListType t) = "[" ++ show t ++ "]"
+    show (SetType t) = "[" ++ show t ++ "]"
     show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
+    show (SumType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
 
 data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
 instance GEq Variable where
@@ -327,7 +399,7 @@ deriving instance Ord a => Ord (Constant a)
 deriving instance Show a => Show (Constant a)
 deriving instance (Read a, ExprType a) => Read (Constant a)
 
-{-# COMPLETE CBool, CInt, CFloat, CString, CList, CTuple #-}
+{-# COMPLETE CBool, CInt, CFloat, CString, CList, CTuple, CSet, CSum #-}
 pattern CBool :: () => (a ~ Bool) => a -> Constant a
 pattern CBool b = Constant BoolType b
 pattern CInt :: () => (a ~ Integer) => a -> Constant a
@@ -338,8 +410,12 @@ pattern CString :: () => (a ~ String) => a -> Constant a
 pattern CString s = Constant StringType s
 pattern CList :: () => (xs ~ List x) => [x] -> Type x -> Constant xs
 pattern CList xs t = (Constant (ListType t) (List xs))
+pattern CSet :: () => (xs ~ RCSet x) => RCSet x -> Type x -> Constant xs
+pattern CSet xs t = (Constant (SetType t) xs)
 pattern CTuple :: () => (ab ~ (a,b)) => a -> b -> Type a -> Type b -> Constant ab
 pattern CTuple a b ta tb = (Constant (TupleType ta tb) (a,b))
+pattern CSum :: () => (ab ~ (Either a b)) => Either a b -> Type a -> Type b -> Constant ab
+pattern CSum ab ta tb = (Constant (SumType ta tb) ab)
 
 int :: Integer -> Some Constant
 int i = Some (CInt i)
@@ -351,8 +427,12 @@ string :: String -> Some Constant
 string s = Some (CString s)
 list :: ExprType a => [a] -> Some Constant
 list xs = Some (CList xs (typeOf' xs))
+set :: ExprType a => RCSet a -> Some Constant
+set xs = Some (CSet xs (typeOf' xs))
 tuple :: (ExprType a, ExprType b) => a -> b -> Some Constant
 tuple a b = Some (CTuple a b (typeOf a) (typeOf b))
+option :: (ExprType a, ExprType b) => Either a b -> Some Constant
+option x = Some (CSum x (typeOf undefined) (typeOf undefined))
 
 instance GEq Constant where
   a `geq` b = case constType a `geq` constType b of
@@ -392,7 +472,9 @@ instance JSON.FromJSON (Some Constant) where
             Some FloatType -> parseFloat $ lkup "value" m
             Some StringType -> parseString $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
+            Some (SetType t) -> parseList t $ lkup "value" m
             Some (TupleType a b) -> parseTuple a b $ lkup "value" m
+            Some (SumType a b) -> parseTuple a b $ lkup "value" m
         where
         parseType (JSON.String (Text.unpack -> s)) = case s of
           "string" -> pure $ Some StringType
@@ -400,8 +482,13 @@ instance JSON.FromJSON (Some Constant) where
           "float" -> pure $ Some FloatType
           "bool" -> pure $ Some BoolType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
+          '{':(init -> cs) -> (\(Some t) -> Some $ SetType t)  <$> parseType (JSON.String (Text.pack cs))
           '(':(parseTupleType 0 . init -> (a,b))
             -> (\(Some a') (Some b') -> Some $ TupleType a' b')
+                      <$> parseType (JSON.String (Text.pack a))
+                      <*> parseType (JSON.String (Text.pack b))
+          '<':(parseTupleType 0 . init -> (a,b))
+            -> (\(Some a') (Some b') -> Some $ SumType a' b')
                       <$> parseType (JSON.String (Text.pack a))
                       <*> parseType (JSON.String (Text.pack b))
           _ -> fail $ "bad type: " <> s
@@ -456,9 +543,19 @@ instance JSON.ToJSON (Some Constant) where
         $ JSON.insert "type" (fromString . showtype $ ListType t)
         $ JSON.insert "value" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
         JSON.empty
+      CSet xs t -> JSON.Object
+        $ JSON.insert "type" (fromString . showtype $ SetType t)
+        $ JSON.insert "value" (error "todo: serialize both regular and complement") --(JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
+        JSON.empty
       CTuple x y a b -> JSON.Object
         $ JSON.insert "type" (fromString . showtype $ TupleType a b)
         $ JSON.insert "value" (JSON.Object $ JSON.insert "left" (JSON.toJSON . Some $ Constant a x) $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
+        JSON.empty
+      CSum xy a b -> JSON.Object
+        $ JSON.insert "type" (fromString . showtype $ SumType a b)
+        $ JSON.insert "value" (case xy of
+          Left  x -> JSON.Object $ JSON.insert "left"  (JSON.toJSON . Some $ Constant a x) JSON.empty
+          Right y -> JSON.Object $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
         JSON.empty
       where
         showtype :: Type a -> String
@@ -467,7 +564,9 @@ instance JSON.ToJSON (Some Constant) where
         showtype FloatType = "float"
         showtype StringType = "string"
         showtype (ListType tp) = "[" <> showtype tp <> "]"
+        showtype (SetType tp) = "{" <> showtype tp <> "}"
         showtype (TupleType a b) = "(" <> showtype a <> "," <> showtype b <> ")"
+        showtype (SumType a b) = "<" <> showtype a <> "," <> showtype b <> ">"
 
 -- | convert a Constant to an typed value
 class ExprType t => ConstType t where
@@ -485,7 +584,9 @@ instance Has ConstType Type where
     BoolType -> k
     StringType -> k
     ListType t' -> has @ConstType t' k
+    SetType t' -> has @ConstType t' k
     TupleType a b -> has @ConstType a $ has @ConstType b k
+    SumType a b -> has @ConstType a $ has @ConstType b k
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
@@ -514,21 +615,26 @@ data ExprView t where
     LElem :: Type a -> ExprView a -> ExprView (List a) -> ExprView Bool
     Take :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
     Drop :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
-    ADTOp :: TypeRep a -> TypeRep b -> ExprView a -> (SBV a -> SBV b) -> ExprView b
-    -- TODO: 'map' needs a function type
     -- NOTE: when adding more fields, check the Eq instance
 
-type ExprConstraints t = (Data t, Eq t, Ord t, Show t, ExprType t, SymVal (ToSBV t), Eq (ToSBV t), ConstType t, Read t)
+type ExprConstraints t = (Data t, Eq t, Ord t, Show t, ExprType t, SymVal (ToSBV t), Eq (ToSBV t), ConstType t, Read t, Ord (ToSBV t))
 
+-- we use 'List' instead of '[]' to avoid clashes with String, and this typeclass removes that newtype at all nesting levels
 type family ToSBV a where
   ToSBV (List a) = [ToSBV a]
+  ToSBV (RCSet a) = RCSet (ToSBV a)
   ToSBV (a,b) = (ToSBV a, ToSBV b)
+  ToSBV (Either a b) = Either (ToSBV a) (ToSBV b)
   ToSBV a = a
 
 toSBV :: Type a -> a -> ToSBV a
 toSBV t x = case t of
   ListType t' -> let List xs = x in map (toSBV t') xs
+  SetType t' -> case x of
+    RegularSet xs -> has @OrdToSBV t' $ RegularSet $ Set.map (toSBV t') xs
+    ComplementSet xs -> has @OrdToSBV t' $ ComplementSet $ Set.map (toSBV t') xs
   TupleType at bt -> bimap (toSBV at) (toSBV bt) x
+  SumType at bt -> bimap (toSBV at) (toSBV bt) x
   IntType -> x
   FloatType -> x
   BoolType -> x

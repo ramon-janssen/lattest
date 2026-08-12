@@ -67,8 +67,10 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.FloatType -> E.float value
                   E.BoolType -> E.bool value
                   E.StringType -> E.string value
-                  E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
                   E.ListType t -> has @ExprType t E.list $ getList value
+                  E.SetType t -> has @ExprType t E.set value
+                  E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
+                  E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
 solveGuard :: [Some Variable] -> SymGuard -> SMT (Maybe Valuation)
