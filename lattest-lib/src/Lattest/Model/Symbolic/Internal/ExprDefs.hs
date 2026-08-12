@@ -91,6 +91,7 @@ import Control.Monad ((<=<))
 import Data.Data (Data)
 import Data.Bifunctor (Bifunctor(..))
 import qualified Data.Aeson.Types as JSON
+import Data.Typeable (TypeRep)
 
 -- avoids overlapping with String in typeclass instances
 newtype List a = List { getList :: [a] }
@@ -102,6 +103,7 @@ data Type a where
   StringType :: Type String
   ListType :: Type a -> Type (List a)
   TupleType :: Type a -> Type b -> Type (a,b)
+  ADTType :: ExprConstraints a => TypeRep a -> Type a
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
 instance (SymVal a, ExprConstraints a) => SymVal (List a) where
@@ -123,6 +125,7 @@ instance GEq Type where
   geq StringType StringType = Just Refl
   geq (ListType a) (ListType b) = (\Refl -> Refl) <$> geq a b
   geq (TupleType a b) (TupleType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
+  geq (ADTType a) (ADTType b) = geq a b
   geq _ _ = Nothing
 instance GCompare Type where
   gcompare = \cases
@@ -511,6 +514,7 @@ data ExprView t where
     LElem :: Type a -> ExprView a -> ExprView (List a) -> ExprView Bool
     Take :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
     Drop :: ExprView Integer -> ExprView (List a) -> ExprView (List a)
+    ADTOp :: TypeRep a -> TypeRep b -> ExprView a -> (SBV a -> SBV b) -> ExprView b
     -- TODO: 'map' needs a function type
     -- NOTE: when adding more fields, check the Eq instance
 
