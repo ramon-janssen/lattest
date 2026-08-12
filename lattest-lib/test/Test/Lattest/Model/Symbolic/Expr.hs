@@ -15,7 +15,7 @@ where
 
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
-import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(Expr))
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr, Expr'(Expr))
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT as SMT
 import qualified Data.List as List
@@ -38,7 +38,7 @@ sizeOf :: SizeOf a => Expr a -> Int
 sizeOf = sizeOf' . view
 
 sizeOf' :: SizeOf a => ExprView a -> Int
-sizeOf' (Var _) = 1
+sizeOf' (EVar _) = 1
 sizeOf' (Const c) = sizeOfTyped c
 sizeOf' (Ite i t e) = sizeOf' i + sizeOf' t + sizeOf' e + 1
 sizeOf' (EqualInt e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
@@ -72,7 +72,7 @@ instance SizeOf String
 
 instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
     arbitrary = sized genExpr
-    shrink (Var _) = []
+    shrink (EVar _) = []
     shrink (Const c) = Const <$> shrinkConst c
     shrink (Ite i t e) = [Ite i' t' e' | (i', t', e') <- shrink (i, t, e)] ++ shrink t ++ shrink e
     shrink (EqualInt e1 e2) = [EqualInt e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
@@ -194,12 +194,12 @@ prop_symbolicEval e = rightToMaybe (eval e) == localConcreteEval e
     localConcreteEval = concreteEval' . view
 
 arbitraryVar :: Type -> Gen (ExprView t)
-arbitraryVar t = 
+arbitraryVar t =
     let prefix = case t of
                     IntType -> 'i'
                     BoolType -> 'b'
                     StringType -> 's'
-    in CM.liftM (\n -> Var $ Variable (prefix:n) t) (return <$> charExpr)
+    in CM.liftM (\n -> EVar $ Var (prefix:n) t) (return <$> charExpr)
 
 type PropEvalSymbolic t = Expr t -> Bool
 
@@ -235,7 +235,7 @@ class ConcreteEval t where
     concreteEval' :: ExprView t -> Maybe t
 
 instance ConcreteEval Integer where
-    concreteEval' (Var _) = Nothing
+    concreteEval' (EVar _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
@@ -258,7 +258,7 @@ foldOccurList zero add mult monoid = (foldr add zero) <$> sequence (maybeEvalTer
 
 
 instance ConcreteEval Bool where
-    concreteEval' (Var _) = Nothing
+    concreteEval' (EVar _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (EqualInt e1 e2) = concreteBinOp (==) e1 e2
@@ -269,7 +269,7 @@ instance ConcreteEval Bool where
     concreteEval' (And es) = fmap and $ sequence (concreteEval' <$> Set.toList es)
 
 instance ConcreteEval String where
-    concreteEval' (Var _) = Nothing
+    concreteEval' (EVar _) = Nothing
     concreteEval' (Const c) = Just c
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Concat es) = concat <$> (sequence $ concreteEval' <$> es)
@@ -326,5 +326,5 @@ testEvalNegativeModulo :: Test
 testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"
 
 testSolveNegativeModulo :: Test
-testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Variable "ix" IntType))
+testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Var "ix" IntType))
 

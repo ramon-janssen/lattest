@@ -1,8 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -45,25 +46,26 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract, SymInteract'(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
-import Algebra.Lattice.Free(Free(..))
+import Algebra.Lattice.Free(Free((:/\:),(:\/:))) -- not importing Var unqualified, because it clashes with our variables
+import qualified Algebra.Lattice.Free as L
 import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
+import Lattest.Model.Symbolic.Expr
 import qualified Lattest.SMT as SMT
 
 pvar :: Variable
-pvar = (Variable "p" IntType)
+pvar = (Var "p" IntType)
 qvar :: Variable
-qvar = (Variable "q" IntType)
+qvar = (Var "q" IntType)
 xvar :: Variable
-xvar = (Variable "x" IntType)
+xvar = (Var "x" IntType)
 stsExampleInitAssign :: Valuation
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
@@ -89,7 +91,7 @@ stsExampleIntrpr :: STSIntrp Det Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
-getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Var "x" IntType) (Cint val)
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
@@ -238,9 +240,9 @@ testSTSTestSelection = TestCase $ do
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
 pvarf :: Variable
-pvarf = (Variable "p" FloatType)
+pvarf = (Var "p" FloatType)
 xvarf :: Variable
-xvarf = (Variable "x" FloatType)
+xvarf = (Var "x" FloatType)
 
 stsExampleInitAssignFloat :: Valuation
 stsExampleInitAssignFloat = fromConstantsMap $ Map.singleton xvarf (Cfloat (0.0 :: Double))
@@ -267,7 +269,7 @@ stsExampleIntrprFloat :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrprFloat = interpretSTS stsExampleFloat stsExampleInitAssignFloat
 
 getSTSIntrpStateFloat :: Integer -> Double -> FreeLattice (IntrpState Integer)
-getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
+getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ fromConstantsMap $ Map.singleton (Var "x" FloatType) (Cfloat val)]
 
 testSTSHappyFlowFloat :: Test
 testSTSHappyFlowFloat = TestCase $ do
@@ -317,7 +319,7 @@ stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
 getSTSValuation :: Integer -> Valuation
-getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSValuation val = fromConstantsMap $ Map.singleton (Var "x" IntType) (Cint val)
 
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
@@ -780,7 +782,7 @@ testComplexTreeStructure :: Test
 testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 3
 
 milkvar :: Variable
-milkvar = (Variable "milk" BoolType)
+milkvar = (Var "milk" BoolType)
 milk = sVar milkvar
 a = SymInteract (In "a") []
 b = SymInteract (In "b") [pvar]
@@ -836,7 +838,7 @@ prettySeTree t0 = unlines (goTree "" t0)
     goConf ind _   (FreeLatticeSlow Top)    = [ind ++ "⊤ (underspecified)"]
     goConf ind _   (FreeLatticeSlow Bottom) = [ind ++ "⊥ (forbidden)"]
     goConf ind sub (FreeLatticeSlow (Levitate free)) = goFree ind sub free
-    goFree ind sub (Var e) = sub ind e
+    goFree ind sub (L.Var e) = sub ind e
     goFree ind sub free@(_ :/\: _) =
         let conjuncts = meets free
         in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
@@ -892,7 +894,7 @@ traceValuation :: [ConcreteStep] -> Valuation
 traceValuation steps = fromConstantsMap $ Map.unions $ zipWith stepConstMap [0..] steps
     where
     stepConstMap n (SymInteract _ vars, vals) = Map.fromList $ zipWith (\var val -> (indexVar n var, val)) vars vals
-    indexVar n (Variable name t) = Variable (name ++ "_" ++ show n) t
+    indexVar n (Var name t) = Var (name ++ "_" ++ show n) t
 
 testConcreteTraceSpecifiedAllowedCorrespondence :: Test
 testConcreteTraceSpecifiedAllowedCorrespondence = TestList
@@ -943,9 +945,9 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
 -- small: the example models are toy examples, so large integers would only slow things down without exercising new
 -- behaviour (guards compare against small constants like 2, 10).
 genConstantForType :: Variable -> Gen Constant
-genConstantForType (Variable _ IntType)    = Cint <$> choose (-5, 20)
-genConstantForType (Variable _ BoolType)   = Cbool <$> elements [False, True]
-genConstantForType (Variable _ StringType) = Cstring <$> elements ["", "a", "b", "c"]
+genConstantForType (Var _ IntType)    = Cint <$> choose (-5, 20)
+genConstantForType (Var _ BoolType)   = Cbool <$> elements [False, True]
+genConstantForType (Var _ StringType) = Cstring <$> elements ["", "a", "b", "c"]
 
 -- | Generate a concrete trace over a model's alphabet: pick interactions (and hence their symbolic parameters) from
 -- the syntactic automaton, then fill in a value for each parameter. Traces are kept short, both because the toy
@@ -1050,7 +1052,7 @@ stsConjOfDifferentVals =
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate]) switches
 
 getSTSIntrpState' :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
-getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Var "x" IntType) (Cint val)
 
 stsConjOfDifferentValsIntrpr :: STSIntrp FreeLattice Integer (IOAct String String)
 stsConjOfDifferentValsIntrpr = interpretSTS treeSTS branchInitAssign

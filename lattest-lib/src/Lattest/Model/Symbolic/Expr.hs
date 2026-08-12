@@ -5,15 +5,18 @@ See LICENSE in the parent Symbolic folder.
 -}
 module Lattest.Model.Symbolic.Expr
 ( Expr
+, Expr'(..)
 , view
-, ExprView(..)
+, ExprView'(..)
+, ExprView
 , Type(..)
 , Constant(..)
 , constType
 , ConstType
 , fromConst
 , toConst
-, Variable(..)
+, Variable
+, Variable'(..)
 , eval
 , freeVars
 , module Lattest.Model.Symbolic.Internal.ExprImpls

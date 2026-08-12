@@ -1,10 +1,11 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-|
     Find concrete values to take transitions in STSes, using an SMT solver.
@@ -24,25 +25,22 @@ foldSeTree,
 )
 where
 
-import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..))
+import Lattest.Model.Alphabet(SymInteract, SymInteract'(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..))
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, Expr, Expr'(..), VarModel, VarModel'(..), valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, Variable'(..), mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
 import Lattest.SMT(SMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&), first, second)
+import Control.Arrow((&&&))
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import Data.Kind(Constraint)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
-import qualified Data.Set as Set
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
@@ -61,7 +59,7 @@ solveRandomInteraction intrpr subsetFunction r = do
     (,r') <$> solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
-    selectInteractionsAndGuards :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+    selectInteractionsAndGuards :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract' Int g', SymGuard)]
     selectInteractionsAndGuards intrpr' subsetFunction' =
         let alph = toList $ alphabet $ syntacticAutomaton intrpr'
         in mapMaybe (distributeFirstMaybe . (fmap indexParams . subsetFunction' &&& (\interaction -> interactsToSpecifiedCondition intrpr' [interaction]))) alph
@@ -73,10 +71,10 @@ solveRandomInteraction intrpr subsetFunction r = do
 
 
 interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
+interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
+interactsToAllowedCondition = interactsToGuard asExpr
 
 
 
@@ -146,11 +144,11 @@ interactsToGuard f intrpr interacts =
     -- fused counterpart of 'seStep': same SSA bookkeeping, but each branch folds straight to a guard
     goStep n implicit expand t (SymIntrpState ploc prevAssign sigma) = f (branchGuard BM.<#> t ploc)
         where
-        indexedAssign = indexLeft n $ indexRight (n-1) prevAssign
-        resolvedAssign = substVarModel sigma indexedAssign
+        indexedAssign = indexLeftRight n (n-1) prevAssign
+        resolvedAssign = error "wip: see the comment on #71" -- substVarModel sigma indexedAssign
         sigma' = resolvedAssign `varUnion` sigma
         branchGuard (tguard, completedAssign, tloc) =
-            let indexedGuard = subst sigma' (indexExpr n tguard)
+            let indexedGuard = error "see #71" -- subst sigma' (indexExpr n tguard)
             in (indexedGuard .&& expand (SymIntrpState tloc completedAssign sigma')) .|| (sNot indexedGuard .&& f implicit)
 
 {-|
@@ -201,14 +199,14 @@ seStep :: (BM.OrdFunctor m, OrdConfig m)
 seStep n implicit expand t (SymIntrpState ploc prevAssign sigma) = SeSeq resolvedAssign (seStep' BM.<#> t ploc)
     where
     -- the assignment that produced the current state's variable values, in SSA form: {x_n := E(vars_{n-1})}
-    indexedAssign = indexLeft n $ indexRight (n-1) prevAssign -- n-1 should be safe: at n=0, all assigned expressions should be constants
+    indexedAssign = indexLeftRight n (n-1) prevAssign -- n-1 should be safe: at n=0, all assigned expressions should be constants
     -- resolve its right-hand sides against the substitution accumulated so far, so they mention interaction variables
     -- only, then extend the accumulated substitution with it (its keys x_n are fresh, so the union does not clash)
-    resolvedAssign = substVarModel sigma indexedAssign
+    resolvedAssign = error "see #71, also, why is this duplicated?" -- substVarModel sigma indexedAssign
     sigma' = resolvedAssign `varUnion` sigma
     seStep' (tguard, completedAssign, tloc) =
         -- index the transition guard, then substitute every state variable away, leaving interaction variables only
-        let indexedGuard = subst sigma' (indexExpr n tguard)
+        let indexedGuard = error "see #71" -- subst sigma' (indexExpr n tguard)
         in SeIte indexedGuard (expand (SymIntrpState tloc completedAssign sigma')) implicit
 
 -- Helpers shared by the tree builder ('interactsToSeTree'/'seStep') and the fused folder ('interactsToGuard'), so the
@@ -227,7 +225,7 @@ transitionAt intrpr i loc = completeSTSLoc BM.<#> Map.findWithDefault err i (tra
 -- | The state variables a transition assignment is completed over, taken from an arbitrary state valuation of the
 -- interpreter's configuration.
 locVars :: Foldable m => AutIntrpr m loc (IntrpState loc) t tdest act -> [Variable]
-locVars intrpr = case (toList $ stateConf intrpr) List.!? 0 of
+locVars intrpr = case toList (stateConf intrpr) List.!? 0 of
     Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
     Nothing -> []
 
@@ -237,18 +235,17 @@ implicitLocation :: BM.BoundedConfiguration m => IOSymInteract i o -> m SymGuard
 implicitLocation (SymInteract (In _) _) = BM.underspecified
 implicitLocation (SymInteract (Out _) _) = BM.forbidden
 
-indexLeft :: Int -> VarModel -> VarModel
-indexLeft n = mapVars $ indexVar n
-indexRight :: Int -> VarModel -> VarModel
-indexRight n = mapVarExprs $ indexVar n
+indexLeftRight :: Int -> Int -> VarModel -> VarModel' Int
+indexLeftRight l r (VarModel a b c d) = VarModel (f a) (f b) (f c) (f d)
+  where
+    f = Map.map (mapExpressionVars $ indexVar r) . Map.mapKeys (indexVar l)
 
-indexExpr :: Int -> Expr t -> Expr t
-indexExpr n e = mapExpressionVars (indexVar n) e
-indexVar :: Int -> Variable -> Variable
---indexVar 0 v = v
-indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
+indexExpr :: Int -> Expr t -> Expr' Int t
+indexExpr n = mapExpressionVars (indexVar n)
+indexVar :: Int -> Variable -> Variable' Int
+indexVar n v
     | n < 0 = error $ "left symbolic variable with index " ++ show n
-    | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
+    | otherwise = v {tag = n}
 
 
 data SolveTree g = SolveTree {
@@ -262,10 +259,21 @@ toSpecifiedTree = toSolveTree asDualExpr
 toAllowedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
 toAllowedTree = toSolveTree asExpr
 
-toSolveTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
-toSolveTree f intrpr = toSolveTree' f intrpr []
+toSolveTree :: forall m i o loc g'. (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toSolveTree f intrpr = toSolveTree' []
     where
-    toSolveTree' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SolveTree (IOAct i o)
-    toSolveTree' f intrpr pref =
-        let children = Map.fromSet (\x -> toSolveTree' f intrpr (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
+    toSolveTree' :: [IOSymInteract i o] -> SolveTree (IOAct i o)
+    toSolveTree' pref =
+        let children = Map.fromSet (\x -> toSolveTree' (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
         in SolveTree (interactsToGuard f intrpr pref) children
+
+{-
+Note [Tags on Variables, Expressions, etc]
+~~~~~~~~~~~~
+Some datatypes follow this pattern:
+data Foo' tag = ...
+type Foo = Foo' ()
+
+These tags are usually unused, i.e. (), but the symbolic lookahead/path condition/offline testing code uses Int as tags.
+Those Ints represent a timestamp, i.e. the value of a variable at a specific point in the trace.
+For convenience in the default case, we provide the synonym Foo, but a lot of code is polymorphic over tags.

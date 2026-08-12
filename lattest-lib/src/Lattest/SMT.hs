@@ -24,7 +24,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, fromConstantsMap, Type (..), Constant (..), toConstantsMap, view)
+import Lattest.Model.Symbolic.Expr(ExprView, ExprView'(..), Variable, Variable'(..), Valuation, Valuation', Expr, fromConstantsMap, Type (..), Constant (..), toConstantsMap, view)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -55,7 +55,7 @@ type SMT = StateT (Map String SBVI.SVal) Query
 runSMT :: SMT a -> IO a
 runSMT = SBV.runSMT . query . flip evalStateT Map.empty
 
-getSolution :: [Variable] -> SMT Valuation
+getSolution :: (Ord tag, Show tag, Read tag) => [Variable' tag] -> SMT (Valuation' tag)
 getSolution vs =
   fromConstantsMap
   . (`Map.intersection` Map.fromList (map (,()) vs))
@@ -69,20 +69,22 @@ addAssertions = mapM_ (lift . constrain <=< exprToSymbolic . view)
 -- SBV wants us to keep track of the symbolic variables
 -- we get on each declaration, and use them to reference
 -- the variable.
-addDeclarations :: [Variable] -> SMT ()
-addDeclarations = mapM_ $ \(Variable nm tp) -> case tp of
-  IntType -> do
-    SBVI.SBV v <- freshVar @Integer nm
-    modify $ Map.insert nm v
-  BoolType -> do
-    SBVI.SBV v <- freshVar @Bool nm
-    modify $ Map.insert nm v
-  StringType -> do
-    SBVI.SBV v <- freshVar @String nm
-    modify $ Map.insert nm v
-  FloatType -> do
-    SBVI.SBV v <- freshVar @Double nm
-    modify $ Map.insert nm v
+addDeclarations :: Show tag => [Variable' tag] -> SMT ()
+addDeclarations = mapM_ $ \var@(Var' _ tp _) ->
+  let nm = show var
+  in case tp of
+    IntType -> do
+      SBVI.SBV v <- freshVar @Integer nm
+      modify $ Map.insert nm v
+    BoolType -> do
+      SBVI.SBV v <- freshVar @Bool nm
+      modify $ Map.insert nm v
+    StringType -> do
+      SBVI.SBV v <- freshVar @String nm
+      modify $ Map.insert nm v
+    FloatType -> do
+      SBVI.SBV v <- freshVar @Double nm
+      modify $ Map.insert nm v
 
 getSolvable :: SMT SolvableProblem
 getSolvable = checkSatToSolveProblem <$> lift checkSat
@@ -98,7 +100,7 @@ push = lift $ SBV.push 1
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: (Show a, SBV.SymVal a) => ExprView a -> SMT (SBV a)
 exprToSymbolic v = case v of
-  Var (Variable nm _tp) -> gets (SBVI.SBV . (Map.! nm))
+  EVar (Var nm _tp) -> gets (SBVI.SBV . (Map.! nm))
   Const t -> pure $ literal t
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   EqualInt    l r -> (SBV..==) <$> go l <*> go r
@@ -133,10 +135,10 @@ checkSatToSolveProblem = \case
   SBV.Unk -> Unknown
   SBV.DSat _ -> Unknown
 
-sbvModelToValuation :: SMTModel -> Valuation
+sbvModelToValuation :: (Read tag, Ord tag) => SMTModel -> Valuation' tag
 sbvModelToValuation = fromConstantsMap . foldr f Map.empty . modelAssocs
   where
-    f (varname, cv) = (\(typ, c) -> Map.insert (Variable varname typ) c) $ case cvVal cv of
+    f (str, cv) = (\(typ, c) -> Map.insert (read str) c) $ case cvVal cv of
       -- booleans for some reason are represented as CInteger with a different 'Kind'
       _ | isBoolean cv -> (BoolType, Cbool (cvToBool cv))
       CInteger i -> (IntType, Cint i)

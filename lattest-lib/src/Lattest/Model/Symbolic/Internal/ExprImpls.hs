@@ -62,12 +62,14 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 --, cstrPredef
 -- * Substitution of var by value
 , VarModel
+, VarModel'(..)
 , Assignable
 , assign
 , varUnion
 , mapVars
 , mapVarExprs
 , Valuation
+, Valuation'
 , valuationToVarModel
 , toConstantsMap
 , fromConstantsMap
@@ -154,40 +156,40 @@ cstrAccess c n p e = Expr (Vaccess c n p e)
 --isConst (view -> Vconst{}) = True
 --isConst _                  = False
 
-sConst :: ExprType t => t -> Expr t
+sConst :: ExprType t => t -> Expr' tag t
 sConst = Expr . Const
 
-sTrue :: Expr Bool
+sTrue :: Expr' tag Bool
 sTrue = sConst True
 
-sFalse :: Expr Bool
+sFalse :: Expr' tag Bool
 sFalse = sConst False
 
 class VarExpr t where
-    sVar :: Variable -> Expr t
+    sVar :: Variable' tag -> Expr' tag t
 
 instance VarExpr Integer where
-    sVar v@(Variable _ IntType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Integer, received " ++ show t
+    sVar v@(Var' _ IntType _) = sVar' v
+    sVar (Var' n t _) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Integer, received " ++ show t
 
 instance VarExpr Bool where
-    sVar v@(Variable _ BoolType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Bool, received " ++ show t
+    sVar v@(Var' _ BoolType _) = sVar' v
+    sVar (Var' n t _) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Bool, received " ++ show t
 
 instance VarExpr String where
-    sVar v@(Variable _ StringType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
+    sVar v@(Var' _ StringType _) = sVar' v
+    sVar (Var' n t _) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
 
 instance VarExpr Double where
-    sVar v@(Variable _ FloatType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Real, received " ++ show t
+    sVar v@(Var' _ FloatType _) = sVar' v
+    sVar (Var' n t _) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Real, received " ++ show t
 
-sVar' :: Variable -> Expr t
-sVar' = Expr . Var
+sVar' :: Variable' tag -> Expr' tag t
+sVar' = Expr . EVar
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
-sIfThenElse :: Expr Bool -> Expr t -> Expr t -> Expr t
+sIfThenElse :: Expr' tag Bool -> Expr' tag t -> Expr' tag t -> Expr' tag t
 sIfThenElse (view -> Const True) t _ = t
 sIfThenElse (view -> Const False) _ f = f
 sIfThenElse (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
@@ -195,7 +197,7 @@ sIfThenElse (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 -- | Create a variable as a value expression.
 -- typeclass because every type has its own ExprView-constructor
 class EqExpr t where
-    (.==) :: Expr t -> Expr t -> Expr Bool
+    (.==) :: Expr' tag t -> Expr' tag t -> Expr' tag Bool
 
 instance EqExpr Integer where
     (.==) (view -> x) (view -> y) = Expr $ EqualInt x y
@@ -214,7 +216,7 @@ infix 4 .==
 {-
 -- | Apply operator Equal on the provided value expressions.
 -- Preconditions are /not/ checked.
-(.==) :: Expr -> Expr -> Expr
+(.==) :: Expr' tag -> Expr' tag -> Expr
 -- Simplification a == a <==> True
 (.==) ve1 ve2 | ve1 == ve2                      = sConst (Cbool True)
 -- Simplification Different Values <==> False : use Same Values are already detected in previous step
@@ -246,7 +248,7 @@ infix 4 .==
 
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
-sNot :: Expr Bool -> Expr Bool
+sNot :: Expr' tag Bool -> Expr' tag Bool
 sNot (view -> Const b)      = sConst (not b) -- constant fold: ¬True ≡ False, ¬False ≡ True
 sNot (view -> Not ve)       = Expr ve -- eliminate double negation: ¬¬e ≡ e
 -- push the negation into the branches: ¬(if cs then tb else fb) ≡ if cs then ¬tb else ¬fb
@@ -255,19 +257,19 @@ sNot (view -> ve)           = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
-sAnd :: Set.Set (Expr Bool) -> Expr Bool
+sAnd :: forall tag. Ord tag => Set.Set (Expr' tag Bool) -> Expr' tag Bool
 --sAnd = sAnd' . flattenAnd
 sAnd = mkAnd . flattenAnd
     where
-        flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
+        flattenAnd :: Set.Set (Expr' tag Bool) -> Set.Set (ExprView' tag Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
 
-        fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
+        fromExpr :: Expr' tag Bool -> Set.Set (ExprView' tag Bool)
         fromExpr (view -> And a) = a
         fromExpr (view -> x) = Set.singleton x
 
         -- annihilation (x ∧ False ≡ False) and identity (x ∧ True ≡ x); a single conjunct needs no wrapping
-        mkAnd :: Set.Set (ExprView Bool) -> Expr Bool
+        mkAnd :: Set.Set (ExprView' tag Bool) -> Expr' tag Bool
         mkAnd (absorb -> vs)
             | Set.member (Const False) vs = sFalse
             | hasComplements vs           = sFalse -- contradiction: x ∧ ¬x ≡ False
@@ -281,7 +283,7 @@ sAnd = mkAnd . flattenAnd
         -- already asserted at the top level of the conjunction is redundant inside a
         -- negated conjunction, so it can be dropped from it. If every conjunct of the
         -- negated cube is dropped this yields ¬True ≡ False, which the checks above catch.
-        absorb :: Set.Set (ExprView Bool) -> Set.Set (ExprView Bool)
+        absorb :: Set.Set (ExprView' tag Bool) -> Set.Set (ExprView' tag Bool)
         absorb vs = Set.map simplify vs
             where
                 simplify (Not (And s))
@@ -289,14 +291,14 @@ sAnd = mkAnd . flattenAnd
                 simplify v = v
 
         -- does the conjunction contain both some e and its negation ¬e?
-        hasComplements :: Set.Set (ExprView Bool) -> Bool
+        hasComplements :: Set.Set (ExprView' tag Bool) -> Bool
         hasComplements vs = any ((`Set.member` vs) . negated) (Set.toList vs)
             where
                 negated (Not e) = e
                 negated e       = Not e
 {-
 -- And doesn't contain elements of type Vand.
-sAnd' :: Set.Set Expr Bool -> Expr Bool
+sAnd' :: Set.Set Expr' tag Bool -> Expr' tag Bool
 sAnd' s =
     if Set.member (sConst (Cbool False)) s
         then sConst (Cbool False)
@@ -319,7 +321,7 @@ sAnd' s =
                             Vnot n -> n : filterNot xs
                             _      ->     filterNot xs
         
-        contains :: Set.Set Expr -> Expr -> Bool
+        contains :: Set.Set Expr' tag -> Expr' tag -> Bool
         contains set (view -> Vand a) = all (`Set.member` set) (Set.toList a)
         contains set a                = Set.member a set
 {-
@@ -341,20 +343,20 @@ sAnd' s =
 -}
 
 -- * Sum
-isSum :: ExprView Integer -> Bool
+isSum :: ExprView' tag Integer -> Bool
 isSum (Sum _) = True
 isSum _ = False
 
-getSum :: ExprView Integer -> FreeSum (ExprView Integer)
+getSum :: ExprView' tag Integer -> FreeSum (ExprView' tag Integer)
 getSum (Sum s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
-sSumInt :: FreeSum (Expr Integer) -> Expr Integer
+sSumInt :: Ord tag => FreeSum (Expr' tag Integer) -> Expr' tag Integer
 sSumInt = Expr . cstrSum . FMX.mapTerms (SumTerm . view . summand)
 
 -- | Apply operator sum on the provided sum of value expressions.
 -- Preconditions are /not/ checked.
-cstrSum :: FreeSum (ExprView Integer) -> ExprView Integer
+cstrSum :: forall tag. Ord tag => FreeSum (ExprView' tag Integer) -> ExprView' tag Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the sum of all values
@@ -363,11 +365,11 @@ cstrSum :: FreeSum (ExprView Integer) -> ExprView Integer
 cstrSum ms = cstrSum' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSum ms
-      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView Integer)))
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView' tag Integer)))
       sumOfAdds = FMX.mapTerms (getSum . summand) adds
 
 -- Sum doesn't contain elements of type VExprSum
-cstrSum' :: FreeSum (ExprView Integer) -> ExprView Integer
+cstrSum' :: Ord tag => FreeSum (ExprView' tag Integer) -> ExprView' tag Integer
 cstrSum' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
@@ -381,30 +383,29 @@ cstrSum' ms =
             [(term,1)] -> summand term
             _          -> Sum retMS
 
-getConst :: ExprView e -> e
+getConst :: ExprView' tag e -> e
 getConst (Const c) = c
 getConst _ = error "Not Const"
 
-isSumF :: ExprView Double -> Bool
+isSumF :: ExprView' tag Double -> Bool
 isSumF (SumFloat _) = True
 isSumF _ = False
 
-getSumF :: ExprView Double -> FreeSum (ExprView Double)
+getSumF :: ExprView' tag Double -> FreeSum (ExprView' tag Double)
 getSumF (SumFloat s) = s
 getSumF _ = error "ExprImpls.hs - getSumF - Unexpected Expr "
 
-sSumFloat :: FreeSum (Expr Double) -> Expr Double
+sSumFloat :: Ord tag => FreeSum (Expr' tag Double) -> Expr' tag Double
 sSumFloat = Expr . cstrSumF . FMX.mapTerms (SumTerm . view . summand)
 
 -- | Apply operator sum on the provided sum of floating-point values.
-cstrSumF :: FreeSum (ExprView Double) -> ExprView Double
+cstrSumF :: Ord tag => FreeSum (ExprView' tag Double) -> ExprView' tag Double
 cstrSumF ms = cstrSumF' $ nonadds <> FMX.flatten sumOfAdds
     where
       (adds, nonadds) = FMX.partitionT isSumF ms
-      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView Double)))
       sumOfAdds = FMX.mapTerms (getSumF . summand) adds
 
-cstrSumF' :: FreeSum (ExprView Double) -> ExprView Double
+cstrSumF' :: Ord tag => FreeSum (ExprView' tag Double) -> ExprView' tag Double
 cstrSumF' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
@@ -421,21 +422,21 @@ cstrSumF' ms =
 -- Product
 
 -- | Is Expr a Product Expression?
-isProduct :: ExprView Integer -> Bool
+isProduct :: ExprView' tag Integer -> Bool
 isProduct (Product _) = True
 isProduct _ = False
 
-getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
+getProduct :: ExprView' tag Integer -> FreeProduct (ExprView' tag Integer)
 getProduct (Product p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
-sProductInt :: FreeProduct (Expr Integer) -> Expr Integer
+sProductInt :: Ord tag => FreeProduct (Expr' tag Integer) -> Expr' tag Integer
 sProductInt = Expr . cstrPrd . FMX.mapTerms (ProductTerm . view . factor)
 
 -- | Apply operator product on the provided product of value expressions.
 -- Be aware that division is not associative for Integer, so only use power >= 0.
 -- Preconditions are /not/ checked.
-cstrPrd :: FreeProduct (ExprView Integer) -> ExprView Integer
+cstrPrd :: Ord tag => FreeProduct (ExprView' tag Integer) -> ExprView' tag Integer
 -- implementation details:
 -- Properties incorporated
 --    at most one value: the value is the product of all values
@@ -445,11 +446,10 @@ cstrPrd ms =
     cstrPrd' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProduct ms
-      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView Integer)))
       prodOfProds = FMX.mapTerms (getProduct . factor) prods
 
 -- Product doesn't contain elements of type VExprProduct
-cstrPrd' :: FreeProduct (ExprView Integer) -> ExprView Integer
+cstrPrd' :: Ord tag => FreeProduct (ExprView' tag Integer) -> ExprView' tag Integer
 cstrPrd' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         (zeros, _) = FMX.partitionT isZero vals
@@ -468,33 +468,32 @@ cstrPrd' ms =
                             0   ->  Const 0      -- 0 * x == 0
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
-        isZero :: ExprView Integer -> Bool
+        isZero :: ExprView' tag Integer -> Bool
         isZero (Const 0) = True
         isZero _         = False
 
 -- Product of floating-point values
-isProductF :: ExprView Double -> Bool
+isProductF :: ExprView' tag Double -> Bool
 isProductF (ProductFloat _) = True
 isProductF _ = False
 
-getProductF :: ExprView Double -> FreeProduct (ExprView Double)
+getProductF :: ExprView' tag Double -> FreeProduct (ExprView' tag Double)
 getProductF (ProductFloat p) = p
 getProductF _ = error "ExprImpls.hs - getProductF - Unexpected Expr "
 
-sProductFloat :: FreeProduct (Expr Double) -> Expr Double
+sProductFloat :: Ord tag => FreeProduct (Expr' tag Double) -> Expr' tag Double
 sProductFloat = Expr . cstrPrdF . FMX.mapTerms (ProductTerm . view . factor)
 
 -- | Apply operator product on the provided product of floating-point values.
-cstrPrdF :: FreeProduct (ExprView Double) -> ExprView Double
+cstrPrdF :: Ord tag => FreeProduct (ExprView' tag Double) -> ExprView' tag Double
 cstrPrdF ms =
     cstrPrdF' $ noprods <> FMX.flatten prodOfProds
     where
       (prods, noprods) = FMX.partitionT isProductF ms
-      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView Double)))
       prodOfProds = FMX.mapTerms (getProductF . factor) prods
 
 -- Product doesn't contain elements of type ProductFloat
-cstrPrdF' :: FreeProduct (ExprView Double) -> ExprView Double
+cstrPrdF' :: Ord tag => FreeProduct (ExprView' tag Double) -> ExprView' tag Double
 cstrPrdF' ms =
     let (vals, nonvals) = FMX.partitionT isConst ms
         (zeros, _) = FMX.partitionT isZeroF vals
@@ -515,7 +514,6 @@ cstrPrdF' ms =
                             0   ->  Const 0.0      -- 0.0 * x == 0.0
                             _   ->  error "Error in model: Division by Zero in Product (via negative power)"
     where
-        isZeroF :: ExprView Double -> Bool
         isZeroF (Const 0.0) = True
         isZeroF _           = False
 
@@ -523,13 +521,13 @@ cstrPrdF' ms =
 
 -- | Apply operator Divide on the provided integer value expressions.
 -- Preconditions are /not/ checked.
-divideInt :: Expr Integer -> Expr Integer -> Expr Integer
+divideInt :: Expr' tag Integer -> Expr' tag Integer -> Expr' tag Integer
 divideInt (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t `Boute.div` n) -- leave error case (division by zero) unevaluated
 divideInt (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 
 -- | Apply operator Divide on the provided floating-point value expressions.
 -- Preconditions are /not/ checked.
-divideFloat :: Expr Double -> Expr Double -> Expr Double
+divideFloat :: Expr' tag Double -> Expr' tag Double -> Expr' tag Double
 divideFloat (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t / n) -- leave error case (division by zero) unevaluated
 divideFloat (view -> vet)         (view -> ven) = Expr (DivideFloat vet ven)
 
@@ -537,7 +535,7 @@ divideFloat (view -> vet)         (view -> ven) = Expr (DivideFloat vet ven)
 
 -- | Apply operator Modulo on the provided value expressions.
 -- Preconditions are /not/ checked.
-(.%) :: Expr Integer -> Expr Integer -> Expr Integer
+(.%) :: Expr' tag Integer -> Expr' tag Integer -> Expr' tag Integer
 (.%) (view -> Const t) (view -> Const n) | n /= 0 = sConst (t `Boute.mod` n) -- leave error case (division by zero) unevaluated
 (.%) (view -> vet)        (view -> ven) = Expr (Modulo vet ven)
 
@@ -545,7 +543,7 @@ infixl 7 .%
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided integer value expression.
 -- Preconditions are /not/ checked.
-sIsNonNegativeInt :: Expr Integer -> Expr Bool
+sIsNonNegativeInt :: Expr' tag Integer -> Expr' tag Bool
 -- Simplification Values
 sIsNonNegativeInt (view -> Const v) = sConst (0 <= v)
 sIsNonNegativeInt (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
@@ -553,15 +551,15 @@ sIsNonNegativeInt (view -> ve)         = Expr (GezInt ve)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided floating-point value expression.
 -- Preconditions are /not/ checked.
-sIsNonNegativeFloat :: Expr Double -> Expr Bool
+sIsNonNegativeFloat :: Expr' tag Double -> Expr' tag Bool
 sIsNonNegativeFloat (view -> Const v) = sConst (0 <= v)
 sIsNonNegativeFloat (view -> ve)      = Expr (GezFloat ve)
 
 class Ord t => ExprNum t where
-    sSum :: FreeSum (Expr t) -> Expr t
-    sProduct :: FreeProduct (Expr t) -> Expr t
-    sIsNonNegative :: Expr t -> Expr Bool
-    (./) :: Expr t -> Expr t -> Expr t
+    sSum :: Ord tag => FreeSum (Expr' tag t) -> Expr' tag t
+    sProduct :: Ord tag => FreeProduct (Expr' tag t) -> Expr' tag t
+    sIsNonNegative :: Ord tag => Expr' tag t -> Expr' tag Bool
+    (./) :: Ord tag => Expr' tag t -> Expr' tag t -> Expr' tag t
 
 infixl 7 ./
 
@@ -579,13 +577,13 @@ instance ExprNum Double where
 
 -- | Apply operator Length on the provided value expression.
 -- Preconditions are /not/ checked.
-sLength :: Expr String -> Expr Integer
+sLength :: Expr' tag String -> Expr' tag Integer
 sLength (view -> Const s) = sConst (Prelude.toInteger (length s))
 sLength (view -> v)             = Expr (Length v)
 
 -- | Apply operator Concat on the provided sequence of value expressions.
 -- Preconditions are /not/ checked.
-sConcat :: [Expr String] -> Expr String
+sConcat :: Eq tag => [Expr' tag String] -> Expr' tag String
 sConcat l =
     let n = (mergeVals . flatten . filter (sConst "" /= ) ) l in
         case n of
@@ -599,14 +597,14 @@ sConcat l =
 --    "a" ++ "b" == "ab"    - concat consecutive string values
 --   remove all nested sConcat, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
-mergeVals :: [Expr String] -> [Expr String]
+mergeVals :: [Expr' tag String] -> [Expr' tag String]
 mergeVals []            = []
 mergeVals [x]           = [x]
 mergeVals ( (view -> Const s1) : (view -> Const s2) : xs) =
                           mergeVals (sConst (s1 <> s2): xs)
 mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
 
-flatten :: [Expr String] -> [Expr String]
+flatten :: [Expr' tag String] -> [Expr' tag String]
 flatten []                       = []
 flatten ((view -> Concat l):xs) = fmap Expr l ++ flatten xs
 flatten (x:xs)                   = x : flatten xs
@@ -623,14 +621,16 @@ cstrPredef :: PredefKind -> FuncId -> [Expr] -> Expr
 cstrPredef p f a = Expr (Vpredef p f a)
 -}
 
-type TypedValuation t = Map.Map Variable t
-data Valuation = Valuation {
-    intValuation :: TypedValuation Integer,
-    boolValuation :: TypedValuation Bool,
-    stringValuation :: TypedValuation String,
-    floatValuation :: TypedValuation Double
+-- See Note [Tags on Variables, Expressions, etc]
+type TypedValuation tag t = Map.Map (Variable' tag) t
+data Valuation' tag = Valuation {
+    intValuation :: TypedValuation tag Integer,
+    boolValuation :: TypedValuation tag Bool,
+    stringValuation :: TypedValuation tag String,
+    floatValuation :: TypedValuation tag Double
     }
     deriving (Eq, Ord)
+type Valuation = Valuation' ()
 
 instance Show Valuation where
     show (Valuation i b s f) = "{" ++ List.intercalate "," (printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s ++ printAsAssignments f) ++ "}"
@@ -639,37 +639,39 @@ instance Show Valuation where
         printAsAssignments m = printAsAssignment <$> Map.toList m
         printAsAssignment (v,t) = varName v ++ ":=" ++ show t
 
-toConstantsMap :: Valuation -> Map.Map Variable Constant
+toConstantsMap :: Ord tag => Valuation' tag -> Map.Map (Variable' tag) Constant
 toConstantsMap valuation = Map.map Cint (intValuation valuation)
                             `Map.union` Map.map Cbool (boolValuation valuation)
                             `Map.union` Map.map Cstring (stringValuation valuation)
                             `Map.union` Map.map Cfloat (floatValuation valuation)
 
-fromConstantsMap :: Map.Map Variable Constant -> Valuation
+fromConstantsMap :: Ord tag => Map.Map (Variable' tag) Constant -> Valuation' tag
 fromConstantsMap = assignValues . fmap (uncurry insertIntoValuation) . Map.toList
 
-assignValues :: [Valuation -> Valuation] -> Valuation
+assignValues :: Ord tag => [Valuation' tag -> Valuation' tag] -> Valuation' tag
 assignValues = foldr ($) emptyValuation
 
-emptyValuation :: Valuation
+emptyValuation :: Ord tag => Valuation' tag
 emptyValuation = Valuation Map.empty Map.empty Map.empty Map.empty
 
-type TypedVarModel t = Map.Map Variable (Expr t)
-data VarModel = VarModel {
-    intVars :: TypedVarModel Integer,
-    boolVars :: TypedVarModel Bool,
-    stringVars :: TypedVarModel String,
-    floatVars :: TypedVarModel Double
+-- See Note [Tags on Variables, Expressions, etc]
+type TypedVarModel tag t = Map.Map (Variable' tag) (Expr' tag t)
+data VarModel' tag = VarModel {
+    intVars :: TypedVarModel tag Integer,
+    boolVars :: TypedVarModel tag Bool,
+    stringVars :: TypedVarModel tag String,
+    floatVars :: TypedVarModel tag Double
     }
     deriving (Eq, Ord)
+type VarModel = VarModel' ()
 
-assignment :: [VarModel -> VarModel] -> VarModel
+assignment :: Ord tag => [VarModel' tag -> VarModel' tag] -> VarModel' tag
 assignment = foldr ($) noAssignment
 
-typedValuationToVarModel :: ExprType t => TypedValuation t -> TypedVarModel t
+typedValuationToVarModel :: ExprType t => TypedValuation tag t -> TypedVarModel tag t
 typedValuationToVarModel = Map.map sConst
 
-valuationToVarModel :: Valuation -> VarModel
+valuationToVarModel :: Valuation' tag -> VarModel' tag
 valuationToVarModel vals = VarModel {
     intVars = typedValuationToVarModel $ intValuation vals,
     boolVars = typedValuationToVarModel $ boolValuation vals,
@@ -677,18 +679,18 @@ valuationToVarModel vals = VarModel {
     floatVars = typedValuationToVarModel $ floatValuation vals
     }
 
-getVariables :: Valuation -> [Variable]
+getVariables :: Valuation' tag -> [Variable' tag]
 getVariables vals =
-    (Map.keys $ intValuation vals) ++
-    (Map.keys $ boolValuation vals) ++
-    (Map.keys $ stringValuation vals) ++
-    (Map.keys $ floatValuation vals)
+    Map.keys (intValuation vals) ++
+    Map.keys (boolValuation vals) ++
+    Map.keys (stringValuation vals) ++
+    Map.keys (floatValuation vals)
 
 assignIdentity :: Variable -> VarModel -> VarModel
-assignIdentity v@(Variable _ IntType) = assign v (sVar v :: Expr Integer)
-assignIdentity v@(Variable _ BoolType) = assign v (sVar v :: Expr Bool)
-assignIdentity v@(Variable _ StringType) = assign v (sVar v :: Expr String)
-assignIdentity v@(Variable _ FloatType) = assign v (sVar v :: Expr Double)
+assignIdentity v@(Var _ IntType) = assign v (sVar v :: Expr Integer)
+assignIdentity v@(Var _ BoolType) = assign v (sVar v :: Expr Bool)
+assignIdentity v@(Var _ StringType) = assign v (sVar v :: Expr String)
+assignIdentity v@(Var _ FloatType) = assign v (sVar v :: Expr Double)
 
 identityVarModel :: [Variable] -> VarModel
 identityVarModel vars = assignment $ assignIdentity <$> vars
@@ -717,77 +719,77 @@ mapVarExprs f vars = VarModel {
     floatVars = Map.map (mapExpressionVars f) $ floatVars vars
     }
 
-varsToGuard :: VarModel -> Expr Bool
+varsToGuard :: Ord tag => VarModel' tag -> Expr' tag Bool
 varsToGuard vars = sAnd $ Set.fromList $
     typedVarsToBools (intVars vars) ++
     typedVarsToBools (boolVars vars) ++
     typedVarsToBools (stringVars vars) ++
     typedVarsToBools (floatVars vars)
 
-typedVarsToBools :: (VarExpr t, EqExpr t, ExprType t) => TypedVarModel t -> [Expr Bool]
+typedVarsToBools :: (VarExpr t, EqExpr t) => TypedVarModel tag t -> [Expr' tag Bool]
 typedVarsToBools = fmap (\(var, val) -> sVar var .== val) . Map.toList
 
-insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
-insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
-insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
-insertIntoValuation v@(Variable name StringType) c = assignValue v (fromConst' c name StringType :: String)
-insertIntoValuation v@(Variable name FloatType) c = assignValue v (fromConst' c name FloatType :: Double)
+insertIntoValuation :: Ord tag => Variable' tag -> Constant -> Valuation' tag -> Valuation' tag
+insertIntoValuation v@(Var' name IntType tag) c = assignValue v (fromConst' c name IntType :: Integer)
+insertIntoValuation v@(Var' name BoolType tag) c = assignValue v (fromConst' c name BoolType :: Bool)
+insertIntoValuation v@(Var' name StringType tag) c = assignValue v (fromConst' c name StringType :: String)
+insertIntoValuation v@(Var' name FloatType tag) c = assignValue v (fromConst' c name FloatType :: Double)
 fromConst' :: (ConstType a, Show b) => Constant -> String -> b -> a
 fromConst' smtValue name t = case fromConst smtValue of
     Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
     Right val -> val
 
 class Assignable t where
-    assign :: Variable -> Expr t -> VarModel -> VarModel
-    assignValue :: Variable -> t -> Valuation -> Valuation
-    assignedExpr :: Variable -> VarModel -> Maybe (Expr t)
-    assignedExprWithDefault :: Variable -> VarModel -> Expr t
+    assign :: Ord tag => Variable' tag -> Expr' tag t -> VarModel' tag -> VarModel' tag
+    assignValue :: Ord tag => Variable' tag -> t -> Valuation' tag -> Valuation' tag
+    assignedExpr :: Ord tag => Variable' tag -> VarModel' tag -> Maybe (Expr' tag t)
+    assignedExprWithDefault :: Ord tag => Variable' tag -> VarModel' tag -> Expr' tag t
 
-(=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
+(=:) :: (Assignable t, Ord tag) => Variable' tag -> Expr' tag t -> VarModel' tag -> VarModel' tag
 (=:) = assign
 infixr 0 =:
 
 instance Assignable Integer where
-    assign v@(Variable _ IntType) e m = m {intVars = Map.insert v e (intVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignValue v@(Variable _ IntType) val m = m {intValuation = Map.insert v val (intValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignedExpr v@(Variable _ IntType) (VarModel ints _bools _strings _floats) = Map.lookup v ints
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
-    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints _bools _strings _floats) = Map.findWithDefault (sVar v) v ints
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
+    assign v@(Var' _ IntType _) e m = m {intVars = Map.insert v e (intVars m)}
+    assign (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
+    assignValue v@(Var' _ IntType _) val m = m {intValuation = Map.insert v val (intValuation m)}
+    assignValue (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
+    assignedExpr v@(Var' _ IntType _) (VarModel ints _bools _strings _floats) = Map.lookup v ints
+    assignedExpr (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
+    assignedExprWithDefault v@(Var' _ IntType _) (VarModel ints _bools _strings _floats) = Map.findWithDefault (sVar v) v ints
+    assignedExprWithDefault (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
 
 instance Assignable Bool where
-    assign v@(Variable _ BoolType) e m = m {boolVars = Map.insert v e (boolVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignValue v@(Variable _ BoolType) val m = m {boolValuation = Map.insert v val (boolValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignedExpr v@(Variable _ BoolType) (VarModel _ints bools _strings _floats) = Map.lookup v bools
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
-    assignedExprWithDefault v@(Variable _ BoolType) (VarModel _ints bools _strings _floats) = Map.findWithDefault (sVar v) v bools
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
+    assign v@(Var' _ BoolType _) e m = m {boolVars = Map.insert v e (boolVars m)}
+    assign (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
+    assignValue v@(Var' _ BoolType _) val m = m {boolValuation = Map.insert v val (boolValuation m)}
+    assignValue (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
+    assignedExpr v@(Var' _ BoolType _) (VarModel _ints bools _strings _floats) = Map.lookup v bools
+    assignedExpr (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
+    assignedExprWithDefault v@(Var' _ BoolType _) (VarModel _ints bools _strings _floats) = Map.findWithDefault (sVar v) v bools
+    assignedExprWithDefault (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
 
 instance Assignable String where
-    assign v@(Variable _ StringType) e m = m {stringVars = Map.insert v e (stringVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignValue v@(Variable _ StringType) val m = m {stringValuation = Map.insert v val (stringValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignedExpr v@(Variable _ StringType) (VarModel _ints _bools strings _floats) = Map.lookup v strings
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
-    assignedExprWithDefault v@(Variable _ StringType) (VarModel _ints _bools strings _floats) = Map.findWithDefault (sVar v) v strings
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
+    assign v@(Var' _ StringType _) e m = m {stringVars = Map.insert v e (stringVars m)}
+    assign (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
+    assignValue v@(Var' _ StringType _) val m = m {stringValuation = Map.insert v val (stringValuation m)}
+    assignValue (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
+    assignedExpr v@(Var' _ StringType _) (VarModel _ints _bools strings _floats) = Map.lookup v strings
+    assignedExpr (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
+    assignedExprWithDefault v@(Var' _ StringType _) (VarModel _ints _bools strings _floats) = Map.findWithDefault (sVar v) v strings
+    assignedExprWithDefault (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
 
 instance Assignable Double where
-    assign v@(Variable _ FloatType) e m = m {floatVars = Map.insert v e (floatVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
-    assignValue v@(Variable _ FloatType) val m = m {floatValuation = Map.insert v val (floatValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
-    assignedExpr v@(Variable _ FloatType) (VarModel _ints _bools _strings floats) = Map.lookup v floats
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
-    assignedExprWithDefault v@(Variable _ FloatType) (VarModel _ints _bools _strings floats) = Map.findWithDefault (sVar v) v floats
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
+    assign v@(Var' _ FloatType _) e m = m {floatVars = Map.insert v e (floatVars m)}
+    assign (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
+    assignValue v@(Var' _ FloatType _) val m = m {floatValuation = Map.insert v val (floatValuation m)}
+    assignValue (Var' n t _) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
+    assignedExpr v@(Var' _ FloatType _) (VarModel _ints _bools _strings floats) = Map.lookup v floats
+    assignedExpr (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
+    assignedExprWithDefault v@(Var' _ FloatType _) (VarModel _ints _bools _strings floats) = Map.findWithDefault (sVar v) v floats
+    assignedExprWithDefault (Var' n t _) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
 
-noAssignment :: VarModel
+noAssignment :: Ord tag => VarModel' tag
 noAssignment = VarModel Map.empty Map.empty Map.empty Map.empty
 
 instance Show VarModel where
@@ -797,13 +799,13 @@ instance Show VarModel where
         showList' m' = showAssign <$> Map.toList m'
         showAssign (v,e) = varName v ++ ":=" ++ show e
 
-substConst :: Assignable t => Valuation -> Expr t -> Expr t
+substConst :: (Ord tag, Assignable t) => Valuation' tag -> Expr' tag t -> Expr' tag t
 substConst valuation = subst (valuationToVarModel valuation)
 
 -- | Apply a substitution to the right-hand-side expressions of a 'VarModel', leaving its keys untouched.
 -- Composing substitutions this way lets an assignment be resolved against an accumulated substitution:
 -- @substVarModel sigma assign@ rewrites every value-expression in @assign@ according to @sigma@.
-substVarModel :: VarModel -> VarModel -> VarModel
+substVarModel :: Ord tag => VarModel' tag -> VarModel' tag -> VarModel' tag
 substVarModel sigma (VarModel ints bools strings floats) = VarModel {
     intVars = Map.map (subst sigma) ints,
     boolVars = Map.map (subst sigma) bools,
@@ -815,21 +817,16 @@ substVarModel sigma (VarModel ints bools strings floats) = VarModel {
 --
 -- Preconditions are /not/ checked.
 --
-subst :: Assignable t => VarModel      -- ^ Map from variables to value expressions.
-{-      -> Map.Map FuncId (FuncDef w e) -- ^ Map from identifiers to their
-                                    -- definitions, this is used to replace
-                                    -- function calls by their bodies if all
-                                    -- the arguments of the function are
-                                    -- constant.-}
-      -> Expr t                -- ^ Value expression where the
-                                    -- substitution will take place.
-      -> Expr t
+subst :: (Ord tag, Assignable t) => VarModel' tag -- ^ Map from variables to value expressions.
+      -> Expr' tag t                   -- ^ Value expression where the
+                                       -- substitution will take place.
+      -> Expr' tag t
 --subst ve _ x   | ve == Map.empty = x
 subst ve x = subst' ve (view x)
 
-subst' :: Assignable t => VarModel -> ExprView t -> Expr t
+subst' :: (Ord tag, Assignable t) => VarModel' tag -> ExprView' tag t -> Expr' tag t
 subst' _  (Const const')          = sConst const'
-subst' ve (Var vid)               = assignedExprWithDefault vid ve
+subst' ve (EVar vid)              = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = sIfThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
@@ -851,12 +848,12 @@ subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
 
-mapExpressionVars :: (Variable -> Variable) -> Expr t -> Expr t
+mapExpressionVars :: Ord tag2 => (Variable' tag1 -> Variable' tag2) -> Expr' tag1 t -> Expr' tag2 t
 mapExpressionVars f = Expr . mapExpressionVars' f . view
 
-mapExpressionVars' :: (Variable -> Variable) -> ExprView t -> ExprView t
-mapExpressionVars' f e@(Const _) = e
-mapExpressionVars' f (Var v) = Var $ f v -- this line is effectively the purpose of this function
+mapExpressionVars' :: Ord tag2 => (Variable' tag1 -> Variable' tag2) -> ExprView' tag1 t -> ExprView' tag2 t
+mapExpressionVars' _ (Const e) = Const e
+mapExpressionVars' f (EVar v) = EVar $ f v -- this line is effectively the purpose of this function
 mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
 mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)
 mapExpressionVars' f (Modulo t n)            = Modulo (mapExpressionVars' f t) (mapExpressionVars' f n)

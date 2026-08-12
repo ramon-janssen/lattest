@@ -19,10 +19,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Text.RawString.QQ as QQ
 import Test.HUnit
-import Lattest.Model.Alphabet(IOAct(..), SymInteract(..))
+import Lattest.Model.Alphabet(IOAct(..), SymInteract'(..))
 import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
-import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable(..), fromConstantsMap)
+import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable'(..), fromConstantsMap)
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
 
 testDir :: FilePath
@@ -52,17 +52,17 @@ testSTSJSONParserNominal = TestCase $ do
         Right (sts, valuation) -> do
             assertEqual "initial valuation"
                 (fromConstantsMap $ Map.fromList
-                    [ (Variable "counter" IntType,    Cint    5    )
-                    , (Variable "label"   StringType, Cstring ""   )
-                    , (Variable "active"  BoolType,   Cbool   False)
+                    [ (Var "counter" IntType,    Cint    5    )
+                    , (Var "label"   StringType, Cstring ""   )
+                    , (Var "active"  BoolType,   Cbool   False)
                     ])
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Variable "label_p"   StringType]
-                    , SymInteract (In  "update")    [Variable "counter_p" IntType   ]
+                    [ SymInteract (In  "register")  [Var "label_p"   StringType]
+                    , SymInteract (In  "update")    [Var "counter_p" IntType   ]
                     , SymInteract (Out "O1")        []
-                    , SymInteract (Out "confirm")   [Variable "counter_p" IntType   ]
+                    , SymInteract (Out "confirm")   [Var "counter_p" IntType   ]
                     ])
                 (alphabet sts)
             assertBool failureMessage (expected == actual)
@@ -100,17 +100,17 @@ testSTSJSONParserNominalFloat = TestCase $ do
         Right (sts, valuation) -> do
             assertEqual "initial valuation"
                 (fromConstantsMap $ Map.fromList
-                    [ (Variable "counter" FloatType,  Cfloat  0.0  )
-                    , (Variable "label"   StringType, Cstring ""   )
-                    , (Variable "active"  BoolType,   Cbool   False)
+                    [ (Var "counter" FloatType,  Cfloat  0.0  )
+                    , (Var "label"   StringType, Cstring ""   )
+                    , (Var "active"  BoolType,   Cbool   False)
                     ])
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Variable "label_p"   StringType]
-                    , SymInteract (In  "update")    [Variable "counter_p" FloatType  ]
+                    [ SymInteract (In  "register")  [Var "label_p"   StringType]
+                    , SymInteract (In  "update")    [Var "counter_p" FloatType  ]
                     , SymInteract (Out "O1")        []
-                    , SymInteract (Out "confirm")   [Variable "counter_p" FloatType  ]
+                    , SymInteract (Out "confirm")   [Var "counter_p" FloatType  ]
                     ])
                 (alphabet sts)
             assertBool failureMessage (expected == actual)

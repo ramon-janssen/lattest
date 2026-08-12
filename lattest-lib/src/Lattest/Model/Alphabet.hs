@@ -50,7 +50,8 @@ SuspendedIF,
 asSuspendedInputAttempt,
 fromSuspendedInputAttempt,
 -- * STS
-SymInteract(..),
+SymInteract,
+SymInteract'(..),
 IOSymInteract,
 SymGuard,
 GateValue(..),
@@ -72,7 +73,7 @@ toIOGateValue
 )
 where
 
-import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..))
+import Lattest.Model.Symbolic.Expr (Variable, Variable'(..), Expr(..), Constant(..))
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
@@ -274,7 +275,8 @@ fromSuspendedInputAttempt _ = error "failed fromSuspendedInputAttempt"
 
 
 -- STS data types
-data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
+data SymInteract' tag g = SymInteract g [Variable' tag] deriving (Eq, Ord, Functor)
+type SymInteract = SymInteract' ()
 type IOSymInteract i o = SymInteract (IOAct i o)
 
 interactionGate :: SymInteract g -> g

@@ -11,13 +11,17 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
-( ExprView(..)
-, Expr(..)       -- for local usage only!
+( ExprView'(..)
+, ExprView
+, Expr
+, Expr'(..)
 , eval
 , reduce
-, Variable(..)
+, Variable
+, Variable'(.., Var)
 , Type(..)
 , allTypes
 , Constant(..)
@@ -79,10 +83,30 @@ instance Show Type where
     show StringType = "String"
     show FloatType = "Float"
 
-data Variable = Variable {varName :: String, varType :: Type} deriving (Eq, Ord)
+instance Read Type where
+  readsPrec _ str = (\(a,b) -> (f a, b)) <$> lex str
+    where
+      f xs = fst . head . filter snd $ map (\t -> (t, show t == xs)) allTypes
 
-instance Show Variable where
-    show (Variable name stype) = name ++ ":" ++ show stype
+-- See Note [Tags on Variables, Expressions, etc]
+data Variable' tag = Var' {varName :: String, varType :: Type, tag :: tag} deriving (Eq, Ord)
+type Variable = Variable' ()
+{-# COMPLETE Var #-}
+pattern Var :: String -> Type -> Variable
+pattern Var n t = Var' n t ()
+
+instance Show tag => Show (Variable' tag) where
+    show (Var' name stype stag) = name ++ showtag (show stag) ++ ":" ++ show stype
+      where
+        -- only showing the suffix if the variable is tagged
+        showtag "()" = ""
+        showtag t = '_' : t
+instance Read tag => Read (Variable' tag) where
+  readsPrec _ str = (\(a,b) -> (f a, b)) <$> lex str
+    where
+      f xs
+        | '_' `elem` xs = Var' (takeWhile (not . (== '_')) xs) (read $ tail $ dropWhile (not . (== ':')) xs) (read $ tail $ dropWhile (not . (== '_')) $ takeWhile (not . (== ':')) xs)
+        | otherwise = f $ takeWhile (not . (== ':')) xs <> "_()" <> dropWhile (not . (== ':')) xs
 
 data Constant = -- | Constructor of Boolean constant.
                 Cbool    { toBool :: Bool }
@@ -180,38 +204,39 @@ typeError received expected = "Type mismatch - " ++ show expected ++ " expected,
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
 
-data ExprView t where
-    Var :: {variable :: Variable} -> ExprView t
-    Const :: ExprType t => {constant :: t} -> ExprView t
-    Ite :: {conditional :: ExprView Bool, trueBranch :: ExprView t, falseBranch :: ExprView t} -> ExprView t
+type ExprView = ExprView' ()
+data ExprView' tag t where
+    EVar :: {variable :: Variable' tag} -> ExprView' tag t
+    Const :: ExprType t => {constant :: t} -> ExprView' tag t
+    Ite :: {conditional :: ExprView' tag Bool, trueBranch :: ExprView' tag t, falseBranch :: ExprView' tag t} -> ExprView' tag t
     {-
     No polymorphic Equal possible, because that would make sensible Eq and Ord instances impossible: Equal 1 2 and Equal
     "a" "b" are both ExprView Bool's, but an == on those expressions would have to compare 1 == "a" and 2 == "b".
     Var, Const and Ite don't have this problem because the argument types are forced to be equal through the return type.
     -}
-    EqualInt :: {leftInt :: ExprView Integer, rightInt :: ExprView Integer} -> ExprView Bool
-    EqualString :: {leftString :: ExprView String, rightString :: ExprView String} -> ExprView Bool
-    EqualBool :: {leftBool :: ExprView Bool, rightBool :: ExprView Bool} -> ExprView Bool
-    EqualFloat :: {leftFloat :: ExprView Double, rightFloat :: ExprView Double} -> ExprView Bool
-    Divide :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
-    Modulo :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
-    DivideFloat :: {dividendF :: ExprView Double, divisorF :: ExprView Double} -> ExprView Double
-    Sum :: FreeSum (ExprView Integer) -> ExprView Integer
-    SumFloat :: FreeSum (ExprView Double) -> ExprView Double
-    Product :: FreeProduct (ExprView Integer) -> ExprView Integer
-    ProductFloat :: FreeProduct (ExprView Double) -> ExprView Double
-    Length :: ExprView String -> ExprView Integer
-    GezInt :: ExprView Integer -> ExprView Bool
-    GezFloat :: ExprView Double -> ExprView Bool
-    Not :: ExprView Bool -> ExprView Bool
-    And :: Set (ExprView Bool) -> ExprView Bool
-    Concat :: [ExprView String] -> ExprView String
+    EqualInt :: {leftInt :: ExprView' tag Integer, rightInt :: ExprView' tag Integer} -> ExprView' tag Bool
+    EqualString :: {leftString :: ExprView' tag String, rightString :: ExprView' tag String} -> ExprView' tag Bool
+    EqualBool :: {leftBool :: ExprView' tag Bool, rightBool :: ExprView' tag Bool} -> ExprView' tag Bool
+    EqualFloat :: {leftFloat :: ExprView' tag Double, rightFloat :: ExprView' tag Double} -> ExprView' tag Bool
+    Divide :: {dividend2 :: ExprView' tag Integer, divisor2 :: ExprView' tag Integer} -> ExprView' tag Integer
+    Modulo :: {dividend2 :: ExprView' tag Integer, divisor2 :: ExprView' tag Integer} -> ExprView' tag Integer
+    DivideFloat :: {dividendF :: ExprView' tag Double, divisorF :: ExprView' tag Double} -> ExprView' tag Double
+    Sum :: FreeSum (ExprView' tag Integer) -> ExprView' tag Integer
+    SumFloat :: FreeSum (ExprView' tag Double) -> ExprView' tag Double
+    Product :: FreeProduct (ExprView' tag Integer) -> ExprView' tag Integer
+    ProductFloat :: FreeProduct (ExprView' tag Double) -> ExprView' tag Double
+    Length :: ExprView' tag String -> ExprView' tag Integer
+    GezInt :: ExprView' tag Integer -> ExprView' tag Bool
+    GezFloat :: ExprView' tag Double -> ExprView' tag Bool
+    Not :: ExprView' tag Bool -> ExprView' tag Bool
+    And :: Set (ExprView' tag Bool) -> ExprView' tag Bool
+    Concat :: [ExprView' tag String] -> ExprView' tag String
 
-deriving instance Eq t => Eq (ExprView t)
-deriving instance Ord t => Ord (ExprView t)
+deriving instance (Eq t, Eq tag) => Eq (ExprView' tag t)
+deriving instance (Ord t, Ord tag) => Ord (ExprView' tag t)
 
-instance Show t => Show (ExprView t) where
-    show (Var v) = varName v
+instance (Show t, Show tag, Ord tag) => Show (ExprView' tag t) where
+    show (EVar v) = show v
     show (Const c) = show c
     show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
     show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
@@ -256,30 +281,31 @@ showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm 
 -- 1. User can't directly construct Expr (such that invariants will always hold)
 -- 2. User can still pattern match on Expr using 'ExprView'
 -- 3. Overhead at run-time is zero. See https://wiki.haskell.org/Performance/Data_types#Newtypes
-newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
+newtype Expr' tag t = Expr {view :: ExprView' tag t} deriving (Eq, Ord)
+type Expr = Expr' ()
 
 instance Show t => Show (Expr t) where
     show = show . view
 
 -- | Evaluate the provided value expression.
 -- Either the Right Constant Value is returned or a (Left) error message.
-eval :: Expr v -> Either String v
+eval :: Ord tag => Expr' tag v -> Either String v
 eval = evalView . view
 
-evalView :: ExprView v -> Either String v
+evalView :: Ord tag => ExprView' tag v -> Either String v
 evalView (reduce -> Const v) = Right v
 evalView _ = Left "Value Expression is not a constant value"
 
-isConst :: ExprView v -> Bool
+isConst :: ExprView' tag v -> Bool
 isConst (Const _) = True
 isConst _ = False
 
-reduce :: ExprView v -> ExprView v
+reduce :: Ord tag => ExprView' tag v -> ExprView' tag v
 --reduce (view -> Vfunc (FuncId _nm _uid _fa fs) _vexps)         =
 --reduce (view -> Vcstr (CstrId _nm _uid _ca cs) _vexps)         =
 --reduce (view -> Viscstr { })                                   =
 --reduce (view -> Vaccess (CstrId _nm _uid ca _cs) _n p _vexps)  =
-reduce (Var v) = Var v
+reduce (EVar v) = EVar v
 reduce (Const v) = Const v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
@@ -346,7 +372,7 @@ freeVars :: Expr t -> Set.Set Variable
 freeVars = Set.fromList . freeVars' . view
 
 freeVars' :: ExprView t -> [Variable]
-freeVars' (Var v) = [v]
+freeVars' (EVar v) = [v]
 freeVars' (Const _) = []
 freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
 freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2

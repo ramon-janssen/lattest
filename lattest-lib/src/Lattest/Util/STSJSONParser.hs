@@ -16,11 +16,11 @@ import Data.Scientific (floatingOrInteger, toRealFloat, Scientific)
 import qualified Data.Set as Set
 import Data.Text (unpack)
 import Data.Maybe (fromMaybe)
-import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
+import Lattest.Model.Alphabet (IOAct (..), SymInteract, SymInteract'(..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable, Variable' (..), Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
 
 data UntypedExpr
     = UEBool Bool
@@ -46,8 +46,8 @@ type VarMap = Map.Map String Variable
 
 lookupVar :: VarMap -> String -> Type -> (Variable -> Expr a) -> Either String (Expr a)
 lookupVar varmap name expected mk = case Map.lookup name varmap of
-    Just v@(Variable _ t) | t == expected -> Right (mk v)
-    Just (Variable _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected " ++ show expected
+    Just v@(Var _ t) | t == expected -> Right (mk v)
+    Just (Var _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected " ++ show expected
     Nothing             -> Left $ "unknown variable: " ++ name
 
 -- Used for equality and ordering comparisons, where the result is defined based on the type of lhs and rhs.
@@ -124,8 +124,8 @@ toFloatExpr _   e                    = Left $ "not a real expression: " ++ show 
 toStrExpr :: VarMap -> UntypedExpr -> Either String (Expr String)
 toStrExpr varmap (UEStr name) =
     case Map.lookup name varmap of
-        Just v@(Variable _ StringType) -> Right (sVar v)
-        Just (Variable _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected String"
+        Just v@(Var _ StringType) -> Right (sVar v)
+        Just (Var _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected String"
         Nothing             -> Right (sConst name)
 toStrExpr varmap (UEOp2 "++" e1 e2)  = (\a b -> sConcat [a, b]) <$> toStrExpr varmap e1 <*> toStrExpr varmap e2
 toStrExpr _   e                    = Left $ "not a string expression: " ++ show e
@@ -231,7 +231,7 @@ parseVarType t         = Left $ "unknown variable type: " ++ t
 buildVarMap :: Map.Map String VarDefJson -> Either String (Map.Map String Variable)
 buildVarMap defs = Map.fromList <$> forM (Map.toList defs) (\(name, def) -> do
     t <- parseVarType (varDefJsonType def)
-    return (name, Variable name t))
+    return (name, Var name t))
 
 buildGateMap
     :: (String -> IOAct String String)
