@@ -277,3 +277,4 @@ type Foo = Foo' ()
 These tags are usually unused, i.e. (), but the symbolic lookahead/path condition/offline testing code uses Int as tags.
 Those Ints represent a timestamp, i.e. the value of a variable at a specific point in the trace.
 For convenience in the default case, we provide the synonym Foo, but a lot of code is polymorphic over tags.
+-}
