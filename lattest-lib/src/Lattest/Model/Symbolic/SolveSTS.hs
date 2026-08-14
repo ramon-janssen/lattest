@@ -98,7 +98,16 @@ interactsToGuard f intrpr interacts =
     --interactsToGuard' :: Int -> [IOSymInteract i o] -> SymIntrpState loc -> SymGuard
     interactsToGuard' _ [] _ = sTrue
 --    interactsToGuard' n [i] sloc = f (seStep n f (const sTrue) (t i) sloc)
-    interactsToGuard' n (i:is) sloc = seStep n (ioInteractToImpliticLocation i) f is (t i) sloc
+    interactsToGuard' n (i:is) (SymIntrpState ploc pvars) = varsToGuard indexedAssign .&& f (seStep' BM.<#> t i ploc)
+        where
+        indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
+        seStep' (tguard, completedAssign, tloc) =
+            let indexedGuard = indexExpr n tguard
+            in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc completedAssign)) .|| (sNot indexedGuard .&& f (ioInteractToImpliticLocation i)) -- The implicit transition destination is a bit hacky
+        indexLeft :: Int -> VarModel -> VarModel
+        indexLeft n = mapVars $ indexVar n
+        indexRight :: Int -> VarModel -> VarModel
+        indexRight n = mapVarExprs $ indexVar n
     completeSTSLoc :: (STStdest, loc) -> (SymGuard, VarModel, loc)
     completeSTSLoc (STSLoc (tguard, tassign), tloc) =
         let completedAssign = tassign `varUnion` identityVarModel locVarSet
@@ -111,16 +120,6 @@ interactsToGuard f intrpr interacts =
             Nothing -> []
     ioInteractToImpliticLocation (SymInteract (In _) _) = BM.underspecified -- this shouldn't be hard-coded
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
-    seStep n implicit f is t (SymIntrpState ploc pvars) = varsToGuard indexedAssign .&& f (seStep' BM.<#> t ploc)
-        where
-        indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
-        seStep' (tguard, completedAssign, tloc) =
-            let indexedGuard = indexExpr n tguard
-            in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc completedAssign)) .|| (sNot indexedGuard .&& f implicit) -- The implicit transition destination is a bit hacky
-        indexLeft :: Int -> VarModel -> VarModel
-        indexLeft n = mapVars $ indexVar n
-        indexRight :: Int -> VarModel -> VarModel
-        indexRight n = mapVarExprs $ indexVar n
 
 indexExpr :: Int -> Expr t -> Expr t
 indexExpr n e = mapExpressionVars (indexVar n) e
