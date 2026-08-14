@@ -111,25 +111,24 @@ interactsToGuard f intrpr interacts =
             Nothing -> []
     ioInteractToImpliticLocation (SymInteract (In _) _) = BM.underspecified -- this shouldn't be hard-coded
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
-
-seStep :: BM.OrdFunctor m
-    => Int -- ^ Step number
-    -> m SymGuard -- ^ implicit transition destination if a guard is false
-    -> (m SymGuard -> SymGuard) -- ^ Subalgebra mapping?
-    -> (SymIntrpState loc -> SymGuard) -- ^ function to expand symbolic destination states, potentially to further steps
-    -> (loc -> m (SymGuard, VarModel, loc)) -- ^ transition function
-    -> SymIntrpState loc -- ^ The current state to step from
-    -> SymGuard -- ^ resulting guard expressions
-seStep n implicit f expand t (SymIntrpState ploc pvars) = varsToGuard indexedAssign .&& f (seStep' BM.<#> t ploc)
-    where
-    indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
-    seStep' (tguard, completedAssign, tloc) = 
-        let indexedGuard = indexExpr n tguard
-        in (indexedGuard .&& expand (SymIntrpState tloc completedAssign)) .|| (sNot indexedGuard .&& f implicit) -- The implicit transition destination is a bit hacky
-    indexLeft :: Int -> VarModel -> VarModel
-    indexLeft n = mapVars $ indexVar n
-    indexRight :: Int -> VarModel -> VarModel
-    indexRight n = mapVarExprs $ indexVar n
+    seStep :: BM.OrdFunctor m
+        => Int -- ^ Step number
+        -> m SymGuard -- ^ implicit transition destination if a guard is false
+        -> (m SymGuard -> SymGuard) -- ^ Subalgebra mapping?
+        -> (SymIntrpState loc -> SymGuard) -- ^ function to expand symbolic destination states, potentially to further steps
+        -> (loc -> m (SymGuard, VarModel, loc)) -- ^ transition function
+        -> SymIntrpState loc -- ^ The current state to step from
+        -> SymGuard -- ^ resulting guard expressions
+    seStep n implicit f expand t (SymIntrpState ploc pvars) = varsToGuard indexedAssign .&& f (seStep' BM.<#> t ploc)
+        where
+        indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
+        seStep' (tguard, completedAssign, tloc) =
+            let indexedGuard = indexExpr n tguard
+            in (indexedGuard .&& expand (SymIntrpState tloc completedAssign)) .|| (sNot indexedGuard .&& f implicit) -- The implicit transition destination is a bit hacky
+        indexLeft :: Int -> VarModel -> VarModel
+        indexLeft n = mapVars $ indexVar n
+        indexRight :: Int -> VarModel -> VarModel
+        indexRight n = mapVarExprs $ indexVar n
 
 indexExpr :: Int -> Expr t -> Expr t
 indexExpr n e = mapExpressionVars (indexVar n) e
