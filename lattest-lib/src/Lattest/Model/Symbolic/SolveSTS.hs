@@ -20,7 +20,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, varsToGuard, identityVarModel, getVariables)
+import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables)
 import Lattest.SMT.SMT(SMT)
 import Lattest.Util.Utils(takeJusts, distributeFirstMaybe)
 
@@ -83,9 +83,7 @@ interactsToAllowedCondition intrpr interacts = interactsToGuard asDualExpr intrp
 data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord)
 
 intrpStateToSym :: IntrpState a -> SymIntrpState a
-intrpStateToSym (IntrpState loc vals) =
-    let abstractVarModel = valuationToVarModel vals
-    in SymIntrpState loc abstractVarModel
+intrpStateToSym (IntrpState loc vals) = SymIntrpState loc (mapVars (indexVar 0) (valuationToVarModel vals))
 
 interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
@@ -97,17 +95,17 @@ interactsToGuard f intrpr interacts =
     err = throw $ ActionOutsideAlphabet callStack
     --interactsToGuard' :: Int -> [IOSymInteract i o] -> SymIntrpState loc -> SymGuard
     interactsToGuard' _ [] _ = sTrue
---    interactsToGuard' n [i] sloc = f (seStep n f (const sTrue) (t i) sloc)
-    interactsToGuard' n (i:is) (SymIntrpState ploc pvars) = varsToGuard indexedAssign .&& f (seStep' BM.<#> t i ploc)
+    -- the LHS pvar contains the indexed vars of the previous step, RHS contains only interaction variables
+    interactsToGuard' n (i:is) (SymIntrpState ploc pvar) = f (seStep' BM.<#> t i ploc)
         where
-        indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
         seStep' (tguard, completedAssign, tloc) =
-            let indexedGuard = indexExpr n tguard
-            in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc completedAssign)) .|| (sNot indexedGuard .&& f (ioInteractToImpliticLocation i)) -- The implicit transition destination is a bit hacky
+            let indexedGuard = subst pvar (indexExpr n tguard)
+                pvar' = substVarModel pvar (indexLeft (n+1) $ indexRight n completedAssign)
+            in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc pvar')) .|| (sNot indexedGuard .&& f (ioInteractToImpliticLocation i)) -- The implicit transition destination is a bit hacky
         indexLeft :: Int -> VarModel -> VarModel
-        indexLeft n = mapVars $ indexVar n
+        indexLeft k = mapVars $ indexVar k
         indexRight :: Int -> VarModel -> VarModel
-        indexRight n = mapVarExprs $ indexVar n
+        indexRight k = mapVarExprs $ indexVar k
     completeSTSLoc :: (STStdest, loc) -> (SymGuard, VarModel, loc)
     completeSTSLoc (STSLoc (tguard, tassign), tloc) =
         let completedAssign = tassign `varUnion` identityVarModel locVarSet
