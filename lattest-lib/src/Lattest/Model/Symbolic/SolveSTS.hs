@@ -78,10 +78,12 @@ interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr in
 --
 -- The accumulated substitution is what lets us substitute state variables out of the interaction guards, rather than
 -- constraining them with a separate assignment guard.
-data SymIntrpState loc = SymIntrpState loc VarModel VarModel deriving (Eq, Ord)
+data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord)
 
 intrpStateToSym :: IntrpState a -> SymIntrpState a
-intrpStateToSym (IntrpState loc vals) = SymIntrpState loc (valuationToVarModel vals) noAssignment -- no state variables resolved yet at the start of the trace
+intrpStateToSym (IntrpState loc vals) =
+    let abstractVarModel = valuationToVarModel vals
+    in SymIntrpState loc (mapVars (indexVar 0) abstractVarModel)
 
 interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc)
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
@@ -93,13 +95,13 @@ interactsToGuard f intrpr interacts =
     err = throw $ ActionOutsideAlphabet callStack
     --interactsToGuard' :: Int -> [IOSymInteract i o] -> SymIntrpState loc -> SymGuard
     interactsToGuard' _ [] _ = sTrue
---    interactsToGuard' n [i] sloc = f (seStep n f (const sTrue) (t i) sloc)
-    interactsToGuard' n (i:is) (SymIntrpState ploc pvars) = varsToGuard indexedAssign .&& f (seStep' BM.<#> t i ploc)
+    -- the LHS pvar contains the indexed vars of the previous step, RHS contains only interaction variables
+    interactsToGuard' n (i:is) (SymIntrpState ploc pvar) = f (seStep' BM.<#> t i ploc)
         where
-        indexedAssign = indexLeft n $ indexRight (n-1) pvars -- n-1 should be safe: at n=0, all assigned expressions should be constants
         seStep' (tguard, completedAssign, tloc) =
-            let indexedGuard = indexExpr n tguard
-            in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc completedAssign)) .|| (sNot indexedGuard .&& f (ioInteractToImpliticLocation i)) -- The implicit transition destination is a bit hacky
+            let indexedGuard = subst pvar (indexExpr n tguard)
+                pvar' = substVarModel pvar (indexLeft (n+1) $ indexRight n completedAssign)
+            in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc pvar')) .|| (sNot indexedGuard .&& f (ioInteractToImpliticLocation i)) -- The implicit transition destination is a bit hacky
         indexLeft :: Int -> VarModel -> VarModel
         indexLeft n = mapVars $ indexVar n
         indexRight :: Int -> VarModel -> VarModel
