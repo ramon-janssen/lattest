@@ -81,9 +81,7 @@ interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr in
 data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord)
 
 intrpStateToSym :: IntrpState a -> SymIntrpState a
-intrpStateToSym (IntrpState loc vals) =
-    let abstractVarModel = valuationToVarModel vals
-    in SymIntrpState loc (mapVars (indexVar 0) abstractVarModel)
+intrpStateToSym (IntrpState loc vals) = SymIntrpState loc (mapVars (indexVar 0) (valuationToVarModel vals))
 
 interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc)
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
@@ -103,9 +101,9 @@ interactsToGuard f intrpr interacts =
                 pvar' = substVarModel pvar (indexLeft (n+1) $ indexRight n completedAssign)
             in (indexedGuard .&& interactsToGuard' (n+1) is (SymIntrpState tloc pvar')) .|| (sNot indexedGuard .&& f (ioInteractToImpliticLocation i)) -- The implicit transition destination is a bit hacky
         indexLeft :: Int -> VarModel -> VarModel
-        indexLeft n = mapVars $ indexVar n
+        indexLeft k = mapVars $ indexVar k
         indexRight :: Int -> VarModel -> VarModel
-        indexRight n = mapVarExprs $ indexVar n
+        indexRight k = mapVarExprs $ indexVar k
     completeSTSLoc :: (STStdest, loc) -> (SymGuard, VarModel, loc)
     completeSTSLoc (STSLoc (tguard, tassign), tloc) =
         let completedAssign = tassign `varUnion` identityVarModel locVarSet
