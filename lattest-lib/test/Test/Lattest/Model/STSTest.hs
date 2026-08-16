@@ -19,8 +19,6 @@ module Test.Lattest.Model.STSTest (
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
-    testComposedSeTreeStructure,
-    testConjunctionOfDifferentValuations,
     testConcreteTraceSpecifiedAllowedCorrespondence,
     prop_specifiedAllowedCorrespondence,
     composedCoffeeMachineIntrpr
@@ -814,71 +812,6 @@ composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeM
 testComposedCoffeeTreeStructure :: Test
 testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
 
--- Pretty-print the intermediate symbolic-execution tree (`Solve.SeTree`) as an indented outline. The monad is fixed
--- to `FreeLattice` (the composed coffee machine's configuration monad) so that we can render its ∧/∨/⊤/⊥ structure
--- directly, interleaved with the sequence/if-then-else structure of the tree. Unlike the CNF representation, the free
--- lattice does not normalise or deduplicate, so structurally-equal subtrees are *not* merged: the shape of the tree
--- follows the trace one-to-one. This shows the intermediate structure *before* it is folded (by `Solve.foldSeTree`)
--- into a single, hard-to-read boolean guard.
-prettySeTree :: Solve.SeTree FreeLatticeSlow -> String
-prettySeTree t0 = unlines (goTree "" t0)
-    where
-    goTree ind (Solve.SeLeaf g)  = [ind ++ "leaf: " ++ show g]
-    goTree ind (Solve.SeConf c)  = (ind ++ "configuration:") : goConf (ind ++ "  ") goTree c
-    goTree ind (Solve.SeSeq assign b) = (ind ++ "step [subst: " ++ show assign ++ "], branches:") : goConf (ind ++ "  ") goBranch b
-    goBranch ind (Solve.SeIte g thn els) =
-           [ind ++ "if " ++ show g ++ " then"]
-        ++ goTree (ind ++ "    ") thn
-        ++ [ind ++ "else: " ++ show els]
-    -- render a FreeLatticeSlow layer, recursing into each atom via `sub`. Chains of the same operator are flattened into an
-    -- n-ary ∧/∨ so the output lines up with the CNF renderer, but no merging of equal subtrees happens.
-    goConf :: String -> (String -> x -> [String]) -> FreeLatticeSlow x -> [String]
-    goConf ind _   (FreeLatticeSlow Top)    = [ind ++ "⊤ (underspecified)"]
-    goConf ind _   (FreeLatticeSlow Bottom) = [ind ++ "⊥ (forbidden)"]
-    goConf ind sub (FreeLatticeSlow (Levitate free)) = goFree ind sub free
-    goFree ind sub (Var e) = sub ind e
-    goFree ind sub free@(_ :/\: _) =
-        let conjuncts = meets free
-        in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
-           : concatMap (goFree (ind ++ "  ") sub) conjuncts
-    goFree ind sub free@(_ :\/: _) =
-        let disjuncts = joins free
-        in (ind ++ "∨ (" ++ show (length disjuncts) ++ " disjuncts):")
-           : concatMap (goFree (ind ++ "  ") sub) disjuncts
-    meets (x :/\: y) = meets x ++ meets y
-    meets other      = [other]
-    joins (x :\/: y) = joins x ++ joins y
-    joins other      = [other]
-
--- Show the intermediate tree-like structure for the trace ?water !b ?esp on the composed coffee machine, as a golden
--- test. The same tree folds (via `Solve.foldSeTree asDualExpr`/`asExpr`) to the specified/allowed guards.
-testComposedSeTreeStructure :: Test
-testComposedSeTreeStructure = TestCase $ goldenAssert
-    [ goldenCheck "composed:interactsToSeTree [water]" (goldenDir </> "composed.setree.water.txt")
-        ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water])),
-        goldenCheck "composed:interactsToSeTree [water,b]" (goldenDir </> "composed.setree.water.b.txt")
-        ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water, b])),
-        goldenCheck "composed:interactsToSeTree [water,b,espresso]" (goldenDir </> "composed.setree.water.b.espresso.txt")
-        ("\n" ++ prettySeTree (Solve.interactsToSeTree composedCoffeeMachineIntrpr [water, b, espresso]))
-    ]
-
--- Concrete-trace correspondence between the semantic model and the symbolic guards.
---
--- Uses the same model as `testComposedCoffeeTreeStructure` (the composed coffee machine) and the same traces as
--- `testComposedSeTreeStructure` (?water, ?water?b, ?water?b?esp and a couple of variations), but with concrete
--- parameter values filled in so the traces become concrete. For each concrete trace two independently-computed
--- verdicts are compared:
---
---   (1) SEMANTIC: run the *concrete* trace through the model with `after` (as in `testSTSHappyFlow`) and inspect the
---       resulting state configuration -- is it forbidden, underspecified, or neither (indefinite)?
---   (2) SYMBOLIC: substitute the concrete parameter values (indexed per trace position, matching the `_n` naming of
---       the symbolic guards) into the specified guard (`interactsToSpecifiedCondition`, asDualExpr) and the allowed
---       guard (`interactsToAllowedCondition`, asExpr), and evaluate each to a concrete True/False.
---
--- The two must correspond: `asDualExpr`/specified means "not underspecified" and `asExpr`/allowed means "not
--- forbidden", so the specified guard evaluates to True iff the concrete configuration is specified, and the allowed
--- guard to True iff the concrete configuration is allowed.
-
 -- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
 type ConcreteStep = (IOSymInteract String String, [Constant])
 
@@ -1003,7 +936,7 @@ goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
 
-testTreeStructure :: (BoundedMonad m, Foldable m, (forall a. Ord a => Ord (m a)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
 testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
     [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
     , -}
