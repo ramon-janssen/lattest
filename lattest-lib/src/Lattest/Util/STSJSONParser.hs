@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -21,11 +22,11 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..))
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..))
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (List, withExprConstraints, Constant (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (withExprConstraints, Constant (..))
 import Data.SBV (RCSet (..))
 
 data UntypedExpr
@@ -87,7 +88,7 @@ toBoolExpr varmap (UEOp2 "==" e1 e2) = do
     case t of
         Some IntType    -> (.==) <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
         Some BoolType   -> (.==) <$> toBoolExpr  varmap e1 <*> toBoolExpr  varmap e2
-        Some StringType -> (.==) <$> toStrExpr   varmap e1 <*> toStrExpr   varmap e2
+        Some CharType   -> (.==) <$> toCharExpr  varmap e1 <*> toCharExpr   varmap e2
         Some FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
         Some (ListType tp) -> withExprConstraints tp $ (.==) <$> toListExpr tp varmap e1 <*> toListExpr tp varmap e2
         Some (SetType _) -> error "no eq on rcsets"
@@ -121,7 +122,7 @@ toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toIntExpr varmap e1 <*> toIntExp
 toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
 
-toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (List t))
+toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr [t])
 toListExpr t varmap e = case e of
   UEStr name -> lookupVar varmap name (ListType t) sVar
   -- TODO: add operators that return lists
@@ -156,15 +157,8 @@ toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toFloatExpr varmap e1 <*> toFl
 toFloatExpr _   e                    = Left $ "not a real expression: " ++ show e
 
 -- unknown strings are treated as string literals.
-toStrExpr :: VarMap -> UntypedExpr -> Either String (Expr String)
-toStrExpr varmap (UEStr name) =
-    case Map.lookup name varmap of
-        Just (Some v@(Variable _ StringType)) -> Right (sVar v)
-        Just (Some (Variable _ t)) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected String"
-        -- unknown strings are treated as string literals.
-        Nothing             -> Right (sConst name)
-toStrExpr varmap (UEOp2 "++" e1 e2)  = (\a b -> sConcat [a, b]) <$> toStrExpr varmap e1 <*> toStrExpr varmap e2
-toStrExpr _   e                    = Left $ "not a string expression: " ++ show e
+toCharExpr :: VarMap -> UntypedExpr -> Either String (Expr Char)
+toCharExpr varmap (UEStr name) = error "todo: change untypedexpr? Just match on one-character strings? Would like to have a clear distinction between variables and literal strings/chars"
 
 -- Location IDs can be integers or strings in JSON; both are mapped to String for consistency.
 newtype LocationId = LocationId { locId :: String }
@@ -261,7 +255,7 @@ parseVarType "int"     = Right $ Some IntType
 parseVarType "float"   = Right $ Some FloatType
 parseVarType "bool"    = Right $ Some BoolType
 parseVarType "boolean" = Right $ Some BoolType
-parseVarType "string"  = Right $ Some StringType
+parseVarType "char"    = Right $ Some CharType
 parseVarType t         = Left $ "unknown variable type: " ++ t
 
 buildVarMap :: Map.Map String VarDefJson -> Either String (Map.Map String (Some Variable))
@@ -298,7 +292,7 @@ buildAssignment varMap name def = do
         IntType    -> (v =:) <$> toIntExpr  varMap expr
         FloatType  -> (v =:) <$> toFloatExpr varMap expr
         BoolType   -> (v =:) <$> toBoolExpr varMap expr
-        StringType -> (v =:) <$> toStrExpr  varMap expr
+        CharType -> (v =:) <$> toCharExpr  varMap expr
         ListType t -> (v =:) <$> toListExpr t varMap expr
         SetType t -> (v =:) <$> toSetExpr t varMap expr
         TupleType a b -> (v =:) <$> toTupleExpr a b varMap expr
@@ -363,7 +357,7 @@ buildValuation locVarCtx initVal =
         case (varType var, Map.lookup name initVal) of
             (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CInt (round n)))
             (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
-            (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CString (unpack s)))
+            (CharType,   Just (JSON.String (unpack -> [c]))) -> Right (name, insertIntoValuation var (CChar c))
             (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
             (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
@@ -374,7 +368,7 @@ buildValuation locVarCtx initVal =
         defaultConst IntType    = CInt 0
         defaultConst FloatType  = CFloat 0.0
         defaultConst BoolType   = CBool False
-        defaultConst StringType = CString ""
+        defaultConst CharType = CChar 'a'
         defaultConst (ListType t) = CList [] t
         defaultConst (SetType t) = withExprConstraints t $ CSet (RegularSet mempty) t
         defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b

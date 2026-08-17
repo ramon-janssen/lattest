@@ -13,6 +13,7 @@ module Lattest.Model.Symbolic.Expr
 , float
 , bool
 , string
+, char
 , list
 , set
 , tuple
@@ -22,10 +23,7 @@ module Lattest.Model.Symbolic.Expr
 , fromConst
 , toConst
 , Variable(..)
-, eval
 , freeVars
-, ToSBV
-, toSBV
 , withExprConstraints
 , module Lattest.Model.Symbolic.Internal.ExprImpls
 , module Lattest.Model.Symbolic.Internal.ExprImplsExtension

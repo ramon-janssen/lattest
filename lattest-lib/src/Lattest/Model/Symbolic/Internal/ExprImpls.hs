@@ -14,6 +14,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE LambdaCase #-}
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -59,6 +60,21 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sElem
 , sTake
 , sDrop
+, sHead
+, sTail
+, sMap
+  -- ** Set operations
+, sInsert
+, sEmptySet
+, sSElem
+  -- ** Pair operations
+, sFirst
+, sSecond
+, sPair
+  -- ** Either
+, sEither
+, sLeft
+, sRight
 
 -- * Substitution of var by value
 , VarModel(..)
@@ -75,6 +91,8 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , assignment
 , noAssignment
 , (=:)
+, eval
+, reduce
 )
 where
 
@@ -91,6 +109,9 @@ import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
 import qualified Data.List as List
+import Data.SBV (RCSet(..))
+import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
+import GHC.Integer (divInteger)
 
 sConst :: ExprConstraints t => t -> Expr t
 sConst = Expr . Const
@@ -475,26 +496,66 @@ sConcat l =
 --    "a" ++ "b" == "ab"    - concat consecutive string values
 --   remove all nested sConcat, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
-sLength :: Expr (List x) -> Expr Integer
+sLength :: Expr [x] -> Expr Integer
 sLength (view -> x) = Expr $ Length (case has @ExprType x $ typeOf' x of ListType t -> t) x
 
-sCons :: Expr x -> Expr (List x) -> Expr (List x)
+sCons :: Expr x -> Expr [x] -> Expr [x]
 sCons (view -> x) (view -> xs) = Expr $ Cons x xs
 
-sNil :: ExprConstraints x => Expr (List x)
-sNil = Expr $ Const $ List []
+sNil :: ExprConstraints x => Expr [x]
+sNil = Expr $ Const []
 
-sAppend :: Expr (List x) -> Expr (List x) -> Expr (List x)
+sAppend :: Expr [x] -> Expr [x] -> Expr [x]
 sAppend (view -> xs) (view -> ys) = Expr $ Append xs ys
 
-sElem :: Expr x -> Expr (List x) -> Expr Bool
+sElem :: Expr x -> Expr [x] -> Expr Bool
 sElem (view -> x) (view -> xs) = Expr $ LElem (has @ExprType x $ typeOf' x) x xs
 
-sTake :: Expr Integer -> Expr (List x) -> Expr (List x)
+sTake :: Expr Integer -> Expr [x] -> Expr [x]
 sTake (view -> i) (view -> xs) = Expr $ Take i xs
 
-sDrop :: Expr Integer -> Expr (List x) -> Expr (List x)
+sDrop :: Expr Integer -> Expr [x] -> Expr [x]
 sDrop (view -> i) (view -> xs) = Expr $ Drop i xs
+
+sFirst :: ExprType b => Expr (t, b) -> Expr t
+sFirst (view -> i) = Expr $ First (typeOf undefined) i
+
+sSecond :: ExprType a => Expr (a, t) -> Expr t
+sSecond (view -> i) = Expr $ Second (typeOf undefined) i
+
+sPair :: Expr a -> Expr b -> Expr (a, b)
+sPair (view -> x) (view -> y) = Expr $ Pair x y
+
+sHead :: ExprConstraints x => Expr [x] -> Expr x
+sHead (view -> xs) = Expr $ Head xs
+
+sTail :: ExprConstraints x => Expr [x] -> Expr [x]
+sTail (view -> xs) = Expr $ Tail xs
+
+-- | Map a function over a list. Think of the variable a and the expression b as morally forming a function a -> b:
+-- the variable will, within the expression, represent the argument to the function.
+sMap :: (ExprConstraints a, ExprConstraints b) => Variable a -> Expr b -> Expr [a] -> Expr [b]
+sMap v (view -> b) (view -> xs) = Expr $ Map v b xs
+
+-- | Case-of on Either: If sMap can be thought of as having type `(a -> b) -> List a -> List b`,
+-- SEither should be considered as having type `(a -> c) -> (b -> c) -> Either a b -> c`.
+sEither :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Variable a -> Variable b -> Expr c -> Expr c -> Expr (Either a b) -> Expr c
+sEither lv rv (view -> le) (view -> re) (view -> e) = Expr $ Either lv rv le re e
+
+sLeft :: (ExprConstraints a, ExprConstraints b) => Expr a -> Expr (Either a b)
+sLeft (view -> a) = Expr $ ELeft a
+
+sRight :: (ExprConstraints a, ExprConstraints b) => Expr b -> Expr (Either a b)
+sRight (view -> b) = Expr $ ERight b
+
+sEmptySet :: (ExprConstraints a, ExprConstraints (RCSet a)) => Expr (RCSet a)
+sEmptySet = Expr $ Const $ RegularSet $ Set.fromList []
+
+sInsert :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr (RCSet a)
+sInsert (view -> x) (view -> xs) = Expr $ SInsert x xs
+
+sSElem :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr Bool
+sSElem (view -> x) (view -> xs) = Expr $ SElem (typeOf' x) x xs
 
 mergeVals :: [Expr String] -> [Expr String]
 mergeVals []            = []
@@ -567,7 +628,7 @@ insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
 insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ StringType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ CharType) c = assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
@@ -639,6 +700,143 @@ subst' ve (Append xs ys) = sAppend (subst' ve xs) (subst' ve ys)
 subst' ve (LElem t x xs) = has @ExprType t $ sElem (subst' ve x) (subst' ve xs)
 subst' ve (Take x xs) = sTake (subst' ve x) (subst' ve xs)
 subst' ve (Drop x xs) = sDrop (subst' ve x) (subst' ve xs)
+subst' ve (First t x) = has @ExprType t $ sFirst $ subst' ve x
+subst' ve (Second t x) = has @ExprType t $ sSecond $ subst' ve x
+subst' ve (Pair x y) = sPair (subst' ve x) (subst' ve y)
+subst' ve (Head x) = sHead $ subst' ve x
+subst' ve (Tail x) = sTail $ subst' ve x
+subst' ve (ELeft x) = sLeft $ subst' ve x
+subst' ve (ERight x) = sRight $ subst' ve x
+subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
+subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
+subst' ve (Map v f xs) = Expr $ Map (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Either vl vr l r x) = Expr $ Either
+  (case assignedExprWithDefault vl ve of { Expr (Var v) -> v; _ -> error "impossible"})
+  (case assignedExprWithDefault vr ve of { Expr (Var v) -> v; _ -> error "impossible"})
+  (view $ subst' ve l)
+  (view $ subst' ve r)
+  (view $ subst' ve x)
 
 
+-- | Evaluate the provided value expression.
+-- Either the Right Constant Value is returned or a (Left) error message.
+eval :: Expr v -> Either String v
+eval = evalView . view
+
+evalView :: ExprView v -> Either String v
+evalView (reduce -> Const v) = Right v
+evalView _ = Left "Value Expression is not a constant value"
+
+reduce :: ExprView v -> ExprView v
+reduce (Var v) = Var v
+reduce (Const v) = Const v
+reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
+reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
+reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) = SumFloat es
+reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) = ProductFloat es
+reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
+reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y
+reduce (Modulo (reduce -> e1) (reduce -> e2)) = Modulo e1 e2
+reduce (Divide (reduce -> e1) (reduce -> e2@(Const 0))) = Divide e1 e2 -- leave divisions by zero as expressions
+reduce (Divide (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `divInteger` y
+reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
+reduce (DivideFloat (reduce -> e1) (reduce -> e2@(Const 0))) = DivideFloat e1 e2 -- leave divisions by zero as expressions
+reduce (DivideFloat (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x / y
+reduce (DivideFloat (reduce -> e1) (reduce -> e2)) = DivideFloat e1 e2
+reduce (StrLength (reduce -> (Const s))) = Const $ fromIntegral $ length s
+reduce (StrLength (reduce -> e)) = StrLength e
+reduce (Length _ (reduce -> Const xs)) = Const $ fromIntegral $ length xs
+reduce (Length t (reduce -> e)) = Length t e
+reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (Equal t (reduce -> e1) (reduce -> e2)) = Equal t e1 e2
+reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezInt (reduce -> e)) = GezInt e
+reduce (GezFloat (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezFloat (reduce -> e)) = GezFloat e
+reduce (Not (reduce -> (Const b))) = Const $ not b
+reduce (Not (reduce -> e)) = Not e
+reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
+reduce (And (Set.map reduce -> es)) = And es
+reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concatMap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
+reduce (Concat (fmap reduce -> e)) = Concat e
+reduce (Cons (reduce -> x) (reduce -> xs))
+  | Const a <- x
+  , Const as <- xs = Const $ a : as
+  | otherwise = Cons x xs
+reduce (Append (reduce -> xs) (reduce -> ys))
+  | Const as <- xs
+  , Const bs <- ys = Const $ as ++ bs
+  | otherwise = Append xs ys
+reduce (LElem t (reduce -> x) (reduce -> xs))
+  | Const a <- x
+  , Const as <- xs = Const $ a `elem` as
+  | otherwise = LElem t x xs
+reduce (Take (reduce -> i) (reduce -> xs))
+  | Const j <- i
+  , Const as <- xs = Const $ take (fromInteger j) as
+  | otherwise = Take i xs
+reduce (Drop (reduce -> i) (reduce -> xs))
+  | Const j <- i
+  , Const as <- xs = Const $ drop (fromInteger j) as
+  | otherwise = Drop i xs
+reduce (First tp (reduce -> x))
+  | Const (y,_) <- x = case typeOf' x of
+      TupleType t _ -> withExprConstraints t $ Const y
+  | otherwise = First tp x
+reduce (Second tp (reduce -> x))
+  | Const (_,y) <- x = case typeOf' x of
+      TupleType _ t -> withExprConstraints t $ Const y
+  | otherwise = Second tp x
+reduce (Pair (reduce -> x) (reduce -> y))
+  | Const a <- x
+  , Const b <- y = Const (a,b)
+  | otherwise = Pair x y
+reduce (Head (reduce -> xs))
+  | Const (y:_) <- xs = Const y
+  | Const [] <- xs = error "Head of empty list"
+  | otherwise = Head xs
+reduce (Tail (reduce -> xs))
+  | Const (_:y) <- xs = Const y
+  | Const [] <- xs = error "Tail of empty list"
+  | otherwise = Tail xs
+reduce (ELeft (reduce -> x))
+  | Const y <- x = Const (Left y)
+  | otherwise = ELeft x
+reduce (ERight (reduce -> x))
+  | Const y <- x = Const (Right y)
+  | otherwise = ERight x
+reduce (SElem t (reduce -> x) (reduce -> xs))
+  | Const y <- x
+  , Const ys <- xs = case ys of
+      RegularSet    s -> Const $       y `Set.member` s
+      ComplementSet s -> Const $ not $ y `Set.member` s
+  | otherwise = SElem t x xs
+reduce (SInsert (reduce -> x) (reduce -> xs))
+  | Const y <- x
+  , Const ys <- xs = case ys of
+      RegularSet    s -> Const $ RegularSet    $ y `Set.insert` s
+      ComplementSet s -> Const $ ComplementSet $ y `Set.delete` s
+  | otherwise = SInsert x xs
+reduce (Map v (reduce -> f') (reduce -> xs))
+  | Const ys <- xs =
+    let f y = reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
+        zs = map f ys
+    in case traverse (\case
+                        Const a -> Just a
+                        _ -> Nothing) zs of
+      Just as -> Const as
+      Nothing -> Map v f' xs
+  | otherwise = Map v f' xs
+reduce (Either vl vr (reduce -> l) (reduce -> r) (reduce -> x))
+  | Const (Left x') <- x =
+    reduce $ view $ subst' (VarModel $ DMap.singleton vl $ Expr $ Const x') l
+  | Const (Right x') <- x =
+    reduce $ view $ subst' (VarModel $ DMap.singleton vr $ Expr $ Const x') r
+  | otherwise = Either vl vr l r x
 

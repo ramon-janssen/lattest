@@ -13,8 +13,8 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), runValuation)
-import Lattest.Model.Symbolic.Internal.ExprDefs(eval, List (..), ExprType)
-import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
+import Lattest.Model.Symbolic.Internal.ExprDefs(ExprType)
+import Lattest.Model.Symbolic.Internal.ExprImpls(eval, substConst)
 import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import Data.Some (Some (..))
@@ -66,8 +66,8 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.IntType -> E.int value
                   E.FloatType -> E.float value
                   E.BoolType -> E.bool value
-                  E.StringType -> E.string value
-                  E.ListType t -> has @ExprType t E.list $ getList value
+                  E.CharType -> E.char value
+                  E.ListType t -> has @ExprType t E.list value
                   E.SetType t -> has @ExprType t E.set value
                   E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
                   E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
