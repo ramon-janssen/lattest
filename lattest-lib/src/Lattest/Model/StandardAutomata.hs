@@ -14,6 +14,8 @@ automaton,
 -- * Sequential composition
 sequentiallyAt,
 (|>),
+selfSequentiallyAt,
+(|>>),
 -- * Alphabets
 -- | Auxiliary functions useful for constructing alphabets, intended for creating automata via `automaton`.
 ioAlphabet,
@@ -63,7 +65,7 @@ interpretSTSQuiescentInputAttemptConcrete,
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, sequentiallyAt, (|>), AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
+import Lattest.Model.Automaton (AutSyntax, automaton, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
