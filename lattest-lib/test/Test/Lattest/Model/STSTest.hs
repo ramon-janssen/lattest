@@ -1070,8 +1070,28 @@ testConjunctionOfDifferentValuations = TestCase $ do
     let intrp2 = after stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0])
     assertEqual "after x: " forbidden (stateConf intrp2)
 
+
+stsExampleFL :: IOSTS FreeLattice Integer String String
+stsExampleFL =
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
+        water = SymInteract (In "water") [pvar]
+        ok = SymInteract (Out "ok") [pvar]
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .<= p .&& p .<= 10
+        waterAssign = assignment [xvar =: x .+ p]
+        okGuard = x .== p
+        coffeeGuard = x .>= 15
+        initConf = ordReturn 0
+        switches = \q -> case q of
+            0 -> Map.fromList [(water, ordReturn (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, ordReturn (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, ordReturn (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+
 -- Define an STS with two sink locations to sequentially compose with the example STS.
-stsPrelude :: IOSTS Det Integer String String
+stsPrelude :: IOSTS FreeLattice Integer String String
 stsPrelude =
     let p = sVar pvar :: Expr Integer
         x = sVar xvar :: Expr Integer
@@ -1079,27 +1099,27 @@ stsPrelude =
         startWithWater = SymInteract (In "startWithWater") [pvar]
         error = SymInteract (Out "error") []
         waterAssign = assignment [xvar =: x .+ p]
-        initConf = return 0
+        initConf = ordReturn 0
         switches q = case q of
-            0 -> Map.fromList [(startEmpty, pure (stsTLoc sTrue noAssignment, 1)),
-                                (startWithWater, pure (stsTLoc sTrue waterAssign, 2)),
-                                (error, pure (stsTLoc sTrue noAssignment, 0))]
+            0 -> Map.fromList [(startEmpty, ordReturn (stsTLoc sTrue noAssignment, 1)),
+                                (startWithWater, ordReturn (stsTLoc sTrue waterAssign, 2)),
+                                (error, ordReturn (stsTLoc sTrue noAssignment, 0))]
             1 -> Map.empty
             2 -> Map.empty
             _ -> Map.empty
     in automaton initConf (Set.fromList [startEmpty, startWithWater, error]) switches
 
-stsSeqComposed :: STSIntrp Det (Either Integer Integer) (IOAct String String)
-stsSeqComposed = interpretSTS (stsPrelude |> stsExample) stsExampleInitAssign
+stsSeqComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsSeqComposed = interpretSTS (stsPrelude |> stsExampleFL) stsExampleInitAssign
 
-stsSeqComposedAt :: STSIntrp Det (Either Integer Integer) (IOAct String String)
-stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExample) stsExampleInitAssign
+stsSeqComposedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExampleFL) stsExampleInitAssign
 
-stsSeqComposedAtOne :: STSIntrp Det (Either Integer Integer) (IOAct String String)
-stsSeqComposedAtOne = interpretSTS (sequentiallyAt stsPrelude [1] stsExample) stsExampleInitAssign
+stsSeqComposedAtOne :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsSeqComposedAtOne = interpretSTS (sequentiallyAt stsPrelude [1] stsExampleFL) stsExampleInitAssign
 
-getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> Det (IntrpState (Either Integer Integer))
-getSTSIntrpStateEither loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
+getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
 testPrintSeqCompSTS :: Test
 testPrintSeqCompSTS = TestCase $ assertBool failureMessage (expected == actual)
@@ -1113,40 +1133,40 @@ locations: Left 0, Left 1, Left 2, Right 0, Right 1, Right 2
 transitions:
 Left 0  ――?"startEmpty" []⟶  (True, {},Left 1)
 Left 0  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},Left 2)
-Left 0  ――?"water" [p:Int]⟶  -underspecified-
-Left 0  ――!"coffee" []⟶  -forbidden-
+Left 0  ――?"water" [p:Int]⟶  ⊤
+Left 0  ――!"coffee" []⟶  ⊥
 Left 0  ――!"error" []⟶  (True, {},Left 0)
-Left 0  ――!"ok" [p:Int]⟶  -forbidden-
-Left 1  ――?"startEmpty" []⟶  -underspecified-
-Left 1  ――?"startWithWater" [p:Int]⟶  -underspecified-
+Left 0  ――!"ok" [p:Int]⟶  ⊥
+Left 1  ――?"startEmpty" []⟶  ⊤
+Left 1  ――?"startWithWater" [p:Int]⟶  ⊤
 Left 1  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},Right 1)
 Left 1  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},Right 2)
-Left 1  ――!"error" []⟶  -forbidden-
-Left 1  ――!"ok" [p:Int]⟶  -forbidden-
-Left 2  ――?"startEmpty" []⟶  -underspecified-
-Left 2  ――?"startWithWater" [p:Int]⟶  -underspecified-
+Left 1  ――!"error" []⟶  ⊥
+Left 1  ――!"ok" [p:Int]⟶  ⊥
+Left 2  ――?"startEmpty" []⟶  ⊤
+Left 2  ――?"startWithWater" [p:Int]⟶  ⊤
 Left 2  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},Right 1)
 Left 2  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},Right 2)
-Left 2  ――!"error" []⟶  -forbidden-
-Left 2  ――!"ok" [p:Int]⟶  -forbidden-
-Right 0  ――?"startEmpty" []⟶  -underspecified-
-Right 0  ――?"startWithWater" [p:Int]⟶  -underspecified-
+Left 2  ――!"error" []⟶  ⊥
+Left 2  ――!"ok" [p:Int]⟶  ⊥
+Right 0  ――?"startEmpty" []⟶  ⊤
+Right 0  ――?"startWithWater" [p:Int]⟶  ⊤
 Right 0  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},Right 1)
 Right 0  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},Right 2)
-Right 0  ――!"error" []⟶  -forbidden-
-Right 0  ――!"ok" [p:Int]⟶  -forbidden-
-Right 1  ――?"startEmpty" []⟶  -underspecified-
-Right 1  ――?"startWithWater" [p:Int]⟶  -underspecified-
-Right 1  ――?"water" [p:Int]⟶  -underspecified-
-Right 1  ――!"coffee" []⟶  -forbidden-
-Right 1  ――!"error" []⟶  -forbidden-
+Right 0  ――!"error" []⟶  ⊥
+Right 0  ――!"ok" [p:Int]⟶  ⊥
+Right 1  ――?"startEmpty" []⟶  ⊤
+Right 1  ――?"startWithWater" [p:Int]⟶  ⊤
+Right 1  ――?"water" [p:Int]⟶  ⊤
+Right 1  ――!"coffee" []⟶  ⊥
+Right 1  ――!"error" []⟶  ⊥
 Right 1  ――!"ok" [p:Int]⟶  ((x) = (p), {},Right 0)
-Right 2  ――?"startEmpty" []⟶  -underspecified-
-Right 2  ――?"startWithWater" [p:Int]⟶  -underspecified-
-Right 2  ――?"water" [p:Int]⟶  -underspecified-
-Right 2  ――!"coffee" []⟶  -forbidden-
-Right 2  ――!"error" []⟶  -forbidden-
-Right 2  ――!"ok" [p:Int]⟶  -forbidden-
+Right 2  ――?"startEmpty" []⟶  ⊤
+Right 2  ――?"startWithWater" [p:Int]⟶  ⊤
+Right 2  ――?"water" [p:Int]⟶  ⊤
+Right 2  ――!"coffee" []⟶  ⊥
+Right 2  ――!"error" []⟶  ⊥
+Right 2  ――!"ok" [p:Int]⟶  ⊥
 |]
 
 -- Using |> and sequentiallyAt should yield the same result.
@@ -1208,7 +1228,7 @@ testSeqComposedAtSTS = TestCase $ do
 -}
 testSequentiallyAtNonSinkLocation :: Test
 testSequentiallyAtNonSinkLocation = TestCase $ do
-    let intrpr0 = interpretSTS (sequentiallyAt stsPrelude [0] stsExample) stsExampleInitAssign
+    let intrpr0 = interpretSTS (sequentiallyAt stsPrelude [0] stsExampleFL) stsExampleInitAssign
     assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf intrpr0)
     let intrp1 = after intrpr0 (GateValue (Out "error") [])
     assertEqual "after error, stsPrelude's own transition at location 0 still works: " (getSTSIntrpStateEither (Left 0) 0) (stateConf intrp1)
@@ -1223,103 +1243,115 @@ testSequentiallyAtNonSinkLocation = TestCase $ do
 
 -- Two STS that share the same input action ("step") but specify different guards for it: [3,5] and [1,3], so they
 -- overlap at exactly 3.
-stsGuardedA :: IOSTS Det Integer String String
+stsGuardedA :: IOSTS FreeLattice Integer String String
 stsGuardedA =
     let p = sVar pvar :: Expr Integer
         step = SymInteract (In "step") [pvar]
+        outA = SymInteract (Out "outA") []
         stepGuard = 3 .<= p .&& p .<= 5
-        initConf = return 0
+        initConf = ordReturn 0
         switches q = case q of
-            0 -> Map.fromList [(step, pure (stsTLoc stepGuard noAssignment, 1))]
-            1 -> Map.empty
+            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1))]
+            1 -> Map.fromList [(outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
+            2 -> Map.empty
             _ -> Map.empty
-    in automaton initConf (Set.fromList [step]) switches
+    in automaton initConf (Set.fromList [step, outA]) switches
 
-stsGuardedB :: IOSTS Det Integer String String
+stsGuardedB :: IOSTS FreeLattice Integer String String
 stsGuardedB =
     let p = sVar pvar :: Expr Integer
         step = SymInteract (In "step") [pvar]
+        outA = SymInteract (Out "outA") []
+        outB = SymInteract (Out "outB") []
         stepGuard = 1 .<= p .&& p .<= 3
-        initConf = return 0
+        initConf = ordReturn 0
         switches q = case q of
-            0 -> Map.fromList [(step, pure (stsTLoc stepGuard noAssignment, 1))]
-            1 -> Map.empty
+            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1))]
+            1 -> Map.fromList [(outB, ordReturn (stsTLoc sTrue noAssignment, 2)), (outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
+            2 -> Map.empty
             _ -> Map.empty
-    in automaton initConf (Set.fromList [step]) switches
+    in automaton initConf (Set.fromList [step, outA, outB]) switches
 
 {- |
     Sequentially composing stsGuardedA and stsGuardedB at location 0 of stsGuardedA, which already has a "step"
-    transition: stsGuardedA's own "step" (guarded by [3,5]) is genuinely specified, so it entirely takes precedence
-    over stsGuardedB's copied "step" (guarded by [1,3]) -- stsGuardedB's guard plays no role at all, even for the
-    value 3 that both guards would accept.
+    transition: stsGuardedA's own "step" (guarded by [3,5]) and stsGuardedB's copied "step" (guarded by [1,3]) are
+    both genuinely specified, so they are conjuncted with '(/\)'. Where only one guard holds, that branch's
+    destination is used as-is (the other branch reduces to 'underspecified', the identity of '(/\)'); where both
+    guards hold (value 3), the merged configuration requires both destinations at once.
 -}
 testSequentiallyAtSameAction :: Test
 testSequentiallyAtSameAction = TestCase $ do
     let intrpr0 = interpretSTS (sequentiallyAt stsGuardedA [0] stsGuardedB) stsExampleInitAssign
     assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf intrpr0)
     let intrp1 = after intrpr0 (GateValue (In "step") [Cint 4])
-    assertEqual "after step 4, stsGuardedA's own guard is used: " (getSTSIntrpStateEither (Left 1) 0) (stateConf intrp1)
+    assertEqual "after step 4, only stsGuardedA's guard holds: " (getSTSIntrpStateEither (Left 1) 0) (stateConf intrp1)
     let intrp2 = after intrpr0 (GateValue (In "step") [Cint 1])
-    assertEqual "after step 1, stsGuardedB's guard is not used: " underspecified (stateConf intrp2)
-    -- satisfies both guards
+    assertEqual "after step 1, only stsGuardedB's guard holds: " (getSTSIntrpStateEither (Right 1) 0) (stateConf intrp2)
+    -- satisfies both guards: the merged configuration conjunctively requires both destinations
     let intrp3 = after intrpr0 (GateValue (In "step") [Cint 3])
-    assertEqual "after step 3, only stsGuardedA's guard is used: " (getSTSIntrpStateEither (Left 1) 0) (stateConf intrp3)
+    assertEqual "after step 3, both guards hold: "
+        (getSTSIntrpStateEither (Left 1) 0 /\ getSTSIntrpStateEither (Right 1) 0) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (Out "outA") [])
+    assertEqual "after outA: "
+        (getSTSIntrpStateEither (Left 2) 0 /\ getSTSIntrpStateEither (Right 2) 0) (stateConf intrp4)
+    let intrp5 = after intrp3 (GateValue (Out "outB") [])
+    assertEqual "after outB: " forbidden (stateConf intrp5) -- only allowed by one of the automata
     return ()
 
 {- |
     'stsPrelude' composed with itself via 'selfSequentiallyAt'\/'(|>>)'
 -}
-stsSelfSeqComposed :: STSIntrp Det Integer (IOAct String String)
+stsSelfSeqComposed :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposed = interpretSTS (stsPrelude |>> stsPrelude) stsExampleInitAssign
 
-stsSelfSeqComposedAt :: STSIntrp Det Integer (IOAct String String)
+stsSelfSeqComposedAt :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposedAt = interpretSTS (selfSequentiallyAt stsPrelude [1,2] stsPrelude) stsExampleInitAssign
 
-stsSelfSeqComposedAtOne :: STSIntrp Det Integer (IOAct String String)
+stsSelfSeqComposedAtOne :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposedAtOne = interpretSTS (selfSequentiallyAt stsPrelude [1] stsPrelude) stsExampleInitAssign
 
 testSelfSeqComposed :: Test
 testSelfSeqComposed = TestCase $ do
-    assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsSelfSeqComposed)
+    assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsSelfSeqComposed)
     let intrp1 = after stsSelfSeqComposed (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpState 0 0) (stateConf intrp1)
+    assertEqual "after error: " (getSTSIntrpState' 0 0) (stateConf intrp1)
     let intrp2 = after intrp1 (GateValue (In "startEmpty") [])
-    assertEqual "after startEmpty: " (getSTSIntrpState 1 0) (stateConf intrp2)
+    assertEqual "after startEmpty: " (getSTSIntrpState' 1 0) (stateConf intrp2)
     let intrp3 = after intrp2 (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpState 0 0) (stateConf intrp3)
+    assertEqual "after error: " (getSTSIntrpState' 0 0) (stateConf intrp3)
     let intrp4 = after intrp3 (GateValue (In "startWithWater") [Cint 7])
-    assertEqual "after startWithWater 7: " (getSTSIntrpState 2 7) (stateConf intrp4)
+    assertEqual "after startWithWater 7: " (getSTSIntrpState' 2 7) (stateConf intrp4)
     let intrp5 = after intrp4 (GateValue (In "startEmpty") [])
-    assertEqual "after startEmpty: " (getSTSIntrpState 1 7) (stateConf intrp5)
+    assertEqual "after startEmpty: " (getSTSIntrpState' 1 7) (stateConf intrp5)
     return ()
 
 -- sequentially composing with |>> and selfSequentiallyAt (pointing to all sink locations) should yield the same result.
 testSelfSeqComposedAt :: Test
 testSelfSeqComposedAt = TestCase $ do
-    assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsSelfSeqComposed)
+    assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsSelfSeqComposed)
     let intrp1 = after stsSelfSeqComposed (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpState 0 0) (stateConf intrp1)
+    assertEqual "after error: " (getSTSIntrpState' 0 0) (stateConf intrp1)
     let intrp2 = after intrp1 (GateValue (In "startEmpty") [])
-    assertEqual "after startEmpty: " (getSTSIntrpState 1 0) (stateConf intrp2)
+    assertEqual "after startEmpty: " (getSTSIntrpState' 1 0) (stateConf intrp2)
     let intrp3 = after intrp2 (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpState 0 0) (stateConf intrp3)
+    assertEqual "after error: " (getSTSIntrpState' 0 0) (stateConf intrp3)
     let intrp4 = after intrp3 (GateValue (In "startWithWater") [Cint 7])
-    assertEqual "after startWithWater 7: " (getSTSIntrpState 2 7) (stateConf intrp4)
+    assertEqual "after startWithWater 7: " (getSTSIntrpState' 2 7) (stateConf intrp4)
     let intrp5 = after intrp4 (GateValue (In "startEmpty") [])
-    assertEqual "after startEmpty: " (getSTSIntrpState 1 7) (stateConf intrp5)
+    assertEqual "after startEmpty: " (getSTSIntrpState' 1 7) (stateConf intrp5)
     return ()
 
 testSelfSeqComposedAtOne :: Test
 testSelfSeqComposedAtOne = TestCase $ do
-    assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsSelfSeqComposedAtOne)
+    assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsSelfSeqComposedAtOne)
     let intrp1 = after stsSelfSeqComposedAtOne (GateValue (Out "error") [])
-    assertEqual "after error: " (getSTSIntrpState 0 0) (stateConf intrp1)
+    assertEqual "after error: " (getSTSIntrpState' 0 0) (stateConf intrp1)
     let intrp2 = after intrp1 (GateValue (In "startEmpty") [])
-    assertEqual "after startEmpty: " (getSTSIntrpState 1 0) (stateConf intrp2)
+    assertEqual "after startEmpty: " (getSTSIntrpState' 1 0) (stateConf intrp2)
     let intrp3 = after intrp2 (GateValue (In "startEmpty") [])
-    assertEqual "after startEmpty: " (getSTSIntrpState 1 0) (stateConf intrp3)
+    assertEqual "after startEmpty: " (getSTSIntrpState' 1 0) (stateConf intrp3)
     let intrp4 = after intrp3 (GateValue (In "startWithWater") [Cint 7])
-    assertEqual "after startWithWater 7: " (getSTSIntrpState 2 7) (stateConf intrp4)
+    assertEqual "after startWithWater 7: " (getSTSIntrpState' 2 7) (stateConf intrp4)
     let intrp5 = after intrp4 (GateValue (Out "error") [])
     assertEqual "after startEmpty: " forbidden (stateConf intrp5)
     return ()
