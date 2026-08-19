@@ -27,6 +27,9 @@ import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), Expr (..))
+import qualified Data.Dependent.Map as DMap
+import Data.SBV (RCSet(..))
 
 
 
@@ -39,7 +42,7 @@ instance ConcreteGenExpr Integer where
         arbitraryVar IntType,
         CM.liftM Const arbitrary
         ]
-    genExpr n | n > 0 = oneof [
+    genExpr n = oneof [
         arbitraryVar IntType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
@@ -64,7 +67,7 @@ instance ConcreteGenExpr Bool where
         arbitraryVar BoolType,
         CM.liftM Const arbitrary
         ]
-    genExpr n | n > 0 = oneof [
+    genExpr n = oneof [
         arbitraryVar BoolType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
@@ -91,7 +94,7 @@ instance ConcreteGenExpr Char where
         arbitraryVar CharType,
         CM.liftM Const arbitrary
         ]
-    genExpr n | n > 0 = oneof [
+    genExpr n = oneof [
         arbitraryVar CharType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3
@@ -131,11 +134,17 @@ arbitraryVar t =
                     BoolType -> "b"
                     CharType -> "c"
                     ListType x -> "[" ++ prefix x ++ "]"
+                    SetType x -> "{" ++ prefix x ++ "}"
                     TupleType x y -> "(" ++ prefix x ++ "," ++ prefix y ++ ")"
+                    SumType x y -> "<" ++ prefix x ++ "," ++ prefix y ++ ">"
     in CM.liftM (\n -> Var $ Variable (prefix t++n) t) (return <$> charExpr)
 
 type PropEvalSymbolic t = Expr t -> Bool
 
+-- If you squint a bit, this is really just two interpreters (`concreteEval'` defined below, and `reduce` defined in lattest-lib),
+-- that are defined almost identically, and then a check whether they give the same result.
+-- Does it really give us anything? Is it worth maintaining two interpreters?
+--  - A person who did not feel like updating this interpreter after a large update to Expr
 prop_evalSymbolic :: (Eq t, ConcreteEval t) => Expr t -> Bool
 prop_evalSymbolic e =
     let l = concreteEval e
@@ -170,16 +179,24 @@ class ConcreteEval t where
 instance ConcreteEval Integer where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
+    concreteEval' (First _ x) = fst <$> concreteEval' x
+    concreteEval' (Second _ x) = snd <$> concreteEval' x
+    concreteEval' (Head xs) = head <$> concreteEval' xs
+    concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
     concreteEval' (Modulo e1 e2) = concreteBinOpMaybe (safeZero mod) e1 e2
-    concreteEval' (StrLength e) = concreteUnaryOp (Prelude.toInteger . length) e
+    concreteEval' (Length _ e) = concreteUnaryOp (Prelude.toInteger . length) e
     concreteEval' (Sum es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* i) <$> x)) (Just 0) es
     concreteEval' (Product es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0) es
 
 instance ConcreteEval Double where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
+    concreteEval' (First _ x) = fst <$> concreteEval' x
+    concreteEval' (Second _ x) = snd <$> concreteEval' x
+    concreteEval' (Head xs) = head <$> concreteEval' xs
+    concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (SumFloat es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* fromInteger i) <$> x)) (Just 0.0) es
     concreteEval' (ProductFloat es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0.0) es
@@ -193,6 +210,10 @@ safeZero op n m = Just $ n `op` m
 instance ConcreteEval Bool where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
+    concreteEval' (First _ x) = fst <$> concreteEval' x
+    concreteEval' (Second _ x) = snd <$> concreteEval' x
+    concreteEval' (Head xs) = head <$> concreteEval' xs
+    concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Equal t e1 e2) = has @ConcreteEval t $ concreteBinOp (==) e1 e2
     concreteEval' (GezInt e) = concreteUnaryOp (>= 0) e
@@ -200,27 +221,74 @@ instance ConcreteEval Bool where
     concreteEval' (Not e) = concreteUnaryOp not e
     concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
     concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y ys -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
+    concreteEval' (SElem t x xs) = withExprConstraints t $ has @ConcreteEval t $ (\y ys -> has @Eq t $ case ys of
+      RegularSet ys' -> y `Set.member` ys'
+      ComplementSet ys' -> not $ y `Set.member` ys') <$> concreteEval' x <*> concreteEval' xs
 
 instance ConcreteEval Char where
   concreteEval' (Var _) = Nothing
   concreteEval' (Const c) = Just c
+  concreteEval' (First _ x) = fst <$> concreteEval' x
+  concreteEval' (Second _ x) = snd <$> concreteEval' x
+  concreteEval' (Head xs) = head <$> concreteEval' xs
+  concreteEval' (Either a b c d e) = concreteEither a b c d e
   concreteEval' (Ite i t e) = concreteIfThenElse i t e
 
-instance ConcreteEval a => ConcreteEval [a] where
+instance ConcreteEval [a] where
   concreteEval' = \case
     Var _ -> Nothing
     Const c -> Just c
-    Take i xs -> (\j ys ->  take (fromInteger j) ys) <$> concreteEval' i <*> concreteEval' xs
-    Drop i xs -> (\j ys ->  drop (fromInteger j) ys) <$> concreteEval' i <*> concreteEval' xs
+    First _ x -> fst <$> concreteEval' x
+    Second _ x -> snd <$> concreteEval' x
+    Either a b c d e -> concreteEither a b c d e
+    Head xs -> head <$> concreteEval' xs
+    Concat xs -> concat <$> concreteEval' xs
+    Tail xs -> tail <$> concreteEval' xs
+    Take i xs -> take . fromInteger <$> concreteEval' i <*> concreteEval' xs
+    Drop i xs -> drop . fromInteger <$> concreteEval' i <*> concreteEval' xs
     Ite i t e -> concreteIfThenElse i t e
-    Cons x xs -> (\y ys ->  y:ys) <$> concreteEval' x <*> concreteEval' xs
-    Append x y -> (\xs ys ->  xs ++ ys) <$> concreteEval' x <*> concreteEval' y
+    Cons x xs -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ (:) <$> concreteEval' x <*> concreteEval' xs
+    Append x y -> (++) <$> concreteEval' x <*> concreteEval' y
+    Map v f xs -> has @ExprType f $ has @ConcreteEval (typeOf' f) $ do
+      ys <- concreteEval' xs
+      traverse (\y -> concreteEval' $ view $ subst (VarModel $ DMap.singleton v $ Expr $ Const y) $ Expr f) ys
 
-instance (ConcreteEval a, ConcreteEval b) => ConcreteEval (a,b) where
+instance ConcreteEval (a,b) where
   concreteEval' = \case
     Var _ -> Nothing
     Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Second _ x -> snd <$> concreteEval' x
+    Head xs -> head <$> concreteEval' xs
+    Either a b c d e -> concreteEither a b c d e
     Ite i t e -> concreteIfThenElse i t e
+    Pair a b -> has @ExprType a $ has @ExprType b $ has @ConcreteEval (typeOf' a) $ has @ConcreteEval (typeOf' b) $ (,) <$> concreteEval' a <*> concreteEval' b
+instance ConcreteEval (Either a b) where
+  concreteEval' = \case
+    Var _ -> Nothing
+    Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Head xs -> head <$> concreteEval' xs
+    Second _ x -> snd <$> concreteEval' x
+    Either a b c d e -> concreteEither a b c d e
+    Ite i t e -> concreteIfThenElse i t e
+    ELeft x -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ Left <$> concreteEval' x
+    ERight x -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ Right <$> concreteEval' x
+
+instance ConcreteEval (SMT.RCSet a) where
+  concreteEval' = \case
+    Var _ -> Nothing
+    Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Head xs -> head <$> concreteEval' xs
+    Second _ x -> snd <$> concreteEval' x
+    Either a b c d e -> concreteEither a b c d e
+    Ite i t e -> concreteIfThenElse i t e
+    SInsert x xs -> has @ConcreteEval (has @ExprType x $ typeOf' x) $ case concreteEval' xs of
+      Nothing -> Nothing
+      Just (RegularSet ys)    -> RegularSet    . flip Set.insert ys <$> concreteEval' x
+      Just (ComplementSet ys) -> ComplementSet . flip Set.delete ys <$> concreteEval' x
+
 
 instance Has ConcreteEval Type where
   has tp k = case tp of
@@ -228,11 +296,13 @@ instance Has ConcreteEval Type where
     FloatType -> k
     CharType -> k
     BoolType -> k
-    ListType t -> has @ConcreteEval t k
-    TupleType a b -> has @ConcreteEval a $ has @ConcreteEval b k
+    ListType _ -> k
+    SetType _ -> k
+    TupleType _ _ -> k
+    SumType _ _ -> k
 
-concreteUnaryOp :: (ConcreteEval t1) => (t1 -> t2) -> ExprView t1 -> Maybe t2
-concreteUnaryOp op e = do
+concreteUnaryOp :: (t1 -> t2) -> ExprView t1 -> Maybe t2
+concreteUnaryOp op e = has @ExprType e $ has @ConcreteEval (typeOf' e) $ do
     x <- concreteEval' e
     return $ op x
 
@@ -254,6 +324,13 @@ concreteIfThenElse i t e = do
     if cond
         then concreteEval' t
         else concreteEval' e
+
+concreteEither :: (ConcreteEval t) => Variable a -> Variable b -> ExprView t -> ExprView t -> ExprView (Either a b) -> Maybe t
+concreteEither vl vr l r x = has @ExprType x $ case typeOf' x of
+  SumType ta tb -> case concreteEval' x of
+    Nothing -> Nothing
+    Just (Left y) -> concreteEval' $ view $ subst (VarModel $ DMap.singleton vl $ Expr $ withExprConstraints ta Const y) $ Expr l
+    Just (Right y) -> concreteEval' $ view $ subst (VarModel $ DMap.singleton vr $ Expr $ withExprConstraints tb Const y) $ Expr r
 
 evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]

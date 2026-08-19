@@ -21,7 +21,7 @@ module Lattest.SMT (
   RCSet(..)
 ) where
 
-import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar, RCSet(..), Kind (..))
+import Data.SBV( constrain, SBV, SymVal (..), freshVar, RCSet(..), Kind (..))
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
@@ -46,9 +46,6 @@ import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints,
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
-import Data.Bifunctor (Bifunctor(..))
-import Data.Maybe (fromJust)
-import Control.Applicative (Alternative(..))
 import Unsafe.Coerce (unsafeCoerce)
 
 --------------------
@@ -120,7 +117,6 @@ exprToSymbolic v = case v of
   SumFloat s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
   Product      p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   ProductFloat p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
-  StrLength s -> SBV.length <$> go s
   Length t x -> withExprConstraints t $ SBV.length <$> go x
   GezInt   i -> (SBV..>= literal 0) <$> go i
   GezFloat f -> (SBV..>= literal 0) <$> go f
@@ -130,7 +126,7 @@ exprToSymbolic v = case v of
    -- My best guess is that it's a bug if you use 'and' inside a Query, but I haven't
    -- looked deep enough nor done enough testing to report as a bug.
    -- SBV.and <$> foldr (\b bs -> (SBV..:) <$> go b <*> bs) (pure SBV.nil) (Set.toList xs)
-  Concat strs -> SBV.concat <$> foldr (\s ss -> (SBV..:) <$> go s <*> ss) (pure SBV.nil) strs
+  Concat xs -> SBV.concat <$> go xs
   Cons x xs -> case typeOf' xs of
     ListType t -> withExprConstraints t $ (SBV..:) <$> go x <*> go xs
   Append xs ys -> case typeOf' xs of

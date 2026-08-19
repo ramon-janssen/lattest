@@ -58,10 +58,8 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Text as Text(pack, unpack)
-import           GHC.Integer (divInteger)
 
 import           Lattest.Model.Symbolic.Internal.FreeMonoidX
-import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX as FMX
 import           Lattest.Model.Symbolic.Internal.Product
 import           Lattest.Model.Symbolic.Internal.Sum
 
@@ -86,7 +84,6 @@ import Control.Monad ((<=<))
 import Data.Data (Data)
 import Data.Bifunctor (Bifunctor(..))
 import qualified Data.Aeson.Types as JSON
-import qualified Debug.Trace
 
 data Type a where
   IntType :: Type Integer
@@ -654,12 +651,11 @@ data ExprView t where
     SumFloat :: FreeSum (ExprView Double) -> ExprView Double
     Product :: FreeProduct (ExprView Integer) -> ExprView Integer
     ProductFloat :: FreeProduct (ExprView Double) -> ExprView Double
-    StrLength :: ExprView String -> ExprView Integer
     GezInt :: ExprView Integer -> ExprView Bool
     GezFloat :: ExprView Double -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
-    Concat :: [ExprView String] -> ExprView String
+    Concat :: ExprConstraints a => ExprView [[a]] -> ExprView [a]
     Cons :: ExprView x -> ExprView [x] -> ExprView [x]
     Append :: ExprView [a] -> ExprView [a] -> ExprView [a]
     Length :: Type a -> ExprView [a] -> ExprView Integer
@@ -705,7 +701,6 @@ instance Eq (ExprView t) where
   SumFloat x == SumFloat y = x == y
   Product x == Product y = x == y
   ProductFloat x == ProductFloat y = x == y
-  StrLength x == StrLength y = x == y
   Length a x == Length b y
     | Just Refl <- a `geq` b = x == y
   GezInt x == GezInt y = x == y
@@ -765,8 +760,6 @@ instance Ord (ExprView t) where
       (Product a, Product b) ->
         compare a b
       (ProductFloat a, ProductFloat b) ->
-        compare a b
-      (StrLength a, StrLength b) ->
         compare a b
       (Length a x, Length b y) -> case gcompare a b of
         GLT -> LT
@@ -851,7 +844,6 @@ instance Ord (ExprView t) where
         SumFloat{} -> 19
         ProductFloat{} -> 20
         GezFloat{} -> 21
-        StrLength{} -> 22
         ELeft{} -> 23
         ERight{} -> 24
         First{} -> 25
@@ -888,7 +880,6 @@ instance Show (ExprView t) where
       showSumTerm n t = show n ++ "⋅" ++ t
   show (ProductFloat es) | es == mempty = "∏∅"
   show (ProductFloat es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es
-  show (StrLength e) = "length(" ++ show e ++ ")"
   show (Length _ e) = "length(" ++ show e ++ ")"
   show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
   show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
@@ -896,8 +887,7 @@ instance Show (ExprView t) where
   show (Not e) = "¬(" ++ show e ++ ")"
   show (And (Set.toList -> [])) = "⋀∅"
   show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
-  show (Concat []) = "∑'∅"
-  show (Concat es) = List.intercalate "++" $ (\e -> "(" ++ show e ++ ")") <$> es
+  show (Concat es) = "concat " <> show es
   show (Cons x xs) = show x ++ ":" ++ show xs
   show (Append xs ys) = show xs ++ "++" ++ show ys
   show (LElem _ x xs) = show x ++ "`elem`" ++ show xs
@@ -928,7 +918,6 @@ instance Has ExprType ExprView where
     SumFloat _ -> k
     Product _ -> k
     ProductFloat _ -> k
-    StrLength _ -> k
     Length t _ -> has @ExprType t k
     GezInt _ -> k
     GezFloat _ -> k
@@ -997,13 +986,12 @@ freeVars' (SumFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (ProductFloat (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Length _ e) = freeVars' e
-freeVars' (StrLength e) = freeVars' e
 freeVars' (Equal _ e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (GezInt e) = freeVars' e
 freeVars' (GezFloat e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
-freeVars' (Concat es) = concatMap freeVars' es
+freeVars' (Concat es) = freeVars' es
 freeVars' (Cons e es) = freeVars' e ++ freeVars' es
 freeVars' (Append e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (LElem _ e1 e2) = freeVars' e1 ++ freeVars' e2

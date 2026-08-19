@@ -47,13 +47,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , (.%)
   -- *** Comparisons GEZ
 , sIsNonNegative
-  -- ** String Operators to create Value Expressions
-  -- *** Length operator
-, sStrLength
-  -- *** Concat operator
-, sConcat
   -- ** List operations
 , sLength
+, sConcat
 , sCons
 , sNil
 , sAppend
@@ -445,7 +441,7 @@ infixl 7 .%
 sIsNonNegativeInt :: Expr Integer -> Expr Bool
 -- Simplification Values
 sIsNonNegativeInt (view -> Const v) = sConst (0 <= v)
-sIsNonNegativeInt (view -> StrLength _)   = sConst True        -- length of string is always Greater or equal to zero
+sIsNonNegativeInt (view -> Length _ _)   = sConst True        -- length of list is always Greater or equal to zero
 sIsNonNegativeInt (view -> ve)         = Expr (GezInt ve)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided floating-point value expression.
@@ -474,21 +470,8 @@ instance ExprNum Double where
     sIsNonNegative = sIsNonNegativeFloat
     (./) = divideFloat
 
--- | Apply operator Length on the provided value expression.
--- Preconditions are /not/ checked.
-sStrLength :: Expr String -> Expr Integer
-sStrLength (view -> Const s) = sConst (Prelude.toInteger (length s))
-sStrLength (view -> v)             = Expr (StrLength v)
-
--- | Apply operator Concat on the provided sequence of value expressions.
--- Preconditions are /not/ checked.
-sConcat :: [Expr String] -> Expr String
-sConcat l =
-    let n = (mergeVals . flatten . filter (sConst "" /= ) ) l in
-        case n of
-          [] -> sConst ""
-          [x] -> x
-          _ -> Expr (Concat $ fmap view n)
+sConcat :: ExprConstraints a => Expr [[a]] -> Expr [a]
+sConcat = Expr . Concat . view
 
 -- implementation details:
 -- Properties incorporated
@@ -556,18 +539,6 @@ sInsert (view -> x) (view -> xs) = Expr $ SInsert x xs
 
 sSElem :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr Bool
 sSElem (view -> x) (view -> xs) = Expr $ SElem (typeOf' x) x xs
-
-mergeVals :: [Expr String] -> [Expr String]
-mergeVals []            = []
-mergeVals [x]           = [x]
-mergeVals ( (view -> Const s1) : (view -> Const s2) : xs) =
-                          mergeVals (sConst (s1 <> s2): xs)
-mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
-
-flatten :: [Expr String] -> [Expr String]
-flatten []                       = []
-flatten ((view -> Concat l):xs) = fmap Expr l ++ flatten xs
-flatten (x:xs)                   = x : flatten xs
 
 -- | Apply String In Regular Expression operator on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -687,14 +658,13 @@ subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subs
 subst' ve (SumFloat s)            = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (ProductFloat p)        = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
-subst' ve (StrLength vexp)           = sStrLength (subst' ve vexp)
 subst' ve (Length _ vexp) = sLength $ subst' ve vexp
 subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
 subst' ve (Equal _ vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (GezFloat v)              = sIsNonNegative (subst' ve v)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
-subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
+subst' ve (Concat vexps)                = sConcat $ subst' ve vexps
 subst' ve (Cons x xs) = has @ExprType x $ sCons (subst' ve x) (subst' ve xs)
 subst' ve (Append xs ys) = sAppend (subst' ve xs) (subst' ve ys)
 subst' ve (LElem t x xs) = has @ExprType t $ sElem (subst' ve x) (subst' ve xs)
@@ -749,8 +719,6 @@ reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
 reduce (DivideFloat (reduce -> e1) (reduce -> e2@(Const 0))) = DivideFloat e1 e2 -- leave divisions by zero as expressions
 reduce (DivideFloat (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x / y
 reduce (DivideFloat (reduce -> e1) (reduce -> e2)) = DivideFloat e1 e2
-reduce (StrLength (reduce -> (Const s))) = Const $ fromIntegral $ length s
-reduce (StrLength (reduce -> e)) = StrLength e
 reduce (Length _ (reduce -> Const xs)) = Const $ fromIntegral $ length xs
 reduce (Length t (reduce -> e)) = Length t e
 reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
@@ -763,8 +731,9 @@ reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
 reduce (And (Set.map reduce -> es)) = And es
-reduce (Concat (fmap reduce -> es)) | all isConst es = Const $ concatMap constant es -- TODO could be optimized further: if not all elements are constant, but if there are multiple successive constant elements, then the latter could still be combined
-reduce (Concat (fmap reduce -> e)) = Concat e
+reduce (Concat (reduce -> es))
+  | Const as <- es = Const $ concat as
+reduce (Concat (reduce -> e)) = Concat e
 reduce (Cons (reduce -> x) (reduce -> xs))
   | Const a <- x
   , Const as <- xs = Const $ a : as
