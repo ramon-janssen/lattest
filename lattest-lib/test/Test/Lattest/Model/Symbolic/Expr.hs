@@ -17,7 +17,6 @@ where
 
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
-import Lattest.Model.Symbolic.Internal.ExprDefs(List (..))
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT as SMT
 
@@ -47,8 +46,7 @@ instance ConcreteGenExpr Integer where
         CM.liftM2 Divide subexpr2 subexpr2,
         CM.liftM2 Modulo subexpr2 subexpr2,
         CM.liftM Sum (FM.fromListT <$> genList subexpr2),
-        CM.liftM Product (FM.fromListT <$> genList subexprSqrt),
-        CM.liftM StrLength subexpr
+        CM.liftM Product (FM.fromListT <$> genList subexprSqrt)
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
@@ -72,7 +70,7 @@ instance ConcreteGenExpr Bool where
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 (Equal IntType) subexpr2 subexpr2,
         CM.liftM2 (Equal BoolType) subexpr2 subexpr2,
-        CM.liftM2 (Equal StringType) subexpr2 subexpr2,
+        CM.liftM2 (Equal CharType) subexpr2 subexpr2,
         CM.liftM GezInt subexpr,
         CM.liftM Not subexpr,
         CM.liftM And (Set.fromList <$> genList subexprSqrt)
@@ -88,30 +86,27 @@ instance ConcreteGenExpr Bool where
         subexprSqrt = genExpr (intSqrt n - 1)
     shrinkConst = shrink
 
-instance ConcreteGenExpr String where
+instance ConcreteGenExpr Char where
     genExpr n | n <= 0 = oneof [
-        arbitraryVar StringType,
-        CM.liftM Const stringExpr
+        arbitraryVar CharType,
+        CM.liftM Const arbitrary
         ]
     genExpr n | n > 0 = oneof [
-        arbitraryVar StringType,
-        CM.liftM Const stringExpr,
-        CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
-        CM.liftM Concat (genList subexprSqrt)
+        arbitraryVar CharType,
+        CM.liftM Const arbitrary,
+        CM.liftM3 Ite subexpr3 subexpr3 subexpr3
         ]
         where
+        subexpr :: ConcreteGenExpr t => Gen (ExprView t)
+        subexpr = genExpr (n - 1)
         subexpr2 :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr2 = genExpr $ (n `div` 2) - 1
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr3 = genExpr $ (n `div` 3) - 1
         subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
         subexprSqrt = genExpr (intSqrt n - 1)
-    shrinkConst _ = []
-    {--- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
-    shrinkConst "" = []
-    shrinkConst [c] = [[]]
-    shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
-    -}
+    shrinkConst = shrink
+
 charExpr :: Gen Char
 charExpr = elements $ ['A'..'Z'] ++ ['a'..'z']
 stringExpr :: Gen String
@@ -134,7 +129,7 @@ arbitraryVar t =
                     IntType -> "i"
                     FloatType -> "f"
                     BoolType -> "b"
-                    StringType -> "s"
+                    CharType -> "c"
                     ListType x -> "[" ++ prefix x ++ "]"
                     TupleType x y -> "(" ++ prefix x ++ "," ++ prefix y ++ ")"
     in CM.liftM (\n -> Var $ Variable (prefix t++n) t) (return <$> charExpr)
@@ -204,23 +199,22 @@ instance ConcreteEval Bool where
     concreteEval' (GezFloat e) = concreteUnaryOp (>= 0) e
     concreteEval' (Not e) = concreteUnaryOp not e
     concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
-    concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y (List ys) -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
+    concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y ys -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
 
-instance ConcreteEval String where
-    concreteEval' (Var _) = Nothing
-    concreteEval' (Const c) = Just c
-    concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (Concat es) = concat <$> mapM concreteEval' es
+instance ConcreteEval Char where
+  concreteEval' (Var _) = Nothing
+  concreteEval' (Const c) = Just c
+  concreteEval' (Ite i t e) = concreteIfThenElse i t e
 
-instance ConcreteEval a => ConcreteEval (List a) where
+instance ConcreteEval a => ConcreteEval [a] where
   concreteEval' = \case
     Var _ -> Nothing
     Const c -> Just c
-    Take i xs -> (\j (List ys) -> List $ take (fromInteger j) ys) <$> concreteEval' i <*> concreteEval' xs
-    Drop i xs -> (\j (List ys) -> List $ drop (fromInteger j) ys) <$> concreteEval' i <*> concreteEval' xs
+    Take i xs -> (\j ys ->  take (fromInteger j) ys) <$> concreteEval' i <*> concreteEval' xs
+    Drop i xs -> (\j ys ->  drop (fromInteger j) ys) <$> concreteEval' i <*> concreteEval' xs
     Ite i t e -> concreteIfThenElse i t e
-    Cons x xs -> (\y (List ys) -> List $ y:ys) <$> concreteEval' x <*> concreteEval' xs
-    Append x y -> (\(List xs) (List ys) -> List $ xs ++ ys) <$> concreteEval' x <*> concreteEval' y
+    Cons x xs -> (\y ys ->  y:ys) <$> concreteEval' x <*> concreteEval' xs
+    Append x y -> (\xs ys ->  xs ++ ys) <$> concreteEval' x <*> concreteEval' y
 
 instance (ConcreteEval a, ConcreteEval b) => ConcreteEval (a,b) where
   concreteEval' = \case
@@ -232,7 +226,7 @@ instance Has ConcreteEval Type where
   has tp k = case tp of
     IntType -> k
     FloatType -> k
-    StringType -> k
+    CharType -> k
     BoolType -> k
     ListType t -> has @ConcreteEval t k
     TupleType a b -> has @ConcreteEval a $ has @ConcreteEval b k

@@ -256,6 +256,7 @@ parseVarType "float"   = Right $ Some FloatType
 parseVarType "bool"    = Right $ Some BoolType
 parseVarType "boolean" = Right $ Some BoolType
 parseVarType "char"    = Right $ Some CharType
+parseVarType "string"  = Right $ Some $ ListType CharType
 parseVarType t         = Left $ "unknown variable type: " ++ t
 
 buildVarMap :: Map.Map String VarDefJson -> Either String (Map.Map String (Some Variable))

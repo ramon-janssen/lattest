@@ -54,13 +54,13 @@ testSTSJSONParserNominal = TestCase $ do
             assertEqual "initial valuation"
                 (Valuation $
                  DMap.insert (Variable "counter" IntType)  (Val 5) $
-                 DMap.insert (Variable "label" StringType) (Val "") $
+                 DMap.insert (Variable "label" (ListType CharType)) (Val "") $
                  DMap.insert (Variable "active" BoolType)  (Val False)
                  mempty)
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   StringType]
+                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   (ListType CharType)]
                     , SymInteract (In  "update")    [Some $ Variable "counter_p" IntType   ]
                     , SymInteract (Out "O1")        []
                     , SymInteract (Out "confirm")   [Some $ Variable "counter_p" IntType   ]
@@ -76,15 +76,15 @@ current state configuration: ("0",{active:=False,counter:=5,label:=""})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
-"0"  ――?"register" [label_p:String]⟶  ⊤
+"0"  ――?"register" [label_p:[Char]]⟶  ⊤
 "0"  ――?"update" [counter_p:Int]⟶  (((counter+-4)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5)) ≥ 0), {counter:=(counter+counter_p)},"1")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Int]⟶  ⊥
-"1"  ――?"register" [label_p:String]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1)},"0")
+"1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1)},"0")
 "1"  ――?"update" [counter_p:Int]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Int]⟶  ⊥
-"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"register" [label_p:[Char]]⟶  ⊤
 "2"  ――?"update" [counter_p:Int]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
 "2"  ――!"confirm" [counter_p:Int]⟶  ⊥
@@ -102,13 +102,13 @@ testSTSJSONParserNominalFloat = TestCase $ do
             assertEqual "initial valuation"
                 (Valuation $
                     DMap.insert (Variable "counter" FloatType)  (Val 0.0) $
-                    DMap.insert (Variable "label"   StringType) (Val "") $
+                    DMap.insert (Variable "label"   (ListType CharType)) (Val "") $
                     DMap.insert (Variable "active"  BoolType)   (Val False)
                     mempty)
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   StringType]
+                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   (ListType CharType)]
                     , SymInteract (In  "update")    [Some $ Variable "counter_p" FloatType  ]
                     , SymInteract (Out "O1")        []
                     , SymInteract (Out "confirm")   [Some $ Variable "counter_p" FloatType  ]
@@ -124,15 +124,15 @@ current state configuration: ("0",{active:=False,counter:=0.0,label:=""})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
-"0"  ――?"register" [label_p:String]⟶  ⊤
+"0"  ――?"register" [label_p:[Char]]⟶  ⊤
 "0"  ――?"update" [counter_p:Float]⟶  (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1") ∧ (((counter+-5.5)) ≥ 0, {active:=False},"2")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Float]⟶  ⊥
-"1"  ――?"register" [label_p:String]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0")
+"1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0")
 "1"  ――?"update" [counter_p:Float]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Float]⟶  ⊥
-"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"register" [label_p:[Char]]⟶  ⊤
 "2"  ――?"update" [counter_p:Float]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
 "2"  ――!"confirm" [counter_p:Float]⟶  ⊥
@@ -150,13 +150,13 @@ testSTSJSONParserUnknownType = TestCase $ do
 testSTSJSONParserAssignmentTypeMismatch :: Test
 testSTSJSONParserAssignmentTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "assignment_type_mismatch.json")
-    assertErrorContains "Test assignment type mismatch" "not a string expression" result
+    assertErrorContains "Test assignment type mismatch" "not a list expression" result
 
 -- | Guard compares integer with string using ==
 testSTSJSONParserGuardTypeMismatch :: Test
 testSTSJSONParserGuardTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "guard_type_mismatch.json")
-    assertErrorContains "Test guard type mismatch" "not a string expression" result
+    assertErrorContains "Test guard type mismatch" "not a list expression" result
 
 -- | Switch refers to an undefined gate
 testSTSJSONParserGateIdDup :: Test

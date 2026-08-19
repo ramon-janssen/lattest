@@ -16,10 +16,14 @@ import           Lattest.Model.StandardAutomata
 import           Lattest.Exec.Testing(runSMTTester)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
+import Lattest.Model.Symbolic.Internal.ExprDefs (Constant(..))
 
 -- silly example to test some data types
 -- the SUT just echos the input back as output
 -- the tester computes prime numbers, and the set of prime divisors of non-prime numbers
+-- currently gives -unspecified- because the testcontroller chooses a value that doesn't satisfy the guard,
+-- but that seems unrelated to the datatypes (see the commented out version with just Integers) and,
+-- for now, this does show what this version of lattest supports as far as datatypes and operations on them.
 
 type X = Either Integer (Integer, RCSet Integer)
 xtype :: Type X
@@ -85,19 +89,23 @@ primesieve =
 primesieveInitAssign :: Valuation
 primesieveInitAssign = Valuation $ DMap.singleton xsvar $ Val ([], map Left [2..10])
 
+-- this version also gives -unspecified-
 -- ivar :: Variable Integer
 -- ivar = Variable "i" IntType
+-- jvar :: Variable Integer
+-- jvar = Variable "j" IntType
 -- primesieve :: IOSTS Det Bool Divisibility ()
 -- primesieve =
 --     let i = sVar ivar
---         echo = Alph.SymInteract (Out ()) [Some ivar]
---         echoAssign = assignment [ivar =: 1+i]
---         yes = Alph.SymInteract (In Prime) [Some ivar]
---         yesguard = i .% 2 .== 0
---         yesassign = assignment [ivar =: i+2]
---         no = Alph.SymInteract (In Divisible) [Some ivar]
---         noguard = i .% 2 .== 1
---         noassign = assignment [ivar =: i+4]
+--         j = sVar jvar
+--         echo = Alph.SymInteract (Out ()) [Some jvar]
+--         echoAssign = assignment [ivar =: 1+j]
+--         yes = Alph.SymInteract (In Prime) [Some jvar]
+--         yesguard = i .% 2 .== 0 .&& j .== i - 1
+--         yesassign = assignment [ivar =: i+j]
+--         no = Alph.SymInteract (In Divisible) [Some jvar]
+--         noguard = i .% 2 .== 1 .&& j .== i - 1
+--         noassign = assignment [ivar =: i+j]
 --         initConf = return False
 --
 --         transition True = Map.singleton echo $ pure (Aut.stsTLoc sTrue echoAssign, False)
@@ -115,6 +123,12 @@ model = interpretSTS primesieve primesieveInitAssign
 
 someFunc :: IO ()
 someFunc = do
+    putStrLn $ Aut.prettyPrintIntrp model
+
+    putStrLn ""
+
+    -- putStrLn $ Aut.prettyPrintIntrp $ Aut.after model $ GateValue (In Prime) [Some $ CSum (Left 2) IntType $ TupleType IntType $ SetType IntType]
+
     -- simple adapter that flops between A and B and echos its input
     adap <- pureMealyAdapter
       (\() -> const ())
