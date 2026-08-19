@@ -1,3 +1,6 @@
 resolver: lts-24.46
 packages:
   - .
+extra-deps:
+# support for ADTs is newer than lts-24.46
+- sbv-14.6
