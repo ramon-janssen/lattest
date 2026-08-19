@@ -3,9 +3,11 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testSTSHappyFlowLists,
     testSTSHappyFlowFloat,
     testLatticeCoffeeSTS,
     testErrorThrowingGates,
@@ -85,6 +87,57 @@ testSTSHappyFlow = TestCase $ do
     assertEqual "after ok 16: " (getSTSIntrpState 0 16) (stateConf intrp5)
     let intrp6 = after intrp5 (GateValue (Out "coffee") [])
     assertEqual "after coffee: " (getSTSIntrpState 2 16) (stateConf intrp6)
+    return ()
+
+pvar' :: Variable [Integer]
+pvar' = Variable "p" $ ListType IntType
+xvar' :: Variable [[Integer]]
+xvar' = Variable "x" $ ListType $ ListType IntType
+mapvar1 :: Variable [Integer]
+mapvar1 = Variable "map1" $ ListType IntType
+mapvar2 :: Variable Integer
+mapvar2 = Variable "map2" IntType
+
+stsExampleInitAssign' :: Valuation
+stsExampleInitAssign' = Valuation $ DMap.singleton xvar' (Val [[1,2,3],[4,5,6]])
+
+stsExample' :: IOSTS Det Integer String String
+stsExample' =
+    let p = sVar pvar'
+        x = sVar xvar'
+        water = SymInteract (In "water") [Some pvar']
+        ok = SymInteract (Out "ok") [Some pvar']
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .< sLength p .&& sLength p .<= 10
+        waterAssign = assignment [xvar' =: sMap mapvar1 (sMap mapvar2 (sLength p + sVar mapvar2) $ sVar mapvar1) x] -- map (map (+length p)) x
+        okGuard = sHead (sHead x) .== sLength p
+        coffeeGuard = sHead (sHead x) .>= 15
+        initConf = return 0
+        switches = \case
+            0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrpr' :: STSIntrp Det Integer (IOAct String String)
+stsExampleIntrpr' = interpretSTS stsExample' stsExampleInitAssign'
+
+getSTSIntrpState' :: Integer -> [[Integer]] -> Det (IntrpState Integer)
+getSTSIntrpState' loc val = pure $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" $ ListType $ ListType IntType) (Val val)
+
+testSTSHappyFlowLists :: Test
+testSTSHappyFlowLists = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpState' 0 [[1,2,3],[4,5,6]]) (stateConf stsExampleIntrpr')
+    let intrp2 = after stsExampleIntrpr' (GateValue (In "water") [list @Integer [1,2,3,4,5,6,7]])
+    assertEqual "after water 7: " (getSTSIntrpState' 1 [[8,9,10],[11,12,13]]) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (Out "ok") [list @Integer [1,2,3,4,5,6,7,8]])
+    assertEqual "after ok 7: " (getSTSIntrpState' 0 [[8,9,10],[11,12,13]]) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (In "water") [list @Integer [1,2,3,4,5,6,7,8,9]])
+    assertEqual "after water 9: " (getSTSIntrpState' 1 [[17,18,19],[20,21,22]]) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (Out "ok") [list @Integer [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]])
+    assertEqual "after ok 16: " (getSTSIntrpState' 0 [[17,18,19],[20,21,22]]) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpState' 2 [[17,18,19],[20,21,22]]) (stateConf intrp6)
     return ()
 
 testErrorThrowingGates :: Test

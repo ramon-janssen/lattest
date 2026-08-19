@@ -82,6 +82,7 @@ makeHUnitTests = do
         testRandomFIncorrectInput,
         testSTSHappyFlow,
         testSTSHappyFlowFloat,
+        testSTSHappyFlowLists,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testPrintSTS,
