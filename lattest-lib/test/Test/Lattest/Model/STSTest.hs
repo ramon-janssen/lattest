@@ -343,6 +343,7 @@ testLatticeCoffeeSTS = TestCase $ do
      assertEqual "2b after ok 3: " (getSTSIntrpState2 0 3) (stateConf intrp3b)
      let intrp4a = after intrp3a (GateValue (In "water") [Cint 4])
      assertEqual "2a after water 4: " (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7) (stateConf intrp4a)
+     -- NOTE: Merging only the initial states drops transitions that loop back to the initial state.
      let intrp4b = after intrp3b (GateValue (In "water") [Cint 4])
      assertEqual "2b after water 4: "  (getSTSIntrpState2 1 7) (stateConf intrp4b)
      let intrp5a = after intrp4a (GateValue (Out "ok") [Cint 7])
@@ -1208,9 +1209,8 @@ stsGuardedB =
 {- |
     Sequentially composing stsGuardedA and stsGuardedB at location 0 of stsGuardedA, which already has a "step"
     transition: stsGuardedA's own "step" (guarded by [3,5]) and stsGuardedB's copied "step" (guarded by [1,3]) are
-    both genuinely specified, so they are conjuncted with '(/\)'. Where only one guard holds, that branch's
-    destination is used as-is (the other branch reduces to 'underspecified', the identity of '(/\)'); where both
-    guards hold (value 3), the merged configuration requires both destinations at once.
+    both specified, so they are conjuncted with /\. OutA is allowed by both, however outB is only allowed by stsGuardedB,
+    so it is forbidden in the composed STS.
 -}
 testSequentiallyAtSameAction :: Test
 testSequentiallyAtSameAction = TestCase $ do
@@ -1237,9 +1237,11 @@ testSequentiallyAtSameAction = TestCase $ do
 stsSelfSeqComposed :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposed = interpretSTS (stsPrelude |>> stsPrelude) stsExampleInitAssign
 
+-- Equivalent to |>> as both 1 and 2 are sink locations.
 stsSelfSeqComposedAt :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposedAt = interpretSTS (selfSequentiallyAt stsPrelude [1,2] stsPrelude) stsExampleInitAssign
 
+-- Only one of the sink locations are selected
 stsSelfSeqComposedAtOne :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposedAtOne = interpretSTS (selfSequentiallyAt stsPrelude [1] stsPrelude) stsExampleInitAssign
 
@@ -1285,6 +1287,7 @@ testSelfSeqComposedAtOne = TestCase $ do
     assertEqual "after startEmpty: " (getSTSIntrpState' 1 0) (stateConf intrp3)
     let intrp4 = after intrp3 (GateValue (In "startWithWater") [Cint 7])
     assertEqual "after startWithWater 7: " (getSTSIntrpState' 2 7) (stateConf intrp4)
+    -- Sequentially composed only at 1, so 2 remains sink.
     let intrp5 = after intrp4 (GateValue (Out "error") [])
     assertEqual "after startEmpty: " forbidden (stateConf intrp5)
     return ()
