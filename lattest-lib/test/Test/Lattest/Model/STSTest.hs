@@ -30,7 +30,11 @@ module Test.Lattest.Model.STSTest (
     testPrintSelfSeqComposedSTS,
     testSelfSeqComposed,
     testSelfSeqComposedAt,
-    testSelfSeqComposedAtOne
+    testSelfSeqComposedAtOne,
+    testConjunctionGuardedSTS,
+    testDisjunctionGuardedSTS,
+    testConjunctionAllGuardedSTS,
+    testDisjunctionAllGuardedSTS
     )
 where
 
@@ -51,7 +55,7 @@ import Lattest.Adapter.StandardAdapters(pureAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
-import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>))
+import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
@@ -1004,6 +1008,9 @@ testConjunctionOfDifferentValuations = TestCase $ do
     let intrp2 = after stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0])
     assertEqual "after x: " forbidden (stateConf intrp2)
 
+-----------------------------
+-- Sequential composition
+-----------------------------
 
 stsExampleFL :: IOSTS FreeLattice Integer String String
 stsExampleFL =
@@ -1181,45 +1188,50 @@ stsGuardedA :: IOSTS FreeLattice Integer String String
 stsGuardedA =
     let p = sVar pvar :: Expr Integer
         step = SymInteract (In "step") [pvar]
+        stepA = SymInteract (In "stepA") []
         outA = SymInteract (Out "outA") []
+        outC = SymInteract (Out "outC") [pvar]
+        outGuardA = 1 .<= p .&& p .<= 2
         stepGuard = 3 .<= p .&& p .<= 5
         initConf = ordReturn 0
         switches q = case q of
-            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1))]
+            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1)), (stepA, ordReturn (stsTLoc sTrue noAssignment, 0))]
             1 -> Map.fromList [(outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
-            2 -> Map.empty
+            2 -> Map.fromList [(outC, ordReturn (stsTLoc outGuardA noAssignment, 0))]
             _ -> Map.empty
-    in automaton initConf (Set.fromList [step, outA]) switches
+    in automaton initConf (Set.fromList [step, stepA, outA, outC]) switches
 
 stsGuardedB :: IOSTS FreeLattice Integer String String
 stsGuardedB =
     let p = sVar pvar :: Expr Integer
         step = SymInteract (In "step") [pvar]
+        stepB = SymInteract (In "stepB") []
         outA = SymInteract (Out "outA") []
         outB = SymInteract (Out "outB") []
+        outC = SymInteract (Out "outC") [pvar]
+        outGuardB = 2 .<= p .&& p .<= 3 -- overlaps with outGuardA at 2
         stepGuard = 1 .<= p .&& p .<= 3
         initConf = ordReturn 0
         switches q = case q of
-            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1))]
+            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1)), (stepB, ordReturn (stsTLoc sTrue noAssignment, 0))]
             1 -> Map.fromList [(outB, ordReturn (stsTLoc sTrue noAssignment, 2)), (outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
-            2 -> Map.empty
+            2 -> Map.fromList [(outC, ordReturn (stsTLoc outGuardB noAssignment, 0))]
             _ -> Map.empty
-    in automaton initConf (Set.fromList [step, outA, outB]) switches
+    in automaton initConf (Set.fromList [step, stepB, outA, outB, outC]) switches
 
 {- |
     Sequentially composing stsGuardedA and stsGuardedB at location 0 of stsGuardedA, which already has a "step"
     transition: stsGuardedA's own "step" (guarded by [3,5]) and stsGuardedB's copied "step" (guarded by [1,3]) are
-    both specified, so they are conjuncted with /\. OutA is allowed by both, however outB is only allowed by stsGuardedB,
-    so it is forbidden in the composed STS.
+    both specified, so they are conjuncted with /\.
 -}
 testSequentiallyAtSameAction :: Test
 testSequentiallyAtSameAction = TestCase $ do
     let intrpr0 = interpretSTS (sequentiallyAt stsGuardedA [0] stsGuardedB) stsExampleInitAssign
     assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf intrpr0)
     let intrp1 = after intrpr0 (GateValue (In "step") [Cint 4])
-    assertEqual "after step 4, only stsGuardedA's guard holds: " (getSTSIntrpStateEither (Left 1) 0) (stateConf intrp1)
+    assertEqual "after step 4, only A's guard holds: " (getSTSIntrpStateEither (Left 1) 0) (stateConf intrp1)
     let intrp2 = after intrpr0 (GateValue (In "step") [Cint 1])
-    assertEqual "after step 1, only stsGuardedB's guard holds: " (getSTSIntrpStateEither (Right 1) 0) (stateConf intrp2)
+    assertEqual "after step 1, only B's guard holds: " (getSTSIntrpStateEither (Right 1) 0) (stateConf intrp2)
     -- satisfies both guards: the merged configuration conjunctively requires both destinations
     let intrp3 = after intrpr0 (GateValue (In "step") [Cint 3])
     assertEqual "after step 3, both guards hold: "
@@ -1231,9 +1243,6 @@ testSequentiallyAtSameAction = TestCase $ do
     assertEqual "after outB: " forbidden (stateConf intrp5) -- only allowed by one of the automata
     return ()
 
-{- |
-    'stsPrelude' composed with itself via 'selfSequentiallyAt'\/'(|>>)'
--}
 stsSelfSeqComposed :: STSIntrp FreeLattice Integer (IOAct String String)
 stsSelfSeqComposed = interpretSTS (stsPrelude |>> stsPrelude) stsExampleInitAssign
 
@@ -1312,3 +1321,168 @@ transitions:
 2  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},2)
 2  ――!"error" []⟶  (True, {},0)
 |]
+
+-----------------------------------
+-- Conjunction/disjunction helpers
+-----------------------------------
+stsConjGuarded :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsConjGuarded = interpretSTS (stsGuardedA //\\ stsGuardedB) stsExampleInitAssign
+
+stsDisjGuarded :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsDisjGuarded = interpretSTS (stsGuardedA \\// stsGuardedB) stsExampleInitAssign
+
+
+testConjunctionGuardedSTS :: Test
+testConjunctionGuardedSTS = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0 /\ getSTSIntrpStateEither (Right 0) 0) (stateConf stsConjGuarded)
+    let intrp0 = after stsConjGuarded (GateValue (In "stepA") []) 
+    assertEqual "after outA: " (getSTSIntrpStateEither (Left 0) 0 /\ getSTSIntrpStateEither (Right 0) 0) (stateConf intrp0)
+    -- only stsGuardedA's guard holds
+    let intrp1 = after stsConjGuarded (GateValue (In "step") [Cint 4])
+    assertEqual "after step 4, only stsGuardedA's guard holds: " (getSTSIntrpStateEither (Left 1) 0) (stateConf intrp1)
+    -- only B's guard holds
+    let intrp2 = after stsConjGuarded (GateValue (In "step") [Cint 1])
+    assertEqual "after step 1, only B's guard holds: " (getSTSIntrpStateEither (Right 1) 0) (stateConf intrp2)
+    -- both guards hold: conjunction of both destinations
+    let intrp3 = after stsConjGuarded (GateValue (In "step") [Cint 3])
+    assertEqual "after step 3, both guards hold: "
+        (getSTSIntrpStateEither (Left 1) 0 /\ getSTSIntrpStateEither (Right 1) 0) (stateConf intrp3)
+    -- outA is allowed by both
+    let intrp4 = after intrp3 (GateValue (Out "outA") [])
+    assertEqual "after outA: "
+        (getSTSIntrpStateEither (Left 2) 0 /\ getSTSIntrpStateEither (Right 2) 0) (stateConf intrp4)
+    -- only the overlapping value for outC (2) is allowed
+    let intrp5 = after intrp4(GateValue (Out "outC") [Cint 2])
+    assertEqual "after outC 2: "
+        (getSTSIntrpStateEither (Left 0) 0 /\ getSTSIntrpStateEither (Right 0) 0) (stateConf intrp5)
+    let intrp6 = after intrp4 (GateValue (Out "outC") [Cint 3])
+    assertEqual "after outC 3: " forbidden (stateConf intrp6)
+    let intrp6 = after intrp4 (GateValue (Out "outC") [Cint 1])
+    assertEqual "after outC 1: " forbidden (stateConf intrp6)
+    -- outB is only allowed by B, so the conjunction forbids it
+    let intrp5 = after intrp3 (GateValue (Out "outB") [])
+    assertEqual "after outB: " forbidden (stateConf intrp5)
+    return ()
+
+
+testDisjunctionGuardedSTS :: Test
+testDisjunctionGuardedSTS = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0 \/ getSTSIntrpStateEither (Right 0) 0) (stateConf stsDisjGuarded)
+    -- only defined for B
+    let intrp1 = after stsDisjGuarded (GateValue (In "step") [Cint 4])
+    assertEqual "after step 4: " underspecified (stateConf intrp1)
+    -- only defined for A
+    let intrp2 = after stsDisjGuarded (GateValue (In "step") [Cint 1])
+    assertEqual "after step 1: " underspecified (stateConf intrp2)
+    -- both guards hold
+    let intrp3 = after stsDisjGuarded (GateValue (In "step") [Cint 3])
+    assertEqual "after step 3, both guards hold: "
+        (getSTSIntrpStateEither (Left 1) 0 \/ getSTSIntrpStateEither (Right 1) 0) (stateConf intrp3)
+    -- outB is only allowed by B (still allowed by the disjunction):
+    let intrp4 = after intrp3 (GateValue (Out "outB") [])
+    assertEqual "after outB: " (getSTSIntrpStateEither (Right 2) 0) (stateConf intrp4)
+    -- outA is allowed by both
+    let intrp5 = after intrp3 (GateValue (Out "outA") [])
+    assertEqual "after outA: " (getSTSIntrpStateEither (Left 2) 0 \/ getSTSIntrpStateEither (Right 2) 0) (stateConf intrp5)
+    -- only the overlapping value for outC (2) is allowed
+    let intrp6 = after intrp5(GateValue (Out "outC") [Cint 2])
+    assertEqual "after outC 2: "
+        (getSTSIntrpStateEither (Left 0) 0 \/ getSTSIntrpStateEither (Right 0) 0) (stateConf intrp6)
+    let intrp7 = after intrp5 (GateValue (Out "outC") [Cint 3])
+    assertEqual "after outC 3: " (getSTSIntrpStateEither (Left 0) 0 \/ getSTSIntrpStateEither (Right 0) 0) (stateConf intrp7)
+    let intrp8 = after intrp5 (GateValue (Out "outC") [Cint 1])
+    assertEqual "after outC 1: " (getSTSIntrpStateEither (Left 0) 0 \/ getSTSIntrpStateEither (Right 0) 0) (stateConf intrp8)
+    return ()
+
+stsGuardedC :: IOSTS FreeLattice Integer String String
+stsGuardedC =
+    let p = sVar pvar :: Expr Integer
+        step = SymInteract (In "step") [pvar]
+        stepC = SymInteract (In "stepC") []
+        outA = SymInteract (Out "outA") []
+        outD = SymInteract (Out "outD") []
+        outC = SymInteract (Out "outC") [pvar]
+        outGuardC = 2 .== p
+        stepGuard = 2 .<= p .&& p .<= 4
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(step, ordReturn (stsTLoc stepGuard noAssignment, 1)), (stepC, ordReturn (stsTLoc sTrue noAssignment, 0))]
+            1 -> Map.fromList [(outD, ordReturn (stsTLoc sTrue noAssignment, 2)), (outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
+            2 -> Map.fromList [(outC, ordReturn (stsTLoc outGuardC noAssignment, 0))]
+            _ -> Map.empty
+    in automaton initConf (Set.fromList [step, stepC, outA, outD, outC]) switches
+
+getSTSIntrpStateLabeled :: String -> Integer -> Integer -> FreeLattice (IntrpState (String, Integer))
+getSTSIntrpStateLabeled k loc val = ordReturn $ IntrpState (k, loc) $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+
+stsConjGuardedAll :: STSIntrp FreeLattice (String, Integer) (IOAct String String)
+stsConjGuardedAll = interpretSTS (conjunctionAll [("A", stsGuardedA), ("B", stsGuardedB), ("C", stsGuardedC)]) stsExampleInitAssign
+
+stsDisjGuardedAll :: STSIntrp FreeLattice (String, Integer) (IOAct String String)
+stsDisjGuardedAll = interpretSTS (disjunctionAll [("A", stsGuardedA), ("B", stsGuardedB), ("C", stsGuardedC)]) stsExampleInitAssign
+
+testConjunctionAllGuardedSTS :: Test
+testConjunctionAllGuardedSTS = TestCase $ do
+    let mergedInit = getSTSIntrpStateLabeled "A" 0 0 /\ getSTSIntrpStateLabeled "B" 0 0 /\ getSTSIntrpStateLabeled "C" 0 0
+    assertEqual "\ninitial state " mergedInit (stateConf stsConjGuardedAll)
+    -- only specified at A, still allowed
+    let intrp0 = after stsConjGuardedAll (GateValue (In "stepA") [])
+    assertEqual "after stepA: " mergedInit (stateConf intrp0)
+    -- only A's guard holds
+    let intrp1 = after stsConjGuardedAll (GateValue (In "step") [Cint 5])
+    assertEqual "after step 5, only A's guard holds: " (getSTSIntrpStateLabeled "A" 1 0) (stateConf intrp1)
+    -- only A and C's guards hold
+    let intrp2 = after stsConjGuardedAll (GateValue (In "step") [Cint 4])
+    assertEqual "after step 4, A and C's guards hold: "
+        (getSTSIntrpStateLabeled "A" 1 0 /\ getSTSIntrpStateLabeled "C" 1 0) (stateConf intrp2)
+    -- all three guards hold: genuine three-way conjunction of all destinations
+    let intrp3 = after stsConjGuardedAll (GateValue (In "step") [Cint 3])
+    assertEqual "after step 3, all three guards hold: "
+        (getSTSIntrpStateLabeled "A" 1 0 /\ getSTSIntrpStateLabeled "B" 1 0 /\ getSTSIntrpStateLabeled "C" 1 0) (stateConf intrp3)
+    -- outA is allowed by all three
+    let intrp4 = after intrp3 (GateValue (Out "outA") [])
+    assertEqual "after outA: "
+        (getSTSIntrpStateLabeled "A" 2 0 /\ getSTSIntrpStateLabeled "B" 2 0 /\ getSTSIntrpStateLabeled "C" 2 0) (stateConf intrp4)
+    -- only the overlapping value for outC (2) is allowed; back to the composed initial state
+    let intrp5 = after intrp4 (GateValue (Out "outC") [Cint 2])
+    assertEqual "after outC 2: " mergedInit (stateConf intrp5)
+    let intrp6 = after intrp4 (GateValue (Out "outC") [Cint 3]) -- only B's guard holds, forbidden
+    assertEqual "after outC 3: " forbidden (stateConf intrp6)
+    let intrp7 = after intrp4 (GateValue (Out "outC") [Cint 1]) -- only A's guard holds, forbidden
+    assertEqual "after outC 1: " forbidden (stateConf intrp7)
+    -- outB is only allowed by B, outD is only allowed by C: the conjunction forbids both
+    let intrp8 = after intrp3 (GateValue (Out "outB") [])
+    assertEqual "after outB: " forbidden (stateConf intrp8)
+    let intrp9 = after intrp3 (GateValue (Out "outD") [])
+    assertEqual "after outD: " forbidden (stateConf intrp9)
+    return ()
+
+testDisjunctionAllGuardedSTS :: Test
+testDisjunctionAllGuardedSTS = TestCase $ do
+    let mergedInit = getSTSIntrpStateLabeled "A" 0 0 \/ getSTSIntrpStateLabeled "B" 0 0 \/ getSTSIntrpStateLabeled "C" 0 0
+    assertEqual "\ninitial state " mergedInit (stateConf stsDisjGuardedAll)
+    let intrp1 = after stsDisjGuardedAll (GateValue (In "step") [Cint 5]) -- only A's guard holds
+    assertEqual "after step 5: " underspecified (stateConf intrp1)
+    let intrp2 = after stsDisjGuardedAll (GateValue (In "step") [Cint 4]) -- B's guard fails
+    assertEqual "after step 4: " underspecified (stateConf intrp2)
+    -- all three guards hold
+    let intrp3 = after stsDisjGuardedAll (GateValue (In "step") [Cint 3])
+    assertEqual "after step 3, all three guards hold: "
+        (getSTSIntrpStateLabeled "A" 1 0 \/ getSTSIntrpStateLabeled "B" 1 0 \/ getSTSIntrpStateLabeled "C" 1 0) (stateConf intrp3)
+    -- outA is allowed by all three
+    let intrp4 = after intrp3 (GateValue (Out "outA") [])
+    assertEqual "after outA: "
+        (getSTSIntrpStateLabeled "A" 2 0 \/ getSTSIntrpStateLabeled "B" 2 0 \/ getSTSIntrpStateLabeled "C" 2 0) (stateConf intrp4)
+    -- All outputs that are defined for at least one of the automata are allowed
+    let intrp5 = after intrp3 (GateValue (Out "outB") [])
+    assertEqual "after outB: " (getSTSIntrpStateLabeled "B" 2 0) (stateConf intrp5)
+    let intrp6 = after intrp3 (GateValue (Out "outD") [])
+    assertEqual "after outD: " (getSTSIntrpStateLabeled "C" 2 0) (stateConf intrp6)
+    -- All values for outC are allowed, regardless of which guards hold
+    let intrp7 = after intrp4 (GateValue (Out "outC") [Cint 2])
+    assertEqual "after outC 2: " mergedInit (stateConf intrp7) -- all guards hold
+    let intrp8 = after intrp4 (GateValue (Out "outC") [Cint 3]) -- only B's guard holds
+    assertEqual "after outC 3: " mergedInit (stateConf intrp8)
+    let intrp9 = after intrp4 (GateValue (Out "outC") [Cint 1]) -- only A's guard holds
+    assertEqual "after outC 1: " mergedInit (stateConf intrp9)
+    return ()
