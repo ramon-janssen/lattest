@@ -16,15 +16,14 @@ module Lattest.SMT (
   runSMT
 ) where
 
-import Data.SBV( constrain, HasKind(isBoolean), SBV, SymVal (..), freshVar)
-import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
-import Data.SBV.Internals( CV(cvVal), CVal(..), SMTModel(modelAssocs),cvToBool )
+import Data.SBV( constrain, SBV, SymVal (..), freshVar)
+import Data.SBV.Control( CheckSatResult, checkSat, query, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, fromConstantsMap, Type (..), Constant (..), toConstantsMap, view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation, Expr, fromConstantsMap, Type (..), Constant (..), view)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -58,9 +57,20 @@ runSMT = SBV.runSMT . query . flip evalStateT Map.empty
 getSolution :: [Variable] -> SMT Valuation
 getSolution vs =
   fromConstantsMap
-  . (`Map.intersection` Map.fromList (map (,()) vs))
-  . toConstantsMap
-  . sbvModelToValuation <$> lift getModel
+  . Map.fromList
+  <$> mapM getVarValue vs
+  where
+    getVarValue :: Variable -> SMT (Variable, Constant)
+    getVarValue v@(Variable nm tp) = do
+        sval <- gets (Map.! nm)
+        c <- lift $ svalToConstant tp sval
+        return (v, c)
+
+svalToConstant :: Type -> SBVI.SVal -> Query Constant
+svalToConstant IntType    s = Cint    <$> SBV.getValue (SBVI.SBV s :: SBV Integer)
+svalToConstant BoolType   s = Cbool   <$> SBV.getValue (SBVI.SBV s :: SBV Bool)
+svalToConstant StringType s = Cstring <$> SBV.getValue (SBVI.SBV s :: SBV String)
+svalToConstant FloatType  s = Cfloat  <$> SBV.getValue (SBVI.SBV s :: SBV Double)
 
 addAssertions :: [Expr Bool] -> SMT ()
 addAssertions = mapM_ (lift . constrain <=< exprToSymbolic . view)
@@ -132,15 +142,4 @@ checkSatToSolveProblem = \case
   SBV.Unsat -> Unsat
   SBV.Unk -> Unknown
   SBV.DSat _ -> Unknown
-
-sbvModelToValuation :: SMTModel -> Valuation
-sbvModelToValuation = fromConstantsMap . foldr f Map.empty . modelAssocs
-  where
-    f (varname, cv) = (\(typ, c) -> Map.insert (Variable varname typ) c) $ case cvVal cv of
-      -- booleans for some reason are represented as CInteger with a different 'Kind'
-      _ | isBoolean cv -> (BoolType, Cbool (cvToBool cv))
-      CInteger i -> (IntType, Cint i)
-      CString s -> (StringType, Cstring s)
-      CDouble d -> (FloatType, Cfloat d)
-      _ -> error "todo: the other SBV types, including lists, sets, arbitrary ADTs, floating point values, etc"
 
