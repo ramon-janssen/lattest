@@ -936,7 +936,7 @@ goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
 
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
+testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, forall a. Ord a => Ord (m a)) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
 testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
     [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
     , -}
