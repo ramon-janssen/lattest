@@ -17,7 +17,6 @@ import           Lattest.Exec.Testing(TestController(..), Verdict(..), runSMTTes
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
 import Lattest.SMT (Some(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (List(..))
 
 pvar = Variable "p" IntType
 -- xvar = Variable "x" IntType
@@ -44,7 +43,7 @@ stsExample =
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 
-stsExampleInitAssign = Valuation $ DMap.singleton xsvar $ Val $ List []
+stsExampleInitAssign = Valuation $ DMap.singleton xsvar $ Val []
 
 model = interpretSTSQuiescent stsExample stsExampleInitAssign
 
