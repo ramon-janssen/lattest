@@ -4,11 +4,11 @@ specified: True
 allowed:   True
 
 === [?"a" []] ===
-specified: True
+specified: False
 allowed:   True
 
 === [?"b" [p:Int]] ===
-specified: True
+specified: ((-p_0)) ≥ 0
 allowed:   True
 
 === [?"take" []] ===
@@ -44,12 +44,12 @@ specified: False
 allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int]] ===
-specified: True
-allowed:   (p_1) = (2)
+specified: False
+allowed:   True
 
 === [?"b" [p:Int],?"a" []] ===
 specified: False
@@ -68,12 +68,12 @@ specified: False
 allowed:   True
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   (milk_1)∧((p_1) = (p_0))
+specified: ((-p_0)) ≥ 0
+allowed:   (¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"tea" [p:Int]] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"take" [],?"a" []] ===
 specified: False
@@ -100,11 +100,11 @@ specified: False
 allowed:   True
 
 === [?"water" [p:Int],?"a" []] ===
-specified: True
+specified: ((p_0+-2)) ≥ 0
 allowed:   True
 
 === [?"water" [p:Int],?"b" [p:Int]] ===
-specified: True
+specified: ((p_0+-p_1)) ≥ 0
 allowed:   True
 
 === [?"water" [p:Int],?"take" []] ===
@@ -268,52 +268,52 @@ specified: False
 allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool],?"a" []] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool],?"take" []] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int],?"a" []] ===
-specified: ¬((p_1) = (2))
-allowed:   (p_1) = (2)
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int],?"b" [p:Int]] ===
-specified: ¬((p_1) = (2))
-allowed:   (p_1) = (2)
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int],?"take" []] ===
-specified: True
-allowed:   (p_1) = (2)
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int],?"water" [p:Int]] ===
-specified: ¬((p_1) = (2))
-allowed:   (p_1) = (2)
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"a" [],!"tea" [p:Int],!"tea" [p:Int]] ===
-specified: True
-allowed:   False
+specified: False
+allowed:   True
 
 === [?"b" [p:Int],?"a" [],?"a" []] ===
 specified: False
@@ -412,52 +412,52 @@ specified: False
 allowed:   True
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"a" []] ===
-specified: ¬((milk_1)∧((p_1) = (p_0)))
-allowed:   (milk_1)∧((p_1) = (p_0))
+specified: ¬((¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0))))))
+allowed:   (¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
-specified: ¬((milk_1)∧((p_1) = (p_0)))
-allowed:   (milk_1)∧((p_1) = (p_0))
+specified: ¬((¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0))))))
+allowed:   (¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"take" []] ===
-specified: True
-allowed:   (milk_1)∧((p_1) = (p_0))
+specified: ¬((¬(((-p_0)) ≥ 0))∧(¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0))))))
+allowed:   (¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
-specified: ¬((milk_1)∧((p_1) = (p_0)))
-allowed:   (milk_1)∧((p_1) = (p_0))
+specified: ¬((¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0))))))
+allowed:   (¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   False
+specified: ¬((¬(((-p_0)) ≥ 0))∧(¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0))))))
+allowed:   (¬(((-p_0)) ≥ 0))∧(¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
-specified: True
-allowed:   False
+specified: ¬((¬(((-p_0)) ≥ 0))∧(¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0))))))
+allowed:   (¬(((-p_0)) ≥ 0))∧(¬((((-p_0)) ≥ 0)∧(¬(milk_1))))∧(¬((((-p_0)) ≥ 0)∧(¬((p_1) = (p_0)))))
 
 === [?"b" [p:Int],!"tea" [p:Int],?"a" []] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"b" [p:Int],!"tea" [p:Int],?"b" [p:Int]] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"b" [p:Int],!"tea" [p:Int],?"take" []] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"b" [p:Int],!"tea" [p:Int],?"water" [p:Int]] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"b" [p:Int],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"b" [p:Int],!"tea" [p:Int],!"tea" [p:Int]] ===
-specified: True
-allowed:   False
+specified: ((-p_0)) ≥ 0
+allowed:   ¬(((-p_0)) ≥ 0)
 
 === [?"take" [],?"a" [],?"a" []] ===
 specified: False
@@ -620,12 +620,12 @@ specified: False
 allowed:   True
 
 === [?"water" [p:Int],?"a" [],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   False
+specified: ((p_0+-2)) ≥ 0
+allowed:   ¬(((p_0+-2)) ≥ 0)
 
 === [?"water" [p:Int],?"a" [],!"tea" [p:Int]] ===
-specified: True
-allowed:   (p_2) = (2)
+specified: ((p_0+-2)) ≥ 0
+allowed:   ¬((((p_0+-2)) ≥ 0)∧(¬((p_2) = (2))))
 
 === [?"water" [p:Int],?"b" [p:Int],?"a" []] ===
 specified: False
@@ -644,12 +644,12 @@ specified: False
 allowed:   True
 
 === [?"water" [p:Int],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
-specified: True
-allowed:   (milk_2)∧((p_2) = (p_1))
+specified: ((p_0+-p_1)) ≥ 0
+allowed:   (¬((((p_0+-p_1)) ≥ 0)∧(¬(milk_2))))∧(¬((((p_0+-p_1)) ≥ 0)∧(¬((p_2) = (p_1)))))
 
 === [?"water" [p:Int],?"b" [p:Int],!"tea" [p:Int]] ===
-specified: True
-allowed:   False
+specified: ((p_0+-p_1)) ≥ 0
+allowed:   ¬(((p_0+-p_1)) ≥ 0)
 
 === [?"water" [p:Int],?"take" [],?"a" []] ===
 specified: False
@@ -676,11 +676,11 @@ specified: False
 allowed:   True
 
 === [?"water" [p:Int],?"water" [p:Int],?"a" []] ===
-specified: ¬(((p_0+-10)) ≥ 0)
+specified: (((p_0+p_1+-2)) ≥ 0)∧(¬(((p_0+-10)) ≥ 0))
 allowed:   True
 
 === [?"water" [p:Int],?"water" [p:Int],?"b" [p:Int]] ===
-specified: ¬(((p_0+-10)) ≥ 0)
+specified: (((p_0+p_1+-p_2)) ≥ 0)∧(¬(((p_0+-10)) ≥ 0))
 allowed:   True
 
 === [?"water" [p:Int],?"water" [p:Int],?"take" []] ===

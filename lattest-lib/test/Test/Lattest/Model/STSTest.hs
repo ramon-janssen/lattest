@@ -765,13 +765,14 @@ composedCoffeeMachine =
     let initConf = ordReturn "a0" /\ ordReturn "b0" /\ ordReturn "c0" /\ ordReturn "d0":: FreeLatticeSlow String
         asTransition = \q -> (stsTLoc sTrue noAssignment, q)
         switches = \q -> case q of
-            "a0" -> Map.fromList [(a, ordReturn (stsTLoc sTrue noAssignment, "a1"))]
+            "a0" -> Map.fromList [(a, ordReturn (stsTLoc (x .>= 2) noAssignment, "a1"))]
             "a1" -> Map.fromList [(tea, ordReturn (stsTLoc (p .== 2) $ noAssignment, "a2"))]
-            "b0" -> Map.fromList [(b, ordReturn (stsTLoc sTrue $ assignment [xvar =: p], "b1"))]
+            "b0" -> Map.fromList [(b, ordReturn (stsTLoc (x .>= p) $ assignment [xvar =: p], "b1"))] -- this one's tricky: in state b0, x was the amount of water still available. In state b1, it becomes the requested size of the coffee
             "b1" -> Map.fromList [(espresso, ordReturn (stsTLoc (p .== x) $ noAssignment, "b2"))]
-            "c0" -> Map.fromList [(b, ordReturn (stsTLoc sTrue noAssignment, "c1"))]
+            "c0" -> Map.fromList [(b, ordReturn (stsTLoc (x .>= p) noAssignment, "c1"))] -- guard duplicated from b0, so c0 (the milk aspect) does not accept an order that b0 would leave underspecified
             "c1" -> Map.fromList [(espresso, ordReturn (stsTLoc (milk) $ noAssignment, "c2"))]
-            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [ordReturn (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(input, ordReturn (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            -- the a/b transitions duplicate a0/b0's guards, so d0 (the loop-back branch) does not accept an order that a0/b0 would leave underspecified
+            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [ordReturn (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(a, ordReturn (stsTLoc (x .>= 2) noAssignment, "d1")), (b, ordReturn (stsTLoc (x .>= p) noAssignment, "d1"))]
             "d1" -> Map.fromList [(output, ordReturn (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
             -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
@@ -877,12 +878,12 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
         [(water, [Cint 3]), (water, [Cint 5])] Indefinite
     , correspondenceCase "[water 12, water 5]"               -- underspecified: second water blocked, x=12>=10
         [(water, [Cint 12]), (water, [Cint 5])] Underspecified
-    , correspondenceCase "[water 3, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
-        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
-    , correspondenceCase "[water 3, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
-        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
-    , correspondenceCase "[water 3, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
-        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
+    , correspondenceCase "[water 6, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
+    , correspondenceCase "[water 6, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
+    , correspondenceCase "[water 6, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
     ]
     where
     correspondenceCase label steps expectedSpecifiedness = TestCase $ do
