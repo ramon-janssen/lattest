@@ -19,6 +19,7 @@ module Test.Lattest.Model.STSTest (
     testLinearCoffeeTreeStructure,
     testComplexTreeStructure,
     testComposedCoffeeTreeStructure,
+    testComposedSeTreeStructure,
     testConcreteTraceSpecifiedAllowedCorrespondence,
     prop_specifiedAllowedCorrespondence,
     composedCoffeeMachineIntrpr
@@ -811,6 +812,60 @@ composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeM
 
 testComposedCoffeeTreeStructure :: Test
 testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
+
+-- Pretty-print the entire current intermediate symbolic-execution tree (`Solve.seTree`), up to a given depth. The
+-- configuration monad is fixed to `FreeLatticeSlow` so that we can render its ∧/∨/⊤/⊥ structure directly (no
+-- normalization or deduplication), interleaved with the step / if-then-else structure of the tree.
+prettySeTree :: Int
+             -> FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))
+             -> String
+prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t0)
+    where
+    goTree :: Int -> String -> Solve.SETree FreeLatticeSlow (IOSymInteract String String) -> [String]
+    goTree d ind (Solve.SETree cs)
+        | d <= 0    = [ind ++ "… (depth limit)"]
+        | otherwise = concatMap (goEntry d ind) (Map.toList cs)
+    goEntry :: Int -> String -> (IOSymInteract String String, FreeLatticeSlow (Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))))) -> [String]
+    goEntry d ind (i, medge) =
+        (ind ++ "step " ++ show i ++ ", branches:") : goConf (ind ++ "  ") (goIte (d-1)) medge
+    goIte :: Int -> String -> Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))) -> [String]
+    goIte d ind (Solve.SEIte g thn els) =
+           [ind ++ "if " ++ show g ++ " then"]
+        ++ goConf (ind ++ "    ") (goTree d) thn
+        ++ [ind ++ "else:"]
+        ++ goConf (ind ++ "    ") (goTree d) els
+    -- render a FreeLatticeSlow layer, recursing into each atom via `sub`. Chains of the same operator are flattened
+    -- into an n-ary ∧/∨, but no merging of equal subtrees happens.
+    goConf :: String -> (String -> x -> [String]) -> FreeLatticeSlow x -> [String]
+    goConf ind _   (FreeLatticeSlow Top)    = [ind ++ "⊤ (underspecified)"]
+    goConf ind _   (FreeLatticeSlow Bottom) = [ind ++ "⊥ (forbidden)"]
+    goConf ind sub (FreeLatticeSlow (Levitate free)) = goFree ind sub free
+    goFree ind sub (Var e) = sub ind e
+    goFree ind sub free@(_ :/\: _) =
+        let conjuncts = meets free
+        in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
+           : concatMap (goOperand ind sub "conjunct") (zip [1 :: Int ..] conjuncts)
+    goFree ind sub free@(_ :\/: _) =
+        let disjuncts = joins free
+        in (ind ++ "∨ (" ++ show (length disjuncts) ++ " disjuncts):")
+           : concatMap (goOperand ind sub "disjunct") (zip [1 :: Int ..] disjuncts)
+    -- Delimit each operand of an n-ary ∧/∨ with its own header, so the (multi-line) subtrees of sibling conjuncts
+    -- do not visually run together.
+    goOperand :: String -> (String -> x -> [String]) -> String -> (Int, Free x) -> [String]
+    goOperand ind sub label (k, operand) =
+        (ind ++ "  " ++ label ++ " " ++ show k ++ ":") : goFree (ind ++ "    ") sub operand
+    meets (x :/\: y) = meets x ++ meets y
+    meets other      = [other]
+    joins (x :\/: y) = joins x ++ joins y
+    joins other      = [other]
+
+-- Show the entire intermediate tree structure (`Solve.seTree`) for the composed coffee machine up to depth 3, as a
+-- single golden test. The same tree folds (via `Solve.treeToGuard asDualExpr`/`asExpr`) to the specified/allowed guards.
+testComposedSeTreeStructure :: Test
+testComposedSeTreeStructure = TestCase $ goldenAssert
+    [ goldenCheck "composed:seTree" (goldenDir </> "composed.setree.txt")
+        ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr))
+    ]
 
 -- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
 type ConcreteStep = (IOSymInteract String String, [Constant])

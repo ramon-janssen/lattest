@@ -14,6 +14,10 @@ interactsToAllowedCondition,
 toSpecifiedTree,
 toAllowedTree,
 SolveTree(..),
+seTree,
+treeToGuard,
+SETree(..),
+SEIte(..),
 )
 where
 
