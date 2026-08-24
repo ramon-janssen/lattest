@@ -99,7 +99,12 @@ intrpStateToSym (IntrpState loc vals) = SymIntrpState loc (mapVars (indexVar 0) 
 -- | Symbolic if-then-else branching
 data SEIte t = SEIte SymGuard t t deriving (Eq, Ord)
 
--- | Symbolic execution tree: every interaction monadically leads to guards (over parameters in that interaction, and in previous interactions) and new trees (for the true/false branches)
+{- |
+    Symbolic execution tree: every interaction monadically leads to guards (over parameters in that interaction, and in previous interactions) and new trees (for the true/false branches).
+
+    Note: the if-then-else @SEIte@ type allows quite general forms of monadic branching, but currently, the use in @seTree@ is quite limited: the
+    then-branch is always singular (ordReturn) and the else-branch is always underspecified or forbidden.
+-}
 newtype SETree m i = SETree (Map.Map i (m (SEIte (m (SETree m i)))))
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Eq (SETree m i)
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Ord (SETree m i)
