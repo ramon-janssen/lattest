@@ -91,6 +91,7 @@ makeHUnitTests = do
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testComposedSeTreeStructure,
+        testComposedPathCondition,
         testConcreteTraceSpecifiedAllowedCorrespondence,
         testPrintSTS,
         testReadAutFile,

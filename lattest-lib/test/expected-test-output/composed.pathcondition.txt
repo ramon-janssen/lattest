@@ -1,0 +1,1037 @@
+
+=== [] ===
+specified: True
+allowed:   True
+
+=== [?"a" []] ===
+specified: True
+allowed:   True
+
+=== [?"b" [p:Int]] ===
+specified: True
+allowed:   True
+
+=== [?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int]] ===
+specified: True
+allowed:   True
+
+=== [!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"tea" [p:Int]] ===
+specified: True
+allowed:   (p_1) = (2)
+
+=== [?"b" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   (milk_1)∧((p_1) = (p_0))
+
+=== [?"b" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"take" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"a" []] ===
+specified: True
+allowed:   True
+
+=== [?"water" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   True
+
+=== [?"water" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"water" [p:Int]] ===
+specified: ¬(((p_0+-10)) ≥ 0)
+allowed:   True
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],?"a" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"a" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"a" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"a" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"a" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"b" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"take" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],?"water" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"tea" [p:Int],?"a" []] ===
+specified: ¬((p_1) = (2))
+allowed:   (p_1) = (2)
+
+=== [?"a" [],!"tea" [p:Int],?"b" [p:Int]] ===
+specified: ¬((p_1) = (2))
+allowed:   (p_1) = (2)
+
+=== [?"a" [],!"tea" [p:Int],?"take" []] ===
+specified: True
+allowed:   (p_1) = (2)
+
+=== [?"a" [],!"tea" [p:Int],?"water" [p:Int]] ===
+specified: ¬((p_1) = (2))
+allowed:   (p_1) = (2)
+
+=== [?"a" [],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"a" [],!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],?"a" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"a" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"a" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"a" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"a" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"b" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"take" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],?"water" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: ¬((milk_1)∧((p_1) = (p_0)))
+allowed:   (milk_1)∧((p_1) = (p_0))
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: ¬((milk_1)∧((p_1) = (p_0)))
+allowed:   (milk_1)∧((p_1) = (p_0))
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: True
+allowed:   (milk_1)∧((p_1) = (p_0))
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: ¬((milk_1)∧((p_1) = (p_0)))
+allowed:   (milk_1)∧((p_1) = (p_0))
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"tea" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"tea" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"tea" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"tea" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"b" [p:Int],!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"take" [],?"a" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"a" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"a" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"a" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"a" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"b" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"take" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],?"water" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"take" [],!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"a" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"a" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"a" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"a" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],?"a" [],!"tea" [p:Int]] ===
+specified: True
+allowed:   (p_2) = (2)
+
+=== [?"water" [p:Int],?"b" [p:Int],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"b" [p:Int],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"b" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"b" [p:Int],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   (milk_2)∧((p_2) = (p_1))
+
+=== [?"water" [p:Int],?"b" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],?"take" [],?"a" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"take" [],?"b" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"take" [],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"take" [],?"water" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"take" [],!"tea" [p:Int]] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"water" [p:Int],?"a" []] ===
+specified: ¬(((p_0+-10)) ≥ 0)
+allowed:   True
+
+=== [?"water" [p:Int],?"water" [p:Int],?"b" [p:Int]] ===
+specified: ¬(((p_0+-10)) ≥ 0)
+allowed:   True
+
+=== [?"water" [p:Int],?"water" [p:Int],?"take" []] ===
+specified: False
+allowed:   True
+
+=== [?"water" [p:Int],?"water" [p:Int],?"water" [p:Int]] ===
+specified: (¬(((p_0+p_1+-10)) ≥ 0))∧(¬(((p_0+-10)) ≥ 0))
+allowed:   True
+
+=== [?"water" [p:Int],?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: ¬(((p_0+-10)) ≥ 0)
+allowed:   ((p_0+-10)) ≥ 0
+
+=== [?"water" [p:Int],?"water" [p:Int],!"tea" [p:Int]] ===
+specified: ¬(((p_0+-10)) ≥ 0)
+allowed:   ((p_0+-10)) ≥ 0
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [?"water" [p:Int],!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" [],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" [],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" [],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" [],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"a" [],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"b" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" [],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" [],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" [],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" [],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"take" [],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],?"water" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"esp" [p:Int,milk:Bool],!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" [],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" [],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" [],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" [],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" [],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"a" [],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"b" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" [],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" [],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" [],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" [],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" [],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"take" [],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],?"water" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"esp" [p:Int,milk:Bool],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int],?"a" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int],?"b" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int],?"take" []] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int],?"water" [p:Int]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int],!"esp" [p:Int,milk:Bool]] ===
+specified: True
+allowed:   False
+
+=== [!"tea" [p:Int],!"tea" [p:Int],!"tea" [p:Int]] ===
+specified: True
+allowed:   False
+

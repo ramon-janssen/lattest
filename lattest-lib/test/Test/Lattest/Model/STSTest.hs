@@ -17,6 +17,7 @@ module Test.Lattest.Model.STSTest (
     testSTSPathCondition,
     testBranchingPathCondition,
     testComposedSeTreeStructure,
+    testComposedPathCondition,
     testConcreteTraceSpecifiedAllowedCorrespondence,
     prop_specifiedAllowedCorrespondence,
     composedCoffeeMachineIntrpr
@@ -832,6 +833,26 @@ testComposedSeTreeStructure = TestCase $ goldenAssert
     [ goldenCheck "composed:seTree" (goldenDir </> "composed.setree.txt")
         ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr))
     ]
+
+-- Snapshot the accumulated symbolic path condition (the actual formula, with SSA-indexed parameters) that
+-- `interactsToSpecifiedCondition` (asDualExpr) and `interactsToAllowedCondition` (asExpr) produce, for *every* trace
+-- over the composed coffee machine's alphabet up to length 3. One symbolic guard per (condition, trace) encodes all
+-- concrete valuations at once, complementing the pointwise checks in testConcreteTraceSpecifiedAllowedCorrespondence.
+-- The transition function is total (missing gates map to the implicit location), so every alphabet trace has a guard.
+testComposedPathCondition :: Test
+testComposedPathCondition = TestCase $ goldenAssert
+    [ goldenCheck "composed:pathCondition" (goldenDir </> "composed.pathcondition.txt")
+        ("\n" ++ concatMap render traces)
+    ]
+    where
+    alph = Set.toList $ alphabet $ syntacticAutomaton composedCoffeeMachineIntrpr
+    -- all traces over the alphabet up to length 3 (sequence . replicate n = all n-length combinations)
+    traces = concatMap (\n -> sequence (replicate n alph)) [0 .. 3 :: Int]
+    render tr = unlines
+        [ "=== " ++ show tr ++ " ==="
+        , "specified: " ++ show (interactsToSpecifiedCondition composedCoffeeMachineIntrpr tr)
+        , "allowed:   " ++ show (interactsToAllowedCondition composedCoffeeMachineIntrpr tr)
+        , "" ]
 
 -- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
 type ConcreteStep = (IOSymInteract String String, [Constant])
