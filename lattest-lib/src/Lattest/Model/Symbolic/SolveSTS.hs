@@ -1,5 +1,6 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-|
     Find concrete values to take transitions in STSes, using an SMT solver.
 -}
@@ -18,20 +19,17 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInt
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables)
 import Lattest.SMT(SMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&), first, second)
+import Control.Arrow((&&&))
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
-import qualified Data.Set as Set
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
@@ -62,10 +60,10 @@ solveRandomInteraction intrpr subsetFunction r = do
 
 
 interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
+interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
+interactsToAllowedCondition = interactsToGuard asExpr
 
 
 
@@ -83,7 +81,7 @@ data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord)
 intrpStateToSym :: IntrpState a -> SymIntrpState a
 intrpStateToSym (IntrpState loc vals) = SymIntrpState loc (mapVars (indexVar 0) (valuationToVarModel vals))
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc)
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc)
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToGuard f intrpr interacts =
     let smloc = intrpStateToSym BM.<#> stateConf intrpr
@@ -110,7 +108,7 @@ interactsToGuard f intrpr interacts =
         in (tguard, completedAssign, tloc)
     locVarSet :: [Variable]
     locVarSet =
-        let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
+        let mArbitraryState = toList (stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
@@ -118,10 +116,9 @@ interactsToGuard f intrpr interacts =
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
 
 indexExpr :: Int -> Expr t -> Expr t
-indexExpr n e = mapExpressionVars (indexVar n) e
+indexExpr n = mapExpressionVars (indexVar n)
 indexVar :: Int -> Variable -> Variable
---indexVar 0 v = v
-indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
+indexVar n v
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
@@ -131,16 +128,24 @@ data SolveTree g = SolveTree {
     traceChildren :: Map.Map (SymInteract g) (SolveTree g)
     }
 
-toSpecifiedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toSpecifiedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc)
+                => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g')
+                -> SolveTree (IOAct i o)
 toSpecifiedTree = toSolveTree asDualExpr
 
-toAllowedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
+toAllowedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc)
+              => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g')
+              -> SolveTree (IOAct i o)
 toAllowedTree = toSolveTree asExpr
 
-toSolveTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
-toSolveTree f intrpr = toSolveTree' f intrpr []
+toSolveTree :: forall m i o loc g'. (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc)
+            => (m (Expr Bool) -> SymGuard)
+            -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g')
+            -> SolveTree (IOAct i o)
+toSolveTree f intrpr = toSolveTree' []
     where
-    toSolveTree' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SolveTree (IOAct i o)
-    toSolveTree' f intrpr pref =
-        let children = Map.fromSet (\x -> toSolveTree' f intrpr (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
+    toSolveTree' :: [IOSymInteract i o] -> SolveTree (IOAct i o)
+    toSolveTree' pref =
+        let children = Map.fromSet (\x -> toSolveTree' (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
         in SolveTree (interactsToGuard f intrpr pref) children
+
