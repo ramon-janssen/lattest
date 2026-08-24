@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -47,9 +48,9 @@ InconclusiveReason(..)
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest)
-import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
+import Lattest.Model.Alphabet(TestChoice, IOAct, IOSymInteract, GateValue, IOGateValue, SymInteract)
+import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest, IntrpState)
+import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden, BoundedMonad, BooleanConfiguration)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
 
@@ -58,6 +59,10 @@ import Control.Exception(catch,evaluate)
 --import Control.DeepSeq(force)
 import Lattest.Streams.Synchronized (Streamed(..))
 import Data.Kind (Constraint, Type)
+import qualified Data.Map as Map
+import Lattest.Model.Symbolic.SolveSTS (toAllowedTree, SolveTree (..))
+import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
+import Lattest.SMT (runSMT)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -227,4 +232,24 @@ runLTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 runSMTTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
     AutIntrpr m loc q t STStdest act -> TestController m loc q t STStdest act state i r -> Adapter act i -> IO (Verdict, r)
 runSMTTester spec testSelection = runExperiment (makeTester spec testSelection)
+
+data OfflineTree i o r where
+  Leaf :: r -> OfflineTree i o r
+  Node :: Map.Map (IOSymInteract i o) (OfflineTree i o r) -> OfflineTree i o r
+
+offlineTester :: (BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc)
+              => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+              -- -> TestController m loc q t tdest (IOSymInteract i o) state i r
+              -> IO (OfflineTree i o Verdict)
+offlineTester intrp = go $ toAllowedTree intrp
+  -- TODO: test both toAllowedTree and toSolveTree
+  where
+    go :: SolveTree (IOAct i o) -> IO (OfflineTree i o Verdict)
+    go (SolveTree guard children)
+     | Map.null children = runSMT $ Leaf <$> do
+          mv <- solveGuard _ guard
+          case mv of
+            Nothing -> Fail
+            Just 
+     | otherwise = Node <$> traverse go children
 
