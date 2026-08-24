@@ -37,7 +37,8 @@ packages:
 # forks / in-progress versions pinned to a git hash. For example:
 #
 extra-deps:
-- lattest-lib-0.1.1
+- ../../lattest-lib
+#- lattest-lib-0.1.1
 - sbv-14.6
 # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git
