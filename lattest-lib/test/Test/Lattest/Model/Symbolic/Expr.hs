@@ -20,6 +20,7 @@ import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT as SMT
 import qualified Data.List as List
 
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
 import qualified Control.Monad as CM
@@ -302,7 +303,20 @@ evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
 
 solveTests :: [Test]
-solveTests = [testSolveNegativeModulo]
+solveTests = [testSolveNegativeModulo, testSolveTwiceInSession]
+
+-- | Solving two satisfiable guards within a single SMT run session
+testSolveTwiceInSession :: Test
+testSolveTwiceInSession = TestCase $ do
+    let v = Variable "j" IntType
+        guard = sVar v .== sConst (41 :: Integer)
+    (firstSolve, secondSolve) <- SMT.runSMT $ do
+        a <- solveGuard [v] guard
+        b <- solveGuard [v] guard
+        return (a, b)
+    let valueOf mVal = (Map.lookup v . toConstantsMap) =<< mVal
+    assertEqual "first solve of j == 41 in a session"  (Just (Cint 41)) (valueOf firstSolve)
+    assertEqual "second solve of j == 41 in the same session" (Just (Cint 41)) (valueOf secondSolve)
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)

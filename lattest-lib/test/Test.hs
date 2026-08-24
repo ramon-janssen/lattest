@@ -79,6 +79,7 @@ makeHUnitTests = do
         testSpecGQuiescent,
         testExponentialNonDeterminism,
         testSTSTestSelection,
+        testSTSDataSelectionGuardedInput,
         testRandomFCorrect,
         testRandomFIncorrectOutput,
         testRandomFIncorrectInput,
