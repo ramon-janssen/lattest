@@ -14,6 +14,7 @@ ordMap,
 -- ** Monads with ordering
 OrdMonad,
 ordBind,
+(#>>),
 ordReturn,
 ordJoin,
 -- ** Traversables with ordering
@@ -59,6 +60,10 @@ class (OrdFunctor m) => OrdMonad m where
 instance {-# OVERLAPPABLE #-} Monad m => OrdMonad m where
     ordBind = (>>=)
     ordReturn = return
+
+-- | An infix synonym for 'ordBind', similar to '>>='.
+(#>>) :: (OrdMonad m, Ord b) => m a -> (a -> m b) -> m b
+(#>>) = ordBind
 
 -- | Standard monadic 'join', but with an additional 'Ord' constraint.
 ordJoin :: (Ord a, OrdMonad m) => m (m a) -> m a
