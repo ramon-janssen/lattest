@@ -16,9 +16,6 @@ module Test.Lattest.Model.STSTest (
     testLatticeSTSQuiescence,
     testSTSPathCondition,
     testBranchingPathCondition,
-    testLinearCoffeeTreeStructure,
-    testComplexTreeStructure,
-    testComposedCoffeeTreeStructure,
     testComposedSeTreeStructure,
     testConcreteTraceSpecifiedAllowedCorrespondence,
     prop_specifiedAllowedCorrespondence,
@@ -750,34 +747,6 @@ treeSTS =
             _ -> Map.empty
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate, outGate]) switches
 
-treeIntrpr :: STSIntrp FreeLattice Integer (IOAct String String)
-treeIntrpr = interpretSTS treeSTS branchInitAssign
-
--- Pretty-printers for the (infinite) trees, bounded to a maximum depth, rendered as an indented outline.
-showGate :: SymInteract (IOAct String String) -> String
-showGate (SymInteract (In s) _) = "?" ++ s
-showGate (SymInteract (Out s) _) = "!" ++ s
-
-prettySolveTree :: Int -> Solve.SolveTree (IOAct String String) -> String
-prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
-    where
-    go d indent t
-        | d > maxDepth = [indent ++ "..."]
-        | otherwise = 
-            let cond = Solve.traceCondition t
-                showCond = indent ++ "cond " ++ show cond
-            in if cond == sFalse -- the solve tree has conditions that are monononically decreasing as you go down the tree, so False is a sink
-                then [showCond]
-                else showCond
-                        : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
-                                    (Map.toList (Solve.traceChildren t))
-
-testLinearCoffeeTreeStructure :: Test
-testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3
-
-testComplexTreeStructure :: Test
-testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 3
-
 milkvar :: Variable
 milkvar = (Variable "milk" BoolType)
 milk = sVar milkvar
@@ -809,9 +778,6 @@ composedCoffeeMachine =
     in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
 composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeSlow String (IOAct String String)
 composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
-
-testComposedCoffeeTreeStructure :: Test
-testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
 
 -- Pretty-print the entire current intermediate symbolic-execution tree (`Solve.seTree`), up to a given depth. The
 -- configuration monad is fixed to `FreeLatticeSlow` so that we can render its ∧/∨/⊤/⊥ structure directly (no
@@ -991,18 +957,6 @@ goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
 
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q, forall a. Ord a => Ord (m a)) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
-testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
-    [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
-    , -}
-      goldenCheck (testName ++ ":toSpecifiedTree") (goldenDir </> (testName ++ ".specifiedtree.txt")) actualSpecifiedTree
-    , goldenCheck (testName ++ ":toAllowedTree") (goldenDir </> (testName ++ ".allowedtree.txt")) actualAllowedTree
-    ]
-    where
-    --tree = Solve.symbolicExecutionTree stsIntrpr
-    --actualExecTree = "\n" ++ prettyExecTree depth tree
-    actualSpecifiedTree = "\n" ++ prettySolveTree depth (Solve.toSpecifiedTree stsIntrpr)
-    actualAllowedTree = "\n" ++ prettySolveTree depth (Solve.toAllowedTree stsIntrpr)
 
 testSTSPathCondition :: Test
 testSTSPathCondition = TestCase $ do

@@ -11,9 +11,6 @@ module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
 interactsToSpecifiedCondition,
 interactsToAllowedCondition,
-toSpecifiedTree,
-toAllowedTree,
-SolveTree(..),
 seTree,
 treeToGuard,
 SETree(..),
@@ -154,21 +151,3 @@ indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with prime
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
 
-data SolveTree g = SolveTree {
-    traceCondition :: SymGuard,
-    traceChildren :: Map.Map (SymInteract g) (SolveTree g)
-    }
-
-toSpecifiedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard), forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
-toSpecifiedTree = toSolveTree asDualExpr
-
-toAllowedTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard), forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
-toAllowedTree = toSolveTree asExpr
-
-toSolveTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard), forall a. Ord a => Ord (m a)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> SolveTree (IOAct i o)
-toSolveTree f intrpr = toSolveTree' f intrpr []
-    where
-    toSolveTree' :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, Ord (m SymGuard), forall a. Ord a => Ord (m a)) => (m (Expr Bool) -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SolveTree (IOAct i o)
-    toSolveTree' f intrpr pref =
-        let children = Map.fromSet (\x -> toSolveTree' f intrpr (pref ++ [x])) (alphabet $ syntacticAutomaton intrpr)
-        in SolveTree (interactsToGuard f intrpr pref) children
