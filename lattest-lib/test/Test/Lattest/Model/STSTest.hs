@@ -34,7 +34,11 @@ module Test.Lattest.Model.STSTest (
     testConjunctionGuardedSTS,
     testDisjunctionGuardedSTS,
     testConjunctionAllGuardedSTS,
-    testDisjunctionAllGuardedSTS
+    testDisjunctionAllGuardedSTS,
+    testPrintPrependOutputChecksDisj,
+    testPrintPrependOutputChecksConj,
+    testPrependOutputChecksDisj,
+    testPrependOutputChecksConj
     )
 where
 
@@ -54,7 +58,7 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
+import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
@@ -1493,4 +1497,221 @@ testDisjunctionAllGuardedSTS = TestCase $ do
     _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Cint 2]) disjInitState -- all guards hold
     _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Cint 3]) disjInitState -- only B's guard holds
     _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Cint 1]) disjInitState -- only A's guard holds
+    return ()
+
+-----------------------------------
+-- prependOutputChecks
+-----------------------------------
+
+startGate = SymInteract (In "start") []
+o1Gate = SymInteract (Out "o1") []
+o2Gate = SymInteract (Out "o2") [pvar]
+resetGate = SymInteract (In "reset") []
+
+stsPrependChecks :: IOSTS FreeLattice Integer String String
+stsPrependChecks =
+    let initConf = ordReturn 0
+        p = sVar pvar :: Expr Integer
+        out2aGuard = 6 .>= p .&& p .>= 4
+        out2bGuard = 4 .>= p .&& p .>= 2
+        out2cGuard = 2 .>= p .&& p .>= 0
+        switches q = case q of
+            0 -> Map.fromList [(startGate, ordReturn (stsTLoc sTrue noAssignment, 1)),
+                            (o2Gate, ordReturn (stsTLoc out2aGuard noAssignment, 2) \/ ordReturn (stsTLoc out2bGuard noAssignment, 2))]
+            1 -> Map.fromList [(o1Gate, ordReturn (stsTLoc sTrue noAssignment, 2)),
+                               (o2Gate, ordReturn (stsTLoc out2bGuard noAssignment, 3))]
+            2 -> Map.fromList [(o2Gate, ordReturn (stsTLoc out2cGuard noAssignment, 3)), (resetGate, ordReturn (stsTLoc sTrue noAssignment, 0))]
+            3 -> Map.empty
+            _ -> Map.empty
+    in automaton initConf (Set.fromList [startGate, o1Gate, o2Gate, resetGate]) switches
+
+stsPrependChecksDisj :: IOSTS FreeLattice (CheckLoc Integer (IOSymInteract String String)) String String
+stsPrependChecksDisj = prependOutputChecks (\/) ("check_" ++) stsPrependChecks
+
+stsPrependChecksDisjIntrpr :: STSIntrp FreeLattice (CheckLoc Integer (IOSymInteract String String)) (IOAct String String)
+stsPrependChecksDisjIntrpr = interpretSTS stsPrependChecksDisj stsExampleInitAssign
+
+getStableOrPendingState :: CheckLoc Integer (IOSymInteract String String) -> Integer -> FreeLattice (IntrpState (CheckLoc Integer (IOSymInteract String String)))
+getStableOrPendingState loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+
+testPrintPrependOutputChecksDisj :: Test
+testPrintPrependOutputChecksDisj = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsPrependChecksDisjIntrpr ++ "\n"
+    expected = [QQ.r|
+current state configuration: (0,{x:=0})
+initial location configuration: 0
+locations: 0, 1, 2, 3, pending !"o2" [p:Int] -> 2, pending !"o1" [] -> 2, pending !"o2" [p:Int] -> 3, pending !"o2" [p:Int] -> 3
+transitions:
+0  ――?"check_o1" []⟶  ⊥
+0  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 2)
+0  ――?"reset" []⟶  ⊤
+0  ――?"start" []⟶  (True, {},1)
+0  ――!"o1" []⟶  ⊥
+0  ――!"o2" [p:Int]⟶  ⊥
+1  ――?"check_o1" []⟶  (True, {},pending !"o1" [] -> 2)
+1  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
+1  ――?"reset" []⟶  ⊤
+1  ――?"start" []⟶  ⊤
+1  ――!"o1" []⟶  ⊥
+1  ――!"o2" [p:Int]⟶  ⊥
+2  ――?"check_o1" []⟶  ⊥
+2  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
+2  ――?"reset" []⟶  (True, {},0)
+2  ――?"start" []⟶  ⊤
+2  ――!"o1" []⟶  ⊥
+2  ――!"o2" [p:Int]⟶  ⊥
+3  ――?"check_o1" []⟶  ⊥
+3  ――?"check_o2" []⟶  ⊥
+3  ――?"reset" []⟶  ⊤
+3  ――?"start" []⟶  ⊤
+3  ――!"o1" []⟶  ⊥
+3  ――!"o2" [p:Int]⟶  ⊥
+pending !"o2" [p:Int] -> 2  ――?"check_o1" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――?"check_o2" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――?"reset" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――?"start" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――!"o1" []⟶  ⊥
+pending !"o2" [p:Int] -> 2  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},2) ∨ ((((-p+6)) ≥ 0)∧(((p+-4)) ≥ 0), {},2)
+pending !"o1" [] -> 2  ――?"check_o1" []⟶  ⊤
+pending !"o1" [] -> 2  ――?"check_o2" []⟶  ⊤
+pending !"o1" [] -> 2  ――?"reset" []⟶  ⊤
+pending !"o1" [] -> 2  ――?"start" []⟶  ⊤
+pending !"o1" [] -> 2  ――!"o1" []⟶  (True, {},2)
+pending !"o1" [] -> 2  ――!"o2" [p:Int]⟶  ⊥
+pending !"o2" [p:Int] -> 3  ――?"check_o1" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},3)
+pending !"o2" [p:Int] -> 3  ――?"check_o1" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  (((p) ≥ 0)∧(((-p+2)) ≥ 0), {},3)
+|]
+
+testPrependOutputChecksDisj :: Test
+testPrependOutputChecksDisj = TestCase $ do
+    let s = getStableOrPendingState
+    assertEqual "\ninitial state " (s (Stable 0) 0) (stateConf stsPrependChecksDisjIntrpr)
+    -- First case: same output gate, same initial location, same target location
+    intrp0 <- assertAfter "after check_o2: " stsPrependChecksDisjIntrpr (GateValue (In "check_o2") []) (s (Pending 0 o2Gate 2) 0)
+    _ <- assertAfter "after o2 (meets only guard a): " intrp0 (GateValue (Out "o2") [Cint 6]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets both guards): " intrp0 (GateValue (Out "o2") [Cint 4]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets only guard b): " intrp0 (GateValue (Out "o2") [Cint 2]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets no guard): " intrp0 (GateValue (Out "o2") [Cint 48]) forbidden
+    intrp1 <- assertAfter "after start: " stsPrependChecksDisjIntrpr (GateValue (In "start") []) (s (Stable 1) 0)
+    -- Second case: outputs with different gates. If one is checked, the other is forbidden
+    _ <- assertAfter "after o1: " intrp1 (GateValue (Out "o1") []) forbidden
+    intrp2 <- assertAfter "after check_o1: " intrp1 (GateValue (In "check_o1") []) (s (Pending 1 o1Gate 2) 0)
+    -- while pending, only the checked output is available: every other output stays forbidden
+    _ <- assertAfter "o2 while pending o1: " intrp2 (GateValue (Out "o2") [Cint 0]) forbidden
+    _ <- assertAfter "next while pending o1: " intrp2 (GateValue (In "reset") []) underspecified
+    _ <- assertAfter "check_o2 while pending o1: " intrp2 (GateValue (In "check_o2") []) underspecified
+    intrp3 <- assertAfter "after o1: " intrp2 (GateValue (Out "o1") []) (s (Stable 2) 0)
+    -- location 2's own switches are back, unchanged
+    _ <- assertAfter "after next: " intrp3 (GateValue (In "reset") []) (s (Stable 0) 0)
+    intrp4 <- assertAfter "after check_o2: " intrp3 (GateValue (In "check_o2") []) (s (Pending 2 o2Gate 3) 0)
+    -- Third case: outputs with the same gate and same target location, but different initial location
+    _ <- assertAfter "after o2 (meets only guard b): " intrp4 (GateValue (Out "o2") [Cint 4]) forbidden
+    _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Cint 2]) (s (Stable 3) 0)
+    _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Cint 0]) (s (Stable 3) 0)
+    return ()
+
+stsPrependChecksConj :: IOSTS FreeLattice (CheckLoc Integer (IOSymInteract String String)) String String
+stsPrependChecksConj = prependOutputChecks (/\) ("check_" ++) stsPrependChecks
+
+stsPrependChecksConjIntrpr :: STSIntrp FreeLattice (CheckLoc Integer (IOSymInteract String String)) (IOAct String String)
+stsPrependChecksConjIntrpr = interpretSTS stsPrependChecksConj stsExampleInitAssign
+
+testPrintPrependOutputChecksConj :: Test
+testPrintPrependOutputChecksConj = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsPrependChecksConjIntrpr ++ "\n"
+    expected = [QQ.r|
+current state configuration: (0,{x:=0})
+initial location configuration: 0
+locations: 0, 1, 2, 3, pending !"o2" [p:Int] -> 2, pending !"o1" [] -> 2, pending !"o2" [p:Int] -> 3, pending !"o2" [p:Int] -> 3
+transitions:
+0  ――?"check_o1" []⟶  ⊥
+0  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 2)
+0  ――?"reset" []⟶  ⊤
+0  ――?"start" []⟶  (True, {},1)
+0  ――!"o1" []⟶  ⊥
+0  ――!"o2" [p:Int]⟶  ⊥
+1  ――?"check_o1" []⟶  (True, {},pending !"o1" [] -> 2)
+1  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
+1  ――?"reset" []⟶  ⊤
+1  ――?"start" []⟶  ⊤
+1  ――!"o1" []⟶  ⊥
+1  ――!"o2" [p:Int]⟶  ⊥
+2  ――?"check_o1" []⟶  ⊥
+2  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
+2  ――?"reset" []⟶  (True, {},0)
+2  ――?"start" []⟶  ⊤
+2  ――!"o1" []⟶  ⊥
+2  ――!"o2" [p:Int]⟶  ⊥
+3  ――?"check_o1" []⟶  ⊥
+3  ――?"check_o2" []⟶  ⊥
+3  ――?"reset" []⟶  ⊤
+3  ――?"start" []⟶  ⊤
+3  ――!"o1" []⟶  ⊥
+3  ――!"o2" [p:Int]⟶  ⊥
+pending !"o2" [p:Int] -> 2  ――?"check_o1" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――?"check_o2" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――?"reset" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――?"start" []⟶  ⊤
+pending !"o2" [p:Int] -> 2  ――!"o1" []⟶  ⊥
+pending !"o2" [p:Int] -> 2  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},2) ∧ ((((-p+6)) ≥ 0)∧(((p+-4)) ≥ 0), {},2)
+pending !"o1" [] -> 2  ――?"check_o1" []⟶  ⊤
+pending !"o1" [] -> 2  ――?"check_o2" []⟶  ⊤
+pending !"o1" [] -> 2  ――?"reset" []⟶  ⊤
+pending !"o1" [] -> 2  ――?"start" []⟶  ⊤
+pending !"o1" [] -> 2  ――!"o1" []⟶  (True, {},2)
+pending !"o1" [] -> 2  ――!"o2" [p:Int]⟶  ⊥
+pending !"o2" [p:Int] -> 3  ――?"check_o1" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},3)
+pending !"o2" [p:Int] -> 3  ――?"check_o1" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
+pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  (((p) ≥ 0)∧(((-p+2)) ≥ 0), {},3)
+|]
+
+testPrependOutputChecksConj :: Test
+testPrependOutputChecksConj = TestCase $ do
+    let s = getStableOrPendingState
+    assertEqual "\ninitial state " (s (Stable 0) 0) (stateConf stsPrependChecksConjIntrpr)
+    -- First case: same output gate, same initial location, same target location
+    intrp0 <- assertAfter "after check_o2: " stsPrependChecksConjIntrpr (GateValue (In "check_o2") []) (s (Pending 0 o2Gate 2) 0)
+    _ <- assertAfter "after o2 (meets only guard a): " intrp0 (GateValue (Out "o2") [Cint 6]) forbidden
+    _ <- assertAfter "after o2 (meets both guards): " intrp0 (GateValue (Out "o2") [Cint 4]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets only guard b): " intrp0 (GateValue (Out "o2") [Cint 2]) forbidden
+    _ <- assertAfter "after o2 (meets no guard): " intrp0 (GateValue (Out "o2") [Cint 48]) forbidden
+    intrp1 <- assertAfter "after start: " stsPrependChecksConjIntrpr (GateValue (In "start") []) (s (Stable 1) 0)
+    -- Second case: outputs with different gates. If one is checked, the other is forbidden
+    _ <- assertAfter "after o1: " intrp1 (GateValue (Out "o1") []) forbidden
+    intrp2 <- assertAfter "after check_o1: " intrp1 (GateValue (In "check_o1") []) (s (Pending 1 o1Gate 2) 0)
+    -- while pending, only the checked output is available: every other output stays forbidden
+    _ <- assertAfter "o2 while pending o1: " intrp2 (GateValue (Out "o2") [Cint 0]) forbidden
+    _ <- assertAfter "next while pending o1: " intrp2 (GateValue (In "reset") []) underspecified
+    _ <- assertAfter "check_o2 while pending o1: " intrp2 (GateValue (In "check_o2") []) underspecified
+    intrp3 <- assertAfter "after o1: " intrp2 (GateValue (Out "o1") []) (s (Stable 2) 0)
+    -- location 2's own switches are back, unchanged
+    _ <- assertAfter "after next: " intrp3 (GateValue (In "reset") []) (s (Stable 0) 0)
+    intrp4 <- assertAfter "after check_o2: " intrp3 (GateValue (In "check_o2") []) (s (Pending 2 o2Gate 3) 0)
+    -- Third case: outputs with the same gate and same target location, but different initial location
+    _ <- assertAfter "after o2 (meets only guard b): " intrp4 (GateValue (Out "o2") [Cint 4]) forbidden
+    _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Cint 2]) (s (Stable 3) 0)
+    _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Cint 0]) (s (Stable 3) 0)
     return ()
