@@ -46,7 +46,7 @@ model' = interpretSTS stsExample stsExampleInitAssign
 
 run :: IO ()
 run = do
-    let controller = randomDataTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 5
+    let controller = randomDataTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 10
     offlinetests <- offlineTests model' controller
     print offlinetests
 
