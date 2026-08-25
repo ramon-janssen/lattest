@@ -22,20 +22,17 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInt
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables)
 import Lattest.SMT(SMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&), first, second)
+import Control.Arrow((&&&))
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
-import qualified Data.Set as Set
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
@@ -66,12 +63,12 @@ solveRandomInteraction intrpr subsetFunction r = do
 
 
 interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
+interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
+interactsToAllowedCondition = interactsToGuard asExpr
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToGuard f intrpr interacts = f (treeToGuard f interacts BM.<#> seTree intrpr)
 
@@ -106,7 +103,7 @@ newtype SETree m i = SETree (Map.Map i (m (SEIte (m (SETree m i)))))
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Eq (SETree m i)
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Ord (SETree m i)
 
-seTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+seTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> m (SETree m (IOSymInteract i o))
 seTree intrpr =
     let smlocs = intrpStateToSym BM.<#> stateConf intrpr
@@ -116,7 +113,7 @@ seTree intrpr =
     t loc = Map.map (BM.ordMap completeSTSLoc) (transRel (syntacticAutomaton intrpr) loc)
     --seTree' :: Int -> SymIntrpState loc -> SETree m i
     -- the LHS pvar contains the indexed vars of the previous step, RHS contains only interaction variables
-    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (\i -> BM.ordMap $ seStep' i) (t ploc)
+    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (BM.ordMap . seStep') (t ploc)
         where
         --seStep' :: (SymGuard, VarModel, loc) -> SEBranch (SETree m i)
         seStep' i (tguard, completedAssign, tloc) =
@@ -135,7 +132,7 @@ seTree intrpr =
         in (tguard, completedAssign, tloc)
     locVarSet :: [Variable]
     locVarSet = -- a bit hacky: we assume that there is a global set of state variables, but we extract it from the assignment of an arbitrary transition
-        let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
+        let mArbitraryState = toList (stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
@@ -143,7 +140,7 @@ seTree intrpr =
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
 
 indexExpr :: Int -> Expr t -> Expr t
-indexExpr n e = mapExpressionVars (indexVar n) e
+indexExpr n = mapExpressionVars (indexVar n)
 indexVar :: Int -> Variable -> Variable
 --indexVar 0 v = v
 indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
