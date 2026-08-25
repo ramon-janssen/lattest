@@ -69,7 +69,10 @@ selfSequentiallyAt,
 (//\\),
 (\\//),
 conjunctionAll,
-disjunctionAll
+disjunctionAll,
+-- * Output-Check Completion
+CheckLoc(..),
+prependOutputChecks
 )
 where
 
@@ -99,7 +102,7 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 
 import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
+import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable, noAssignment, sTrue)
 
 ------------
 -- syntax --
@@ -851,13 +854,73 @@ disjunctionAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Fol
     [(k, AutSyntax m loc t tdest)] -> AutSyntax m (k, loc) t tdest
 disjunctionAll = composeInitialAll (\/)
 
+{- |
+    A location of an STS is either 'Stable' (a location's own behaviour) or 'Pending' 
+    a specific output.
+-}
+data CheckLoc loc g = Stable loc | Pending loc g loc deriving (Eq, Ord)
+
+instance (Show loc, Show g) => Show (CheckLoc loc g) where
+    show (Stable loc)          = show loc
+    show (Pending src g target) = "pending " ++ show g ++ " -> " ++ show target
+
+{- |
+    Complete an STS by prepending a "check" input before every output switch: an original switch l0 --o1!--> l1
+    becomes Stable l0 --prefix_o1?--> Pending o1 l1 --o1!--> Stable l2, where prefix is configurable. Locations are 
+    identified as 'Stable', the original STS location, and 'Pending', intermediate locations reached only via a check gate.
+
+    Where two or more original switches share both the same output gate and the target location, their pending state
+    configurations are merged with the given operator:'\/' if any guard may be satisfied, or '/\' if they must 
+    all hold at once.
+-}
+prependOutputChecks :: (Ord loc, Ord i, Ord o, BoundedMonad m, Foldable m) =>
+    (m (STStdest, CheckLoc loc (IOSymInteract i o)) -> m (STStdest, CheckLoc loc (IOSymInteract i o)) -> m (STStdest, CheckLoc loc (IOSymInteract i o))) ->
+    (o -> i) -> AutSyntax m loc (IOSymInteract i o) STStdest -> AutSyntax m (CheckLoc loc (IOSymInteract i o)) (IOSymInteract i o) STStdest
+prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet switches
+    where
+    newInitConf = Stable BM.<#> initConf sts
+
+    outputGates = [ t | t <- Set.toList (alphabet sts), isOutputInteract t ]
+    newAlphabet = alphabet sts `Set.union` Set.fromList (checkGateFor <$> outputGates)
+
+    checkGateFor (SymInteract (Out o) _) = SymInteract (In (checkNaming o)) []
+    checkGateFor _                       = error "prependOutputChecks: checkGateFor called on a non-output gate"
+
+    identityTdest = stsTLoc sTrue noAssignment
+
+    -- Switches starting from stable locations
+    switches (Stable loc) = Map.fromList $
+        -- keep input switches as-is
+        [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
+        ++
+        -- output switches are replaced by a check gate leading to a pending state
+        [ (checkGateFor t, BM.ordMap (\(_, target) -> (identityTdest, Pending loc t target)) mval)
+        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t ]
+
+    -- Additional switches starting from `pending` locations
+    switches (Pending src t target) = Map.singleton t outcomes
+        where
+        mval = Map.findWithDefault
+                 (error "prependOutputChecks: pending state refers to a nonexistent transition")
+                 t (transRel sts src)
+
+        matching = [ (tdest, Stable target)
+                   | (tdest, dest) <- Foldable.toList mval
+                   , dest == target
+                   ]
+
+        -- combine posible target states with the given operator (/\ or \/)
+        outcomes = case matching of
+            []     -> error "prependOutputChecks: pending state has no matching outcome"
+            (x:xs) -> List.foldl' combine (BM.ordReturn x) (BM.ordReturn <$> xs)
+
 prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)
 
 prettyPrintFrom :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> String
 prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitial ++ "\nlocations: " ++ printLocations ++ "\ntransitions:\n" ++ printTransitions
     where
-    locations = Set.toList $ reachableFrom aut fromLocs
+    locations = Set.toList $ reachableFrom aut fromLocs `Set.union` Set.fromList (Foldable.toList (initConf aut))
     printInitial = show $ initConf aut
     printLocations = List.intercalate ", " (show <$> locations)
     printTransitions = List.intercalate "\n" (printTransitionsFrom <$> locations)
