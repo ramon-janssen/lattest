@@ -1,8 +1,12 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BlockArguments #-}
 {-|
     Find concrete values to take transitions in STSes, using an SMT solver.
 -}
@@ -15,16 +19,19 @@ seTree,
 treeToGuard,
 SETree(..),
 SEIte(..),
+offlineTests,
+OfflineTests(..)
 )
 where
 
-import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..))
-import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
+import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
+import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables)
-import Lattest.SMT(SMT)
+import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), toConstantsMap, sFalse, (.==), sVar, sConst, ExprView (And))
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..))
+import Lattest.SMT(SMT, runSMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
 import Control.Arrow((&&&))
@@ -36,7 +43,10 @@ import qualified Data.Map as Map
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, catMaybes)
+import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..))
+import Control.Monad (forM)
+import qualified Data.Set as Set
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -147,4 +157,84 @@ indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with prime
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
+data OfflineTests i o
+  = OfflineTests
+      (Map.Map o             -- Map each output to:
+        ([Constant]          -- The expected valuation;
+        , OnlyOrInconclusive -- Whether that is the only allowed valuation, or other valuations should be marked as 'inconclusive';
+        , OfflineTests i o)) -- And the rest of the test.
+      (Either (GateValue i, OfflineTests i o) Verdict) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
+  | Done Verdict -- End of the test
+  deriving Show
+
+
+data OnlyOrInconclusive = Only | Inconclusiv deriving (Eq, Show)
+
+getInputOffline :: OfflineTests i o -> Either (GateValue i, OfflineTests i o) Verdict
+getInputOffline (OfflineTests _ i) = i
+getInputOffline (Done v) = Right v
+
+giveOutputOffline :: Ord o => OfflineTests i o -> GateValue o -> Either (OfflineTests i o) Verdict
+giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
+  Nothing -> Right Fail
+  Just (cs, ooi, rest)
+    | cs == os  -> Left rest
+    | otherwise -> case ooi of
+      Only -> Right Fail
+      Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
+giveOutputOffline (Done v) _ = Right v
+
+offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice i (IOGateValue i o))
+             => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+             -> IO (OfflineTests i o)
+offlineTests intrpr tc = do
+  inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
+  i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
+        Right _ -> pure $ Right Pass -- the test controller has no input to give
+        Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
+          Right r -> pure $ Right r
+          Left (tc', intrpr') -> do
+            ot <- offlineTests intrpr' tc'
+            pure $ Left (i', ot)
+  o <- Map.fromList . catMaybes <$> do
+    let os = mapMaybe (\case
+                SymInteract (Out o) vs -> Just $ SymInteract o vs
+                SymInteract (In _) _ -> Nothing)
+              (toList $ alphabet $ syntacticAutomaton intrpr)
+    forM os $ \(SymInteract o vs) -> do
+      let guard = interactsToAllowedCondition intrpr [SymInteract (Out o) vs]
+      mv <- runSMT $ solveGuard vs guard
+      case mv of
+        Nothing -> pure Nothing
+        Just (toConstantsMap -> m) -> let vs' = map (m Map.!) vs in
+          (\x y -> Just (o,(vs',x,y)))
+          <$> do -- checking whether this is the only valid assignment for this gate, by adding a guard specifying that at least one value should differ
+                let guard' = guard .&& (if null vs then sFalse else sNot $ Expr $ And $ Set.fromList $ zipWith (\v c -> view case c of
+                                Cbool b   -> sVar v .== sConst b
+                                Cint x    -> sVar v .== sConst x
+                                Cstring s -> sVar v .== sConst s
+                                Cfloat f  -> sVar v .== sConst f
+                                Ccstr _ _ -> error "not used"
+                                ) vs vs')
+                runSMT $ solveGuard vs guard' >>= \case
+                  Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
+                  Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
+          <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
+             Right r -> pure $ Done r
+             Left (tc', intrpr') -> offlineTests intrpr' tc')
+  pure $ OfflineTests o i
+  where
+    handleAction :: IOGateValue i o
+                 ->   TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+                 ->   AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+                 -> IO (Either
+                    ( TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+                    , AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
+                    Verdict)
+    handleAction x t i = updateTestController t (testControllerState t) i x (stateConf i) >>= \case
+      Right _ -> pure $ Right $ case x of
+        GateValue (In  _) _ -> error "this should never happen, I think: the testcontroller choosing to stop rather than update based on an input it chose itself"
+        GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail?
+      Left st -> pure $ Left (t {testControllerState = st}, after i x)
 
