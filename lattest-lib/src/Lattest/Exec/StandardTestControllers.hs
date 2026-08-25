@@ -156,7 +156,9 @@ randomDataTestSelectorFromGen g = selector g solveRandomIfPossible (\s _ _ _ -> 
             Nothing -> Nothing
             Just value -> Just (value, g')
     maybeFromIOAct :: SymInteract (IOAct i1 o1) -> Maybe (SymInteract i1)
-    maybeFromIOAct = error ""
+    maybeFromIOAct (SymInteract io xs) = case io of
+      In i -> Just $ SymInteract i xs
+      Out _ -> Nothing
 
 {- |
     A 'TestSelector' that picks input gates uniformly pseudo-randomly from the outgoing transitions from the current state configuration, with arbitrary

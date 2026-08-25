@@ -11,6 +11,7 @@ module Test.Lattest.Model.STSTest (
     testSTSUnHappyFlow,
     testPrintSTS,
     testSTSTestSelection,
+    testSTSDataSelectionGuardedInput,
     testLatticeSTS,
     testLatticeSTSQuiescence
     )
@@ -24,7 +25,7 @@ import System.Random(mkStdGen)
 import Data.String(IsString)
 import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
-import Lattest.Adapter.StandardAdapters(pureAdapter)
+import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
@@ -595,6 +596,59 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
                 inp "start" [Cint 2],
                 GateValue δ []
                 ] observed
+
+{- |
+    End-to-end regression test for the data test selector picking input values that violate a guard.
+-}
+data Divisibility = Prime | Divisible deriving (Eq, Ord, Show)
+
+ivar :: Variable
+ivar = Variable "i" IntType
+jvar :: Variable
+jvar = Variable "j" IntType
+
+guardedInputSTS :: IOSTS Det Bool Divisibility ()
+guardedInputSTS =
+    let i = sVar ivar :: Expr Integer
+        j = sVar jvar :: Expr Integer
+        echo = SymInteract (Out ()) [jvar]
+        echoAssign = assignment [ivar =: 1 .+ j]
+        yes = SymInteract (In Prime) [jvar]
+        yesGuard = i .% 2 .== 0 .&& j .== i .- 1
+        yesAssign = assignment [ivar =: i .+ j]
+        no = SymInteract (In Divisible) [jvar]
+        noGuard = i .% 2 .== 1 .&& j .== i .- 1
+        noAssign = assignment [ivar =: i .+ j]
+        initConf = return False
+        switches True = Map.singleton echo $ pure (stsTLoc sTrue echoAssign, False)
+        switches False = Map.fromList
+            [ (yes, pure (stsTLoc yesGuard yesAssign, True))
+            , (no,  pure (stsTLoc noGuard  noAssign,  True))]
+    in automaton initConf (Set.fromList [echo, yes, no]) switches
+
+guardedInputInitAssign :: Valuation
+guardedInputInitAssign = fromConstantsMap $ Map.singleton ivar (Cint 42)
+
+guardedInputModel :: STSIntrp Det Bool (IOAct Divisibility ())
+guardedInputModel = interpretSTS guardedInputSTS guardedInputInitAssign
+
+testSTSDataSelectionGuardedInput :: Test
+testSTSDataSelectionGuardedInput = TestCase $ do
+    -- simple adapter that echos its input and then emits an output carrying the same value
+    adap <- pureMealyAdapter
+        (\() _ -> ())
+        (\_ (GateValue m d) -> [GateValue (In m) d, GateValue (Out ()) d])
+        ()
+    let nrSteps = 2
+        randomSeed = 456
+        testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+                        `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    (verdict, ((observed, _), _)) <- runSMTTester guardedInputModel testSelector adap
+    assertEqual ("expected the selector to pick the only guard-satisfying input ?Prime [41], got " <> show observed)
+        [ GateValue (In Prime) [Cint 41]
+        , GateValue (Out ()) [Cint 41]
+        ] observed
+    assertEqual ("expected Pass after " <> show observed) Pass verdict
 
 testLatticeSTSQuiescence :: [Test]
 testLatticeSTSQuiescence = [
