@@ -18,13 +18,26 @@ import Test.Tasty.Providers as Tasty
 import Test.HUnit as HUnit
 import Test.Tasty.QuickCheck
 
+import System.Environment (getArgs, withArgs)
+import Data.List (partition)
+
+-- | Command-line flag that switches the golden tests from comparing to (re)generating their expected-output files.
+-- Pass it via @stack test --test-arguments=--regenerate-golden-files@ (or the shorthand @--ta=...@). Without it, the
+-- test suite has no side-effects; with it, the golden files under test/expected-test-output are overwritten.
+regenerateFlag :: String
+regenerateFlag = "--regenerate-golden-files"
+
 durationSeconds :: Int
 durationSeconds = 3
 
 main :: IO ()
 main = do
-    hunitTests <- makeHUnitTests
-    defaultMain $ 
+    args <- getArgs
+    -- Consume our own flag before handing the remaining arguments to tasty, which would reject it as unknown.
+    let (ours, tastyArgs) = partition (== regenerateFlag) args
+        regenerate = not (null ours)
+    hunitTests <- makeHUnitTests regenerate
+    withArgs tastyArgs $ defaultMain $
       localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run multiple times in parallel
       testGroup "Lattest-tests"
         [ hunitTests
@@ -53,8 +66,8 @@ quickCheckTests = testGroup "Quickcheck"
       noShrinking $ prop testparam
 
 
-makeHUnitTests :: IO TestTree
-makeHUnitTests = do
+makeHUnitTests :: Bool -> IO TestTree
+makeHUnitTests regenerate = do
     return $
       localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run in parallel
       singleTest "unit tests" $
@@ -90,8 +103,8 @@ makeHUnitTests = do
         testSTSHappyFlowFloat,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
-        testComposedSeTreeStructure,
-        testComposedPathCondition,
+        testComposedSeTreeStructure regenerate,
+        testComposedPathCondition regenerate,
         testConcreteTraceSpecifiedAllowedCorrespondence,
         testPrintSTS,
         testReadAutFile,
