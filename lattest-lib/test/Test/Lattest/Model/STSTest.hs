@@ -38,15 +38,13 @@ module Test.Lattest.Model.STSTest (
 where
 
 import Prelude hiding (take)
-import Lattest.Model.Symbolic.Internal.ExprDefs (Constant(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import Data.Type.Equality ((:~:)(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..))
 import Test.HUnit
 import Data.Dependent.Sum
 import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
-import Data.Maybe(fromJust, isJust, catMaybes)
+import Data.Maybe(isJust, catMaybes)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -61,7 +59,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>))
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
 import Algebra.Lattice.Free(Free(..))
@@ -73,7 +71,6 @@ import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 import qualified Lattest.SMT as SMT
-import Lattest.Model.Symbolic.Expr
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 
@@ -754,18 +751,11 @@ testLatticeSTSQuiescence = [
     testLatticeSTSUnimplementable "u2'" False -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
     ]
 
--- ============================================================================
--- Symbolic path-condition / execution-tree tests (merged from feature branch).
--- Ported to the sbv-based backend: the old Lattest.SMT.SMT/Config solver is
--- replaced by Lattest.SMT.runSMT, FreeLattice by the (now CNF) FreeLattice,
--- and the non-normalising free lattice by Reference.FreeLatticeSlow.
--- ============================================================================
-
+-- TODO: put these in a let or where
 p, q, x :: Expr Integer
 p = sVar pvar
 q = sVar qvar
 x = sVar xvar
-
 water, ok, coffee :: SymInteract (IOAct String String)
 water = SymInteract (In "water") [Some pvar]
 ok = SymInteract (Out "ok") [Some pvar]
@@ -1053,6 +1043,7 @@ genConstantForType :: Variable a -> Gen (Constant a)
 genConstantForType (Variable _ IntType)    = CInt <$> choose (-5, 20)
 genConstantForType (Variable _ BoolType)   = CBool <$> elements [False, True]
 genConstantForType (Variable _ CharType)   = CChar <$> elements ['a', 'b', 'c']
+genConstantForType _ = error "not used at other types"
 
 -- | Generate a concrete trace over a model's alphabet: pick interactions (and hence their symbolic parameters) from
 -- the syntactic automaton, then fill in a value for each parameter. Traces are kept short, both because the toy

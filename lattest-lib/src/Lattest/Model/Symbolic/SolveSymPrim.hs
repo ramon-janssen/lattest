@@ -12,9 +12,8 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr(Valuation,Variable(..), runValuation)
-import Lattest.Model.Symbolic.Internal.ExprDefs(ExprType)
-import Lattest.Model.Symbolic.Internal.ExprImpls(eval, substConst)
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType)
 import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import Data.Some (Some (..))

@@ -38,7 +38,9 @@ packages:
 #
 extra-deps:
 - ../../lattest-lib
-- sbv-14.6
+- git: https://github.com/dpvanbalen/sbv.git
+  commit: 5801cf1a1f82ad447dfbec46d8eec84d07a27b62
+# - sbv-14.6
 # - lattest-lib-0.1.1
 # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git

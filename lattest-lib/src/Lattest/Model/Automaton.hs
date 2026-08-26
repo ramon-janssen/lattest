@@ -93,12 +93,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack, HasCallStack)
-import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
+import Lattest.Model.Symbolic.Expr(ConstType(..), Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..), Constant (Constant))
 import Data.Constraint.Extras (Has(..))
 
 ------------

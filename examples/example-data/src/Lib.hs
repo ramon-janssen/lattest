@@ -16,14 +16,11 @@ import           Lattest.Model.StandardAutomata
 import           Lattest.Exec.Testing(runSMTTester)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
-import Lattest.Model.Symbolic.Internal.ExprDefs (Constant(..))
+import Lattest.Model.Symbolic.Expr (Constant(..))
 
 -- silly example to test some data types
 -- the SUT just echos the input back as output
 -- the tester computes prime numbers, and the set of prime divisors of non-prime numbers
--- currently gives -unspecified- because the testcontroller chooses a value that doesn't satisfy the guard,
--- but that seems unrelated to the datatypes (see the commented out version with just Integers) and,
--- for now, this does show what this version of lattest supports as far as datatypes and operations on them.
 
 type X = Either Integer (Integer, RCSet Integer)
 xtype :: Type X
@@ -89,43 +86,15 @@ primesieve =
 primesieveInitAssign :: Valuation
 primesieveInitAssign = Valuation $ DMap.singleton xsvar $ Val ([], map Left [2..10])
 
--- this version also gives -unspecified-
--- ivar :: Variable Integer
--- ivar = Variable "i" IntType
--- jvar :: Variable Integer
--- jvar = Variable "j" IntType
--- primesieve :: IOSTS Det Bool Divisibility ()
--- primesieve =
---     let i = sVar ivar
---         j = sVar jvar
---         echo = Alph.SymInteract (Out ()) [Some jvar]
---         echoAssign = assignment [ivar =: 1+j]
---         yes = Alph.SymInteract (In Prime) [Some jvar]
---         yesguard = i .% 2 .== 0 .&& j .== i - 1
---         yesassign = assignment [ivar =: i+j]
---         no = Alph.SymInteract (In Divisible) [Some jvar]
---         noguard = i .% 2 .== 1 .&& j .== i - 1
---         noassign = assignment [ivar =: i+j]
---         initConf = return False
---
---         transition True = Map.singleton echo $ pure (Aut.stsTLoc sTrue echoAssign, False)
---         transition False = Map.fromList
---           [ (yes, pure (Aut.stsTLoc yesguard yesassign, True))
---           , (no,  pure (Aut.stsTLoc noguard  noassign, True))]
---     in automaton initConf (Set.fromList [echo,yes,no]) transition
---
--- primesieveInitAssign :: Valuation
--- primesieveInitAssign = Valuation $ DMap.singleton ivar $ Val 42
-
 
 model :: STSIntrp Det Bool (IOAct Divisibility ())
 model = interpretSTS primesieve primesieveInitAssign
 
 someFunc :: IO ()
 someFunc = do
-    putStrLn $ Aut.prettyPrintIntrp model
-
-    putStrLn ""
+    -- putStrLn $ Aut.prettyPrintIntrp model
+    --
+    -- putStrLn ""
 
     -- putStrLn $ Aut.prettyPrintIntrp $ Aut.after model $ GateValue (In Prime) [Some $ CSum (Left 2) IntType $ TupleType IntType $ SetType IntType]
 
@@ -135,7 +104,7 @@ someFunc = do
       (\_ (GateValue m d) -> [GateValue (In m) d, GateValue (Out ()) d])
       ()
 
-    let nrSteps = 50
+    let nrSteps = 9
         randomSeed = 456
         testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver

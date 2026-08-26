@@ -42,7 +42,7 @@ import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints, Constant (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV

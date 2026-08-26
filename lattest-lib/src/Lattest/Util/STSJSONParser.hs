@@ -22,11 +22,10 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..))
+import Lattest.Model.Symbolic.Expr (withExprConstraints, (=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..))
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (withExprConstraints, Constant (..))
 import Data.SBV (RCSet (..))
 
 data UntypedExpr

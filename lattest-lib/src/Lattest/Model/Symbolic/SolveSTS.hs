@@ -32,7 +32,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
 import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
-import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), Constant (..), ExprType (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 import Lattest.SMT(SMT, runSMT, Some (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 

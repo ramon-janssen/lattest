@@ -35,8 +35,8 @@ quickCheckTests = testGroup "Quickcheck"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
 --    quickCheckWithTimeoutWithNumWithSize prop_solveSymbolic 100 2
-  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
-  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
+  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith (15 :: Int) "consumeBufferedWith"
+  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) (10000 :: Int) "latticeIsCNF"
   -- concrete-trace specified/allowed correspondence, with traces generated from the model alphabet
   , testProperty "specifiedAllowedCorrespondence" $
       within (durationSeconds * 1000000) $ withMaxSuccess 200 $
