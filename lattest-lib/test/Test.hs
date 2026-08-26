@@ -108,6 +108,8 @@ makeHUnitTests = do
         testDisjunctionGuardedSTS,
         testConjunctionAllGuardedSTS,
         testDisjunctionAllGuardedSTS,
+        testPrintTriDisj,
+        testPrintDisjOfSTSWithMultpInitStates,
         testPrintPrependOutputChecksDisj,
         testPrintPrependOutputChecksConj,
         testPrependOutputChecksDisj,
