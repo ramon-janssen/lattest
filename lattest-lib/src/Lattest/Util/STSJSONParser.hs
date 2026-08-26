@@ -29,10 +29,12 @@ import Data.GADT.Compare (GEq(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (withExprConstraints, Constant (..))
 import Data.SBV (RCSet (..))
 
+
 data UntypedExpr
     = UEBool Bool
     | UENumber Scientific
     | UEStr  String
+    | UEVar  String  -- Variable reference, e.g. { "var": "name" }
     | UEOp1  String UntypedExpr
     | UEOp2  String UntypedExpr UntypedExpr
     deriving (Show, Eq)
@@ -42,11 +44,15 @@ instance JSON.FromJSON UntypedExpr where
     parseJSON (JSON.Number n) = pure (UENumber n)
     parseJSON (JSON.String s) = pure (UEStr (unpack s))
     parseJSON (JSON.Object o) = do
-        (op :: String) <- o JSON..: "op"
-        case op of
-            "neg" -> UEOp1 op <$> o JSON..: "rhs"
-            "not" -> UEOp1 op <$> o JSON..: "rhs"
-            _     -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+        mvar <- o JSON..:? "var"
+        case mvar of
+            Just name -> pure (UEVar name)
+            Nothing -> do
+                (op :: String) <- o JSON..: "op"
+                case op of
+                    "neg" -> UEOp1 op <$> o JSON..: "rhs"
+                    "not" -> UEOp1 op <$> o JSON..: "rhs"
+                    _     -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
     parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
@@ -69,7 +75,7 @@ inferOperandType varmap lhs rhs =
             (_, Just t) -> Right t
             _           -> Left "cannot determine operand type for operator"
     where
-        varOperandType (UEStr name) = (\(Some x) -> Some (varType x)) <$> Map.lookup name varmap
+        varOperandType (UEVar name) = (\(Some x) -> Some (varType x)) <$> Map.lookup name varmap
         varOperandType _            = Nothing
         literalOperandType (UEBool _)  = Just $ Some BoolType
         literalOperandType (UENumber n)
@@ -79,7 +85,7 @@ inferOperandType varmap lhs rhs =
 
 toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)
 toBoolExpr _   (UEBool b)          = Right (sConst b)
-toBoolExpr varmap (UEStr name)        = lookupVar varmap name BoolType sVar
+toBoolExpr varmap (UEVar name)        = lookupVar varmap name BoolType sVar
 toBoolExpr varmap (UEOp1 "not" e)    = sNot  <$> toBoolExpr varmap e
 toBoolExpr varmap (UEOp2 "&&" e1 e2) = (.&&) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
 toBoolExpr varmap (UEOp2 "||" e1 e2) = (.||) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
@@ -113,7 +119,7 @@ toComparisonExpr cmp varmap e1 e2 = do
 toIntExpr :: VarMap -> UntypedExpr -> Either String (Expr Integer)
 toIntExpr _   (UENumber n)
  | Right i <- floatingOrInteger @Double n = Right (sConst i)
-toIntExpr varmap (UEStr name)         = lookupVar varmap name IntType sVar
+toIntExpr varmap (UEVar name)         = lookupVar varmap name IntType sVar
 toIntExpr varmap (UEOp1 "neg" e)     = sNeg <$> toIntExpr varmap e
 toIntExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toIntExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
@@ -124,31 +130,31 @@ toIntExpr _   e                    = Left $ "not an integer expression: " ++ sho
 
 toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr [t])
 toListExpr t varmap e = case e of
-  UEStr name -> lookupVar varmap name (ListType t) sVar
+  UEVar name -> lookupVar varmap name (ListType t) sVar
   -- TODO: add operators that return lists
   _ -> Left $ "not a list expression: " ++ show e
 
 toSetExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (RCSet t))
 toSetExpr t varmap e = case e of
-  UEStr name -> lookupVar varmap name (SetType t) sVar
+  UEVar name -> lookupVar varmap name (SetType t) sVar
   -- TODO: add operators that return sets
   _ -> Left $ "not a list expression: " ++ show e
 
 toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
 toTupleExpr t1 t2 varmap e = case e of
-  UEStr name -> lookupVar varmap name (TupleType t1 t2) sVar
+  UEVar name -> lookupVar varmap name (TupleType t1 t2) sVar
   -- TODO: add operators that return tuples
   _ -> Left $ "not a tuple expression: " ++ show e
 
 toEitherExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (Either a b))
 toEitherExpr t1 t2 varmap e = case e of
-  UEStr name -> lookupVar varmap name (SumType t1 t2) sVar
+  UEVar name -> lookupVar varmap name (SumType t1 t2) sVar
   -- TODO: add operators that return eithers
   _ -> Left $ "not a tuple expression: " ++ show e
 
 toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
 toFloatExpr _   (UENumber n)          = Right (sConst $ toRealFloat n)
-toFloatExpr varmap (UEStr name)         = lookupVar varmap name FloatType sVar
+toFloatExpr varmap (UEVar name)         = lookupVar varmap name FloatType sVar
 toFloatExpr varmap (UEOp1 "neg" e)     = sNeg <$> toFloatExpr varmap e
 toFloatExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
 toFloatExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
@@ -156,9 +162,10 @@ toFloatExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toFloatExpr varmap e1 <*> toFl
 toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
 toFloatExpr _   e                    = Left $ "not a real expression: " ++ show e
 
--- unknown strings are treated as string literals.
 toCharExpr :: VarMap -> UntypedExpr -> Either String (Expr Char)
-toCharExpr varmap (UEStr name) = error "todo: change untypedexpr? Just match on one-character strings? Would like to have a clear distinction between variables and literal strings/chars"
+toCharExpr varmap (UEVar name) = lookupVar varmap name CharType sVar
+toCharExpr _      (UEStr [c])  = Right (sConst c)
+toCharExpr _      e            = Left $ "not a character expression: " ++ show e
 
 -- Location IDs can be integers or strings in JSON; both are mapped to String for consistency.
 newtype LocationId = LocationId { locId :: String }
