@@ -764,30 +764,46 @@ redirectToComposed isOldInit composedInit dest = BM.ordBind dest $ \(td, l) -> i
     then BM.ordMap (td,) composedInit
     else BM.ordReturn (td, l)
 
+-- | Rename locations of a given STS with the given renaming function, returning the renamed initial configuration and
+-- the renamed transition relation.
+renameLocs :: (Ord loc, Ord loc', Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc'))) =>
+    (loc -> loc') -> AutSyntax m loc t tdest ->
+    (m loc', Map.Map loc' (Map.Map t (m (tdest, loc'))))
+renameLocs renamingFun sts = (renamingFun BM.<#> initConf sts, wrappedSwitches)
+  where
+    wrappedSwitches = Map.fromList
+        [ (renamingFun l, Map.map (BM.ordMap (second renamingFun)) (transRel sts l))
+        | l <- Set.toList (allLocations sts)
+        ]
+
+-- | Combine automata with the same loc type
+composeGeneric :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc)), Completable t) =>
+    (m loc -> m loc -> m loc) -> Set.Set t ->
+    [(m loc, Map.Map loc (Map.Map t (m (tdest, loc))))] ->
+    AutSyntax m loc t tdest
+composeGeneric combine newAlphabet renamedLocs = automaton newInitConf newAlphabet switches
+  where
+    allInitLocs = Set.unions [ Set.fromList (Foldable.toList ic) | (ic, _) <- renamedLocs ]
+    isOldInit l = l `Set.member` allInitLocs
+
+    newInitConf = foldr1 combine [ ic | (ic, _) <- renamedLocs ]
+
+    allSwitches = Map.map (Map.map (redirectToComposed isOldInit newInitConf))
+                $ Map.unions [ sw | (_, sw) <- renamedLocs ]
+
+    switches loc = Map.findWithDefault Map.empty loc allSwitches
+
 {- |
     Compose the initial state of two automata with the given operator, and redirect every transition in either automaton that
-    leads back to one of its own original initial locations so that it leads to this composed initial state instead.
+    leads back to one of its own original initial locations to the composed initial state instead.
     Every other transition is kept as-is (just expressed as 'Either loc1 loc2' location type).
 -}
 composeInitial :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t) =>
-    (m (Either loc1 loc2) -> m (Either loc1 loc2) -> m (Either loc1 loc2)) -> AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
-composeInitial combine sts1 sts2 = automaton newInitConf newAlphabet switches
-    where
-    locs1 = allLocations sts1
-    locs2 = allLocations sts2
-    initLocs1 = Set.fromList $ Foldable.toList $ initConf sts1
-    initLocs2 = Set.fromList $ Foldable.toList $ initConf sts2
-    isOldInit (Left l1)  = l1 `Set.member` initLocs1
-    isOldInit (Right l2) = l2 `Set.member` initLocs2
-
-    newAlphabet = alphabet sts1 `Set.union` alphabet sts2
-    newInitConf = combine (Left BM.<#> initConf sts1) (Right BM.<#> initConf sts2)
-
-    switches1 = Map.fromList [ (Left l1, Map.map (redirectToComposed isOldInit newInitConf . BM.ordMap (second Left)) (transRel sts1 l1)) | l1 <- Set.toList locs1 ]
-    switches2 = Map.fromList [ (Right l2, Map.map (redirectToComposed isOldInit newInitConf . BM.ordMap (second Right)) (transRel sts2 l2)) | l2 <- Set.toList locs2 ]
-
-    allSwitches = switches1 `Map.union` switches2
-    switches loc = Map.findWithDefault Map.empty loc allSwitches
+    (m (Either loc1 loc2) -> m (Either loc1 loc2) -> m (Either loc1 loc2)) ->
+    AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
+composeInitial combine sts1 sts2 =
+    composeGeneric combine (alphabet sts1 `Set.union` alphabet sts2)
+        [ renameLocs Left sts1, renameLocs Right sts2 ]
 
 infixl 1 //\\
 {- |
@@ -818,25 +834,13 @@ infixl 1 \\//
 composeInitialAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, (k, loc))), Completable t) =>
     (m (k, loc) -> m (k, loc) -> m (k, loc)) -> [(k, AutSyntax m loc t tdest)] -> AutSyntax m (k, loc) t tdest
 composeInitialAll _ [] = errorWithoutStackTrace "composeInitialAll: no automata to combine"
-composeInitialAll combine labeled
-    | not (null duplicateLabels) = errorWithoutStackTrace $ "composeInitialAll: labels used more than once: " ++ show duplicateLabels
-    | otherwise = automaton newInitConf newAlphabet switches
-    where
-    duplicateLabels = Map.keys $ Map.filter (> 1) $ Map.fromListWith (+) [ (k, 1 :: Int) | (k, _) <- labeled ]
-
-    tagWith k = (k,)
-    initLocsOf (k, sts) = Set.map (tagWith k) $ Set.fromList $ Foldable.toList $ initConf sts
-    allInitLocs = Set.unions $ initLocsOf <$> labeled
-    isOldInit l = l `Set.member` allInitLocs
-
-    newAlphabet = Set.unions [ alphabet sts | (_, sts) <- labeled ]
-    newInitConf = foldr1 combine [ BM.ordMap (tagWith k) (initConf sts) | (k, sts) <- labeled ]
-
-    allSwitches = Map.fromList
-        [ (tagWith k l, Map.map (redirectToComposed isOldInit newInitConf . BM.ordMap (second (tagWith k))) (transRel sts l))
-        | (k, sts) <- labeled, l <- Set.toList (allLocations sts) ]
-
-    switches loc = Map.findWithDefault Map.empty loc allSwitches
+composeInitialAll combine labeledSTSList
+    | not (null duplicateLabels) =
+        errorWithoutStackTrace $ "composeInitialAll: labels used more than once: " ++ show duplicateLabels
+    | otherwise = composeGeneric combine newAlphabet [ renameLocs (k,) sts | (k, sts) <- labeledSTSList ]
+  where
+    duplicateLabels = Map.keys $ Map.filter (> 1) $ Map.fromListWith (+) [ (k, 1 :: Int) | (k, _) <- labeledSTSList ]
+    newAlphabet = Set.unions [ alphabet sts | (_, sts) <- labeledSTSList ]
 
 {- |
     The conjunction of any number of labeled automata. Locations are identified with a tuple of sts identifier and location of such automaton.
