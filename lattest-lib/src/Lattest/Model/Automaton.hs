@@ -55,15 +55,21 @@ stsTLoc,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
+allLocations,
 prettyPrint,
 prettyPrintFrom,
-prettyPrintIntrp
+prettyPrintIntrp,
+-- * Sequential Composition
+sequentiallyAt,
+(|>),
+selfSequentiallyAt,
+(|>>)
 )
 where
 
 import Prelude hiding (lookup)
 
-import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified)
+import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanConfiguration, isForbidden, forbidden, underspecified, isSpecified, MeetSemiLattice, (/\))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
@@ -83,6 +89,8 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 
 import GHC.Stack(CallStack,callStack)
 import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
@@ -616,7 +624,130 @@ reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable
                 boundary' = boundaryRem `Set.union` new
             in reachableFrom' acc' boundary'
 
+------------------------------
+-- sequential composition --
+------------------------------
 
+-- | A location is sink if none of its outgoing transitions are specified, i.e. every transition is either forbidden or underspecified.
+isSinkLocation :: BoundedConfiguration m => AutSyntax m loc t tdest -> loc -> Bool
+isSinkLocation aut loc = not (any BM.isIndefinite (Map.elems (transRel aut loc)))
+
+{- |
+    All locations of an automaton, i.e. its initial location together with everything reachable from them.
+-}
+allLocations :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> Set loc
+allLocations aut = reachable aut `Set.union` Set.fromList (Foldable.toList (initConf aut))
+
+{- |
+    Returns 'allLocations' of the first automaton or the corresponding error if some precondition is violated.
+-}
+validMergeLocs :: (Ord loc1, Foldable m) => String -> AutSyntax m loc1 t tdest -> [loc1] -> Set loc1
+validMergeLocs fnName sts1 mergeLocs
+    | null mergeLocs = errorWithoutStackTrace $ fnName ++ ": no locations given to merge at"
+    | not (all (`Set.member` locs1) mergeLocs) = errorWithoutStackTrace $ fnName ++ ": one or more locations are not reachable in the first automaton"
+    | otherwise = locs1
+    where
+    locs1 = allLocations sts1
+
+{- |
+    Sequentially compose two automata: sequentiallyAt sts1 locs sts2 merges sts2 into sts1 at the given locations of sts1. Every merge
+    location keeps its own identity, but is additionally given a copy of the transitions of the initial location(s) of sts2. Where a merge
+    location already specifies a transition for an action also in sts2's alphabet, and the copied transition from sts2 is also specified, 
+    the two are conjuncted with '(/\)'. If only one of the two is specified (the other being forbidden or underspecified), that one is 
+    used as-is. The result has a joint alphabet and locations of type 'Either loc1 loc2'.
+-}
+sequentiallyAt :: (Ord loc1, Ord loc2, Show loc1, Show loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t, MeetSemiLattice (m (tdest, Either loc1 loc2))) =>
+    AutSyntax m loc1 t tdest -> [loc1] -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
+sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphabet switches
+    where
+    locs1 = validMergeLocs "sequentiallyAt" sts1 mergeLocs
+    locs2 = allLocations sts2
+    mergeLocSet = Set.fromList mergeLocs
+
+    newAlphabet = alphabet sts1 `Set.union` alphabet sts2
+    newInitConf = Left BM.<#> initConf sts1
+
+    -- transitions out of the initial location(s) of sts2, to be replicated onto every merge location of sts1
+    initTransOf2 = Map.fromList
+        [ (t, BM.ordMap (second Right) (BM.ordBind (initConf sts2) (\l2 -> transRel sts2 l2 Map.! t)))
+        | t <- Set.toList (alphabet sts2) ]
+
+    -- conjunct sts1's own transition with the copied one, but only where both are specified
+    pick own other
+        | BM.isIndefinite own && BM.isIndefinite other = own /\ other
+        | BM.isIndefinite own                          = own
+        | otherwise                                     = other
+
+    transOf1 l1
+        | l1 `Set.member` mergeLocSet = Map.unionWith pick ownTrans initTransOf2
+        | otherwise                   = ownTrans
+        where
+        ownTrans = Map.map (BM.ordMap (second Left)) (transRel sts1 l1)
+
+    switches1 = Map.fromList [ (Left l1, transOf1 l1) | l1 <- Set.toList locs1 ]
+    switches2 = Map.fromList
+        [ (Right l2, Map.map (BM.ordMap (second Right)) (transRel sts2 l2))
+        | l2 <- Set.toList locs2 ]
+
+    allSwitches = switches1 `Map.union` switches2
+    switches loc = Map.findWithDefault Map.empty loc allSwitches
+
+infixl 1 |>
+-- | Sequentially compose two automata at all sink locations of the first. Throws an error if the first automaton does not have any sink locations.
+(|>) :: (Ord loc1, Ord loc2, Show loc1, Show loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t, MeetSemiLattice (m (tdest, Either loc1 loc2))) =>
+    AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
+sts1 |> sts2 = case Set.toList $ Set.filter (isSinkLocation sts1) (allLocations sts1) of
+    []      -> errorWithoutStackTrace "(|>): the first automaton has no sink location to sequentially compose at"
+    locList -> sequentiallyAt sts1 locList sts2
+
+{- |
+    Sequentially compose two automata that share the same location semantics, e.g. an automaton composed with itself: selfSequentiallyAt sts1 locs sts2
+    merges sts2 into sts1 at the given locations of sts1. Where a merge location already specifies a transition for an action also
+    in sts2's alphabet, and the copied transition from sts2 is also specified, the two are conjuncted with '(/\)', so the merged
+    transition holds only where both hold. If only one of the two is specified (the other being forbidden or underspecified), that
+    one is used as-is.
+-}
+selfSequentiallyAt :: (Ord loc, Show loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc)), Completable t, MeetSemiLattice (m (tdest, loc))) =>
+    AutSyntax m loc t tdest -> [loc] -> AutSyntax m loc t tdest -> AutSyntax m loc t tdest
+selfSequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphabet switches
+    where
+    locs1 = validMergeLocs "selfSequentiallyAt" sts1 mergeLocs
+    locs2 = allLocations sts2
+    mergeLocSet = Set.fromList mergeLocs
+
+    newAlphabet = alphabet sts1 `Set.union` alphabet sts2
+    newInitConf = initConf sts1
+
+    -- transitions out of the initial location(s) of sts2, to be replicated onto every merge location of sts1
+    initTransOf2 = Map.fromList
+        [ (t, BM.ordBind (initConf sts2) (\l2 -> transRel sts2 l2 Map.! t))
+        | t <- Set.toList (alphabet sts2) ]
+
+    -- conjunct sts1's own transition with the copied one, but only where both are specified
+    pick own other
+        | BM.isIndefinite own && BM.isIndefinite other = own /\ other
+        | BM.isIndefinite own                          = own
+        | otherwise                                     = other
+
+    transOf1 l1
+        | l1 `Set.member` mergeLocSet = Map.unionWith pick (transRel sts1 l1) initTransOf2
+        | otherwise                   = transRel sts1 l1
+
+    switches1 = Map.fromList [ (l1, transOf1 l1) | l1 <- Set.toList locs1 ]
+    switches2 = Map.fromList
+        [ (l2, transRel sts2 l2)
+        | l2 <- Set.toList locs2 ]
+
+    allSwitches = switches1 `Map.union` switches2
+    switches loc = Map.findWithDefault Map.empty loc allSwitches
+
+infixl 1 |>>
+-- | `selfSequentiallyAt` applied to all sink locations of the first automaton. Throws an error if the first automaton does not have any sink locations.
+(|>>) :: (Ord loc, Show loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc)), Completable t, MeetSemiLattice (m (tdest, loc))) =>
+    AutSyntax m loc t tdest -> AutSyntax m loc t tdest -> AutSyntax m loc t tdest
+sts1 |>> sts2 = case Set.toList $ Set.filter (isSinkLocation sts1) (allLocations sts1) of
+    []      -> errorWithoutStackTrace "(|>>): the first automaton has no sink location to sequentially compose at"
+    locList -> selfSequentiallyAt sts1 locList sts2
 
 prettyPrint :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show t, Ord loc, Foldable m) => AutSyntax m loc t tdest -> String
 prettyPrint aut = prettyPrintFrom aut (initConf aut)
