@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -20,7 +22,12 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConcat, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant (..), insertIntoValuation, assignValues)
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..))
+import Data.Some (Some (..))
+import Data.Type.Equality ((:~:)(..))
+import Data.GADT.Compare (GEq(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (withExprConstraints, Constant (..))
+import Data.SBV (RCSet (..))
 
 data UntypedExpr
     = UEBool Bool
@@ -42,17 +49,17 @@ instance JSON.FromJSON UntypedExpr where
             _     -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
     parseJSON _ = fail "expected expression"
 
-type VarMap = Map.Map String Variable
+type VarMap = Map.Map String (Some Variable)
 
-lookupVar :: VarMap -> String -> Type -> (Variable -> Expr a) -> Either String (Expr a)
+lookupVar :: VarMap -> String -> Type t -> (Variable t -> Expr a) -> Either String (Expr a)
 lookupVar varmap name expected mk = case Map.lookup name varmap of
-    Just v@(Variable _ t) | t == expected -> Right (mk v)
-    Just (Variable _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected " ++ show expected
+    Just (Some v@(Variable _ t)) | Just Refl <- t `geq` expected -> Right (mk v)
+    Just (Some (Variable _ t)) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected " ++ show expected
     Nothing             -> Left $ "unknown variable: " ++ name
 
 -- Used for equality and ordering comparisons, where the result is defined based on the type of lhs and rhs.
 -- A variable's declared type always takes priority over a literal's type
-inferOperandType :: VarMap -> UntypedExpr -> UntypedExpr -> Either String Type
+inferOperandType :: VarMap -> UntypedExpr -> UntypedExpr -> Either String (Some Type)
 inferOperandType varmap lhs rhs =
     case (varOperandType lhs, varOperandType rhs) of
         (Just t, _) -> Right t
@@ -62,11 +69,12 @@ inferOperandType varmap lhs rhs =
             (_, Just t) -> Right t
             _           -> Left "cannot determine operand type for operator"
     where
-        varOperandType (UEStr name) = fmap varType (Map.lookup name varmap)
+        varOperandType (UEStr name) = (\(Some x) -> Some (varType x)) <$> Map.lookup name varmap
         varOperandType _            = Nothing
-        literalOperandType (UEBool _)  = Just BoolType
+        literalOperandType (UEBool _)  = Just $ Some BoolType
         literalOperandType (UENumber n)
-          | Left _ <- floatingOrInteger @Double @Integer n = Just FloatType
+          | Left _ <- floatingOrInteger @Double @Integer n = Just $ Some FloatType
+          | otherwise = Just $ Some IntType
         literalOperandType _           = Nothing
 
 toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)
@@ -78,10 +86,14 @@ toBoolExpr varmap (UEOp2 "||" e1 e2) = (.||) <$> toBoolExpr varmap e1 <*> toBool
 toBoolExpr varmap (UEOp2 "==" e1 e2) = do
     t <- inferOperandType varmap e1 e2
     case t of
-        IntType    -> (.==) <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
-        BoolType   -> (.==) <$> toBoolExpr  varmap e1 <*> toBoolExpr  varmap e2
-        StringType -> (.==) <$> toStrExpr   varmap e1 <*> toStrExpr   varmap e2
-        FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        Some IntType    -> (.==) <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
+        Some BoolType   -> (.==) <$> toBoolExpr  varmap e1 <*> toBoolExpr  varmap e2
+        Some CharType   -> (.==) <$> toCharExpr  varmap e1 <*> toCharExpr   varmap e2
+        Some FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        Some (ListType tp) -> withExprConstraints tp $ (.==) <$> toListExpr tp varmap e1 <*> toListExpr tp varmap e2
+        Some (SetType _) -> error "no eq on rcsets"
+        Some (TupleType a b) -> withExprConstraints (TupleType a b) $ (.==) <$> toTupleExpr a b varmap e1 <*> toTupleExpr a b varmap e2
+        Some (SumType a b) -> withExprConstraints (SumType a b) $ (.==) <$> toEitherExpr a b varmap e1 <*> toEitherExpr a b varmap e2
 toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toBoolExpr varmap (UEOp2 "==" e1 e2)
 toBoolExpr varmap (UEOp2 "<"  e1 e2) = toComparisonExpr (.<)  varmap e1 e2
 toBoolExpr varmap (UEOp2 "<=" e1 e2) = toComparisonExpr (.<=) varmap e1 e2
@@ -94,9 +106,9 @@ toComparisonExpr :: (forall t. ExprNum t => Expr t -> Expr t -> Expr Bool) -> Va
 toComparisonExpr cmp varmap e1 e2 = do
     t <- inferOperandType varmap e1 e2
     case t of
-        IntType   -> cmp <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
-        FloatType -> cmp <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
-        _         -> Left $ "comparison operator is not defined for type " ++ show t
+        Some IntType   -> cmp <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
+        Some FloatType -> cmp <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        Some tp        -> Left $ "comparison operator is not defined for type " ++ show tp
 
 toIntExpr :: VarMap -> UntypedExpr -> Either String (Expr Integer)
 toIntExpr _   (UENumber n)
@@ -110,6 +122,30 @@ toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toIntExpr varmap e1 <*> toIntExp
 toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
 toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
 
+toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr [t])
+toListExpr t varmap e = case e of
+  UEStr name -> lookupVar varmap name (ListType t) sVar
+  -- TODO: add operators that return lists
+  _ -> Left $ "not a list expression: " ++ show e
+
+toSetExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (RCSet t))
+toSetExpr t varmap e = case e of
+  UEStr name -> lookupVar varmap name (SetType t) sVar
+  -- TODO: add operators that return sets
+  _ -> Left $ "not a list expression: " ++ show e
+
+toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
+toTupleExpr t1 t2 varmap e = case e of
+  UEStr name -> lookupVar varmap name (TupleType t1 t2) sVar
+  -- TODO: add operators that return tuples
+  _ -> Left $ "not a tuple expression: " ++ show e
+
+toEitherExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (Either a b))
+toEitherExpr t1 t2 varmap e = case e of
+  UEStr name -> lookupVar varmap name (SumType t1 t2) sVar
+  -- TODO: add operators that return eithers
+  _ -> Left $ "not a tuple expression: " ++ show e
+
 toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
 toFloatExpr _   (UENumber n)          = Right (sConst $ toRealFloat n)
 toFloatExpr varmap (UEStr name)         = lookupVar varmap name FloatType sVar
@@ -121,14 +157,8 @@ toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toFloatExpr varmap e1 <*> toFl
 toFloatExpr _   e                    = Left $ "not a real expression: " ++ show e
 
 -- unknown strings are treated as string literals.
-toStrExpr :: VarMap -> UntypedExpr -> Either String (Expr String)
-toStrExpr varmap (UEStr name) =
-    case Map.lookup name varmap of
-        Just v@(Variable _ StringType) -> Right (sVar v)
-        Just (Variable _ t) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected String"
-        Nothing             -> Right (sConst name)
-toStrExpr varmap (UEOp2 "++" e1 e2)  = (\a b -> sConcat [a, b]) <$> toStrExpr varmap e1 <*> toStrExpr varmap e2
-toStrExpr _   e                    = Left $ "not a string expression: " ++ show e
+toCharExpr :: VarMap -> UntypedExpr -> Either String (Expr Char)
+toCharExpr varmap (UEStr name) = error "todo: change untypedexpr? Just match on one-character strings? Would like to have a clear distinction between variables and literal strings/chars"
 
 -- Location IDs can be integers or strings in JSON; both are mapped to String for consistency.
 newtype LocationId = LocationId { locId :: String }
@@ -219,23 +249,25 @@ instance JSON.FromJSON STSJsonFormat where
 
 -- STS elements builders
 
-parseVarType :: String -> Either String Type
-parseVarType "integer" = Right IntType
-parseVarType "int"     = Right IntType
-parseVarType "float"   = Right FloatType
-parseVarType "bool"    = Right BoolType
-parseVarType "boolean" = Right BoolType
-parseVarType "string"  = Right StringType
+parseVarType :: String -> Either String (Some Type)
+parseVarType "integer" = Right $ Some IntType
+parseVarType "int"     = Right $ Some IntType
+parseVarType "float"   = Right $ Some FloatType
+parseVarType "bool"    = Right $ Some BoolType
+parseVarType "boolean" = Right $ Some BoolType
+parseVarType "char"    = Right $ Some CharType
+parseVarType "string"  = Right $ Some $ ListType CharType
 parseVarType t         = Left $ "unknown variable type: " ++ t
 
-buildVarMap :: Map.Map String VarDefJson -> Either String (Map.Map String Variable)
+buildVarMap :: Map.Map String VarDefJson -> Either String (Map.Map String (Some Variable))
 buildVarMap defs = Map.fromList <$> forM (Map.toList defs) (\(name, def) -> do
     t <- parseVarType (varDefJsonType def)
-    return (name, Variable name t))
+    case t of
+      Some t' -> return (name, Some $ Variable name t'))
 
 buildGateMap
     :: (String -> IOAct String String)
-    -> Map.Map String Variable
+    -> Map.Map String (Some Variable)
     -> Map.Map String GateDefJson
     -> Either String (Map.Map String (SymInteract (IOAct String String)))
 buildGateMap mkGate varMap defs = Map.fromList <$> forM (Map.toList defs) (\(name, def) -> do
@@ -256,11 +288,16 @@ buildAssignment varMap name def = do
         Just v  -> Right v
         Nothing -> Left $ "unknown variable '" ++ assignmentJsonVar def ++ "' in assignment '" ++ name ++ "'"
     let expr = assignmentJsonExpr def
-    case varType var of
-        IntType    -> (var =:) <$> toIntExpr   varMap expr
-        BoolType   -> (var =:) <$> toBoolExpr  varMap expr
-        StringType -> (var =:) <$> toStrExpr   varMap expr
-        FloatType  -> (var =:) <$> toFloatExpr varMap expr
+    case var of
+      Some v -> case varType v of
+        IntType    -> (v =:) <$> toIntExpr  varMap expr
+        FloatType  -> (v =:) <$> toFloatExpr varMap expr
+        BoolType   -> (v =:) <$> toBoolExpr varMap expr
+        CharType -> (v =:) <$> toCharExpr  varMap expr
+        ListType t -> (v =:) <$> toListExpr t varMap expr
+        SetType t -> (v =:) <$> toSetExpr t varMap expr
+        TupleType a b -> (v =:) <$> toTupleExpr a b varMap expr
+        SumType a b -> (v =:) <$> toEitherExpr a b varMap expr
 
 buildAssignmentMap
     :: VarMap
@@ -315,23 +352,28 @@ buildTransitionRel switchList loc =
         , initLoc == loc
         ]
 
-buildValuation :: Map.Map String Variable -> Map.Map String JSON.Value -> Either String Valuation
+buildValuation :: Map.Map String (Some Variable) -> Map.Map String JSON.Value -> Either String Valuation
 buildValuation locVarCtx initVal =
-    fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, var) ->
+    fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, Some var) ->
         case (varType var, Map.lookup name initVal) of
-            (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (Cint (round n)))
-            (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (Cbool b))
-            (StringType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (Cstring (unpack s)))
-            (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (Cfloat (toRealFloat n)))
+            (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CInt (round n)))
+            (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
+            (CharType,   Just (JSON.String (unpack -> [c]))) -> Right (name, insertIntoValuation var (CChar c))
+            (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
             (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
-        defaultConst IntType    = Cint 0
-        defaultConst BoolType   = Cbool False
-        defaultConst StringType = Cstring ""
-        defaultConst FloatType  = Cfloat 0.0
+        defaultConst :: Type t -> Constant t
+        defaultConst IntType    = CInt 0
+        defaultConst FloatType  = CFloat 0.0
+        defaultConst BoolType   = CBool False
+        defaultConst CharType = CChar 'a'
+        defaultConst (ListType t) = CList [] t
+        defaultConst (SetType t) = withExprConstraints t $ CSet (RegularSet mempty) t
+        defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
+        defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
 
 convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLattice String String String, Valuation)
 convertSTSJson json = do

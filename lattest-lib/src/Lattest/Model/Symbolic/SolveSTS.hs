@@ -1,12 +1,14 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE BlockArguments #-}
 {-|
     Find concrete values to take transitions in STSes, using an SMT solver.
 -}
@@ -25,13 +27,13 @@ OfflineTests(..)
 where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
-import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics)
+import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation (..))
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
-import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), toConstantsMap, sFalse, (.==), sVar, sConst, ExprView (And))
-import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..))
-import Lattest.SMT(SMT, runSMT)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), Constant (..), ExprType (..))
+import Lattest.SMT(SMT, runSMT, Some (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 
 import Control.Arrow((&&&))
@@ -47,6 +49,11 @@ import Data.Maybe (mapMaybe, catMaybes)
 import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..))
 import Control.Monad (forM)
 import qualified Data.Set as Set
+import Data.Some (mapSome)
+import Data.Type.Equality ((:~:)(..))
+import Data.Constraint.Extras (Has(..))
+import Data.GADT.Compare (GEq(..))
+import qualified Data.Dependent.Map as DMap
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -69,7 +76,7 @@ solveRandomInteraction intrpr subsetFunction r = do
         -- `interactsToSpecifiedCondition` puts the (single) step's variables in SSA form, indexing them with `_0`, so
         -- index the gate parameters we solve for and read the solution back from with the same suffix. Otherwise the
         -- SMT declarations (taken from these parameters) wouldn't match the variables mentioned in the guard.
-        indexParams (SymInteract g' params) = SymInteract g' (indexVar 0 <$> params)
+        indexParams (SymInteract g' params) = SymInteract g' (mapSome (indexVar 0) <$> params)
 
 
 interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
@@ -140,7 +147,7 @@ seTree intrpr =
     completeSTSLoc (STSLoc (tguard, tassign), tloc) =
         let completedAssign = tassign `varUnion` identityVarModel locVarSet
         in (tguard, completedAssign, tloc)
-    locVarSet :: [Variable]
+    locVarSet :: [Some Variable]
     locVarSet = -- a bit hacky: we assume that there is a global set of state variables, but we extract it from the assignment of an arbitrary transition
         let mArbitraryState = toList (stateConf intrpr) List.!? 0
         in case mArbitraryState of
@@ -151,7 +158,7 @@ seTree intrpr =
 
 indexExpr :: Int -> Expr t -> Expr t
 indexExpr n = mapExpressionVars (indexVar n)
-indexVar :: Int -> Variable -> Variable
+indexVar :: Int -> Variable a -> Variable a
 indexVar 0 v = v
 indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     | n < 0 = error $ "left symbolic variable with index " ++ show n
@@ -163,7 +170,7 @@ indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with prime
 data OfflineTests i o r
   = OfflineTests
       (Map.Map o             -- Map each output to:
-        ([Constant]          -- The expected valuation;
+        ([Some Constant]          -- The expected valuation;
         , OnlyOrInconclusive -- Whether that is the only allowed valuation, or other valuations should be marked as 'inconclusive';
         , OfflineTests i o r)) -- And the rest of the test.
       (Either (GateValue i, OfflineTests i o r) r) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
@@ -222,18 +229,15 @@ offlineTests intrpr tc = do
       mv <- runSMT $ solveGuard vs guard
       case mv of
         Nothing -> pure Nothing
-        Just (toConstantsMap -> m) -> let vs' = map (\v -> case m Map.!? v of
-                                                              Just x -> x
+        Just (runValuation -> m) -> let vs' = map (\(Some v) -> case DMap.lookup v m of
+                                                              Just (Val x) -> Some $ Constant (has @ExprType v $ typeOf' v) x
                                                               Nothing -> error $ show v <> "is not in" <> show m) vs in
           (\x y -> Just (o,(vs',x,y)))
           <$> do -- checking whether this is the only valid assignment for this gate, by adding a guard specifying that at least one value should differ
-                let guard' = guard .&& (if null vs then sFalse else sNot $ Expr $ And $ Set.fromList $ zipWith (\v c -> view case c of
-                                Cbool b   -> sVar v .== sConst b
-                                Cint x    -> sVar v .== sConst x
-                                Cstring s -> sVar v .== sConst s
-                                Cfloat f  -> sVar v .== sConst f
-                                Ccstr _ _ -> error "not used"
-                                ) vs vs')
+                let guard' = guard .&& (if null vs then sFalse else sNot $ Expr $ And $ Set.fromList
+                           $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
+                                    Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
+                                    Nothing -> error "internal type mismatch") vs vs')
                 runSMT $ solveGuard vs guard' >>= \case
                   Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it

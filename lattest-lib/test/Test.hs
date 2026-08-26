@@ -8,9 +8,7 @@ import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
-import qualified Lattest.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
-import qualified Data.Maybe as M
 
 import Test.Tasty
 import Test.Tasty.Runners as Tasty
@@ -24,7 +22,7 @@ durationSeconds = 3
 main :: IO ()
 main = do
     hunitTests <- makeHUnitTests
-    defaultMain $ 
+    defaultMain $
       localOption (NumThreads 1) $ -- some of these tests open concrete sockets, and thus can't be run multiple times in parallel
       testGroup "Lattest-tests"
         [ hunitTests
@@ -46,8 +44,8 @@ quickCheckTests = testGroup "Quickcheck"
   ]
 
     where
-    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> 
+    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop (100 :: Int)
+    quickCheckWithTimeoutWithNum prop _ name = testProperty name $ \testparam ->
       within (durationSeconds * 1000000) $ withMaxSize 20 $
       -- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
       noShrinking $ prop testparam
@@ -89,6 +87,7 @@ makeHUnitTests = do
         testRandomFIncorrectInput,
         testSTSHappyFlow,
         testSTSHappyFlowFloat,
+        testSTSHappyFlowLists,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testComposedSeTreeStructure,

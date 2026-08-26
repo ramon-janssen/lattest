@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -15,10 +17,8 @@ where
 
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
-import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(Expr))
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT as SMT
-import qualified Data.List as List
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -27,70 +27,12 @@ import qualified Control.Monad as CM
 import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
+import Data.Constraint.Extras (Has(..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), Expr (..))
+import qualified Data.Dependent.Map as DMap
+import Data.SBV (RCSet(..))
 
-instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (Expr a) where
-    arbitrary = Expr <$> arbitrary -- max to avoid large expressions, which will choke the SMT solver
-    -- for debugging exponential blowups in Arbitrary generation
-    -- arbitrary = ((\e -> Trace.trace ("size " ++ (show $ sizeOf e) ++ " | ") e). Expr) <$> arbitrary
-    -- arbitrary = ((\e -> Trace.trace ("expr " ++ show e ++ " | ") e). Expr) <$> arbitrary
-    shrink (view -> e) = Expr <$> shrink e
 
-sizeOf :: SizeOf a => Expr a -> Int
-sizeOf = sizeOf' . view
-
-sizeOf' :: SizeOf a => ExprView a -> Int
-sizeOf' (Var _) = 1
-sizeOf' (Const c) = sizeOfTyped c
-sizeOf' (Ite i t e) = sizeOf' i + sizeOf' t + sizeOf' e + 1
-sizeOf' (EqualInt e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (EqualBool e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (EqualString e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (Divide e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (Modulo e1 e2) = sizeOf' e1 + sizeOf' e2 + 1
-sizeOf' (Sum es) = foldrTerms (\a b -> sizeOf' a + b) 0 es + 1
-sizeOf' (Product es) = foldrTerms (\a b -> sizeOf' a + b) 0 es + 1
-sizeOf' (Length e) = sizeOf' e + 1
-sizeOf' (GezInt e) = sizeOf' e + 1
-sizeOf' (Not e) = sizeOf' e + 1
-sizeOf' (And es) = (sum $ sizeOf' <$> Set.toList es) + 1
-sizeOf' (Concat es) = (sum $ sizeOf' <$> es) + 1
-
-class SizeOf t
-    where
-    sizeOfTyped :: t -> Int
-
-instance SizeOf Integer
-    where
-    sizeOfTyped _ = 1
-
-instance SizeOf Bool
-    where
-    sizeOfTyped _ = 1
-
-instance SizeOf String
-    where
-    sizeOfTyped s = length s
-
-instance (Arbitrary a, ConcreteGenExpr a) => Arbitrary (ExprView a) where
-    arbitrary = sized genExpr
-    shrink (Var _) = []
-    shrink (Const c) = Const <$> shrinkConst c
-    shrink (Ite i t e) = [Ite i' t' e' | (i', t', e') <- shrink (i, t, e)] ++ shrink t ++ shrink e
-    shrink (EqualInt e1 e2) = [EqualInt e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
-    shrink (EqualBool e1 e2) = [EqualBool e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
-    shrink (EqualString e1 e2) = [EqualString e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ [Const True, Const False]
-    shrink (Divide e1 e2) = [Divide e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1
-    shrink (Modulo e1 e2) = [Modulo e1' e2' | (e1', e2') <- shrink (e1, e2) ] ++ shrink e1 ++ shrink e2
-    shrink (Sum _) = [] -- shrinkListExpr (Sum . FM.fromListT) (FM.toListT es)
-    shrink (Product _) = [] -- shrinkListExpr (Product . FM.fromListT) (FM.toList es)
-    shrink (Length e) = Length <$> shrink e
-    shrink (GezInt e) = GezInt <$> shrink e
-    shrink (Not e) = [e]
-    shrink (And es) = shrinkListExpr (And . Set.fromList) (Set.toList es)
-    shrink (Concat es) = Concat <$> shrinkList (const []) es
-
-shrinkListExpr :: Arbitrary t1 => (t1 -> t2) -> t1 -> [t2]
-shrinkListExpr op es = fmap op (shrink es)
 
 class ConcreteGenExpr t where
     genExpr :: Int -> Gen (ExprView t)
@@ -101,15 +43,14 @@ instance ConcreteGenExpr Integer where
         arbitraryVar IntType,
         CM.liftM Const arbitrary
         ]
-    genExpr n | n > 0 = oneof [
+    genExpr n = oneof [
         arbitraryVar IntType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 Divide subexpr2 subexpr2,
         CM.liftM2 Modulo subexpr2 subexpr2,
         CM.liftM Sum (FM.fromListT <$> genList subexpr2),
-        CM.liftM Product (FM.fromListT <$> genList subexprSqrt),
-        CM.liftM Length subexpr
+        CM.liftM Product (FM.fromListT <$> genList subexprSqrt)
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
@@ -127,13 +68,13 @@ instance ConcreteGenExpr Bool where
         arbitraryVar BoolType,
         CM.liftM Const arbitrary
         ]
-    genExpr n | n > 0 = oneof [
+    genExpr n = oneof [
         arbitraryVar BoolType,
         CM.liftM Const arbitrary,
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
-        CM.liftM2 EqualInt subexpr2 subexpr2,
-        CM.liftM2 EqualBool subexpr2 subexpr2,
-        CM.liftM2 EqualString subexpr2 subexpr2,
+        CM.liftM2 (Equal IntType) subexpr2 subexpr2,
+        CM.liftM2 (Equal BoolType) subexpr2 subexpr2,
+        CM.liftM2 (Equal CharType) subexpr2 subexpr2,
         CM.liftM GezInt subexpr,
         CM.liftM Not subexpr,
         CM.liftM And (Set.fromList <$> genList subexprSqrt)
@@ -149,30 +90,27 @@ instance ConcreteGenExpr Bool where
         subexprSqrt = genExpr (intSqrt n - 1)
     shrinkConst = shrink
 
-instance ConcreteGenExpr String where
+instance ConcreteGenExpr Char where
     genExpr n | n <= 0 = oneof [
-        arbitraryVar StringType,
-        CM.liftM Const stringExpr
+        arbitraryVar CharType,
+        CM.liftM Const arbitrary
         ]
-    genExpr n | n > 0 = oneof [
-        arbitraryVar StringType,
-        CM.liftM Const stringExpr,
-        CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
-        CM.liftM Concat (genList subexprSqrt)
+    genExpr n = oneof [
+        arbitraryVar CharType,
+        CM.liftM Const arbitrary,
+        CM.liftM3 Ite subexpr3 subexpr3 subexpr3
         ]
         where
+        subexpr :: ConcreteGenExpr t => Gen (ExprView t)
+        subexpr = genExpr (n - 1)
         subexpr2 :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr2 = genExpr $ (n `div` 2) - 1
         subexpr3 :: ConcreteGenExpr t => Gen (ExprView t)
         subexpr3 = genExpr $ (n `div` 3) - 1
         subexprSqrt :: ConcreteGenExpr t => Gen (ExprView t)
         subexprSqrt = genExpr (intSqrt n - 1)
-    shrinkConst _ = []
-    {--- very crude and fast string shrinking. Should suffice while we don't do anything interesting with strings yet
-    shrinkConst "" = []
-    shrinkConst [c] = [[]]
-    shrinkConst xs = [take (length xs `div` 2) xs, drop (length xs `div` 2) xs]
-    -}
+    shrinkConst = shrink
+
 charExpr :: Gen Char
 charExpr = elements $ ['A'..'Z'] ++ ['a'..'z']
 stringExpr :: Gen String
@@ -187,23 +125,27 @@ genList g = sized $ \n -> do
 intSqrt :: Int -> Int
 intSqrt = floor . (sqrt :: Double -> Double) . fromIntegral
 
-prop_symbolicEval :: Expr Integer -> Bool
-prop_symbolicEval e = rightToMaybe (eval e) == localConcreteEval e
-    where
-    rightToMaybe (Left _) = Nothing
-    rightToMaybe (Right x) = Just x
-    localConcreteEval = concreteEval' . view
 
-arbitraryVar :: Type -> Gen (ExprView t)
-arbitraryVar t = 
-    let prefix = case t of
-                    IntType -> 'i'
-                    BoolType -> 'b'
-                    StringType -> 's'
-    in CM.liftM (\n -> Var $ Variable (prefix:n) t) (return <$> charExpr)
+arbitraryVar :: Type t -> Gen (ExprView t)
+arbitraryVar t =
+    let prefix :: Type a -> String
+        prefix tp = case tp of
+                    IntType -> "i"
+                    FloatType -> "f"
+                    BoolType -> "b"
+                    CharType -> "c"
+                    ListType x -> "[" ++ prefix x ++ "]"
+                    SetType x -> "{" ++ prefix x ++ "}"
+                    TupleType x y -> "(" ++ prefix x ++ "," ++ prefix y ++ ")"
+                    SumType x y -> "<" ++ prefix x ++ "," ++ prefix y ++ ">"
+    in CM.liftM (\n -> Var $ Variable (prefix t++n) t) (return <$> charExpr)
 
 type PropEvalSymbolic t = Expr t -> Bool
 
+-- If you squint a bit, this is really just two interpreters (`concreteEval'` defined below, and `reduce` defined in lattest-lib),
+-- that are defined almost identically, and then a check whether they give the same result.
+-- Does it really give us anything? Is it worth maintaining two interpreters?
+--  - A person who did not feel like updating this interpreter after a large update to Expr
 prop_evalSymbolic :: (Eq t, ConcreteEval t) => Expr t -> Bool
 prop_evalSymbolic e =
     let l = concreteEval e
@@ -238,45 +180,130 @@ class ConcreteEval t where
 instance ConcreteEval Integer where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
+    concreteEval' (First _ x) = fst <$> concreteEval' x
+    concreteEval' (Second _ x) = snd <$> concreteEval' x
+    concreteEval' (Head xs) = head <$> concreteEval' xs
+    concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
     concreteEval' (Modulo e1 e2) = concreteBinOpMaybe (safeZero mod) e1 e2
-    concreteEval' (Length e) = concreteUnaryOp (Prelude.toInteger . length) e
-    concreteEval' (Sum es) = foldOccurList 0 (+) (*) es
-    concreteEval' (Product es) = foldOccurList 1 (*) (^) es
+    concreteEval' (Length _ e) = concreteUnaryOp (Prelude.toInteger . length) e
+    concreteEval' (Sum es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* i) <$> x)) (Just 0) es
+    concreteEval' (Product es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0) es
 
-safeZero :: (Integer -> Integer -> Integer) -> (Integer -> Integer -> Maybe Integer)
+instance ConcreteEval Double where
+    concreteEval' (Var _) = Nothing
+    concreteEval' (Const c) = Just c
+    concreteEval' (First _ x) = fst <$> concreteEval' x
+    concreteEval' (Second _ x) = snd <$> concreteEval' x
+    concreteEval' (Head xs) = head <$> concreteEval' xs
+    concreteEval' (Either a b c d e) = concreteEither a b c d e
+    concreteEval' (Ite i t e) = concreteIfThenElse i t e
+    concreteEval' (SumFloat es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* fromInteger i) <$> x)) (Just 0.0) es
+    concreteEval' (ProductFloat es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0.0) es
+    concreteEval' (DivideFloat e1 e2) = concreteBinOpMaybe (safeZero (/)) e1 e2
+
+safeZero :: (Num a, Eq a) => (a -> a -> a) -> (a -> a -> Maybe a)
 safeZero _ _ 0 = Nothing
 safeZero op n m = Just $ n `op` m
-
-foldOccurList :: TermWrapper t => Integer -> (Integer -> Integer -> Integer) -> (Integer -> Integer -> Integer) -> FreeMonoidX (t (ExprView Integer)) -> Maybe Integer
-foldOccurList zero add mult monoid = (foldr add zero) <$> sequence (maybeEvalTerm <$> FM.toOccurListT monoid)
-    where
-    maybeEvalTerm :: (ExprView Integer, Integer) -> Maybe Integer
-    maybeEvalTerm (x, n) = case concreteEval' x of
-        Just y -> Just (y `mult` n)
-        Nothing -> Nothing
 
 
 instance ConcreteEval Bool where
     concreteEval' (Var _) = Nothing
     concreteEval' (Const c) = Just c
+    concreteEval' (First _ x) = fst <$> concreteEval' x
+    concreteEval' (Second _ x) = snd <$> concreteEval' x
+    concreteEval' (Head xs) = head <$> concreteEval' xs
+    concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (EqualInt e1 e2) = concreteBinOp (==) e1 e2
-    concreteEval' (EqualBool e1 e2) = concreteBinOp (==) e1 e2
-    concreteEval' (EqualString e1 e2) = concreteBinOp (==) e1 e2
+    concreteEval' (Equal t e1 e2) = has @ConcreteEval t $ concreteBinOp (==) e1 e2
     concreteEval' (GezInt e) = concreteUnaryOp (>= 0) e
+    concreteEval' (GezFloat e) = concreteUnaryOp (>= 0) e
     concreteEval' (Not e) = concreteUnaryOp not e
-    concreteEval' (And es) = fmap and $ sequence (concreteEval' <$> Set.toList es)
+    concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
+    concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y ys -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
+    concreteEval' (SElem t x xs) = withExprConstraints t $ has @ConcreteEval t $ (\y ys -> has @Eq t $ case ys of
+      RegularSet ys' -> y `Set.member` ys'
+      ComplementSet ys' -> not $ y `Set.member` ys') <$> concreteEval' x <*> concreteEval' xs
 
-instance ConcreteEval String where
-    concreteEval' (Var _) = Nothing
-    concreteEval' (Const c) = Just c
-    concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (Concat es) = concat <$> (sequence $ concreteEval' <$> es)
+instance ConcreteEval Char where
+  concreteEval' (Var _) = Nothing
+  concreteEval' (Const c) = Just c
+  concreteEval' (First _ x) = fst <$> concreteEval' x
+  concreteEval' (Second _ x) = snd <$> concreteEval' x
+  concreteEval' (Head xs) = head <$> concreteEval' xs
+  concreteEval' (Either a b c d e) = concreteEither a b c d e
+  concreteEval' (Ite i t e) = concreteIfThenElse i t e
 
-concreteUnaryOp :: (ConcreteEval t1) => (t1 -> t2) -> ExprView t1 -> Maybe t2
-concreteUnaryOp op e = do
+instance ConcreteEval [a] where
+  concreteEval' = \case
+    Var _ -> Nothing
+    Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Second _ x -> snd <$> concreteEval' x
+    Either a b c d e -> concreteEither a b c d e
+    Head xs -> head <$> concreteEval' xs
+    Concat xs -> concat <$> concreteEval' xs
+    Tail xs -> tail <$> concreteEval' xs
+    Take i xs -> take . fromInteger <$> concreteEval' i <*> concreteEval' xs
+    Drop i xs -> drop . fromInteger <$> concreteEval' i <*> concreteEval' xs
+    Ite i t e -> concreteIfThenElse i t e
+    Cons x xs -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ (:) <$> concreteEval' x <*> concreteEval' xs
+    Append x y -> (++) <$> concreteEval' x <*> concreteEval' y
+    Map v f xs -> has @ExprType f $ has @ConcreteEval (typeOf' f) $ do
+      ys <- concreteEval' xs
+      traverse (\y -> concreteEval' $ view $ subst (VarModel $ DMap.singleton v $ Expr $ Const y) $ Expr f) ys
+
+instance ConcreteEval (a,b) where
+  concreteEval' = \case
+    Var _ -> Nothing
+    Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Second _ x -> snd <$> concreteEval' x
+    Head xs -> head <$> concreteEval' xs
+    Either a b c d e -> concreteEither a b c d e
+    Ite i t e -> concreteIfThenElse i t e
+    Pair a b -> has @ExprType a $ has @ExprType b $ has @ConcreteEval (typeOf' a) $ has @ConcreteEval (typeOf' b) $ (,) <$> concreteEval' a <*> concreteEval' b
+instance ConcreteEval (Either a b) where
+  concreteEval' = \case
+    Var _ -> Nothing
+    Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Head xs -> head <$> concreteEval' xs
+    Second _ x -> snd <$> concreteEval' x
+    Either a b c d e -> concreteEither a b c d e
+    Ite i t e -> concreteIfThenElse i t e
+    ELeft x -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ Left <$> concreteEval' x
+    ERight x -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ Right <$> concreteEval' x
+
+instance ConcreteEval (SMT.RCSet a) where
+  concreteEval' = \case
+    Var _ -> Nothing
+    Const c -> Just c
+    First _ x -> fst <$> concreteEval' x
+    Head xs -> head <$> concreteEval' xs
+    Second _ x -> snd <$> concreteEval' x
+    Either a b c d e -> concreteEither a b c d e
+    Ite i t e -> concreteIfThenElse i t e
+    SInsert x xs -> has @ConcreteEval (has @ExprType x $ typeOf' x) $ case concreteEval' xs of
+      Nothing -> Nothing
+      Just (RegularSet ys)    -> RegularSet    . flip Set.insert ys <$> concreteEval' x
+      Just (ComplementSet ys) -> ComplementSet . flip Set.delete ys <$> concreteEval' x
+
+
+instance Has ConcreteEval Type where
+  has tp k = case tp of
+    IntType -> k
+    FloatType -> k
+    CharType -> k
+    BoolType -> k
+    ListType _ -> k
+    SetType _ -> k
+    TupleType _ _ -> k
+    SumType _ _ -> k
+
+concreteUnaryOp :: (t1 -> t2) -> ExprView t1 -> Maybe t2
+concreteUnaryOp op e = has @ExprType e $ has @ConcreteEval (typeOf' e) $ do
     x <- concreteEval' e
     return $ op x
 
@@ -299,6 +326,13 @@ concreteIfThenElse i t e = do
         then concreteEval' t
         else concreteEval' e
 
+concreteEither :: (ConcreteEval t) => Variable a -> Variable b -> ExprView t -> ExprView t -> ExprView (Either a b) -> Maybe t
+concreteEither vl vr l r x = has @ExprType x $ case typeOf' x of
+  SumType ta tb -> case concreteEval' x of
+    Nothing -> Nothing
+    Just (Left y) -> concreteEval' $ view $ subst (VarModel $ DMap.singleton vl $ Expr $ withExprConstraints ta Const y) $ Expr l
+    Just (Right y) -> concreteEval' $ view $ subst (VarModel $ DMap.singleton vr $ Expr $ withExprConstraints tb Const y) $ Expr r
+
 evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
 
@@ -311,18 +345,18 @@ testSolveTwiceInSession = TestCase $ do
     let v = Variable "j" IntType
         guard = sVar v .== sConst (41 :: Integer)
     (firstSolve, secondSolve) <- SMT.runSMT $ do
-        a <- solveGuard [v] guard
-        b <- solveGuard [v] guard
+        a <- solveGuard [SMT.Some v] guard
+        b <- solveGuard [SMT.Some v] guard
         return (a, b)
-    let valueOf mVal = (Map.lookup v . toConstantsMap) =<< mVal
-    assertEqual "first solve of j == 41 in a session"  (Just (Cint 41)) (valueOf firstSolve)
-    assertEqual "second solve of j == 41 in the same session" (Just (Cint 41)) (valueOf secondSolve)
+    let valueOf mVal = (DMap.lookup v . runValuation) =<< mVal
+    assertEqual "first solve of j == 41 in a session"  (Just (Val 41)) (valueOf firstSolve)
+    assertEqual "second solve of j == 41 in the same session" (Just (Val 41)) (valueOf secondSolve)
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
 
 testEvalEmptyProduct :: Test
-testEvalEmptyProduct = testEvalExpression (sProduct @Integer ([])) "empty product evaluation incorrect"
+testEvalEmptyProduct = testEvalExpression (sProduct @Integer []) "empty product evaluation incorrect"
 
 testSolveExpression :: Expr Bool -> Test
 testSolveExpression guard = TestCase $ do
@@ -331,10 +365,8 @@ testSolveExpression guard = TestCase $ do
         Nothing -> return ()
         Just valuation ->
             let val = substConst valuation guard
-            in case concreteEval val of
-                Nothing -> return () -- we may generate an expression which can have an undefined value, e.g. division by zero, for which the SMT solver may pick an arbitrary valuation
-                --Just sat -> Trace.trace (show valuation) $ assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
-                Just sat -> assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
+            in CM.forM_ (concreteEval val)
+                $ \sat -> assertBool ("Substituting solved value doesn't yield True for [" ++ show valuation ++ "] " ++ show guard) sat
 
 testEvalNegativeModulo :: Test
 testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluates incorrectly"

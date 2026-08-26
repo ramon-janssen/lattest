@@ -212,7 +212,7 @@ class RunTester tdest where
     -> IO (Verdict, r)
 
 instance RunTester () where
-  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q))
+  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q), Show t, Show (m ((),loc)))
   runTester = runLTSTester
 
 instance RunTester STStdest where

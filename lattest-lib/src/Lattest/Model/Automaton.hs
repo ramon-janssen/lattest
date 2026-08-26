@@ -7,6 +7,8 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 
 {-|
     This module contains the definitions and interpretations of automata models.
@@ -49,7 +51,7 @@ FiniteMenu,
 specifiedMenu,
 -- ** STS State data types
 IntrpState(..),
-Valuation,
+Valuation(..),
 STStdest(STSLoc),
 stsTLoc,
 -- * Auxiliary Automaton Functions
@@ -89,11 +91,15 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 
-import GHC.Stack(CallStack,callStack)
-import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable)
+import GHC.Stack(CallStack,callStack, HasCallStack)
+import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
+import Data.Some (Some (..))
+import Data.EqP (EqP(..))
+import qualified Data.Dependent.Map as DMap
+import Unsafe.Coerce (unsafeCoerce)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..), Constant (Constant))
+import Data.Constraint.Extras (Has(..))
 
 ------------
 -- syntax --
@@ -279,7 +285,7 @@ after intrpr act' =
     in intrpr { stateConf = stateConf' }
     -}
 
-afterInternal' :: (StepSemantics m loc q t tdest act, Ord t, Ord q, Ord (m q), Monad execM) =>
+afterInternal' :: (HasCallStack, StepSemantics m loc q t tdest act, Ord t, Ord q, Ord (m q), Monad execM) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> execM (m q)
 afterInternal' internalTakeTransition alph transMap act q = do
@@ -296,12 +302,12 @@ afterInternal' internalTakeTransition alph transMap act q = do
             moveAlongTransition :: (StepSemantics m loc q t tdest act) => q -> act -> t -> (tdest, loc) -> m q
             moveAlongTransition q' act' t'' (tdest, loc) = move q' act' (Just (t'', tdest)) loc
         where
-        lookupAction :: Ord k => Map k a -> k -> a
+        lookupAction :: (Ord k) => Map k a -> k -> a
         lookupAction m k = case Map.lookup k m of
             Just v -> v
             Nothing -> throw $ ActionOutsideAlphabet callStack
 {-
-after' :: (StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
+after' :: (HasCallStack, StepSemantics m loc q t tdest act) => Set t -> (loc -> Map t (m (tdest, loc))) -> act -> q -> m q
 after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act (lookupAction $ transMap $ asLoc q) of
     LocationMove mloc -> move q act (nothingTTdest transMap) BM.<#> mloc
         where
@@ -319,7 +325,7 @@ after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act
 -}
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q), Show t, Show (m (tdest, loc))) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -488,10 +494,14 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
                 if List.length vals /= List.length vars
                     then errorWithoutStackTrace $
                       "nr of values unequal to nr of parameters: " <> show (List.length vals) <> " values and " <> show (List.length vars) <> " variables"
-                    else if List.all (\(var,val) -> varType var == constType val) (zip vars vals)
+                    else if List.all (\(Some var, Some val) -> varType var `eqp` constType val) (zip vars vals)
                             then Just i
                             else errorWithoutStackTrace $
-                              "type of variable and value do not match. Variables: " <> show vars <> ", Values: " <> show vals
+                              "type of variable and value do not match. Variables: ["
+                              <> List.intercalate ", " (map (\(Some v) -> show v) vars)
+                              <> "], Values: ["
+                              <> List.intercalate ", " (map (\(Some (Constant t v)) -> has @Show t $ show v) vals)
+                              <> "]"
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
 
@@ -499,28 +509,26 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
     move (IntrpState _l1 stateValuation) gv@(GateValue _ gateVals) (Just (SymInteract _ gateVars, STSLoc (guard,assign))) l2 =
         let gateValuation = buildGateValuation gateVars gateVals
             -- valuation = Map.foldrWithKey (\x xval m -> insertIntoValuation x xval m) gateValuation stateValuation
-            valuation = fromConstantsMap $ toConstantsMap stateValuation `Map.union` toConstantsMap gateValuation
+            valuation = Valuation $ runValuation stateValuation `DMap.union` runValuation gateValuation
         in if not $ evalBool valuation guard
             then implicitDestination gv
-            else let stateValuation2 = Map.mapWithKey (\var val -> assignNewValue var val valuation assign) $ toConstantsMap stateValuation
-                 in BM.ordReturn $ IntrpState l2 $ fromConstantsMap stateValuation2
+            else let stateValuation2 = Valuation $ DMap.mapWithKey (\var val -> assignNewValue var val valuation assign) $ runValuation stateValuation
+                 in BM.ordReturn $ IntrpState l2 stateValuation2
         where
-        assignNewValue :: Variable -> Constant -> Valuation -> VarModel -> Constant
-        -- the following case distinctino could be removed if constants were also typed
-        assignNewValue var@(Variable _ IntType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Integer))
-        assignNewValue var@(Variable _ BoolType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Bool))
-        assignNewValue var@(Variable _ StringType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr String))
-        assignNewValue var@(Variable _ FloatType) oldVal val' assign' = maybe oldVal (evalVal val') (assignedExpr var assign' :: Maybe (Expr Double))
+        assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t
+        assignNewValue var oldVal val' assign' = withExprConstraints (varType var)
+                                               $ maybe oldVal (Val . fromConst . evalVal val') (assignedExpr var assign')
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
-buildGateValuation :: [Variable] -> [Constant] -> Valuation
+buildGateValuation :: [Some Variable] -> [Some Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
-buildGateValuation gateVars gateVals = assignValues $ (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) <$> zip gateVars gateVals
-evalVal :: (ConstType t, Assignable t) => Valuation -> Expr t -> Constant
+                                              -------------- TODO: this unsafeCoerce should be replaced by a check, which means we need some type tag in Val
+buildGateValuation gateVars gateVals = assignValues $ (\(Some gateVar, Some gateVal) m -> insertIntoValuation gateVar (unsafeCoerce gateVal) m) <$> zip gateVars gateVals
+evalVal :: (ConstType t) => Valuation -> Expr t -> Constant t
 evalVal valuation e = case eval $ substConst valuation e of
     Right v -> toConst v
     Left m -> error $ "evalVal: " ++ m
 evalBool :: Valuation -> Expr Bool -> Bool
-evalBool valuation = toBool . evalVal valuation
+evalBool valuation = fromConst . evalVal valuation
 
 --------------------
 -- STS without quiescence or input-failure
@@ -656,7 +664,7 @@ validMergeLocs fnName sts1 mergeLocs
     the two are conjuncted with '(/\)'. If only one of the two is specified (the other being forbidden or underspecified), that one is 
     used as-is. The result has a joint alphabet and locations of type 'Either loc1 loc2'.
 -}
-sequentiallyAt :: (Ord loc1, Ord loc2, Show loc1, Show loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t, MeetSemiLattice (m (tdest, Either loc1 loc2))) =>
+sequentiallyAt :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, MeetSemiLattice (m (tdest, Either loc1 loc2))) =>
     AutSyntax m loc1 t tdest -> [loc1] -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
 sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphabet switches
     where
@@ -694,7 +702,7 @@ sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphab
 
 infixl 1 |>
 -- | Sequentially compose two automata at all sink locations of the first. Throws an error if the first automaton does not have any sink locations.
-(|>) :: (Ord loc1, Ord loc2, Show loc1, Show loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t, MeetSemiLattice (m (tdest, Either loc1 loc2))) =>
+(|>) :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, MeetSemiLattice (m (tdest, Either loc1 loc2))) =>
     AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
 sts1 |> sts2 = case Set.toList $ Set.filter (isSinkLocation sts1) (allLocations sts1) of
     []      -> errorWithoutStackTrace "(|>): the first automaton has no sink location to sequentially compose at"
@@ -707,7 +715,7 @@ sts1 |> sts2 = case Set.toList $ Set.filter (isSinkLocation sts1) (allLocations 
     transition holds only where both hold. If only one of the two is specified (the other being forbidden or underspecified), that
     one is used as-is.
 -}
-selfSequentiallyAt :: (Ord loc, Show loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc)), Completable t, MeetSemiLattice (m (tdest, loc))) =>
+selfSequentiallyAt :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, MeetSemiLattice (m (tdest, loc))) =>
     AutSyntax m loc t tdest -> [loc] -> AutSyntax m loc t tdest -> AutSyntax m loc t tdest
 selfSequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphabet switches
     where
@@ -743,7 +751,7 @@ selfSequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAl
 
 infixl 1 |>>
 -- | `selfSequentiallyAt` applied to all sink locations of the first automaton. Throws an error if the first automaton does not have any sink locations.
-(|>>) :: (Ord loc, Show loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc)), Completable t, MeetSemiLattice (m (tdest, loc))) =>
+(|>>) :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, MeetSemiLattice (m (tdest, loc))) =>
     AutSyntax m loc t tdest -> AutSyntax m loc t tdest -> AutSyntax m loc t tdest
 sts1 |>> sts2 = case Set.toList $ Set.filter (isSinkLocation sts1) (allLocations sts1) of
     []      -> errorWithoutStackTrace "(|>>): the first automaton has no sink location to sequentially compose at"

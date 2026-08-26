@@ -61,10 +61,10 @@ testJSONSocketAdapterByte = TestCase $ withSocketsDo $ do
     threadDelay 2000
     assertObserveBytes (C8.pack "3") adap -- the adapter observes 3 from the SUT
     assertObserveBytes (C8.pack "4") adap -- the adapter observes 4 from the SUT
-    
+
     void $ send (C8.pack "5") adap -- the adapter sends 5
     _assertRecv "receive 5" "5" listenConn
-    
+
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "6" -- the SUT sends 6
     assertObserveBytes (C8.pack "6") adap -- the adapter observes 6 from the SUT
 
@@ -81,19 +81,19 @@ testAdapterAcceptingInput = TestCase $ do
     actQueue <- newTQueueIO
     actionsFromSut' <- fromBuffer actQueue
     let rawAdap = Adapter { inputCommandsToSut = ics, actionsFromSut = actionsFromSut', close = error ""}
-    adap <- (SA.acceptingInputs rawAdap) :: IO (Adapter (IOAct Int Int) Int)
-    
+    adap <- SA.acceptingInputs rawAdap :: IO (Adapter (IOAct Int Int) Int)
+
     void $ send 1 adap -- send an input
     assertObserve 1 adap -- input is observed
     assertReadTQueue 1 icQueue -- input is sent to the underlying adap
-    
+
     void $ send 2 adap -- send an input
     assertReadTQueue 2 icQueue -- input is sent to the underlying adap
     assertObserve 2 adap -- input is observed
-    
+
     atomically $ writeTQueue actQueue (Just 3) -- let underlying adap produce an output
     assertObserve 3 adap -- output is observed
-    
+
     atomically $ writeTQueue actQueue (Just 4) -- let underlying adap produce an output
     assertObserve 4 adap -- output is observed
 
@@ -103,7 +103,7 @@ testAdapterAcceptingInput = TestCase $ do
     assertObserve 5 adap -- input is observed
     threadDelay 100000 -- wait 100ms to ensure that the adap output is received
     assertObserve 6 adap -- output is observed
-    
+
     void $ send 7 adap -- send an input
     atomically $ writeTQueue actQueue (Just 8) -- let underlying adap produce an output
     void $ send 9 adap -- send an input
@@ -120,7 +120,7 @@ testAdapterAcceptingInput = TestCase $ do
         mic <- atomically $ readTQueue queue
         case mic of
             Nothing -> assertFailure $ "Adapter closed unexpectedly while reading '" ++ show expected ++ "'"
-            Just ic -> assertEqual ("receiving wrong input command on adap") expected ic
+            Just ic -> assertEqual "receiving wrong input command on adap" expected ic
 
 testJSONSocketAdapterInt :: Test
 testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
@@ -138,7 +138,7 @@ testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
     _assertRecv "receive 1 and 2 on socket" "1\n2\n" listenConn
     assertObserve 1 adap -- the adapter sees that input 1 was accepted
     assertObserve 2 adap -- the adapter sees that input 2 was accepted
-    
+
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "3" -- the SUT sends 3 and 4. Not nicely per action, but this should still work because TCP
     threadDelay 2000 -- wait 2ms to ensure that the packets are read separately by the adapter
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "\n4"
@@ -146,7 +146,7 @@ testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "\n"
     assertObserve 3 adap -- the adapter observes 3 from the SUT
     assertObserve 4 adap -- the adapter observes 4 from the SUT
-    
+
     void $ send 5 adap -- the adapter sends 5
     _assertRecv "receive 5" "5\n" listenConn -- the SUT reads 5 from the adapter.
     assertObserve 5 adap -- the adapter sees that input 5 was accepted
@@ -182,7 +182,7 @@ assertRecv assertName expected sock = do
                         then return $ splitAt maxChars recvd
                         else do
                             (rest,tl) <- recvMax (maxChars - length recvd)
-                            return $ (recvd ++ rest,tl)
+                            return (recvd ++ rest,tl)
 
 assertObserveBytes :: (Show a, Eq a) => a -> Adapter a i -> IO ()
 assertObserveBytes expected adap = do
@@ -190,7 +190,7 @@ assertObserveBytes expected adap = do
     case maybeObserved of
         Nothing -> assertFailure $ "Adapter observation timeout while observing '" ++ show expected ++ "'"
         Just Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
-        Just (Just observed) -> assertEqual ("receiving wrong output on adap") expected observed
+        Just (Just observed) -> assertEqual "receiving wrong output on adap" expected observed
 
 assertObserve :: (Show a, Eq a) => a -> Adapter (IOAct a a) i -> IO ()
 assertObserve expected adap = do
@@ -198,7 +198,7 @@ assertObserve expected adap = do
     case maybeObserved of
         Nothing -> assertFailure $ "Adapter observation timeout while observing '" ++ show expected ++ "'"
         Just Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
-        Just (Just observed) -> assertEqual ("receiving wrong output on adap") expected (fromIOAct observed)
+        Just (Just observed) -> assertEqual "receiving wrong output on adap" expected (fromIOAct observed)
     where
     fromIOAct :: IOAct a a -> a
     fromIOAct (Out a) = a
@@ -210,7 +210,7 @@ assertObserveIO expected adap = do
     case maybeObserved of
         Nothing -> assertFailure $ "Adapter observation timeout while observing '" ++ show expected ++ "'"
         Just Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
-        Just (Just observed) -> assertEqual ("receiving wrong observation on adap") expected observed
+        Just (Just observed) -> assertEqual "receiving wrong observation on adap" expected observed
 
 assertObserveNonDet :: (Show a, Eq a) => a -> a -> Adapter (IOAct a a) i -> IO ()
 assertObserveNonDet expected1 expected2 adap = do
@@ -222,7 +222,7 @@ assertObserveNonDet expected1 expected2 adap = do
             if expected2 == fromIOAct observed
                 then assertObserve expected1 adap
                 else do
-                    assertEqual ("receiving wrong output on adap") expected1 (fromIOAct observed)
+                    assertEqual "receiving wrong output on adap" expected1 (fromIOAct observed)
                     assertObserve expected2 adap
     where
     fromIOAct :: IOAct a a -> a
@@ -234,7 +234,7 @@ assertObserve' expected adap = do
     maybeObserved <- observe adap
     case maybeObserved of
         Nothing -> assertFailure $ "Adapter closed unexpectedly while observing '" ++ show expected ++ "'"
-        Just observed -> assertEqual ("receiving wrong output on adap") (Out expected) observed
+        Just observed -> assertEqual "receiving wrong output on adap" (Out expected) observed
 
 data List = Cons { element :: Double, comment :: String, tail :: List } | Nil deriving (Show, Generic, Ord, Eq)
 instance FromJSON List
@@ -256,7 +256,7 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
     assertEqual "receive [1,2] on socket"
         "{\"comment\":\"first!\",\"element\":1,\"tag\":\"Cons\",\"tail\":{\"comment\":\"second!\",\"element\":2,\"tag\":\"Cons\",\"tail\":{\"tag\":\"Nil\"}}}\n" list12OnSock
     assertObserve list12 adap -- the adapter sees that [1,2] was accepted
-    
+
     let list34 = Cons 3 "third!" $ Cons 4 "fourth!" Nil
     void $ BSock.send listenConn $ encodeUtf8 . pack $
         "{\"comment\":\"third!\",\"element\":3,\"tag\":\"Cons\",\"tail\":{\"comment\":\"fourth!\",\"element\":4,\"tag\":\"Cons\",\"tail\":{\"tag\":\"Nil\"}}}\n" -- the SUT sends [3,4].
@@ -306,11 +306,11 @@ testQuiscence = TestCase $ do
     parsingAdap <- SA.parseJSONActionsFromSut stringAdap
     jsonAdap <- SA.encodeJSONTestChoices parsingAdap :: IO (Adapter String String)
     acceptingAdap <- SA.acceptingInputs jsonAdap
-    adap <- (SA.withQuiescenceMillis deltaMillis acceptingAdap) :: IO (Adapter (IOSuspAct String String) (Maybe String))
+    adap <- SA.withQuiescenceMillis deltaMillis acceptingAdap :: IO (Adapter (IOSuspAct String String) (Maybe String))
 
     impQueue <- newTQueueIO
     void $ forkIO $ impFromQueue impQueue actQueue
-    
+
     -- TODO also make a test case which starts with 1) an output, 2) Quiescence, and 3) a Nothing input
     waitMillis halfDeltaMillis
     send (Just "a") adap
@@ -320,7 +320,7 @@ testQuiscence = TestCase $ do
     assertObserve' Quiescence adap
     assertObserve' Quiescence adap
     t2 <- getCurrentTime
-    assertEqualWithMargin ("t2 - t1") marginMillis (deltaMillis*3) (diffMillis t2 t1)
+    assertEqualWithMargin "t2 - t1" marginMillis (deltaMillis*3) (diffMillis t2 t1)
     sendWithDelay impQueue "1" 0
     assertObserve' (OutSusp "1") adap
     sendWithDelay impQueue "2" 0
@@ -377,7 +377,7 @@ testQuiscence = TestCase $ do
     assertObserve' Quiescence adap
     assertObserveIO (In "i") adap
     assertObserve' (OutSusp "12") adap
-    
+
     -- sending nothing will block until an output is received (before the quiescence timeout)
     sendWithDelay impQueue "13" halfDeltaMillis
     send Nothing adap
@@ -398,7 +398,7 @@ testInputDelay = TestCase $ do
     let deltaMillis = 2*delayMillis
     let oneAndHalfDeltaMillis = (deltaMillis * 3) `div` 2
     let marginMillis = 20
-    
+
     icQueue <- newTQueueIO
     ics <- makeOutputStream $ atomically . writeTQueue icQueue
     actQueue <- newTQueueIO
@@ -410,7 +410,7 @@ testInputDelay = TestCase $ do
     jsonAdap <- SA.encodeJSONTestChoices parsingAdap :: IO (Adapter String String)
     acceptingAdap <- SA.acceptingInputs jsonAdap
     adap' <- SA.withQuiescenceMillis deltaMillis acceptingAdap :: IO (Adapter (IOSuspAct String String) (Maybe String))
-    adap <- (SA.withSuccessiveInputDelayMillis delayMillis adap') :: IO (Adapter (IOSuspAct String String) (Maybe String))
+    adap <- SA.withSuccessiveInputDelayMillis delayMillis adap' :: IO (Adapter (IOSuspAct String String) (Maybe String))
 
     impQueue <- newTQueueIO
     void $ forkIO $ impFromQueue impQueue actQueue
@@ -419,7 +419,7 @@ testInputDelay = TestCase $ do
     send (Just "a") adap
     assertObserveIO (In "a") adap
     t2 <- getCurrentTime
-    assertEqualWithMargin ("t2 - t1") marginMillis delayMillis (diffMillis t2 t1)
+    assertEqualWithMargin "t2 - t1" marginMillis delayMillis (diffMillis t2 t1)
 
     t3 <- getCurrentTime
     send (Just "b") adap
@@ -427,7 +427,7 @@ testInputDelay = TestCase $ do
     assertObserveIO (In "b") adap
     t4 <- getCurrentTime
     assertObserve' (OutSusp "1") adap
-    assertEqualWithMargin ("t4 - t3") marginMillis 0 (diffMillis t4 t3)
+    assertEqualWithMargin "t4 - t3" marginMillis 0 (diffMillis t4 t3)
 
     t5 <- getCurrentTime
     send (Just "c") adap
@@ -436,8 +436,8 @@ testInputDelay = TestCase $ do
     t6' <- getCurrentTime
     assertObserve' (OutSusp "2") adap
     t6 <- getCurrentTime
-    assertEqualWithMargin ("t6' - t5") marginMillis halfDelayMillis (diffMillis t6' t5)
-    assertEqualWithMargin ("t6 - t5") marginMillis halfDelayMillis (diffMillis t6 t5)
+    assertEqualWithMargin "t6' - t5" marginMillis halfDelayMillis (diffMillis t6' t5)
+    assertEqualWithMargin "t6 - t5" marginMillis halfDelayMillis (diffMillis t6 t5)
 
     t7 <- getCurrentTime
     send (Just "d") adap
@@ -447,8 +447,8 @@ testInputDelay = TestCase $ do
     assertObserve' Quiescence adap
     assertObserve' (OutSusp "3") adap
     t8 <- getCurrentTime
-    assertEqualWithMargin ("t8' - t7") marginMillis delayMillis (diffMillis t8' t7)
-    assertEqualWithMargin ("t8 - t7") marginMillis oneAndHalfDeltaMillis (diffMillis t8 t7)
+    assertEqualWithMargin "t8' - t7" marginMillis delayMillis (diffMillis t8' t7)
+    assertEqualWithMargin "t8 - t7" marginMillis oneAndHalfDeltaMillis (diffMillis t8 t7)
 
     sendWithDelay impQueue "Just to reset the quiescence timer" 0
     assertObserve' (OutSusp "Just to reset the quiescence timer") adap
@@ -456,11 +456,11 @@ testInputDelay = TestCase $ do
     t9 <- getCurrentTime
     sendWithDelay impQueue "4" halfDelayMillis
     send Nothing adap
-    waitMillis $ oneAndHalfDeltaMillis
+    waitMillis oneAndHalfDeltaMillis
     t10 <- getCurrentTime
     assertObserve' (OutSusp "4") adap
     assertObserve' Quiescence adap
-    assertEqualWithMargin ("t10 - t9") marginMillis (halfDelayMillis + oneAndHalfDeltaMillis) (diffMillis t10 t9)
+    assertEqualWithMargin "t10 - t9" marginMillis (halfDelayMillis + oneAndHalfDeltaMillis) (diffMillis t10 t9)
 
     sendWithDelay impQueue "Just to reset the quiescence timer" 0
     assertObserve' (OutSusp "Just to reset the quiescence timer") adap
@@ -472,18 +472,18 @@ testInputDelay = TestCase $ do
     assertObserve' Quiescence adap
     assertObserve' (OutSusp "5") adap
     t12 <- getCurrentTime
-    assertEqualWithMargin ("t12' - t11") marginMillis deltaMillis (diffMillis t12' t11)
-    assertEqualWithMargin ("t12 - t11") marginMillis oneAndHalfDeltaMillis (diffMillis t12 t11)
+    assertEqualWithMargin "t12' - t11" marginMillis deltaMillis (diffMillis t12' t11)
+    assertEqualWithMargin "t12 - t11" marginMillis oneAndHalfDeltaMillis (diffMillis t12 t11)
 
     atomically $ writeTQueue impQueue Nothing -- close the implementation
 
 assertEqualWithMargin :: String -> Int -> Int -> Int -> Assertion
-assertEqualWithMargin msg margin expected actual = 
+assertEqualWithMargin msg margin expected actual =
     let msg' = msg ++ ": expected " ++ show expected ++ "±" ++ show margin ++ ", was " ++ show actual
     in assertBool msg' $ actual <= expected + margin && actual >= expected - margin
 
 diffMillis :: Integral b => UTCTime -> UTCTime -> b
-diffMillis t2 t1 = ceiling $ 1000 * (nominalDiffTimeToSeconds $ diffUTCTime t2 t1)
+diffMillis t2 t1 = ceiling $ 1000 * nominalDiffTimeToSeconds (diffUTCTime t2 t1)
 
 impFromQueue :: TQueue (Maybe (String, Int)) -> TQueue (Maybe String) -> IO ()
 impFromQueue impQueue actQueue = do
