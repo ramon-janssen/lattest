@@ -922,6 +922,7 @@ traceValuation :: [ConcreteStep] -> Valuation
 traceValuation steps = fromConstantsMap $ Map.unions $ zipWith stepConstMap [0..] steps
     where
     stepConstMap n (SymInteract _ vars, vals) = Map.fromList $ zipWith (\var val -> (indexVar n var, val)) vars vals
+    indexVar 0 var = var
     indexVar n (Variable name t) = Variable (name ++ "_" ++ show n) t
 
 testConcreteTraceSpecifiedAllowedCorrespondence :: Test

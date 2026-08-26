@@ -152,29 +152,44 @@ seTree intrpr =
 indexExpr :: Int -> Expr t -> Expr t
 indexExpr n = mapExpressionVars (indexVar n)
 indexVar :: Int -> Variable -> Variable
---indexVar 0 v = v
+indexVar 0 v = v
 indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
-data OfflineTests i o
+-- TODO: unsure whether this should hold arbitrary 'r's, or Verdicts, or both.
+-- If 'r's: it would be good to have a test controller combinator that makes a test controller return a Verdict
+-- If 'Verdict's: See the final couple lines of this file: I'm not sure how to disambiguate them. Should I just pass the interaction to the automaton and look at the state?
+data OfflineTests i o r
   = OfflineTests
       (Map.Map o             -- Map each output to:
         ([Constant]          -- The expected valuation;
         , OnlyOrInconclusive -- Whether that is the only allowed valuation, or other valuations should be marked as 'inconclusive';
-        , OfflineTests i o)) -- And the rest of the test.
-      (Either (GateValue i, OfflineTests i o) Verdict) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
-  | Done Verdict -- End of the test
-  deriving Show
+        , OfflineTests i o r)) -- And the rest of the test.
+      (Either (GateValue i, OfflineTests i o r) r) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
+  | Done r -- End of the test
 
+data OnlyOrInconclusive = Only | Inconclusiv
 
-data OnlyOrInconclusive = Only | Inconclusiv deriving (Eq, Show)
+instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
+  show (Done r) = show r
+  show (OfflineTests os is) = "\\case\n" <> indentOfflineTree os' <> indentOfflineTree is'
+    where
+      os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> show cs <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
+                  Only -> ""
+                  Inconclusiv -> "!"<> show o <> "[..] -> Inconclusive") $ Map.toList os
+      is' = case is of
+        Right r -> if Map.null os then show r else ""
+        Left (i, ot) -> "?" <> show i <> " -> \n" <> indentOfflineTree (show ot)
+      indentOfflineTree "" = ""
+      indentOfflineTree s = reverse . ('\n':) . dropWhile (\x -> x == '\n' || x == ' ') . reverse -- ugly hack to remove empty lines
+                          . unlines . map ("  " ++) $ lines s
 
-getInputOffline :: OfflineTests i o -> Either (GateValue i, OfflineTests i o) Verdict
+getInputOffline :: OfflineTests i o r -> Either (GateValue i, OfflineTests i o r) r
 getInputOffline (OfflineTests _ i) = i
 getInputOffline (Done v) = Right v
 
-giveOutputOffline :: Ord o => OfflineTests i o -> GateValue o -> Either (OfflineTests i o) Verdict
+giveOutputOffline :: Ord o => OfflineTests i o Verdict -> GateValue o -> Either (OfflineTests i o Verdict) Verdict
 giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
   Nothing -> Right Fail
   Just (cs, ooi, rest)
@@ -184,14 +199,14 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 giveOutputOffline (Done v) _ = Right v
 
-offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice i (IOGateValue i o))
+offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
-             -> IO (OfflineTests i o)
+             -> IO (OfflineTests i o r)
 offlineTests intrpr tc = do
   inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
-        Right _ -> pure $ Right Pass -- the test controller has no input to give
+        Right r -> pure $ Right r
         Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
           Right r -> pure $ Right r
           Left (tc', intrpr') -> do
@@ -207,7 +222,9 @@ offlineTests intrpr tc = do
       mv <- runSMT $ solveGuard vs guard
       case mv of
         Nothing -> pure Nothing
-        Just (toConstantsMap -> m) -> let vs' = map (m Map.!) vs in
+        Just (toConstantsMap -> m) -> let vs' = map (\v -> case m Map.!? v of
+                                                              Just x -> x
+                                                              Nothing -> error $ show v <> "is not in" <> show m) vs in
           (\x y -> Just (o,(vs',x,y)))
           <$> do -- checking whether this is the only valid assignment for this gate, by adding a guard specifying that at least one value should differ
                 let guard' = guard .&& (if null vs then sFalse else sNot $ Expr $ And $ Set.fromList $ zipWith (\v c -> view case c of
@@ -231,10 +248,11 @@ offlineTests intrpr tc = do
                  -> IO (Either
                     ( TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
                     , AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
-                    Verdict)
+                    r)
     handleAction x t i = updateTestController t (testControllerState t) i x (stateConf i) >>= \case
-      Right _ -> pure $ Right $ case x of
-        GateValue (In  _) _ -> error "this should never happen, I think: the testcontroller choosing to stop rather than update based on an input it chose itself"
-        GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail?
+      Right r -> pure $ Right r
+      -- $ case x of
+        -- GateValue (In  _) _ -> Pass -- TODO: testcontrollers with a fixed number of steps do trigger this. Need a way to also deal with them in in the output case! -- error "this should never happen, I think: the testcontroller choosing to stop rather than update based on an input it chose itself"
+        -- GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail? Not necessarily, what if it's just a stopcondition?
       Left st -> pure $ Left (t {testControllerState = st}, after i x)
 
