@@ -3,7 +3,8 @@
     "locationVariables": {
         "counter": { "type": "integer" },
         "label":   { "type": "string"  },
-        "active":  { "type": "bool"    }
+        "active":  { "type": "bool"    },
+        "selector": { "type": "char"   }
     },
     "parameters": {
         "counter_p": { "type": "integer" },
@@ -11,7 +12,8 @@
     },
     "initialValuation": {
         "counter": 5,
-        "active": false
+        "active": false,
+        "selector": "a"
     },
     "locations": [0, 1, 2],
     "inputGates": {
@@ -33,7 +35,8 @@
         "A2": { "target": "active",  "expression": false     },
         "A3": { "target": "active",  "expression": true      },
         "A4": { "target": "label",   "expression": {"var": "label_p"} },
-        "A5": { "target": "counter", "expression": { "lhs": {"var": "counter"}, "op": "+", "rhs": 1 } }       
+        "A5": { "target": "counter", "expression": { "lhs": {"var": "counter"}, "op": "+", "rhs": 1 } },
+        "A6": { "target": "selector", "expression": "b" } 
     },
     "switches": {
         "r_low":    { "init_loc": 0, "gate": "I2", "guard": "G1", "assignments": ["A1"], "end_loc": 1 },
