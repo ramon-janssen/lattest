@@ -64,19 +64,28 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , VarModel
 , Assignable
 , assign
+, varUnion
+, mapVars
+, mapVarExprs
 , Valuation
+, valuationToVarModel
 , toConstantsMap
 , fromConstantsMap
 , emptyValuation
 , assignValues
 , assignValue
+, getVariables
+, identityVarModel
+, varsToGuard
 , insertIntoValuation
 , substConst
 , subst
+, substVarModel
 , assignedExpr
 , assignment
 , noAssignment
 , (=:)
+, mapExpressionVars
 )
 where
 
@@ -238,18 +247,17 @@ infix 4 .==
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
 sNot :: Expr Bool -> Expr Bool
-{-sNot (view -> Vconst (Cbool True))       = sConst (Cbool False)
-sNot (view -> Vconst (Cbool False))      = sConst (Cbool True)
-sNot (view -> Vnot ve)                   = ve
--- not (if cs then tb else fb) == if cs then not (tb) else not (fb)
-sNot (view -> Vite cs tb fb)             = Expr (Vite cs (sNot tb) (sNot fb))-}
-sNot (view -> ve) = Expr $ Not ve
+sNot (view -> Const b)      = sConst (not b) -- constant fold: ¬True ≡ False, ¬False ≡ True
+sNot (view -> Not ve)       = Expr ve -- eliminate double negation: ¬¬e ≡ e
+-- push the negation into the branches: ¬(if cs then tb else fb) ≡ if cs then ¬tb else ¬fb
+sNot (view -> Ite cs tb fb) = Expr (Ite cs (view $ sNot (Expr tb)) (view $ sNot (Expr fb)))
+sNot (view -> ve)           = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 sAnd :: Set.Set (Expr Bool) -> Expr Bool
 --sAnd = sAnd' . flattenAnd
-sAnd = Expr . And . flattenAnd
+sAnd = mkAnd . flattenAnd
     where
         flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
@@ -257,6 +265,35 @@ sAnd = Expr . And . flattenAnd
         fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
         fromExpr (view -> And a) = a
         fromExpr (view -> x) = Set.singleton x
+
+        -- annihilation (x ∧ False ≡ False) and identity (x ∧ True ≡ x); a single conjunct needs no wrapping
+        mkAnd :: Set.Set (ExprView Bool) -> Expr Bool
+        mkAnd (absorb -> vs)
+            | Set.member (Const False) vs = sFalse
+            | hasComplements vs           = sFalse -- contradiction: x ∧ ¬x ≡ False
+            | otherwise = case Set.toList vs' of
+                []  -> sTrue
+                [v] -> Expr v
+                _   -> Expr (And vs')
+            where vs' = Set.delete (Const True) vs
+
+        -- absorption under negation: e ∧ ¬(e ∧ rest) ≡ e ∧ ¬rest. A conjunct that is
+        -- already asserted at the top level of the conjunction is redundant inside a
+        -- negated conjunction, so it can be dropped from it. If every conjunct of the
+        -- negated cube is dropped this yields ¬True ≡ False, which the checks above catch.
+        absorb :: Set.Set (ExprView Bool) -> Set.Set (ExprView Bool)
+        absorb vs = Set.map simplify vs
+            where
+                simplify (Not (And s))
+                    | not (Set.null (Set.intersection s vs)) = view $ sNot $ sAnd $ Set.map Expr $ s Set.\\ vs
+                simplify v = v
+
+        -- does the conjunction contain both some e and its negation ¬e?
+        hasComplements :: Set.Set (ExprView Bool) -> Bool
+        hasComplements vs = any ((`Set.member` vs) . negated) (Set.toList vs)
+            where
+                negated (Not e) = e
+                negated e       = Not e
 {-
 -- And doesn't contain elements of type Vand.
 sAnd' :: Set.Set Expr Bool -> Expr Bool
@@ -640,6 +677,56 @@ valuationToVarModel vals = VarModel {
     floatVars = typedValuationToVarModel $ floatValuation vals
     }
 
+getVariables :: Valuation -> [Variable]
+getVariables vals =
+    (Map.keys $ intValuation vals) ++
+    (Map.keys $ boolValuation vals) ++
+    (Map.keys $ stringValuation vals) ++
+    (Map.keys $ floatValuation vals)
+
+assignIdentity :: Variable -> VarModel -> VarModel
+assignIdentity v@(Variable _ IntType) = assign v (sVar v :: Expr Integer)
+assignIdentity v@(Variable _ BoolType) = assign v (sVar v :: Expr Bool)
+assignIdentity v@(Variable _ StringType) = assign v (sVar v :: Expr String)
+assignIdentity v@(Variable _ FloatType) = assign v (sVar v :: Expr Double)
+
+identityVarModel :: [Variable] -> VarModel
+identityVarModel vars = assignment $ assignIdentity <$> vars
+
+varUnion :: VarModel -> VarModel -> VarModel
+varUnion vars1 vars2 = VarModel {
+    intVars = intVars vars1 `Map.union` intVars vars2,
+    boolVars = boolVars vars1 `Map.union` boolVars vars2,
+    stringVars = stringVars vars1 `Map.union` stringVars vars2,
+    floatVars = floatVars vars1 `Map.union` floatVars vars2
+    }
+
+mapVars :: (Variable -> Variable) -> VarModel -> VarModel
+mapVars f vars = VarModel {
+    intVars = Map.mapKeys f $ intVars vars,
+    boolVars = Map.mapKeys f $ boolVars vars,
+    stringVars = Map.mapKeys f $ stringVars vars,
+    floatVars = Map.mapKeys f $ floatVars vars
+    }
+
+mapVarExprs :: (Variable -> Variable) -> VarModel -> VarModel
+mapVarExprs f vars = VarModel {
+    intVars = Map.map (mapExpressionVars f) $ intVars vars,
+    boolVars = Map.map (mapExpressionVars f) $ boolVars vars,
+    stringVars = Map.map (mapExpressionVars f) $ stringVars vars,
+    floatVars = Map.map (mapExpressionVars f) $ floatVars vars
+    }
+
+varsToGuard :: VarModel -> Expr Bool
+varsToGuard vars = sAnd $ Set.fromList $
+    typedVarsToBools (intVars vars) ++
+    typedVarsToBools (boolVars vars) ++
+    typedVarsToBools (stringVars vars) ++
+    typedVarsToBools (floatVars vars)
+
+typedVarsToBools :: (VarExpr t, EqExpr t, ExprType t) => TypedVarModel t -> [Expr Bool]
+typedVarsToBools = fmap (\(var, val) -> sVar var .== val) . Map.toList
+
 insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
 insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
 insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
@@ -713,6 +800,17 @@ instance Show VarModel where
 substConst :: Assignable t => Valuation -> Expr t -> Expr t
 substConst valuation = subst (valuationToVarModel valuation)
 
+-- | Apply a substitution to the right-hand-side expressions of a 'VarModel', leaving its keys untouched.
+-- Composing substitutions this way lets an assignment be resolved against an accumulated substitution:
+-- @substVarModel sigma assign@ rewrites every value-expression in @assign@ according to @sigma@.
+substVarModel :: VarModel -> VarModel -> VarModel
+substVarModel sigma (VarModel ints bools strings floats) = VarModel {
+    intVars = Map.map (subst sigma) ints,
+    boolVars = Map.map (subst sigma) bools,
+    stringVars = Map.map (subst sigma) strings,
+    floatVars = Map.map (subst sigma) floats
+    }
+
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
@@ -752,3 +850,30 @@ subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
 
 subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
+
+mapExpressionVars :: (Variable -> Variable) -> Expr t -> Expr t
+mapExpressionVars f = Expr . mapExpressionVars' f . view
+
+mapExpressionVars' :: (Variable -> Variable) -> ExprView t -> ExprView t
+mapExpressionVars' f e@(Const _) = e
+mapExpressionVars' f (Var v) = Var $ f v -- this line is effectively the purpose of this function
+mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (Modulo t n)            = Modulo (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (DivideFloat t n)       = DivideFloat (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (Sum s)                 = Sum (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
+mapExpressionVars' f (SumFloat s)            = SumFloat (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
+mapExpressionVars' f (Product p)             = Product (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
+mapExpressionVars' f (ProductFloat p)        = ProductFloat (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
+mapExpressionVars' f (Length vexp)           = Length (mapExpressionVars' f vexp)
+
+mapExpressionVars' f (GezInt v)                = GezInt (mapExpressionVars' f v)
+mapExpressionVars' f (GezFloat v)              = GezFloat (mapExpressionVars' f v)
+mapExpressionVars' f (EqualInt vexp1 vexp2)    = EqualInt (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (EqualBool vexp1 vexp2)   = EqualBool (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (EqualString vexp1 vexp2) = EqualString (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (EqualFloat vexp1 vexp2)  = EqualFloat (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (And vexps)               = And (Set.map (mapExpressionVars' f) vexps)
+mapExpressionVars' f (Not vexp)                = Not (mapExpressionVars' f vexp)
+
+mapExpressionVars' f (Concat vexps)            = Concat (fmap (mapExpressionVars' f) vexps)

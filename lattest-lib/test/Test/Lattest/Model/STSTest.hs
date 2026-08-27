@@ -2,6 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
@@ -13,29 +14,46 @@ module Test.Lattest.Model.STSTest (
     testSTSTestSelection,
     testSTSDataSelectionGuardedInput,
     testLatticeSTS,
-    testLatticeSTSQuiescence
+    testLatticeSTSQuiescence,
+    testSTSPathCondition,
+    testBranchingPathCondition,
+    testComposedSeTreeStructure,
+    testComposedPathCondition,
+    testConcreteTraceSpecifiedAllowedCorrespondence,
+    prop_specifiedAllowedCorrespondence,
+    composedCoffeeMachineIntrpr
     )
 where
 
 import Prelude hiding (take)
 import Test.HUnit
-import Data.Maybe(fromJust)
+import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
+import Data.Maybe(fromJust, isJust, catMaybes)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.UTF8 as UTF8
+import System.FilePath ((</>), takeDirectory)
+import System.Directory (createDirectoryIfMissing)
 import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc)
+import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..))
-import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction)
-import Reference.FreeLatticeSlow(FreeLatticeSlow)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
+import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
+import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
+import Algebra.Lattice.Free(Free(..))
+import Algebra.Lattice.Levitated(Levitated(..))
+import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
+import qualified Lattest.Model.Symbolic.SolveSTS as Solve
+import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
-import Lattest.Model.Symbolic.Expr
+import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 import qualified Lattest.SMT as SMT
 
 pvar :: Variable
@@ -661,3 +679,409 @@ testLatticeSTSQuiescence = [
     testLatticeSTSUnimplementable "u1" True, -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
     testLatticeSTSUnimplementable "u2'" False -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
     ]
+
+-- ============================================================================
+-- Symbolic path-condition / execution-tree tests (merged from feature branch).
+-- Ported to the sbv-based backend: the old Lattest.SMT.SMT/Config solver is
+-- replaced by Lattest.SMT.runSMT, FreeLattice by the (now CNF) FreeLattice,
+-- and the non-normalising free lattice by Reference.FreeLatticeSlow.
+-- ============================================================================
+
+p, q, x :: Expr Integer
+p = sVar pvar
+q = sVar qvar
+x = sVar xvar
+
+water, ok, coffee :: SymInteract (IOAct String String)
+water = SymInteract (In "water") [pvar]
+ok = SymInteract (Out "ok") [pvar]
+coffee = SymInteract (Out "coffee") []
+
+-- Interactions and STS for the branching tests, using the CNF lattice monad (FreeLattice).
+-- Input variants (unsatisfied guard -> underspecified/top) and output variants (unsatisfied guard -> forbidden/bottom).
+gateA = SymInteract (In "a") [pvar, qvar]
+gateB = SymInteract (In "b") [pvar, qvar]
+gateAo = SymInteract (Out "a") [pvar, qvar]
+gateBo = SymInteract (Out "b") [pvar, qvar]
+
+branchInitAssign :: Valuation
+branchInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+
+-- A depth-2 binary-branching STS over the CNF monad:
+--   loc 0 --a--> {loc 1, loc 2}   combined with op0
+--   loc 1 --b--> {loc 3, loc 4}   combined with op1
+--   loc 2 --b--> {loc 5, loc 6}   combined with op2
+-- Each branch has exactly two outgoing transitions, combined by either disjunction (\/) or conjunction (/\).
+-- The two destination guards at each branch are gp (p>=5) and gq (q>=5) on two independent parameters p and q, so
+-- they are orthogonal: all four cells of the value-partition (neither / p-only / q-only / both) are satisfiable and
+-- routed differently, and the choice of branch operator is observable in the resulting path condition.
+type Branch = FreeLattice (STStdest, Integer) -> FreeLattice (STStdest, Integer) -> FreeLattice (STStdest, Integer)
+
+-- The first-level gate g1 is used at loc 0; the second-level gate g2 at locs 1 and 2. Passing input or output gates
+-- selects whether unsatisfied guards fall through to top or to bottom.
+branchingSTS :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> IOSTS FreeLattice Integer String String
+branchingSTS g1 g2 op0 op1 op2 =
+    let gp = p .>= 5
+        gq = q .>= 5
+        asgn = assignment [xvar =: p]
+        switches loc = case loc of
+            0 -> Map.fromList [(g1, atom (stsTLoc gp asgn, 1) `op0` atom (stsTLoc gq asgn, 2))]
+            1 -> Map.fromList [(g2, atom (stsTLoc gp noAssignment, 3) `op1` atom (stsTLoc gq noAssignment, 4))]
+            2 -> Map.fromList [(g2, atom (stsTLoc gp noAssignment, 5) `op2` atom (stsTLoc gq noAssignment, 6))]
+            _ -> Map.empty
+    in automaton (atom 0 :: FreeLattice Integer) (Set.fromList [g1, g2]) switches
+
+branchingIntrpr :: SymInteract (IOAct String String) -> SymInteract (IOAct String String) -> Branch -> Branch -> Branch -> STSIntrp FreeLattice Integer (IOAct String String)
+branchingIntrpr g1 g2 op0 op1 op2 = interpretSTS (branchingSTS g1 g2 op0 op1 op2) branchInitAssign
+
+-- Path conditions over the branching STS, exercising disjunctive vs conjunctive branching in the CNF monad, for
+-- inputs and outputs. asDualExpr reads the configuration dually, but the input/output distinction is whether an
+-- unsatisfied guard falls through to top (underspecified, inputs) or bottom (forbidden, outputs):
+--   * for INPUTS a disjunctive (\/) branch requires *both* guards (gp ∧ gq) and a conjunctive (/\) one *either*
+--     (gp ∨ gq) -- the operator is dualised, because an unsatisfied alternative becomes top and absorbs the join;
+--   * for OUTPUTS it is mirrored -- disjunction yields gp ∨ gq and conjunction gp ∧ gq -- because an unsatisfied
+--     alternative becomes bottom, which is absorbed by the join and absorbing for the meet.
+testBranchingPathCondition :: Test
+testBranchingPathCondition = TestCase $ do
+    let disj = (\/) :: Branch
+        conj = (/\) :: Branch
+        isSat guard = SMT.runSMT $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        assertSat lbl g = isSat g >>= assertBool (lbl ++ " should be satisfiable")
+        assertUnsat lbl g = isSat g >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
+        assertNotTautology lbl g = isSat (sNot g) >>= assertBool (lbl ++ " should not be a tautology")
+        -- a ⟹ b iff a ∧ ¬b is unsatisfiable
+        assertImplies lbl a b = isSat (a .&& sNot b) >>= (assertBool (lbl ++ ": expected implication") . not)
+        assertNotImplies lbl a b = isSat (a .&& sNot b) >>= assertBool (lbl ++ ": expected non-implication")
+        combos = [ ("DDD",disj,disj,disj), ("DDC",disj,disj,conj), ("DCD",disj,conj,disj), ("DCC",disj,conj,conj)
+                 , ("CDD",conj,disj,disj), ("CDC",conj,disj,conj), ("CCD",conj,conj,disj), ("CCC",conj,conj,conj) ]
+    -- 1. Across every combination of branch operators, both traces, and both input/output, the path condition is a
+    --    genuine constraint: never collapsing to True (a tautology) nor to False (unsatisfiable).
+    sequence_ [ assertSat (kind ++ " " ++ nm ++ " " ++ tn) g >> assertNotTautology (kind ++ " " ++ nm ++ " " ++ tn) g
+              | (kind, g1, g2) <- [ ("in", gateA, gateB), ("out", gateAo, gateBo) ]
+              , (nm, o0, o1, o2) <- combos
+              , (tn, tr) <- [ ("[a]", [g1]), ("[a,b]", [g1, g2]) ]
+              , let g = interactsToSpecifiedCondition (branchingIntrpr g1 g2 o0 o1 o2) tr ]
+    -- 2. INPUT branch on [a]: disjunction is strictly stronger than conjunction (it requires both guards).
+    let inD = interactsToSpecifiedCondition (branchingIntrpr gateA gateB disj disj disj) [gateA]
+        inC = interactsToSpecifiedCondition (branchingIntrpr gateA gateB conj conj conj) [gateA]
+    assertImplies    "input [a]: disjunction ⟹ conjunction" inD inC
+    assertNotImplies "input [a]: conjunction ⇏ disjunction" inC inD
+    assertUnsat "input [a] disjunction with p<5 (needs p>=5 AND q>=5)" (inD .&& (p .<= 4))
+    assertSat   "input [a] conjunction with p<5 (q>=5 alone suffices)" (inC .&& (p .<= 4))
+    -- 3. OUTPUT branch on [a]: mirrored -- conjunction is strictly stronger than disjunction.
+    let outD = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo disj disj disj) [gateAo]
+        outC = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo conj conj conj) [gateAo]
+    assertImplies    "output [a]: conjunction ⟹ disjunction" outC outD
+    assertNotImplies "output [a]: disjunction ⇏ conjunction" outD outC
+    assertUnsat "output [a] conjunction with p<5 (needs p>=5 AND q>=5)" (outC .&& (p .<= 4))
+    assertSat   "output [a] disjunction with p<5 (q>=5 alone suffices)" (outD .&& (p .<= 4))
+    -- 4. The same input/output contrast one branching level deeper, on trace [a,b].
+    let inDAB = interactsToSpecifiedCondition (branchingIntrpr gateA gateB disj disj disj) [gateA, gateB]
+        inCAB = interactsToSpecifiedCondition (branchingIntrpr gateA gateB conj conj conj) [gateA, gateB]
+        outDAB = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo disj disj disj) [gateAo, gateBo]
+        outCAB = interactsToSpecifiedCondition (branchingIntrpr gateAo gateBo conj conj conj) [gateAo, gateBo]
+    assertImplies    "input [a,b]: all-disjunction ⟹ all-conjunction" inDAB inCAB
+    assertNotImplies "input [a,b]: all-conjunction ⇏ all-disjunction" inCAB inDAB
+    assertImplies    "output [a,b]: all-conjunction ⟹ all-disjunction" outCAB outDAB
+    assertNotImplies "output [a,b]: all-disjunction ⇏ all-conjunction" outDAB outCAB
+
+-- A minimal STS for asserting the tree structures directly (rather than via the SMT solver):
+--   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
+-- One input gate keeps the symbolic-execution tree narrow enough to read.
+inGate :: SymInteract (IOAct String String)
+inGate = SymInteract (In "a") [pvar]
+outGate :: SymInteract (IOAct String String)
+outGate = SymInteract (Out "x") [pvar]
+
+treeSTS :: IOSTS FreeLattice Integer String String
+treeSTS =
+    let switches loc = case loc of
+            0 -> Map.fromList [(inGate, ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
+            1 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
+            2 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
+            _ -> Map.empty
+    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate, outGate]) switches
+
+milkvar :: Variable
+milkvar = (Variable "milk" BoolType)
+milk = sVar milkvar
+a = SymInteract (In "a") []
+b = SymInteract (In "b") [pvar]
+tea = SymInteract (Out "tea") [pvar]
+espresso = SymInteract (Out "esp") [pvar, milkvar]
+take = SymInteract (In "take") []
+
+composedCoffeeMachineAssign :: Valuation
+composedCoffeeMachineAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+
+composedCoffeeMachine :: IOSTS FreeLatticeSlow String String String
+composedCoffeeMachine =
+    let initConf = ordReturn "a0" /\ ordReturn "b0" /\ ordReturn "c0" /\ ordReturn "d0":: FreeLatticeSlow String
+        asTransition = \q -> (stsTLoc sTrue noAssignment, q)
+        switches = \q -> case q of
+            "a0" -> Map.fromList [(a, ordReturn (stsTLoc (x .>= 2) noAssignment, "a1"))]
+            "a1" -> Map.fromList [(tea, ordReturn (stsTLoc (p .== 2) $ noAssignment, "a2"))]
+            "b0" -> Map.fromList [(b, ordReturn (stsTLoc (x .>= p) $ assignment [xvar =: p], "b1"))] -- this one's tricky: in state b0, x was the amount of water still available. In state b1, it becomes the requested size of the coffee
+            "b1" -> Map.fromList [(espresso, ordReturn (stsTLoc (p .== x) $ noAssignment, "b2"))]
+            "c0" -> Map.fromList [(b, ordReturn (stsTLoc (x .>= p) noAssignment, "c1"))] -- guard duplicated from b0, so c0 (the milk aspect) does not accept an order that b0 would leave underspecified
+            "c1" -> Map.fromList [(espresso, ordReturn (stsTLoc (milk) $ noAssignment, "c2"))]
+            -- the a/b transitions duplicate a0/b0's guards, so d0 (the loop-back branch) does not accept an order that a0/b0 would leave underspecified
+            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [ordReturn (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(a, ordReturn (stsTLoc (x .>= 2) noAssignment, "d1")), (b, ordReturn (stsTLoc (x .>= p) noAssignment, "d1"))]
+            "d1" -> Map.fromList [(output, ordReturn (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
+            "d2" -> Map.fromList [(take, asTransition <#> initConf)]
+            -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
+            _ -> Map.fromList [(gate, underspecified) | gate <- [water, a, b, tea, espresso, take]]
+    in automaton initConf (Set.fromList [water,a,b,tea,espresso,take]) switches
+composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeSlow String (IOAct String String)
+composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
+
+-- Pretty-print the entire current intermediate symbolic-execution tree (`Solve.seTree`), up to a given depth. The
+-- configuration monad is fixed to `FreeLatticeSlow` so that we can render its ∧/∨/⊤/⊥ structure directly (no
+-- normalization or deduplication), interleaved with the step / if-then-else structure of the tree.
+prettySeTree :: Int
+             -> FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))
+             -> String
+prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t0)
+    where
+    goTree :: Int -> String -> Solve.SETree FreeLatticeSlow (IOSymInteract String String) -> [String]
+    goTree d ind (Solve.SETree cs)
+        | d <= 0    = [ind ++ "… (depth limit)"]
+        | otherwise = concatMap (goEntry d ind) (Map.toList cs)
+    goEntry :: Int -> String -> (IOSymInteract String String, FreeLatticeSlow (Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))))) -> [String]
+    goEntry d ind (i, medge) =
+        (ind ++ "step " ++ show i ++ ", branches:") : goConf (ind ++ "  ") (goIte (d-1)) medge
+    goIte :: Int -> String -> Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))) -> [String]
+    goIte d ind (Solve.SEIte g thn els) =
+           [ind ++ "if " ++ show g ++ " then"]
+        ++ goConf (ind ++ "    ") (goTree d) thn
+        ++ [ind ++ "else:"]
+        ++ goConf (ind ++ "    ") (goTree d) els
+    -- render a FreeLatticeSlow layer, recursing into each atom via `sub`. Chains of the same operator are flattened
+    -- into an n-ary ∧/∨, but no merging of equal subtrees happens.
+    goConf :: String -> (String -> x -> [String]) -> FreeLatticeSlow x -> [String]
+    goConf ind _   (FreeLatticeSlow Top)    = [ind ++ "⊤ (underspecified)"]
+    goConf ind _   (FreeLatticeSlow Bottom) = [ind ++ "⊥ (forbidden)"]
+    goConf ind sub (FreeLatticeSlow (Levitate free)) = goFree ind sub free
+    goFree ind sub (Var e) = sub ind e
+    goFree ind sub free@(_ :/\: _) =
+        let conjuncts = meets free
+        in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
+           : concatMap (goOperand ind sub "conjunct") (zip [1 :: Int ..] conjuncts)
+    goFree ind sub free@(_ :\/: _) =
+        let disjuncts = joins free
+        in (ind ++ "∨ (" ++ show (length disjuncts) ++ " disjuncts):")
+           : concatMap (goOperand ind sub "disjunct") (zip [1 :: Int ..] disjuncts)
+    -- Delimit each operand of an n-ary ∧/∨ with its own header, so the (multi-line) subtrees of sibling conjuncts
+    -- do not visually run together.
+    goOperand :: String -> (String -> x -> [String]) -> String -> (Int, Free x) -> [String]
+    goOperand ind sub label (k, operand) =
+        (ind ++ "  " ++ label ++ " " ++ show k ++ ":") : goFree (ind ++ "    ") sub operand
+    meets (x :/\: y) = meets x ++ meets y
+    meets other      = [other]
+    joins (x :\/: y) = joins x ++ joins y
+    joins other      = [other]
+
+-- Show the entire intermediate tree structure (`Solve.seTree`) for the composed coffee machine up to depth 3, as a
+-- single golden test. The same tree folds (via `Solve.treeToGuard asDualExpr`/`asExpr`) to the specified/allowed guards.
+testComposedSeTreeStructure :: Bool -> Test
+testComposedSeTreeStructure regenerate = TestCase $ goldenAssert
+    [ goldenCheck regenerate "composed:seTree" (goldenDir </> "composed.setree.txt")
+        ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr))
+    ]
+
+-- Snapshot the accumulated symbolic path condition (the actual formula, with SSA-indexed parameters) that
+-- `interactsToSpecifiedCondition` (asDualExpr) and `interactsToAllowedCondition` (asExpr) produce, for *every* trace
+-- over the composed coffee machine's alphabet up to length 3. One symbolic guard per (condition, trace) encodes all
+-- concrete valuations at once, complementing the pointwise checks in testConcreteTraceSpecifiedAllowedCorrespondence.
+-- The transition function is total (missing gates map to the implicit location), so every alphabet trace has a guard.
+testComposedPathCondition :: Bool -> Test
+testComposedPathCondition regenerate = TestCase $ goldenAssert
+    [ goldenCheck regenerate "composed:pathCondition" (goldenDir </> "composed.pathcondition.txt")
+        ("\n" ++ concatMap render traces)
+    ]
+    where
+    alph = Set.toList $ alphabet $ syntacticAutomaton composedCoffeeMachineIntrpr
+    -- all traces over the alphabet up to length 3 (sequence . replicate n = all n-length combinations)
+    traces = concatMap (\n -> sequence (replicate n alph)) [0 .. 3 :: Int]
+    render tr = unlines
+        [ "=== " ++ show tr ++ " ==="
+        , "specified: " ++ show (interactsToSpecifiedCondition composedCoffeeMachineIntrpr tr)
+        , "allowed:   " ++ show (interactsToAllowedCondition composedCoffeeMachineIntrpr tr)
+        , "" ]
+
+-- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
+type ConcreteStep = (IOSymInteract String String, [Constant])
+
+-- | The concrete gate value of a step, for feeding to `after`.
+stepGateValue :: ConcreteStep -> GateValue (IOAct String String)
+stepGateValue (SymInteract g _, vals) = GateValue g vals
+
+-- | Build the valuation that fills the symbolic guards: the parameter `v` of the interaction at trace position `n`
+-- appears in the guards as `v_n` (matching `indexVar` in SolveSTS.hs), and is bound here to its concrete value.
+traceValuation :: [ConcreteStep] -> Valuation
+traceValuation steps = fromConstantsMap $ Map.unions $ zipWith stepConstMap [0..] steps
+    where
+    stepConstMap n (SymInteract _ vars, vals) = Map.fromList $ zipWith (\var val -> (indexVar n var, val)) vars vals
+    indexVar n (Variable name t) = Variable (name ++ "_" ++ show n) t
+
+testConcreteTraceSpecifiedAllowedCorrespondence :: Test
+testConcreteTraceSpecifiedAllowedCorrespondence = TestList
+    [ correspondenceCase "[water 3]"                         -- neither: input, guard x<10 holds (x=0)
+        [(water, [Cint 3])] Indefinite
+    , correspondenceCase "[water 3, water 5]"                -- neither: second water still has x=3<10
+        [(water, [Cint 3]), (water, [Cint 5])] Indefinite
+    , correspondenceCase "[water 12, water 5]"               -- underspecified: second water blocked, x=12>=10
+        [(water, [Cint 12]), (water, [Cint 5])] Underspecified
+    , correspondenceCase "[water 6, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
+    , correspondenceCase "[water 6, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
+    , correspondenceCase "[water 6, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
+    ]
+    where
+    correspondenceCase label steps expectedSpecifiedness = TestCase $ do
+        let symTrace = fst <$> steps
+            gateValues = stepGateValue <$> steps
+            valuation = traceValuation steps
+            -- (1) semantic verdict: the state configuration after running the concrete trace
+            finalConf = stateConf $ foldl after composedCoffeeMachineIntrpr gateValues
+            -- (2) symbolic verdict: fill the concrete values into the guards and evaluate to a constant
+            specifiedGuard = interactsToSpecifiedCondition composedCoffeeMachineIntrpr symTrace
+            allowedGuard = interactsToAllowedCondition composedCoffeeMachineIntrpr symTrace
+        -- sanity check: the chosen values really drive the trace to the specifiedness we expect
+        assertEqual (label ++ ": concrete specifiedness") expectedSpecifiedness (specifiedness finalConf)
+        specifiedVal <- assertEvaluatesToBool (label ++ ": specified guard") (substConst valuation specifiedGuard)
+        allowedVal <- assertEvaluatesToBool (label ++ ": allowed guard") (substConst valuation allowedGuard)
+        -- the correspondence: specified <-> not underspecified, allowed <-> not forbidden
+        assertEqual (label ++ ": specified guard vs. isSpecified") (isSpecified finalConf) specifiedVal
+        assertEqual (label ++ ": allowed guard vs. isAllowed") (isAllowed finalConf) allowedVal
+    -- a fully-substituted guard must reduce to a constant boolean; anything else means a variable leaked through
+    assertEvaluatesToBool :: String -> Expr Bool -> IO Bool
+    assertEvaluatesToBool label g = case eval g of
+        Right b -> return b
+        Left err -> assertFailure (label ++ " did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")")
+
+-- QuickCheck version of the same correspondence, with the concrete traces *generated* instead of hand-picked.
+--
+-- The interactions and their symbolic parameters are read from the model's alphabet (not hard-coded), and every
+-- parameter is filled with a randomly-chosen value of its declared type. The property is parametric in the model, so
+-- any STS interpreter over String gates can be checked; below it is applied to the composed coffee machine, but a
+-- future model only needs to be passed to `prop_specifiedAllowedCorrespondence` to be covered.
+
+-- | Generate a concrete value for a symbolic parameter, based only on its declared type. The ranges are deliberately
+-- small: the example models are toy examples, so large integers would only slow things down without exercising new
+-- behaviour (guards compare against small constants like 2, 10).
+genConstantForType :: Variable -> Gen Constant
+genConstantForType (Variable _ IntType)    = Cint <$> choose (-5, 20)
+genConstantForType (Variable _ BoolType)   = Cbool <$> elements [False, True]
+genConstantForType (Variable _ StringType) = Cstring <$> elements ["", "a", "b", "c"]
+
+-- | Generate a concrete trace over a model's alphabet: pick interactions (and hence their symbolic parameters) from
+-- the syntactic automaton, then fill in a value for each parameter. Traces are kept short, both because the toy
+-- models are shallow and because the non-normalising FreeLatticeSlow configuration grows with the trace length.
+genConcreteTrace :: STSIntrp m loc (IOAct String String) -> Gen [ConcreteStep]
+genConcreteTrace intrpr = do
+    let alph = Set.toList $ alphabet $ syntacticAutomaton intrpr
+    len <- choose (0, 4)
+    vectorOf len $ do
+        interaction@(SymInteract _ vars) <- elements alph
+        vals <- traverse genConstantForType vars
+        return (interaction, vals)
+
+-- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
+-- parametric in the model. For every generated concrete trace: the specified guard evaluates to True exactly when
+-- the concrete configuration is specified (not underspecified), and the allowed guard exactly when it is allowed
+-- (not forbidden).
+prop_specifiedAllowedCorrespondence ::
+    (BoundedMonad m, Foldable m, BooleanConfiguration m, (forall a. Ord a => Ord (m a)), Ord loc)
+    => STSIntrp m loc (IOAct String String) -> Property
+prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ \steps ->
+    let symTrace = fst <$> steps
+        gateValues = stepGateValue <$> steps
+        valuation = traceValuation steps
+        finalConf = stateConf $ foldl after intrpr gateValues
+        specifiedGuard = interactsToSpecifiedCondition intrpr symTrace
+        allowedGuard = interactsToAllowedCondition intrpr symTrace
+    in counterexample ("trace: " ++ show gateValues) $
+            checkGuard "specified" (isSpecified finalConf) (substConst valuation specifiedGuard)
+       .&&. checkGuard "allowed"   (isAllowed finalConf)    (substConst valuation allowedGuard)
+    where
+    checkGuard name expected g = case eval g of
+        Right b  -> counterexample (name ++ " guard evaluated to " ++ show b ++ ", expected " ++ show expected) (b == expected)
+        Left err -> counterexample (name ++ " guard did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")") False
+
+goldenDir :: FilePath
+goldenDir = "test/expected-test-output"
+
+-- Compare rendered output against a golden file. Returns a failure message if it did not match, or Nothing if it did.
+--
+-- In compare mode (@regenerate == False@, the default) the golden file is only read, never written, so running the
+-- test suite has no side-effects. A missing golden file is reported as a failure with a hint on how to create it.
+--
+-- In regenerate mode (@regenerate == True@) the golden file is (over)written (creating the directory if needed) and
+-- the check always passes. Enable this by running the test suite with @--regenerate-golden-files@.
+goldenCheck :: Bool -> String -> FilePath -> String -> IO (Maybe String)
+goldenCheck regenerate what path actual
+    | regenerate = do
+        createDirectoryIfMissing True (takeDirectory path)
+        BS.writeFile path (UTF8.fromString actual)
+        return Nothing
+    | otherwise = do
+        existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
+        return $ case existing of
+            Right expected | expected == actual -> Nothing
+                           | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual ++ "\n(run the test suite with --regenerate-golden-files to update the golden files)")
+            Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " is missing; run the test suite with --regenerate-golden-files to (re)generate it")
+
+-- Run all golden checks (so every file is regenerated in one run, even on failure), then fail once if any did not match.
+goldenAssert :: [IO (Maybe String)] -> Assertion
+goldenAssert checks = do
+    failures <- catMaybes <$> sequence checks
+    if null failures then return () else assertFailure (concat failures)
+
+
+testSTSPathCondition :: Test
+testSTSPathCondition = TestCase $ do
+    let -- is the given guard satisfiable, according to the SMT solver?
+        isSat guard = SMT.runSMT $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        pathCond = interactsToSpecifiedCondition stsExampleIntrpr
+        assertSat lbl prefix = isSat (pathCond prefix) >>= assertBool (lbl ++ " should be satisfiable")
+        assertUnsat lbl prefix = isSat (pathCond prefix) >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
+        -- guards against a regression to True: a tautology's negation is unsatisfiable
+        assertNotTautology lbl prefix = isSat (sNot (pathCond prefix)) >>= assertBool (lbl ++ " should not be a tautology")
+    -- Build up from a trivial example to the full trace [water, ok, water, ok, coffee]. Every prefix must yield a
+    -- meaningful path condition, never collapsing to True (which it did before the symbolic-execution-tree fixes).
+    assertSat           "[]" []
+    assertUnsat         "[coffee] (coffee cannot be the first action: x starts at 0, guard needs x >= 15)" [coffee]
+    assertSat           "[water]" [water]
+    assertNotTautology  "[water]" [water]
+    assertSat           "[water, ok]" [water, ok]
+    assertNotTautology  "[water, ok]" [water, ok]
+    assertSat           "[water, ok, water]" [water, ok, water]
+    assertNotTautology  "[water, ok, water]" [water, ok, water]
+    assertSat           "[water, ok, water, ok]" [water, ok, water, ok]
+    assertNotTautology  "[water, ok, water, ok]" [water, ok, water, ok]
+    assertSat           "[water, ok, water, ok, coffee]" [water, ok, water, ok, coffee]
+    assertNotTautology  "[water, ok, water, ok, coffee]" [water, ok, water, ok, coffee]
+
+stsConjOfDifferentVals :: IOSTS FreeLattice Integer String String
+stsConjOfDifferentVals =
+    let switches loc = case loc of
+            0 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment [xvar =: (1 :: Expr Integer)]), 1) /\ ordReturn (stsTLoc sTrue (assignment [xvar =: (2 :: Expr Integer)]), 2))]
+            1 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 1))]
+            2 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 2))]
+            _ -> Map.empty
+    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate]) switches
+
+getSTSIntrpState' :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
+getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+
+stsConjOfDifferentValsIntrpr :: STSIntrp FreeLattice Integer (IOAct String String)
+stsConjOfDifferentValsIntrpr = interpretSTS treeSTS branchInitAssign
+
+testConjunctionOfDifferentValuations :: Test
+testConjunctionOfDifferentValuations = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsConjOfDifferentValsIntrpr)
+    let intrp2 = after stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0])
+    assertEqual "after x: " forbidden (stateConf intrp2)
