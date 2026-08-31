@@ -956,9 +956,9 @@ prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t
 
 -- Show the entire intermediate tree structure (`Solve.seTree`) for the composed coffee machine up to depth 3, as a
 -- single golden test. The same tree folds (via `Solve.treeToGuard asDualExpr`/`asExpr`) to the specified/allowed guards.
-testComposedSeTreeStructure :: Test
-testComposedSeTreeStructure = TestCase $ goldenAssert
-    [ goldenCheck "composed:seTree" (goldenDir </> "composed.setree.txt")
+testComposedSeTreeStructure :: Bool -> Test
+testComposedSeTreeStructure regenerate = TestCase $ goldenAssert
+    [ goldenCheck regenerate "composed:seTree" (goldenDir </> "composed.setree.txt")
         ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr))
     ]
 
@@ -967,9 +967,9 @@ testComposedSeTreeStructure = TestCase $ goldenAssert
 -- over the composed coffee machine's alphabet up to length 3. One symbolic guard per (condition, trace) encodes all
 -- concrete valuations at once, complementing the pointwise checks in testConcreteTraceSpecifiedAllowedCorrespondence.
 -- The transition function is total (missing gates map to the implicit location), so every alphabet trace has a guard.
-testComposedPathCondition :: Test
-testComposedPathCondition = TestCase $ goldenAssert
-    [ goldenCheck "composed:pathCondition" (goldenDir </> "composed.pathcondition.txt")
+testComposedPathCondition :: Bool -> Test
+testComposedPathCondition regenerate = TestCase $ goldenAssert
+    [ goldenCheck regenerate "composed:pathCondition" (goldenDir </> "composed.pathcondition.txt")
         ("\n" ++ concatMap render traces)
     ]
     where
@@ -1091,18 +1091,25 @@ prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
 
--- Compare rendered output against a golden file, then always (re)generate it (creating the directory if needed).
--- Returns a failure message if it did not match, or Nothing if it did. A completely missing golden file is
--- (re)generated but reported as a failure, so a freshly created baseline is never silently accepted.
-goldenCheck :: String -> FilePath -> String -> IO (Maybe String)
-goldenCheck what path actual = do
-    existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
-    createDirectoryIfMissing True (takeDirectory path)
-    BS.writeFile path (UTF8.fromString actual)
-    return $ case existing of
-        Right expected | expected == actual -> Nothing
-                       | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual)
-        Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " was missing; (re)generated it -- rerun to compare against it")
+-- Compare rendered output against a golden file. Returns a failure message if it did not match, or Nothing if it did.
+--
+-- In compare mode (@regenerate == False@, the default) the golden file is only read, never written, so running the
+-- test suite has no side-effects. A missing golden file is reported as a failure with a hint on how to create it.
+--
+-- In regenerate mode (@regenerate == True@) the golden file is (over)written (creating the directory if needed) and
+-- the check always passes. Enable this by running the test suite with @--regenerate-golden-files@.
+goldenCheck :: Bool -> String -> FilePath -> String -> IO (Maybe String)
+goldenCheck regenerate what path actual
+    | regenerate = do
+        createDirectoryIfMissing True (takeDirectory path)
+        BS.writeFile path (UTF8.fromString actual)
+        return Nothing
+    | otherwise = do
+        existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
+        return $ case existing of
+            Right expected | expected == actual -> Nothing
+                           | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual ++ "\n(run the test suite with --regenerate-golden-files to update the golden files)")
+            Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " is missing; run the test suite with --regenerate-golden-files to (re)generate it")
 
 -- Run all golden checks (so every file is regenerated in one run, even on failure), then fail once if any did not match.
 goldenAssert :: [IO (Maybe String)] -> Assertion
