@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -22,7 +23,7 @@ import Lattest.Model.Alphabet (IOAct (..), SymInteract (..))
 import Lattest.Model.Automaton (stsTLoc, STStdest)
 import Lattest.Model.BoundedMonad (FreeLattice, atom, (/\))
 import Lattest.Model.StandardAutomata (IOSTS, automaton)
-import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..))
+import Lattest.Model.Symbolic.Expr ((=:), (./), (.%), (.+), (.-), (.*), (.==), (.>=), (.<=), (.<), (.>), (.||), (.&&), sNeg, sNot, assignment, sTrue, sConst, sVar, Expr, ExprNum, Type (..), Variable (..), Valuation, VarModel, Constant(..), insertIntoValuation, assignValues, Constant(..), sElem, sFirst, sSecond, sHead, sSElem, sConcat, sCons, sAppend, sTake, sDrop, sTail)
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
@@ -83,28 +84,62 @@ inferOperandType varmap lhs rhs =
           | otherwise = Just $ Some IntType
         literalOperandType _           = Nothing
 
+-- handles the polymorphic cases, and redirects to the other parsers for other cases
+toExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr t)
+toExpr t varmap (UEVar name) = lookupVar varmap name t sVar
+toExpr t varmap (UEOp1 "head" e) = withExprConstraints t $ sHead <$> toExpr (ListType t) varmap e
+-- todo: Ite, First, Second, Either (the deconstructor)
+-- what do we even want if-then-else to look like?
+-- problem for First and Second: don't know the type of the other half of the tuple
+-- toExpr t varmap (UEOp1 "first" e) = sFirst <$> toExpr (TupleType t undefined) varmap e
+-- toExpr t varmap (UEOp1 "second" e) = sSecond <$> toExpr (TupleType t undefined) varmap e
+-- problem for Either: similarly, we don't know the type of the either
+-- toExpr t varmap (UEOp5 "either" vl vr l r e) = sEither <$> _ vl <*> _ vr <*> toExpr t varmap l <*> toExpr t varmap r <*> toExpr undefined varmap e
+toExpr t varmap e = toExpr' t varmap e -- the rest of the cases get delegated to special-purpose parsers
+  where
+    toExpr' :: Type t -> VarMap -> UntypedExpr -> Either String (Expr t)
+    toExpr' = \case
+      IntType -> toIntExpr
+      BoolType -> toBoolExpr
+      FloatType -> toFloatExpr
+      CharType -> toCharExpr
+      ListType tp -> toListExpr tp
+      SetType tp -> toSetExpr tp
+      TupleType a b -> toTupleExpr a b
+      SumType a b -> toEitherExpr a b
+
 toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)
 toBoolExpr _   (UEBool b)          = Right (sConst b)
-toBoolExpr varmap (UEVar name)        = lookupVar varmap name BoolType sVar
-toBoolExpr varmap (UEOp1 "not" e)    = sNot  <$> toBoolExpr varmap e
-toBoolExpr varmap (UEOp2 "&&" e1 e2) = (.&&) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
-toBoolExpr varmap (UEOp2 "||" e1 e2) = (.||) <$> toBoolExpr varmap e1 <*> toBoolExpr varmap e2
+toBoolExpr varmap (UEOp1 "not" e)    = sNot  <$> toExpr BoolType varmap e
+toBoolExpr varmap (UEOp2 "&&" e1 e2) = (.&&) <$> toExpr BoolType varmap e1 <*> toExpr BoolType varmap e2
+toBoolExpr varmap (UEOp2 "||" e1 e2) = (.||) <$> toExpr BoolType varmap e1 <*> toExpr BoolType varmap e2
 toBoolExpr varmap (UEOp2 "==" e1 e2) = do
     t <- inferOperandType varmap e1 e2
     case t of
-        Some IntType    -> (.==) <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
-        Some BoolType   -> (.==) <$> toBoolExpr  varmap e1 <*> toBoolExpr  varmap e2
-        Some CharType   -> (.==) <$> toCharExpr  varmap e1 <*> toCharExpr   varmap e2
-        Some FloatType  -> (.==) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
-        Some (ListType tp) -> withExprConstraints tp $ (.==) <$> toListExpr tp varmap e1 <*> toListExpr tp varmap e2
-        Some (SetType _) -> error "no eq on rcsets"
-        Some (TupleType a b) -> withExprConstraints (TupleType a b) $ (.==) <$> toTupleExpr a b varmap e1 <*> toTupleExpr a b varmap e2
-        Some (SumType a b) -> withExprConstraints (SumType a b) $ (.==) <$> toEitherExpr a b varmap e1 <*> toEitherExpr a b varmap e2
-toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toBoolExpr varmap (UEOp2 "==" e1 e2)
+      Some tp -> withExprConstraints tp $ (.==) <$> toExpr tp varmap e1 <*> toExpr tp varmap e2
+toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toExpr BoolType varmap (UEOp2 "==" e1 e2)
 toBoolExpr varmap (UEOp2 "<"  e1 e2) = toComparisonExpr (.<)  varmap e1 e2
 toBoolExpr varmap (UEOp2 "<=" e1 e2) = toComparisonExpr (.<=) varmap e1 e2
 toBoolExpr varmap (UEOp2 ">"  e1 e2) = toComparisonExpr (.>)  varmap e1 e2
 toBoolExpr varmap (UEOp2 ">=" e1 e2) = toComparisonExpr (.>=) varmap e1 e2
+toBoolExpr varmap (UEOp2 "LElem" e1 e2) =
+  let tp = case inferOperandType varmap e1 e1 of
+        Right t -> Just t
+        _ -> case inferOperandType varmap e2 e2 of
+          Right (Some (ListType t)) -> Just (Some t)
+          _ -> Nothing
+  in case tp of
+    Nothing -> Left "Cannot infer list type of LElem"
+    Just (Some t) -> sElem <$> toExpr t varmap e1 <*> toExpr (ListType t) varmap e2
+toBoolExpr varmap (UEOp2 "SElem" e1 e2) =
+  let tp = case inferOperandType varmap e1 e1 of
+        Right t -> Just t
+        _ -> case inferOperandType varmap e2 e2 of
+          Right (Some (SetType t)) -> Just (Some t)
+          _ -> Nothing
+  in case tp of
+    Nothing -> Left "Cannot infer set type of SElem"
+    Just (Some t) -> sSElem <$> toExpr t varmap e1 <*> toExpr (SetType t) varmap e2
 toBoolExpr _   e                   = Left $ "not a boolean expression: " ++ show e
 
 -- Numeric ordering comparisons are defined for both Integer and Float operands, but never mixed.
@@ -112,58 +147,57 @@ toComparisonExpr :: (forall t. ExprNum t => Expr t -> Expr t -> Expr Bool) -> Va
 toComparisonExpr cmp varmap e1 e2 = do
     t <- inferOperandType varmap e1 e2
     case t of
-        Some IntType   -> cmp <$> toIntExpr   varmap e1 <*> toIntExpr   varmap e2
-        Some FloatType -> cmp <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+        Some IntType   -> cmp <$> toExpr IntType   varmap e1 <*> toExpr IntType   varmap e2
+        Some FloatType -> cmp <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
         Some tp        -> Left $ "comparison operator is not defined for type " ++ show tp
 
 toIntExpr :: VarMap -> UntypedExpr -> Either String (Expr Integer)
 toIntExpr _   (UENumber n)
  | Right i <- floatingOrInteger @Double n = Right (sConst i)
-toIntExpr varmap (UEVar name)         = lookupVar varmap name IntType sVar
-toIntExpr varmap (UEOp1 "neg" e)     = sNeg <$> toIntExpr varmap e
-toIntExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toIntExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toIntExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
-toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toIntExpr varmap e1 <*> toIntExpr varmap e2
+toIntExpr varmap (UEOp1 "neg" e)     = sNeg <$> toExpr IntType varmap e
+toIntExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
+toIntExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
+toIntExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
+toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
+toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
 toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
 
 toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr [t])
 toListExpr t varmap e = case e of
-  UEVar name -> lookupVar varmap name (ListType t) sVar
-  -- TODO: add operators that return lists
+  UEOp1 "concat" e1 -> withExprConstraints t $ sConcat <$> toExpr (ListType $ ListType t) varmap e1
+  UEOp1 "tail"   e1 -> withExprConstraints t $ sTail   <$> toExpr (ListType t)            varmap e1
+  UEOp2 "cons"   e1 e2 -> sCons   <$> toExpr t            varmap e1 <*> toExpr (ListType t) varmap e2
+  UEOp2 "append" e1 e2 -> sAppend <$> toExpr (ListType t) varmap e1 <*> toExpr (ListType t) varmap e2
+  UEOp2 "take"   e1 e2 -> sTake   <$> toExpr IntType      varmap e1 <*> toExpr (ListType t) varmap e2
+  UEOp2 "drop"   e1 e2 -> sDrop   <$> toExpr IntType      varmap e1 <*> toExpr (ListType t) varmap e2
+  -- problem: can't parse Map without knowing the types
   _ -> Left $ "not a list expression: " ++ show e
 
 toSetExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (RCSet t))
 toSetExpr t varmap e = case e of
-  UEVar name -> lookupVar varmap name (SetType t) sVar
   -- TODO: add operators that return sets
   _ -> Left $ "not a set expression: " ++ show e
 
 toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
 toTupleExpr t1 t2 varmap e = case e of
-  UEVar name -> lookupVar varmap name (TupleType t1 t2) sVar
   -- TODO: add operators that return tuples
   _ -> Left $ "not a tuple expression: " ++ show e
 
 toEitherExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (Either a b))
 toEitherExpr t1 t2 varmap e = case e of
-  UEVar name -> lookupVar varmap name (SumType t1 t2) sVar
   -- TODO: add operators that return eithers
   _ -> Left $ "not an either expression: " ++ show e
 
 toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
 toFloatExpr _   (UENumber n)          = Right (sConst $ toRealFloat n)
-toFloatExpr varmap (UEVar name)         = lookupVar varmap name FloatType sVar
-toFloatExpr varmap (UEOp1 "neg" e)     = sNeg <$> toFloatExpr varmap e
-toFloatExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
-toFloatExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
-toFloatExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
-toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toFloatExpr varmap e1 <*> toFloatExpr varmap e2
+toFloatExpr varmap (UEOp1 "neg" e)     = sNeg <$> toExpr FloatType varmap e
+toFloatExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
+toFloatExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
+toFloatExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
+toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
 toFloatExpr _   e                    = Left $ "not a real expression: " ++ show e
 
 toCharExpr :: VarMap -> UntypedExpr -> Either String (Expr Char)
-toCharExpr varmap (UEVar name) = lookupVar varmap name CharType sVar
 toCharExpr _      (UEStr [c])  = Right (sConst c)
 toCharExpr _      e            = Left $ "not a character expression: " ++ show e
 
@@ -297,14 +331,14 @@ buildAssignment varMap name def = do
     let expr = assignmentJsonExpr def
     case var of
       Some v -> case varType v of
-        IntType    -> (v =:) <$> toIntExpr  varMap expr
-        FloatType  -> (v =:) <$> toFloatExpr varMap expr
-        BoolType   -> (v =:) <$> toBoolExpr varMap expr
-        CharType -> (v =:) <$> toCharExpr  varMap expr
-        ListType t -> (v =:) <$> toListExpr t varMap expr
-        SetType t -> (v =:) <$> toSetExpr t varMap expr
-        TupleType a b -> (v =:) <$> toTupleExpr a b varMap expr
-        SumType a b -> (v =:) <$> toEitherExpr a b varMap expr
+        IntType   -> (v =:) <$> toExpr IntType   varMap expr
+        FloatType -> (v =:) <$> toExpr FloatType varMap expr
+        BoolType  -> (v =:) <$> toExpr BoolType  varMap expr
+        CharType  -> (v =:) <$> toExpr CharType  varMap expr
+        ListType t -> (v =:) <$> toExpr (ListType t) varMap expr
+        SetType  t -> (v =:) <$> toExpr (SetType  t) varMap expr
+        TupleType a b -> (v =:) <$> toExpr (TupleType a b) varMap expr
+        SumType   a b -> (v =:) <$> toExpr (SumType   a b) varMap expr
 
 buildAssignmentMap
     :: VarMap
@@ -392,7 +426,7 @@ convertSTSJson json = do
     outputGateMap <- buildGateMap Out varMap (stsJsonOutputGates json)
     let gateMap = inputGateMap `Map.union` outputGateMap
         alphabet  = Set.fromList (Map.elems gateMap)
-    guardMap  <- traverse (toBoolExpr varMap) (stsJsonGuards json)
+    guardMap  <- traverse (toExpr BoolType varMap) (stsJsonGuards json)
     assignMap <- buildAssignmentMap varMap (stsJsonAssignments json)
     switchList <- buildSwitchList gateMap guardMap assignMap (stsJsonSwitches json)
     let transRel = buildTransitionRel switchList

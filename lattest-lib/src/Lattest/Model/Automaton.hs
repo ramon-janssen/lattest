@@ -510,7 +510,7 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
                  in BM.ordReturn $ IntrpState l2 stateValuation2
         where
         assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t
-        assignNewValue var oldVal val' assign' = withExprConstraints (varType var)
+        assignNewValue var oldVal val' assign' = withExprConstraints var
                                                $ maybe oldVal (Val . fromConst . evalVal val') (assignedExpr var assign')
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Some Variable] -> [Some Constant] -> Valuation

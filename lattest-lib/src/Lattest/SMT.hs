@@ -147,7 +147,7 @@ exprToSymbolic v = case v of
   ERight xs -> withExprConstraints (typeOf' xs) $ SBV.sRight <$> go xs
   SElem t x xs -> withExprConstraints t $ withExprConstraints (SetType t) $ SBV.member <$> go x <*> go xs
   SInsert x xs -> SBV.insert <$> go x <*> go xs
-  Map (Variable nm ta) f x -> withExprConstraints ta $ has @ExprType f $ withExprConstraints (typeOf' f) $ do
+  Map (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
     -- do-notation makes it easier to massage the functions into the type that 'SBV.map' wants
     xs <- go x
     m <- get
@@ -156,7 +156,7 @@ exprToSymbolic v = case v of
           modify $ Map.insert nm $ Some smtvar
           go f
     pure $ SBV.map f' xs
-  Either (Variable nml tl) (Variable nmr tr) l r e -> withExprConstraints tl $ withExprConstraints tr $ has @ExprType e $ withExprConstraints (typeOf' e) $ do
+  Either (Variable nml tl) (Variable nmr tr) l r e -> withExprConstraints tl $ withExprConstraints tr $ withExprConstraints e $ do
     -- see the case for 'Map' above; this one is very similar
     ei <- go e
     m <- get
