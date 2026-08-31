@@ -62,9 +62,7 @@ getSolution vs =
   where
     getVarValue :: Variable -> SMT (Variable, Constant)
     getVarValue v@(Variable nm tp) = do
-        sval <- gets (\m -> case m Map.!? nm of
-            Nothing -> error $ show nm <> "is not in" <> show m
-            Just x -> x)
+        sval <- gets (Map.! nm)
         c <- lift $ svalToConstant tp sval
         return (v, c)
 
