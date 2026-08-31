@@ -174,12 +174,10 @@ data OfflineTests i o r
         , OnlyOrInconclusive -- Whether that is the only allowed valuation, or other valuations should be marked as 'inconclusive';
         , OfflineTests i o r)) -- And the rest of the test.
       (Either (GateValue i, OfflineTests i o r) r) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
-  | Done r -- End of the test
 
 data OnlyOrInconclusive = Only | Inconclusiv
 
 instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
-  show (Done r) = show r
   show (OfflineTests os is) = "\\case\n" <> indentOfflineTree os' <> indentOfflineTree is'
     where
       os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> show cs <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
@@ -194,7 +192,6 @@ instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
 
 getInputOffline :: OfflineTests i o r -> Either (GateValue i, OfflineTests i o r) r
 getInputOffline (OfflineTests _ i) = i
-getInputOffline (Done v) = Right v
 
 giveOutputOffline :: Ord o => OfflineTests i o Verdict -> GateValue o -> Either (OfflineTests i o Verdict) Verdict
 giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
@@ -204,7 +201,6 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
     | otherwise -> case ooi of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
-giveOutputOffline (Done v) _ = Right v
 
 offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
@@ -242,7 +238,7 @@ offlineTests intrpr tc = do
                   Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
-             Right r -> pure $ Done r
+             Right r -> pure $ OfflineTests mempty $ Right r
              Left (tc', intrpr') -> offlineTests intrpr' tc')
   pure $ OfflineTests o i
   where
@@ -259,4 +255,15 @@ offlineTests intrpr tc = do
         -- GateValue (In  _) _ -> Pass -- TODO: testcontrollers with a fixed number of steps do trigger this. Need a way to also deal with them in in the output case! -- error "this should never happen, I think: the testcontroller choosing to stop rather than update based on an input it chose itself"
         -- GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail? Not necessarily, what if it's just a stopcondition?
       Left st -> pure $ Left (t {testControllerState = st}, after i x)
+
+-- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it.
+-- For outputs, it returns both the given output and the starting location.
+toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
+        => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+        -> OfflineTests i o r
+        -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Constant], m (IntrpState loc))]
+toTrace _ (OfflineTests (Map.toList -> []) (Right _)) = Just []
+toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
+toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
+toTrace _ _ = Nothing -- either multiple outputs, or input and output
 
