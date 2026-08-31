@@ -38,7 +38,9 @@ packages:
 #
 extra-deps:
 - ../../lattest-lib
-- sbv-14.6
+- git: https://github.com/LeventErkok/sbv.git
+  commit: 3dd5fb732f7039f68fae8f8cb95b24eab3d594fe # master as of 31-08-2026; the important thing is that it's after the 'Addresses #813' commit. Once 14.7 gets released, just use that
+#- sbv-14.7
 # - lattest-lib-0.1.1
 # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git

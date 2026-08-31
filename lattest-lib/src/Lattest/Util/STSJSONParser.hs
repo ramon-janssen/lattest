@@ -138,7 +138,7 @@ toSetExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (RCSet t))
 toSetExpr t varmap e = case e of
   UEVar name -> lookupVar varmap name (SetType t) sVar
   -- TODO: add operators that return sets
-  _ -> Left $ "not a list expression: " ++ show e
+  _ -> Left $ "not a set expression: " ++ show e
 
 toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
 toTupleExpr t1 t2 varmap e = case e of
@@ -150,7 +150,7 @@ toEitherExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr
 toEitherExpr t1 t2 varmap e = case e of
   UEVar name -> lookupVar varmap name (SumType t1 t2) sVar
   -- TODO: add operators that return eithers
-  _ -> Left $ "not a tuple expression: " ++ show e
+  _ -> Left $ "not an either expression: " ++ show e
 
 toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
 toFloatExpr _   (UENumber n)          = Right (sConst $ toRealFloat n)
