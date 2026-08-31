@@ -56,6 +56,7 @@ run = do
     let controller = randomDataTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 10
     offlinetests <- offlineTests model' controller
     print offlinetests
+    print $ toTrace model' offlinetests
 
     putStrLn $ "connecting to SUT..."
     let quiesenceMillis = 300

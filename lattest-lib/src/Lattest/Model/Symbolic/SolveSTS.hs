@@ -22,7 +22,8 @@ treeToGuard,
 SETree(..),
 SEIte(..),
 offlineTests,
-OfflineTests(..)
+OfflineTests(..),
+toTrace
 )
 where
 
@@ -175,7 +176,7 @@ data OfflineTests i o r
         , OfflineTests i o r)) -- And the rest of the test.
       (Either (GateValue i, OfflineTests i o r) r) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
 
-data OnlyOrInconclusive = Only | Inconclusiv
+data OnlyOrInconclusive = Only | Inconclusiv deriving Show
 
 instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
   show (OfflineTests os is) = "\\case\n" <> indentOfflineTree os' <> indentOfflineTree is'
@@ -261,7 +262,7 @@ offlineTests intrpr tc = do
 toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
         => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
         -> OfflineTests i o r
-        -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Constant], m (IntrpState loc))]
+        -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))]
 toTrace _ (OfflineTests (Map.toList -> []) (Right _)) = Just []
 toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
 toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
