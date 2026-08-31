@@ -55,7 +55,8 @@ testSTSJSONParserNominal = TestCase $ do
                 (Valuation $
                  DMap.insert (Variable "counter" IntType)  (Val 5) $
                  DMap.insert (Variable "label" (ListType CharType)) (Val "") $
-                 DMap.insert (Variable "active" BoolType)  (Val False)
+                 DMap.insert (Variable "active" BoolType)  (Val False) $
+                 DMap.insert (Variable "selector" CharType) (Val 'a')
                  mempty)
                 valuation
             assertEqual "alphabet"
@@ -72,7 +73,7 @@ testSTSJSONParserNominal = TestCase $ do
                 actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
                 failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
                 expected = [QQ.r|
-current state configuration: ("0",{active:=False,counter:=5,label:=""})
+current state configuration: ("0",{active:=False,counter:=5,label:="",selector:='a'})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
@@ -156,7 +157,7 @@ testSTSJSONParserAssignmentTypeMismatch = TestCase $ do
 testSTSJSONParserGuardTypeMismatch :: Test
 testSTSJSONParserGuardTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "guard_type_mismatch.json")
-    assertErrorContains "Test guard type mismatch" "not a list expression" result
+    assertErrorContains "Test guard type mismatch" "not a character expression" result
 
 -- | Switch refers to an undefined gate
 testSTSJSONParserGateIdDup :: Test
