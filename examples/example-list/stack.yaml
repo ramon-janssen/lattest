@@ -38,7 +38,7 @@ packages:
 #
 extra-deps:
 - ../../lattest-lib
-- sbv-14.6
+- sbv-14.7
 #- lattest-lib-0.1.1
 # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git

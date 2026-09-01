@@ -577,8 +577,8 @@ sEmptySet = Expr $ Const $ RegularSet $ Set.fromList []
 sInsert :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr (RCSet a)
 sInsert (view -> x) (view -> xs) = Expr $ SInsert x xs
 
-sSElem :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr Bool
-sSElem (view -> x) (view -> xs) = Expr $ SElem (typeOf' x) x xs
+sSElem :: Expr a -> Expr (RCSet a) -> Expr Bool
+sSElem (view -> x) (view -> xs) = withExprConstraints x $ Expr $ SElem (typeOf' x) x xs
 
 -- | Apply String In Regular Expression operator on the provided value expressions.
 -- Preconditions are /not/ checked.

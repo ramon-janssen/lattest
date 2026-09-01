@@ -257,8 +257,8 @@ readSet ('{':s) = go [] s
       go (x:xs) str'
 readSet _ = []
 
-withExprConstraints :: Type x -> (ExprConstraints x => r) -> r
-withExprConstraints t k = has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t k
+withExprConstraints :: Has ExprType f => f a -> (ExprConstraints a => r) -> r
+withExprConstraints f k = let t = has @ExprType f (typeOf' f) in has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t k
 
 instance Has ExprType Type where
   has t k = case t of
@@ -398,7 +398,7 @@ instance Has (ComposeC Ord Expr) Variable where
 instance Has (ComposeC Show Expr) Variable where
   has _ k = k
 instance Has ExprType Variable where
-  has (Variable _ t) = has @ExprType t
+  has v = has @ExprType (varType v)
 
 instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
