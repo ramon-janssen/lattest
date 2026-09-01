@@ -672,6 +672,7 @@ data ExprView t where
     ELeft  :: (ExprConstraints a, ExprConstraints b) => ExprView a -> ExprView (Either a b)
     ERight  :: (ExprConstraints a, ExprConstraints b) => ExprView b -> ExprView (Either a b)
     SElem :: Type a -> ExprView a -> ExprView (RCSet a) -> ExprView Bool
+    Size :: ExprConstraints a => ExprView (RCSet a) -> ExprView Integer
     SInsert :: ExprConstraints a => ExprView a -> ExprView (RCSet a) -> ExprView (RCSet a)
     -- Adding Lam and App would make it impossible to implement some typeclasses that SBV wants,
     -- and is also stronger than we need: we don't need lists of functions, top-level functions, etc.
@@ -683,9 +684,6 @@ data ExprView t where
     -- The first 'ExprView x' has the 'Variable a' in scope, the second 'ExprView x' has the 'Variable b' in scope.
     -- This is the `either` deconstructor in Haskell: (a -> x) -> (b -> x) -> Either a b -> x
     Either :: (ExprConstraints a, ExprConstraints b, ExprConstraints x) => Variable a -> Variable b -> ExprView x -> ExprView x -> ExprView (Either a b) -> ExprView x
-    -- don't like the functions in here, but the alternative is an environment?
-    -- maybe adding an env is not too bad when I enforce that a complete Expr is always closed
-    -- but also; we already have named variables, the most logical thing is probably to just create a Lam node with some fresh name
     -- NOTE: when adding more fields, check the Eq instance
 
 type ExprConstraints t = (Data t, Eq t, Ord t, Show t, ExprType t, SymVal t, Eq t, ConstType t, Read t)
@@ -697,14 +695,12 @@ instance Eq (ExprView t) where
   Equal t1 a b == Equal t2 x y
     | Just Refl <- t1 `geq` t2 = a == x && b == y
   Divide a b == Divide x y = a == x && b == y
-  DivideFloat a b == DivideFloat x y = a == x && b == y
   Modulo a b == Modulo x y = a == x && b == y
+  DivideFloat a b == DivideFloat x y = a == x && b == y
   Sum x == Sum y = x == y
   SumFloat x == SumFloat y = x == y
   Product x == Product y = x == y
   ProductFloat x == ProductFloat y = x == y
-  Length a x == Length b y
-    | Just Refl <- a `geq` b = x == y
   GezInt x == GezInt y = x == y
   GezFloat x == GezFloat y = x == y
   Not x == Not y = x == y
@@ -712,6 +708,8 @@ instance Eq (ExprView t) where
   Concat x == Concat y = x == y
   Cons x xs == Cons y ys = x == y && xs == ys
   Append x xs == Append y ys = x == y && xs == ys
+  Length a x == Length b y
+    | Just Refl <- a `geq` b = x == y
   LElem t1 x y == LElem t2 a b
     | Just Refl <- t1 `geq` t2 = x == a && y == b
   Take x xs == Take y ys = x == y && xs == ys
@@ -725,16 +723,22 @@ instance Eq (ExprView t) where
   Pair a b == Pair x y = a == x && b == y
   Head x == Head y = x == y
   Tail x == Tail y = x == y
+  ELeft x == ELeft y
+    | Just Refl <- geq (typeOf' x) (typeOf' y) = x == y
+  ERight x == ERight y
+    | Just Refl <- geq (typeOf' x) (typeOf' y) = x == y
+  SElem t1 x y == SElem t2 a b
+    | Just Refl <- t1 `geq` t2 = x == a && y == b
+  Size x == Size y
+    | Just Refl <- typeOf' x `geq` typeOf' y = x == y
+  SInsert x y == SInsert a b = x == a && y == b
+  Map t1 f xs == Map t2 g ys
+    | Just Refl <- geq t1 t2
+    = f == g && xs == ys
   Either ta tb a b c == Either tx ty x y z
     | Just Refl <- geq ta tx
     , Just Refl <- geq tb ty
     = a == x && b == y && c == z
-  Map t1 f xs == Map t2 g ys
-    | Just Refl <- geq t1 t2
-    = f == g && xs == ys
-  SElem t1 x y == SElem t2 a b
-    | Just Refl <- t1 `geq` t2 = x == a && y == b
-  SInsert x y == SInsert a b = x == a && y == b
   _ == _ = False
 
 instance Ord (ExprView t) where
@@ -751,9 +755,9 @@ instance Ord (ExprView t) where
           GEQ -> compare (a,b) (x,y)
       (Divide a b, Divide x y) ->
         compare (a, b) (x, y)
-      (DivideFloat a b, DivideFloat x y) ->
-        compare (a, b) (x, y)
       (Modulo a b, Modulo x y) ->
+        compare (a, b) (x, y)
+      (DivideFloat a b, DivideFloat x y) ->
         compare (a, b) (x, y)
       (Sum a, Sum b) ->
         compare a b
@@ -763,10 +767,6 @@ instance Ord (ExprView t) where
         compare a b
       (ProductFloat a, ProductFloat b) ->
         compare a b
-      (Length a x, Length b y) -> case gcompare a b of
-        GLT -> LT
-        GGT -> GT
-        GEQ -> compare x y
       (GezInt a, GezInt b) ->
         compare a b
       (GezFloat a, GezFloat b) ->
@@ -781,6 +781,10 @@ instance Ord (ExprView t) where
         compare (x,xs) (y,ys)
       (Append as bs, Append xs ys) ->
         compare (as,bs) (xs,ys)
+      (Length a x, Length b y) -> case gcompare a b of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
       (LElem t1 x xs, LElem t2 y ys) ->
         case gcompare t1 t2 of
           GLT -> LT
@@ -806,6 +810,30 @@ instance Ord (ExprView t) where
         compare x a
       (Tail x, Tail a) ->
         compare x a
+      (ELeft x, ELeft y) -> case gcompare (typeOf' x) (typeOf' y) of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
+      (ERight x, ERight y) -> case gcompare (typeOf' x) (typeOf' y) of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
+      (SElem tx x xs, SElem ty y ys) -> case gcompare tx ty of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> case compare x y of
+          EQ -> compare xs ys
+          c -> c
+      (Size x, Size y) -> case gcompare (typeOf' x) (typeOf' y) of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
+      (SInsert x xs, SInsert y ys) -> case gcompare (typeOf' x) (typeOf' y) of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> case compare x y of
+          EQ -> compare xs ys
+          c -> c
       (Either ta tb a b c, Either tx ty x y z) ->
         case gcompare ta tx of
           GLT -> LT
@@ -846,6 +874,7 @@ instance Ord (ExprView t) where
         SumFloat{} -> 19
         ProductFloat{} -> 20
         GezFloat{} -> 21
+        Size{} -> 22
         ELeft{} -> 23
         ERight{} -> 24
         First{} -> 25
@@ -905,7 +934,8 @@ instance Show (ExprView t) where
   show (ELeft x) = "Left " <> show x
   show (ERight x) = "Right " <> show x
   show (SElem _ x xs) = show x <> "`Set.elem`" <> show xs
-  show (SInsert x xs) = "Set.insert" <> show x <> " " <> show xs
+  show (SInsert x xs) = "Set.insert " <> show x <> " " <> show xs
+  show (Size xs) = "Set.size " <> show xs
 
 instance Has ExprType ExprView where
   has e k = case e of
@@ -946,6 +976,7 @@ instance Has ExprType ExprView where
     ERight x -> has @ExprType x k
     SElem{} -> k
     SInsert x _ -> has @ExprType x k
+    Size _ -> k
 
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
@@ -1008,7 +1039,8 @@ freeVars' (ELeft x) = freeVars' x
 freeVars' (ERight x) = freeVars' x
 freeVars' (SElem _ x xs) = freeVars' x ++ freeVars' xs
 freeVars' (SInsert x xs) = freeVars' x ++ freeVars' xs
--- TODO: should v, vl, vr be in these lists? Maybe they should even be removed from the recursive calls instead?
-freeVars' (Map v f xs) = Some v : freeVars' f ++ freeVars' xs
-freeVars' (Either vl vr l r x) = Some vl : Some vr : freeVars' l ++ freeVars' r ++ freeVars' x
+freeVars' (Size xs) = freeVars' xs
+-- v, vl, and vr are the only variables that are not free
+freeVars' (Map v f xs) = filter (/= Some v) (freeVars' f) ++ freeVars' xs
+freeVars' (Either vl vr l r x) = filter (/= Some vl) (freeVars' l) ++ filter (/= Some vr) (freeVars' r) ++ freeVars' x
 
