@@ -12,13 +12,13 @@ module Test.Lattest.Model.STSTest (
     testSTSUnHappyFlow,
     testPrintSTS,
     testSTSTestSelection,
+    testSTSDataSelectionGuardedInput,
     testLatticeSTS,
     testLatticeSTSQuiescence,
     testSTSPathCondition,
     testBranchingPathCondition,
-    testLinearCoffeeTreeStructure,
-    testComplexTreeStructure,
-    testComposedCoffeeTreeStructure,
+    testComposedSeTreeStructure,
+    testComposedPathCondition,
     testConcreteTraceSpecifiedAllowedCorrespondence,
     prop_specifiedAllowedCorrespondence,
     composedCoffeeMachineIntrpr,
@@ -47,7 +47,7 @@ import System.FilePath ((</>), takeDirectory)
 import System.Directory (createDirectoryIfMissing)
 import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
-import Lattest.Adapter.StandardAdapters(pureAdapter)
+import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
@@ -625,6 +625,59 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
                 GateValue δ []
                 ] observed
 
+{- |
+    End-to-end regression test for the data test selector picking input values that violate a guard.
+-}
+data Divisibility = Prime | Divisible deriving (Eq, Ord, Show)
+
+ivar :: Variable
+ivar = Variable "i" IntType
+jvar :: Variable
+jvar = Variable "j" IntType
+
+guardedInputSTS :: IOSTS Det Bool Divisibility ()
+guardedInputSTS =
+    let i = sVar ivar :: Expr Integer
+        j = sVar jvar :: Expr Integer
+        echo = SymInteract (Out ()) [jvar]
+        echoAssign = assignment [ivar =: 1 .+ j]
+        yes = SymInteract (In Prime) [jvar]
+        yesGuard = i .% 2 .== 0 .&& j .== i .- 1
+        yesAssign = assignment [ivar =: i .+ j]
+        no = SymInteract (In Divisible) [jvar]
+        noGuard = i .% 2 .== 1 .&& j .== i .- 1
+        noAssign = assignment [ivar =: i .+ j]
+        initConf = return False
+        switches True = Map.singleton echo $ pure (stsTLoc sTrue echoAssign, False)
+        switches False = Map.fromList
+            [ (yes, pure (stsTLoc yesGuard yesAssign, True))
+            , (no,  pure (stsTLoc noGuard  noAssign,  True))]
+    in automaton initConf (Set.fromList [echo, yes, no]) switches
+
+guardedInputInitAssign :: Valuation
+guardedInputInitAssign = fromConstantsMap $ Map.singleton ivar (Cint 42)
+
+guardedInputModel :: STSIntrp Det Bool (IOAct Divisibility ())
+guardedInputModel = interpretSTS guardedInputSTS guardedInputInitAssign
+
+testSTSDataSelectionGuardedInput :: Test
+testSTSDataSelectionGuardedInput = TestCase $ do
+    -- simple adapter that echos its input and then emits an output carrying the same value
+    adap <- pureMealyAdapter
+        (\() _ -> ())
+        (\_ (GateValue m d) -> [GateValue (In m) d, GateValue (Out ()) d])
+        ()
+    let nrSteps = 2
+        randomSeed = 456
+        testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+                        `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
+    (verdict, ((observed, _), _)) <- runSMTTester guardedInputModel testSelector adap
+    assertEqual ("expected the selector to pick the only guard-satisfying input ?Prime [41], got " <> show observed)
+        [ GateValue (In Prime) [Cint 41]
+        , GateValue (Out ()) [Cint 41]
+        ] observed
+    assertEqual ("expected Pass after " <> show observed) Pass verdict
+
 testLatticeSTSQuiescence :: [Test]
 testLatticeSTSQuiescence = [
     testLatticeSTSQuiescentPass "q1" True, -- a quiescent implementation and STS will lead to a pass
@@ -804,13 +857,14 @@ composedCoffeeMachine =
     let initConf = ordReturn "a0" /\ ordReturn "b0" /\ ordReturn "c0" /\ ordReturn "d0":: FreeLatticeSlow String
         asTransition = \q -> (stsTLoc sTrue noAssignment, q)
         switches = \q -> case q of
-            "a0" -> Map.fromList [(a, ordReturn (stsTLoc sTrue noAssignment, "a1"))]
+            "a0" -> Map.fromList [(a, ordReturn (stsTLoc (x .>= 2) noAssignment, "a1"))]
             "a1" -> Map.fromList [(tea, ordReturn (stsTLoc (p .== 2) $ noAssignment, "a2"))]
-            "b0" -> Map.fromList [(b, ordReturn (stsTLoc sTrue $ assignment [xvar =: p], "b1"))]
+            "b0" -> Map.fromList [(b, ordReturn (stsTLoc (x .>= p) $ assignment [xvar =: p], "b1"))] -- this one's tricky: in state b0, x was the amount of water still available. In state b1, it becomes the requested size of the coffee
             "b1" -> Map.fromList [(espresso, ordReturn (stsTLoc (p .== x) $ noAssignment, "b2"))]
-            "c0" -> Map.fromList [(b, ordReturn (stsTLoc sTrue noAssignment, "c1"))]
+            "c0" -> Map.fromList [(b, ordReturn (stsTLoc (x .>= p) noAssignment, "c1"))] -- guard duplicated from b0, so c0 (the milk aspect) does not accept an order that b0 would leave underspecified
             "c1" -> Map.fromList [(espresso, ordReturn (stsTLoc (milk) $ noAssignment, "c2"))]
-            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [ordReturn (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(input, ordReturn (stsTLoc sTrue noAssignment, "d1")) | input <- [a,b]]
+            -- the a/b transitions duplicate a0/b0's guards, so d0 (the loop-back branch) does not accept an order that a0/b0 would leave underspecified
+            "d0" -> Map.fromList $ [(water, foldr (/\) underspecified [ordReturn (stsTLoc (x .< 10) $ assignment [xvar =: x .+ p], d) | d <- ["a0", "b0", "c0", "d0"]])] ++ [(a, ordReturn (stsTLoc (x .>= 2) noAssignment, "d1")), (b, ordReturn (stsTLoc (x .>= p) noAssignment, "d1"))]
             "d1" -> Map.fromList [(output, ordReturn (stsTLoc sTrue $ assignment [xvar =: x .- p], "d2")) | output <- [tea, espresso]]
             "d2" -> Map.fromList [(take, asTransition <#> initConf)]
             -- terminal locations (a2, b2, c2): map every interaction explicitly to unspecified
@@ -819,8 +873,79 @@ composedCoffeeMachine =
 composedCoffeeMachineIntrpr :: STSIntrp FreeLatticeSlow String (IOAct String String)
 composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeMachineAssign
 
-testComposedCoffeeTreeStructure :: Test
-testComposedCoffeeTreeStructure = testTreeStructure "composed" composedCoffeeMachineIntrpr 3
+-- Pretty-print the entire current intermediate symbolic-execution tree (`Solve.seTree`), up to a given depth. The
+-- configuration monad is fixed to `FreeLatticeSlow` so that we can render its ∧/∨/⊤/⊥ structure directly (no
+-- normalization or deduplication), interleaved with the step / if-then-else structure of the tree.
+prettySeTree :: Int
+             -> FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))
+             -> String
+prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t0)
+    where
+    goTree :: Int -> String -> Solve.SETree FreeLatticeSlow (IOSymInteract String String) -> [String]
+    goTree d ind (Solve.SETree cs)
+        | d <= 0    = [ind ++ "… (depth limit)"]
+        | otherwise = concatMap (goEntry d ind) (Map.toList cs)
+    goEntry :: Int -> String -> (IOSymInteract String String, FreeLatticeSlow (Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))))) -> [String]
+    goEntry d ind (i, medge) =
+        (ind ++ "step " ++ show i ++ ", branches:") : goConf (ind ++ "  ") (goIte (d-1)) medge
+    goIte :: Int -> String -> Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))) -> [String]
+    goIte d ind (Solve.SEIte g thn els) =
+           [ind ++ "if " ++ show g ++ " then"]
+        ++ goConf (ind ++ "    ") (goTree d) thn
+        ++ [ind ++ "else:"]
+        ++ goConf (ind ++ "    ") (goTree d) els
+    -- render a FreeLatticeSlow layer, recursing into each atom via `sub`. Chains of the same operator are flattened
+    -- into an n-ary ∧/∨, but no merging of equal subtrees happens.
+    goConf :: String -> (String -> x -> [String]) -> FreeLatticeSlow x -> [String]
+    goConf ind _   (FreeLatticeSlow Top)    = [ind ++ "⊤ (underspecified)"]
+    goConf ind _   (FreeLatticeSlow Bottom) = [ind ++ "⊥ (forbidden)"]
+    goConf ind sub (FreeLatticeSlow (Levitate free)) = goFree ind sub free
+    goFree ind sub (Var e) = sub ind e
+    goFree ind sub free@(_ :/\: _) =
+        let conjuncts = meets free
+        in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
+           : concatMap (goOperand ind sub "conjunct") (zip [1 :: Int ..] conjuncts)
+    goFree ind sub free@(_ :\/: _) =
+        let disjuncts = joins free
+        in (ind ++ "∨ (" ++ show (length disjuncts) ++ " disjuncts):")
+           : concatMap (goOperand ind sub "disjunct") (zip [1 :: Int ..] disjuncts)
+    -- Delimit each operand of an n-ary ∧/∨ with its own header, so the (multi-line) subtrees of sibling conjuncts
+    -- do not visually run together.
+    goOperand :: String -> (String -> x -> [String]) -> String -> (Int, Free x) -> [String]
+    goOperand ind sub label (k, operand) =
+        (ind ++ "  " ++ label ++ " " ++ show k ++ ":") : goFree (ind ++ "    ") sub operand
+    meets (x :/\: y) = meets x ++ meets y
+    meets other      = [other]
+    joins (x :\/: y) = joins x ++ joins y
+    joins other      = [other]
+
+-- Show the entire intermediate tree structure (`Solve.seTree`) for the composed coffee machine up to depth 3, as a
+-- single golden test. The same tree folds (via `Solve.treeToGuard asDualExpr`/`asExpr`) to the specified/allowed guards.
+testComposedSeTreeStructure :: Bool -> Test
+testComposedSeTreeStructure regenerate = TestCase $ goldenAssert
+    [ goldenCheck regenerate "composed:seTree" (goldenDir </> "composed.setree.txt")
+        ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr))
+    ]
+
+-- Snapshot the accumulated symbolic path condition (the actual formula, with SSA-indexed parameters) that
+-- `interactsToSpecifiedCondition` (asDualExpr) and `interactsToAllowedCondition` (asExpr) produce, for *every* trace
+-- over the composed coffee machine's alphabet up to length 3. One symbolic guard per (condition, trace) encodes all
+-- concrete valuations at once, complementing the pointwise checks in testConcreteTraceSpecifiedAllowedCorrespondence.
+-- The transition function is total (missing gates map to the implicit location), so every alphabet trace has a guard.
+testComposedPathCondition :: Bool -> Test
+testComposedPathCondition regenerate = TestCase $ goldenAssert
+    [ goldenCheck regenerate "composed:pathCondition" (goldenDir </> "composed.pathcondition.txt")
+        ("\n" ++ concatMap render traces)
+    ]
+    where
+    alph = Set.toList $ alphabet $ syntacticAutomaton composedCoffeeMachineIntrpr
+    -- all traces over the alphabet up to length 3 (sequence . replicate n = all n-length combinations)
+    traces = concatMap (\n -> sequence (replicate n alph)) [0 .. 3 :: Int]
+    render tr = unlines
+        [ "=== " ++ show tr ++ " ==="
+        , "specified: " ++ show (interactsToSpecifiedCondition composedCoffeeMachineIntrpr tr)
+        , "allowed:   " ++ show (interactsToAllowedCondition composedCoffeeMachineIntrpr tr)
+        , "" ]
 
 -- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
 type ConcreteStep = (IOSymInteract String String, [Constant])
@@ -845,12 +970,12 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
         [(water, [Cint 3]), (water, [Cint 5])] Indefinite
     , correspondenceCase "[water 12, water 5]"               -- underspecified: second water blocked, x=12>=10
         [(water, [Cint 12]), (water, [Cint 5])] Underspecified
-    , correspondenceCase "[water 3, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
-        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
-    , correspondenceCase "[water 3, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
-        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
-    , correspondenceCase "[water 3, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
-        [(water, [Cint 3]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
+    , correspondenceCase "[water 6, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
+    , correspondenceCase "[water 6, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
+    , correspondenceCase "[water 6, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
+        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
     ]
     where
     correspondenceCase label steps expectedSpecifiedness = TestCase $ do
@@ -927,18 +1052,25 @@ prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
 
--- Compare rendered output against a golden file, then always (re)generate it (creating the directory if needed).
--- Returns a failure message if it did not match, or Nothing if it did. A completely missing golden file is
--- (re)generated but reported as a failure, so a freshly created baseline is never silently accepted.
-goldenCheck :: String -> FilePath -> String -> IO (Maybe String)
-goldenCheck what path actual = do
-    existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
-    createDirectoryIfMissing True (takeDirectory path)
-    BS.writeFile path (UTF8.fromString actual)
-    return $ case existing of
-        Right expected | expected == actual -> Nothing
-                       | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual)
-        Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " was missing; (re)generated it -- rerun to compare against it")
+-- Compare rendered output against a golden file. Returns a failure message if it did not match, or Nothing if it did.
+--
+-- In compare mode (@regenerate == False@, the default) the golden file is only read, never written, so running the
+-- test suite has no side-effects. A missing golden file is reported as a failure with a hint on how to create it.
+--
+-- In regenerate mode (@regenerate == True@) the golden file is (over)written (creating the directory if needed) and
+-- the check always passes. Enable this by running the test suite with @--regenerate-golden-files@.
+goldenCheck :: Bool -> String -> FilePath -> String -> IO (Maybe String)
+goldenCheck regenerate what path actual
+    | regenerate = do
+        createDirectoryIfMissing True (takeDirectory path)
+        BS.writeFile path (UTF8.fromString actual)
+        return Nothing
+    | otherwise = do
+        existing <- Exception.try (UTF8.toString <$> BS.readFile path) :: IO (Either Exception.IOException String)
+        return $ case existing of
+            Right expected | expected == actual -> Nothing
+                           | otherwise -> Just ("\nprint of " ++ what ++ " does not match, expected:" ++ expected ++ "but received:" ++ actual ++ "\n(run the test suite with --regenerate-golden-files to update the golden files)")
+            Left _ -> Just ("\ngolden file " ++ path ++ " for " ++ what ++ " is missing; run the test suite with --regenerate-golden-files to (re)generate it")
 
 -- Run all golden checks (so every file is regenerated in one run, even on failure), then fail once if any did not match.
 goldenAssert :: [IO (Maybe String)] -> Assertion
@@ -946,18 +1078,6 @@ goldenAssert checks = do
     failures <- catMaybes <$> sequence checks
     if null failures then return () else assertFailure (concat failures)
 
-testTreeStructure :: (BoundedMonad m, Foldable m, Ord (m (Expr Bool)), BooleanConfiguration m, Ord q) => String -> STSIntrp m q (IOAct String String) -> Int -> Test
-testTreeStructure testName stsIntrpr depth = TestCase $ goldenAssert
-    [ {-goldenCheck (testName ++ ":symbolicExecutionTree") (goldenDir </> (testName ++ ".exectree.txt")) actualExecTree
-    , -}
-      goldenCheck (testName ++ ":toSpecifiedTree") (goldenDir </> (testName ++ ".specifiedtree.txt")) actualSpecifiedTree
-    , goldenCheck (testName ++ ":toAllowedTree") (goldenDir </> (testName ++ ".allowedtree.txt")) actualAllowedTree
-    ]
-    where
-    --tree = Solve.symbolicExecutionTree stsIntrpr
-    --actualExecTree = "\n" ++ prettyExecTree depth tree
-    actualSpecifiedTree = "\n" ++ prettySolveTree depth (Solve.toSpecifiedTree stsIntrpr)
-    actualAllowedTree = "\n" ++ prettySolveTree depth (Solve.toAllowedTree stsIntrpr)
 
 testSTSPathCondition :: Test
 testSTSPathCondition = TestCase $ do

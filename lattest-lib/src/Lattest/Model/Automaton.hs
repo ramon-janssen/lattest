@@ -523,6 +523,12 @@ evalBool :: Valuation -> Expr Bool -> Bool
 evalBool valuation = toBool . evalVal valuation
 
 --------------------
+-- STS without quiescence or input-failure
+--------------------
+instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) where
+  ioTakeTransition q alph act m = return $ takeTransition q alph act m
+
+--------------------
 -- STS quiescence --
 --------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
