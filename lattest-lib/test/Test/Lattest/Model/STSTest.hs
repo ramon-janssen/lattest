@@ -1529,28 +1529,11 @@ stsTriangle1 =
             _ -> Map.empty
     in automaton initConf (Set.fromList [outA, outB, outC]) switches
 
-stsTriangle1or2 :: IOSTS FreeLattice Integer String String
-stsTriangle1or2 =
-    let p = sVar pvar :: Expr Integer
-        outA = SymInteract (Out "outA") []
-        outB = SymInteract (Out "outB") []
-        outC = SymInteract (Out "outC") []
-        initConf = ordReturn 1 \/ ordReturn 2
-        switches q = case q of
-            0 -> Map.fromList [(outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
-            1 -> Map.fromList [(outC, ordReturn (stsTLoc sTrue noAssignment, 0))]
-            2 -> Map.fromList [(outB, ordReturn (stsTLoc sTrue noAssignment, 1))]
-            _ -> Map.empty
-    in automaton initConf (Set.fromList [outA, outB, outC]) switches
-
 stsDisjTri :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsDisjTri = interpretSTS (stsTriangle0 \\// stsTriangle1) stsExampleInitAssign
 
 stsDisjAllTri :: STSIntrp FreeLattice (String, Integer) (IOAct String String)
 stsDisjAllTri = interpretSTS (disjunctionAll [("tri0", stsTriangle0), ("tri1", stsTriangle1)]) stsExampleInitAssign
-
-stsDisjTri1or2 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-stsDisjTri1or2 = interpretSTS (stsTriangle0 \\// stsTriangle1or2) stsExampleInitAssign
 
 testPrintTriDisj :: Test
 testPrintTriDisj = TestCase $ do
@@ -1611,39 +1594,26 @@ transitions:
 ("tri1",2)  ――!"outC" []⟶  ⊥
 |]        
 
--- Resulting STS of STS1 \\// STS2, where STS1 has initial state 0 and STS2 has initial states 1 and 2.
+stsTriangle1or2 :: IOSTS FreeLattice Integer String String
+stsTriangle1or2 =
+    let p = sVar pvar :: Expr Integer
+        outA = SymInteract (Out "outA") []
+        outB = SymInteract (Out "outB") []
+        outC = SymInteract (Out "outC") []
+        initConf = ordReturn 1 \/ ordReturn 2
+        switches q = case q of
+            0 -> Map.fromList [(outA, ordReturn (stsTLoc sTrue noAssignment, 2))]
+            1 -> Map.fromList [(outC, ordReturn (stsTLoc sTrue noAssignment, 0))]
+            2 -> Map.fromList [(outB, ordReturn (stsTLoc sTrue noAssignment, 1))]
+            _ -> Map.empty
+    in automaton initConf (Set.fromList [outA, outB, outC]) switches
+
+-- STS1 \\// STS2, where STS1 has initial state 0 and STS2 has initial states 1 and 2
 testPrintDisjOfSTSWithMultpInitStates :: Test
-testPrintDisjOfSTSWithMultpInitStates = TestCase $ do
-    let model = (interpretSTS stsTriangle0 stsExampleInitAssign)
-    assertBool failureMessage (expected == actual)
-        where
-        failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-        actual = "\n" ++ prettyPrintIntrp stsDisjTri1or2 ++ "\n"
-        -- As Right 1 and Right 2 are part of the initial states of STS2, the transition points to the merged init state.
-        expected = [QQ.r|
-current state configuration: (Left 0,{x:=0}) ∨ (Right 1,{x:=0}) ∨ (Right 2,{x:=0})
-initial location configuration: Left 0 ∨ Right 1 ∨ Right 2
-locations: Left 0, Left 1, Left 2, Right 0, Right 1, Right 2
-transitions:
-Left 0  ――!"outA" []⟶  (True, {},Left 2)
-Left 0  ――!"outB" []⟶  ⊥
-Left 0  ――!"outC" []⟶  ⊥
-Left 1  ――!"outA" []⟶  ⊥
-Left 1  ――!"outB" []⟶  ⊥
-Left 1  ――!"outC" []⟶  (True, {},Left 0) ∨ (True, {},Right 1) ∨ (True, {},Right 2)
-Left 2  ――!"outA" []⟶  ⊥
-Left 2  ――!"outB" []⟶  (True, {},Left 1)
-Left 2  ――!"outC" []⟶  ⊥
-Right 0  ――!"outA" []⟶  (True, {},Left 0) ∨ (True, {},Right 1) ∨ (True, {},Right 2)
-Right 0  ――!"outB" []⟶  ⊥
-Right 0  ――!"outC" []⟶  ⊥
-Right 1  ――!"outA" []⟶  ⊥
-Right 1  ――!"outB" []⟶  ⊥
-Right 1  ――!"outC" []⟶  (True, {},Right 0)
-Right 2  ――!"outA" []⟶  ⊥
-Right 2  ――!"outB" []⟶  (True, {},Left 0) ∨ (True, {},Right 1) ∨ (True, {},Right 2)
-Right 2  ――!"outC" []⟶  ⊥
-|]
+testPrintDisjOfSTSWithMultpInitStates = TestCase $
+    assertThrowsError
+        "composeGeneric: the initial state of the automaton(s) is not atomic, which is currently not supported"
+        (stsTriangle0 \\// stsTriangle1or2)
 
 -----------------------------------
 -- prependOutputChecks
