@@ -672,7 +672,7 @@ sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphab
         [ (t, BM.ordMap (second Right) (BM.ordBind (initConf sts2) (\l2 -> transRel sts2 l2 Map.! t)))
         | t <- Set.toList (alphabet sts2) ]
 
-    -- conjunct sts1's own transition with the copied one, but only where both are specified
+    -- conjunct sts1's own transition with the copied one, but only where both are specified (and not forbiddden)
     pick own other
         | BM.isIndefinite own && BM.isIndefinite other = own /\ other
         | BM.isIndefinite own                          = own
