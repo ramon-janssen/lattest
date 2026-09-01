@@ -1,4 +1,5 @@
 {
+    "id": "STS1",
     "initial_location": 0,
     "locationVariables": {
         "counter": { "type": "integer" },

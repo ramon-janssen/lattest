@@ -262,7 +262,8 @@ instance JSON.FromJSON SwitchDefJson where
             <*> o JSON..:  "end_loc"
 
 data STSJsonFormat = STSJsonFormat
-    { stsJsonInitLoc       :: LocationId
+    { stsJsonId            :: String
+    , stsJsonInitLoc       :: LocationId
     , stsJsonLocVars       :: Map.Map String VarDefJson
     , stsJsonParams        :: Map.Map String VarDefJson
     , stsJsonInitValuation :: Map.Map String JSON.Value
@@ -277,7 +278,8 @@ data STSJsonFormat = STSJsonFormat
 instance JSON.FromJSON STSJsonFormat where
     parseJSON = JSON.withObject "STSJsonFormat" $ \o ->
         STSJsonFormat
-            <$> o JSON..:  "initial_location"
+            <$> (o JSON..:? "id" JSON..!= "")
+            <*> o JSON..:  "initial_location"
             <*> o JSON..:  "locationVariables"
             <*> o JSON..:  "parameters"
             <*> (o JSON..:? "initialValuation" JSON..!= Map.empty)
@@ -416,7 +418,7 @@ buildValuation locVarCtx initVal =
         defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
         defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
 
-convertSTSJson :: STSJsonFormat -> Either String (IOSTS FreeLattice String String String, Valuation)
+convertSTSJson :: STSJsonFormat -> Either String (String, IOSTS FreeLattice String String String, Valuation)
 convertSTSJson json = do
     locVarMap <- buildVarMap (stsJsonLocVars json)
     paramMap  <- buildVarMap (stsJsonParams json)
@@ -432,14 +434,25 @@ convertSTSJson json = do
     let transRel = buildTransitionRel switchList
         initCfg  = atom $ locId (stsJsonInitLoc json)
         sts      = automaton initCfg alphabet transRel
-    return (sts, initVal)
+    return (stsJsonId json, sts, initVal)
 
 {-| 
-    Read a JSON file and parse an STS from it.
+    Read a JSON file and parse an STS from it. Returns a tuple (ID, STS, Initial Valuation) if successful,
+    or an error message if parsing fails.
 -}
-stsFromJSONFile :: FilePath -> IO (Either String (IOSTS FreeLattice String String String, Valuation))
+stsFromJSONFile :: FilePath -> IO (Either String (String,IOSTS FreeLattice String String String, Valuation))
 stsFromJSONFile path = do
     bytes <- BSL.readFile path
     return $ case JSON.eitherDecode bytes of
         Left  err     -> Left $ "JSON decode error: " ++ err
         Right stsJson -> convertSTSJson stsJson
+
+{-|
+    Read a JSON file containing a list of STSs, and parse each one.
+-}
+stsListFromJSONFile :: FilePath -> IO (Either String [(String, IOSTS FreeLattice String String String, Valuation)])
+stsListFromJSONFile path = do
+    bytes <- BSL.readFile path
+    return $ case JSON.eitherDecode bytes of
+        Left  err      -> Left $ "JSON decode error: " ++ err
+        Right stsJsons -> forM stsJsons convertSTSJson
