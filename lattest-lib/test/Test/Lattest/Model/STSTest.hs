@@ -812,34 +812,6 @@ treeSTS =
             _ -> Map.empty
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate, outGate]) switches
 
-treeIntrpr :: STSIntrp FreeLattice Integer (IOAct String String)
-treeIntrpr = interpretSTS treeSTS branchInitAssign
-
--- Pretty-printers for the (infinite) trees, bounded to a maximum depth, rendered as an indented outline.
-showGate :: SymInteract (IOAct String String) -> String
-showGate (SymInteract (In s) _) = "?" ++ s
-showGate (SymInteract (Out s) _) = "!" ++ s
-
-prettySolveTree :: Int -> Solve.SolveTree (IOAct String String) -> String
-prettySolveTree maxDepth t0 = unlines (go 0 "" t0)
-    where
-    go d indent t
-        | d > maxDepth = [indent ++ "..."]
-        | otherwise =
-            let cond = Solve.traceCondition t
-                showCond = indent ++ "cond " ++ show cond
-            in if cond == sFalse -- the solve tree has conditions that are monononically decreasing as you go down the tree, so False is a sink
-                then [showCond]
-                else showCond
-                        : concatMap (\(act, sub) -> (indent ++ showGate act ++ ":") : go (d + 1) (indent ++ "    ") sub)
-                                    (Map.toList (Solve.traceChildren t))
-
-testLinearCoffeeTreeStructure :: Test
-testLinearCoffeeTreeStructure = testTreeStructure "linear" stsExampleIntrpr 3
-
-testComplexTreeStructure :: Test
-testComplexTreeStructure = testTreeStructure "complex" treeIntrpr 3
-
 milkvar :: Variable
 milkvar = (Variable "milk" BoolType)
 milk = sVar milkvar
