@@ -1,11 +1,12 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
 module Lattest.SMT (
   SMT,
   SolvableProblem(..),
@@ -21,7 +22,7 @@ module Lattest.SMT (
   RCSet(..)
 ) where
 
-import Data.SBV( constrain, SBV, SymVal (..), freshVar, RCSet(..), Kind (..))
+import Data.SBV(constrain, SBV, SymVal (..), freshVar, RCSet(..), Kind (..))
 import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
@@ -47,6 +48,7 @@ import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
+
 
 --------------------
 -- exported types and functions
@@ -147,17 +149,42 @@ exprToSymbolic v = case v of
   ERight xs -> withExprConstraints (typeOf' xs) $ SBV.sRight <$> go xs
   SElem t x xs -> withExprConstraints t $ withExprConstraints (SetType t) $ SBV.member <$> go x <*> go xs
   SInsert x xs -> SBV.insert <$> go x <*> go xs
+
+  -- do-notation makes it easier to massage the functions into the forms that SBV expects
+  -- we locally modify the environment to map our placeholder variables to the smtvar we get
   Map (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
-    -- do-notation makes it easier to massage the functions into the type that 'SBV.map' wants
     xs <- go x
     m <- get
-    -- locally modify the environment to map 'v' to the smtvar we get
     let f' smtvar = flip evalState m $ do
           modify $ Map.insert nm $ Some smtvar
           go f
     pure $ SBV.map f' xs
+  Filter (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
+    xs <- go x
+    m <- get
+    let f' smtvar = flip evalState m $ do
+          modify $ Map.insert nm $ Some smtvar
+          go f
+    pure $ SBV.filter f' xs
+  Foldr (Variable na (ta :: Type a)) (Variable nb (_ :: Type b)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
+    xs <- go x
+    i' <- go i
+    m <- get
+    let f' :: SBV a -> SBV b -> SBV b
+        f' smtvara smtvarb = flip evalState m $ do
+          modify $ Map.insert na (Some smtvara) . Map.insert nb (Some smtvarb)
+          go f
+    pure $ SBV.foldr f' i' xs
+  Foldl (Variable nb (_ :: Type b)) (Variable na (ta :: Type a)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
+    xs <- go x
+    i' <- go i
+    m <- get
+    let f' :: SBV b -> SBV a -> SBV b
+        f' smtvara smtvarb = flip evalState m $ do
+          modify $ Map.insert na (Some smtvara) . Map.insert nb (Some smtvarb)
+          go f
+    pure $ SBV.foldl f' i' xs
   Either (Variable nml tl) (Variable nmr tr) l r e -> withExprConstraints tl $ withExprConstraints tr $ withExprConstraints e $ do
-    -- see the case for 'Map' above; this one is very similar
     ei <- go e
     m <- get
     let fl smtvar = flip evalState m $ do

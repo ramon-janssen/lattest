@@ -49,6 +49,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , set
 , tuple
 , option
+, inhabitants
 )
 where
 
@@ -228,7 +229,7 @@ instance ExprType a => Ord (RCSet a) where
       ComplementSet bs -> case compare (Set.size bs) (Set.size as) of
         EQ -> compare bs as
         x -> x
--- count the inhabitants of a type; to define Eq and Ord instances for RCSet
+-- count the inhabitants of a type; to define Eq and Ord instances for RCSet, and to compute the size of a complementset
 inhabitants :: forall e. Type e -> Maybe Int
 inhabitants = \case
   IntType -> Nothing
@@ -672,15 +673,18 @@ data ExprView t where
     ELeft  :: (ExprConstraints a, ExprConstraints b) => ExprView a -> ExprView (Either a b)
     ERight  :: (ExprConstraints a, ExprConstraints b) => ExprView b -> ExprView (Either a b)
     SElem :: Type a -> ExprView a -> ExprView (RCSet a) -> ExprView Bool
-    Size :: ExprConstraints a => ExprView (RCSet a) -> ExprView Integer
     SInsert :: ExprConstraints a => ExprView a -> ExprView (RCSet a) -> ExprView (RCSet a)
     -- Adding Lam and App would make it impossible to implement some typeclasses that SBV wants,
     -- and is also stronger than we need: we don't need lists of functions, top-level functions, etc.
     -- Lam :: Variable t -> ExprView a -> ExprView (a -> t)
     -- App :: Type a -> ExprView (a -> b) -> ExprView a -> ExprView b
-    -- Instead, 'Map' and 'Either' (the only two places where we want a function)
+    -- Instead, 'Map', 'Filter', 'Fold's, and 'Either' (the only places where we want a function)
     -- just inline the definition of Lam: they carry the bound variable and the function body (which may reference this variable)
     Map :: (ExprConstraints a, ExprConstraints b) => Variable a -> ExprView b -> ExprView [a] -> ExprView [b]
+    Filter :: ExprConstraints a => Variable a -> ExprView Bool -> ExprView [a] -> ExprView [a]
+    -- for folds, the first `ExprView b` is the function and the second is the initial value
+    Foldr :: ExprConstraints a => Variable a -> Variable b -> ExprView b -> ExprView b -> ExprView [a] -> ExprView b
+    Foldl :: ExprConstraints a => Variable b -> Variable a -> ExprView b -> ExprView b -> ExprView [a] -> ExprView b
     -- The first 'ExprView x' has the 'Variable a' in scope, the second 'ExprView x' has the 'Variable b' in scope.
     -- This is the `either` deconstructor in Haskell: (a -> x) -> (b -> x) -> Either a b -> x
     Either :: (ExprConstraints a, ExprConstraints b, ExprConstraints x) => Variable a -> Variable b -> ExprView x -> ExprView x -> ExprView (Either a b) -> ExprView x
@@ -729,12 +733,17 @@ instance Eq (ExprView t) where
     | Just Refl <- geq (typeOf' x) (typeOf' y) = x == y
   SElem t1 x y == SElem t2 a b
     | Just Refl <- t1 `geq` t2 = x == a && y == b
-  Size x == Size y
-    | Just Refl <- typeOf' x `geq` typeOf' y = x == y
   SInsert x y == SInsert a b = x == a && y == b
-  Map t1 f xs == Map t2 g ys
-    | Just Refl <- geq t1 t2
+  Map v1 f xs == Map v2 g ys
+    | Just Refl <- geq v1 v2
     = f == g && xs == ys
+  Foldr v1 v2 f x xs == Foldr v1' v2' g y ys
+    | Just Refl <- geq (typeOf' xs) (typeOf' ys)
+    = v1 == v1' && v2 == v2' && f == g && x == y && xs == ys
+  Foldl v1 v2 f x xs == Foldl v1' v2' g y ys
+    | Just Refl <- geq (typeOf' xs) (typeOf' ys)
+    = v1 == v1' && v2 == v2' && f == g && x == y && xs == ys
+  Filter v f xs == Filter v' g ys = v == v' && f == g && xs == ys
   Either ta tb a b c == Either tx ty x y z
     | Just Refl <- geq ta tx
     , Just Refl <- geq tb ty
@@ -824,10 +833,6 @@ instance Ord (ExprView t) where
         GEQ -> case compare x y of
           EQ -> compare xs ys
           c -> c
-      (Size x, Size y) -> case gcompare (typeOf' x) (typeOf' y) of
-        GLT -> LT
-        GGT -> GT
-        GEQ -> compare x y
       (SInsert x xs, SInsert y ys) -> case gcompare (typeOf' x) (typeOf' y) of
         GLT -> LT
         GGT -> GT
@@ -847,6 +852,17 @@ instance Ord (ExprView t) where
           GLT -> LT
           GGT -> GT
           GEQ -> compare (y,z) (b,c)
+      (Foldr v1 v2 f x xs, Foldr v1' v2' g y ys) ->
+        case gcompare v1 v1' of
+          GLT -> LT
+          GGT -> GT
+          GEQ -> compare (v2, f, x, xs) (v2', g, y, ys)
+      (Foldl v1 v2 f x xs, Foldl v1' v2' g y ys) ->
+        case gcompare v2 v2' of
+          GLT -> LT
+          GGT -> GT
+          GEQ -> compare (v1, f, x, xs) (v1', g, y, ys)
+      (Filter v1 f xs, Filter v2 g ys) -> compare (v1, f, xs) (v2, g, ys)
       _ ->
         compare (tag l) (tag r)
     where
@@ -874,7 +890,7 @@ instance Ord (ExprView t) where
         SumFloat{} -> 19
         ProductFloat{} -> 20
         GezFloat{} -> 21
-        Size{} -> 22
+        Filter{} -> 22
         ELeft{} -> 23
         ERight{} -> 24
         First{} -> 25
@@ -886,6 +902,8 @@ instance Ord (ExprView t) where
         Map{} -> 31
         SElem{} -> 32
         SInsert{} -> 33
+        Foldr{} -> 34
+        Foldl{} -> 35
 
 
 instance Show (ExprView t) where
@@ -935,7 +953,9 @@ instance Show (ExprView t) where
   show (ERight x) = "Right " <> show x
   show (SElem _ x xs) = show x <> "`Set.elem`" <> show xs
   show (SInsert x xs) = "Set.insert " <> show x <> " " <> show xs
-  show (Size xs) = "Set.size " <> show xs
+  show (Filter _ f xs) = "filter (" <> show f <> ") " <> show xs
+  show (Foldr _ _ f i xs) = "foldr (" <> show f <> ") (" <> show i <> ") " <> show xs
+  show (Foldl _ _ f i xs) = "foldl (" <> show f <> ") (" <> show i <> ") " <> show xs
 
 instance Has ExprType ExprView where
   has e k = case e of
@@ -976,7 +996,9 @@ instance Has ExprType ExprView where
     ERight x -> has @ExprType x k
     SElem{} -> k
     SInsert x _ -> has @ExprType x k
-    Size _ -> k
+    Filter _ _ x -> has @ExprType x k
+    Foldr _ x _ _ _ -> has @ExprType x k
+    Foldl x _ _ _ _ -> has @ExprType x k
 
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
@@ -988,7 +1010,8 @@ showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm 
 -- | Expr: value expression
 -- Only 'view' is exported, not the constructor, to safeguard invariants.
 newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
--- TODO: which invariants?
+-- TODO: which invariants? I can't find any other mention of them,
+-- so I've been assuming that any representable ExprView is fair game
 
 instance Show (Expr t) where
     show = show . view
@@ -1039,8 +1062,10 @@ freeVars' (ELeft x) = freeVars' x
 freeVars' (ERight x) = freeVars' x
 freeVars' (SElem _ x xs) = freeVars' x ++ freeVars' xs
 freeVars' (SInsert x xs) = freeVars' x ++ freeVars' xs
-freeVars' (Size xs) = freeVars' xs
--- v, vl, and vr are the only variables that are not free
+-- v, vl, and vr are not free
 freeVars' (Map v f xs) = filter (/= Some v) (freeVars' f) ++ freeVars' xs
 freeVars' (Either vl vr l r x) = filter (/= Some vl) (freeVars' l) ++ filter (/= Some vr) (freeVars' r) ++ freeVars' x
+freeVars' (Filter v f xs) = filter (/= Some v) (freeVars' f) ++ freeVars' xs
+freeVars' (Foldr v1 v2 f i xs) = filter (not . flip elem [Some v1, Some v2]) (freeVars' f) ++ freeVars' i ++ freeVars' xs
+freeVars' (Foldl v1 v2 f i xs) = filter (not . flip elem [Some v1, Some v2]) (freeVars' f) ++ freeVars' i ++ freeVars' xs
 

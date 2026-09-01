@@ -15,6 +15,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -108,6 +109,7 @@ import qualified Data.List as List
 import Data.SBV (RCSet(..))
 import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
 import GHC.Integer (divInteger)
+import Data.Maybe (catMaybes)
 
 sConst :: ExprConstraints t => t -> Expr t
 sConst = Expr . Const
@@ -680,6 +682,9 @@ subst' ve (ERight x) = sRight $ subst' ve x
 subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
 subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
 subst' ve (Map v f xs) = Expr $ Map (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Filter v f xs) = Expr $ Filter (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Foldr v1 v2 f i xs) = Expr $ Foldr (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)
+subst' ve (Foldl v1 v2 f i xs) = Expr $ Foldl (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)
 subst' ve (Either vl vr l r x) = Expr $ Either
   (case assignedExprWithDefault vl ve of { Expr (Var v) -> v; _ -> error "impossible"})
   (case assignedExprWithDefault vr ve of { Expr (Var v) -> v; _ -> error "impossible"})
@@ -792,6 +797,13 @@ reduce (SInsert (reduce -> x) (reduce -> xs))
       RegularSet    s -> Const $ RegularSet    $ y `Set.insert` s
       ComplementSet s -> Const $ ComplementSet $ y `Set.delete` s
   | otherwise = SInsert x xs
+-- We can't lift this into sbv, which is why we don't currently have a set.size in exprview
+-- reduce (Size (reduce -> x)) = case x of
+--   Const (RegularSet xs) -> Const (toInteger (Set.size xs))
+--   Const (ComplementSet xs) -> case inhabitants (typeOf' x) of
+--     Nothing -> error "requesting size of an infinite list"
+--     Just i -> Const (toInteger $ i - Set.size xs)
+--   xs -> Size xs
 reduce (Map v (reduce -> f') (reduce -> xs))
   | Const ys <- xs =
     let f y = reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
@@ -802,6 +814,29 @@ reduce (Map v (reduce -> f') (reduce -> xs))
       Just as -> Const as
       Nothing -> Map v f' xs
   | otherwise = Map v f' xs
+reduce (Filter v (reduce -> f') (reduce -> xs))
+  | Const ys <- xs =
+    let f y = (y,) $ reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
+        zs = map f ys
+    in case traverse (\case -- innermost Maybe is whether the filter accepts the element, outermost Maybe is whether the reduction succeeds
+                        (y, Const True) -> Just (Just y)
+                        (_, Const False) -> Just Nothing
+                        _ -> Nothing) zs of
+      Just as -> Const $ catMaybes as
+      Nothing -> Filter v f' xs
+  | otherwise = Filter v f' xs
+reduce (Foldr v1 v2 (reduce -> f') (reduce -> i') (reduce -> xs))
+  | Const ys <- xs
+  , Const i <- i' =
+    let f a b = reduce $ view $ subst' (VarModel $ DMap.insert v2 (Expr b) $ DMap.singleton v1 $ Expr $ Const a) f'
+    in foldr f (Const i) ys
+  | otherwise = Foldr v1 v2 f' i' xs
+reduce (Foldl v1 v2 (reduce -> f') (reduce -> i') (reduce -> xs))
+  | Const ys <- xs
+  , Const i <- i' =
+    let f b a = reduce $ view $ subst' (VarModel $ DMap.insert v1 (Expr b) $ DMap.singleton v2 $ Expr $ Const a) f'
+    in foldl f (Const i) ys
+  | otherwise = Foldl v1 v2 f' i' xs
 reduce (Either vl vr (reduce -> l) (reduce -> r) (reduce -> x))
   | Const (Left x') <- x =
     reduce $ view $ subst' (VarModel $ DMap.singleton vl $ Expr $ Const x') l
