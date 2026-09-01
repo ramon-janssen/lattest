@@ -781,7 +781,10 @@ composeGeneric :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m
     (m loc -> m loc -> m loc) -> Set.Set t ->
     [(m loc, Map.Map loc (Map.Map t (m (tdest, loc))))] ->
     AutSyntax m loc t tdest
-composeGeneric combine newAlphabet renamedLocs = automaton newInitConf newAlphabet switches
+composeGeneric combine newAlphabet renamedLocs
+    | any (\(ic, _) -> Foldable.length ic /= 1) renamedLocs = errorWithoutStackTrace
+        "composeGeneric: the initial state of the automaton(s) is not atomic, which is currently not supported"
+    | otherwise = automaton newInitConf newAlphabet switches
   where
     allInitLocs = Set.unions [ Set.fromList (Foldable.toList ic) | (ic, _) <- renamedLocs ]
     isOldInit l = l `Set.member` allInitLocs
