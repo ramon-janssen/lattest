@@ -17,6 +17,4 @@ extra-deps:
 # Newer versions of quickcheck both expose, and require us to use, 'maxsize' for the testsuite.
 # Upgrading quickcheck here avoids CPP in test/Test.hs
 - QuickCheck-2.15.0.1@sha256:ff732606dd8b3f76e3cb87a26516583d183729bf540085228c82adf037aca8bf,8751 # for witnesses
-- git: https://github.com/LeventErkok/sbv.git
-  commit: 3dd5fb732f7039f68fae8f8cb95b24eab3d594fe # master as of 31-08-2026; the important thing is that it's after the 'Addresses #813' commit. Once 14.7 gets released, just use that
-#- sbv-14.7
+- sbv-14.7
