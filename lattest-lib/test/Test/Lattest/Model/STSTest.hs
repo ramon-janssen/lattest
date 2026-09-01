@@ -36,7 +36,7 @@ module Test.Lattest.Model.STSTest (
     testConjunctionAllGuardedSTS,
     testDisjunctionAllGuardedSTS,
     testPrintTriDisj,
-    testPrintDisjOfSTSWithMultpInitStates,
+    testErrorDisjOfSTSWithMultpInitStates,
     testPrintPrependOutputChecksDisj,
     testPrintPrependOutputChecksConj,
     testPrependOutputChecksDisj,
@@ -1609,8 +1609,8 @@ stsTriangle1or2 =
     in automaton initConf (Set.fromList [outA, outB, outC]) switches
 
 -- STS1 \\// STS2, where STS1 has initial state 0 and STS2 has initial states 1 and 2
-testPrintDisjOfSTSWithMultpInitStates :: Test
-testPrintDisjOfSTSWithMultpInitStates = TestCase $
+testErrorDisjOfSTSWithMultpInitStates :: Test
+testErrorDisjOfSTSWithMultpInitStates = TestCase $
     assertThrowsError
         "composeGeneric: the initial state of the automaton(s) is not atomic, which is currently not supported"
         (stsTriangle0 \\// stsTriangle1or2)
