@@ -91,10 +91,6 @@ model = interpretSTS primesieve primesieveInitAssign
 
 someFunc :: IO ()
 someFunc = do
-    putStrLn $ Aut.prettyPrintIntrp model
-
-    putStrLn ""
-
     -- putStrLn $ Aut.prettyPrintIntrp $ Aut.after model $ GateValue (In Prime) [Some $ CSum (Left 2) IntType $ TupleType IntType $ SetType IntType]
 
     -- simple adapter that flops between A and B and echos its input
@@ -103,7 +99,7 @@ someFunc = do
       (\_ (GateValue m d) -> [GateValue (In m) d, GateValue (Out ()) d])
       ()
 
-    let nrSteps = 50
+    let nrSteps = 18
         randomSeed = 456
         testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
