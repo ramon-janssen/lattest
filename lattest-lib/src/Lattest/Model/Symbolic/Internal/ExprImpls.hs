@@ -16,6 +16,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes #-}
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -78,18 +79,27 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , assign
 , Valuation(..)
 , Val(..)
+, varUnion
+, mapVars
+, mapVarExprs
+, valuationToVarModel
 , emptyValuation
 , assignValues
 , assignValue
+, getVariables
+, identityVarModel
+, varsToGuard
 , insertIntoValuation
 , substConst
 , subst
+, substVarModel
 , assignedExpr
 , assignment
 , noAssignment
 , (=:)
 , eval
 , reduce
+, mapExpressionVars
 )
 where
 
@@ -110,6 +120,8 @@ import Data.SBV (RCSet(..))
 import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
 import GHC.Integer (divInteger)
 import Data.Maybe (catMaybes)
+import Data.Some (Some (..))
+import Data.Dependent.Sum (DSum(..))
 
 sConst :: ExprConstraints t => t -> Expr t
 sConst = Expr . Const
@@ -170,18 +182,17 @@ infix 4 .==
 -- | Apply operator Not on the provided value expression.
 -- Preconditions are /not/ checked.
 sNot :: Expr Bool -> Expr Bool
-{-sNot (view -> Vconst (Cbool True))       = sConst (Cbool False)
-sNot (view -> Vconst (Cbool False))      = sConst (Cbool True)
-sNot (view -> Vnot ve)                   = ve
--- not (if cs then tb else fb) == if cs then not (tb) else not (fb)
-sNot (view -> Vite cs tb fb)             = Expr (Vite cs (sNot tb) (sNot fb))-}
-sNot (view -> ve) = Expr $ Not ve
+sNot (view -> Const b)      = sConst (not b) -- constant fold: ¬True ≡ False, ¬False ≡ True
+sNot (view -> Not ve)       = Expr ve -- eliminate double negation: ¬¬e ≡ e
+-- push the negation into the branches: ¬(if cs then tb else fb) ≡ if cs then ¬tb else ¬fb
+sNot (view -> Ite cs tb fb) = Expr (Ite cs (view $ sNot (Expr tb)) (view $ sNot (Expr fb)))
+sNot (view -> ve)           = Expr $ Not ve
 
 -- | Apply operator And on the provided set of value expressions.
 -- Preconditions are /not/ checked.
 sAnd :: Set.Set (Expr Bool) -> Expr Bool
 --sAnd = sAnd' . flattenAnd
-sAnd = Expr . And . flattenAnd
+sAnd = mkAnd . flattenAnd
     where
         flattenAnd :: Set.Set (Expr Bool) -> Set.Set (ExprView Bool)
         flattenAnd = Set.unions . map fromExpr . Set.toList
@@ -189,6 +200,35 @@ sAnd = Expr . And . flattenAnd
         fromExpr :: Expr Bool -> Set.Set (ExprView Bool)
         fromExpr (view -> And a) = a
         fromExpr (view -> x) = Set.singleton x
+
+        -- annihilation (x ∧ False ≡ False) and identity (x ∧ True ≡ x); a single conjunct needs no wrapping
+        mkAnd :: Set.Set (ExprView Bool) -> Expr Bool
+        mkAnd (absorb -> vs)
+            | Set.member (Const False) vs = sFalse
+            | hasComplements vs           = sFalse -- contradiction: x ∧ ¬x ≡ False
+            | otherwise = case Set.toList vs' of
+                []  -> sTrue
+                [v] -> Expr v
+                _   -> Expr (And vs')
+            where vs' = Set.delete (Const True) vs
+
+        -- absorption under negation: e ∧ ¬(e ∧ rest) ≡ e ∧ ¬rest. A conjunct that is
+        -- already asserted at the top level of the conjunction is redundant inside a
+        -- negated conjunction, so it can be dropped from it. If every conjunct of the
+        -- negated cube is dropped this yields ¬True ≡ False, which the checks above catch.
+        absorb :: Set.Set (ExprView Bool) -> Set.Set (ExprView Bool)
+        absorb vs = Set.map simplify vs
+            where
+                simplify (Not (And s))
+                    | not (Set.null (Set.intersection s vs)) = view $ sNot $ sAnd $ Set.map Expr $ s Set.\\ vs
+                simplify v = v
+
+        -- does the conjunction contain both some e and its negation ¬e?
+        hasComplements :: Set.Set (ExprView Bool) -> Bool
+        hasComplements vs = any ((`Set.member` vs) . negated) (Set.toList vs)
+            where
+                negated (Not e) = e
+                negated e       = Not e
 {-
 -- And doesn't contain elements of type Vand.
 sAnd' :: Set.Set Expr Bool -> Expr Bool
@@ -607,6 +647,27 @@ insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ ass
 insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 
+getVariables :: Valuation -> [Some Variable]
+getVariables = DMap.keys . runValuation
+
+assignIdentity :: Variable a -> VarModel -> VarModel
+assignIdentity v = assign v (sVar v)
+
+identityVarModel :: [Some Variable] -> VarModel
+identityVarModel vars = assignment $ (\(Some v) -> assignIdentity v) <$> vars
+
+varUnion :: VarModel -> VarModel -> VarModel
+varUnion (VarModel vars1) (VarModel vars2) = VarModel $ DMap.union vars1 vars2
+
+mapVars :: (forall a. Variable a -> Variable a) -> VarModel -> VarModel
+mapVars f (VarModel vars) = VarModel $ DMap.mapKeysWith (error "mapVars mapped two distinct variables to the same variable") f vars
+
+mapVarExprs :: (forall a. Variable a -> Variable a) -> VarModel -> VarModel
+mapVarExprs f (VarModel vars) = VarModel $ DMap.map (mapExpressionVars f) vars
+
+varsToGuard :: VarModel -> Expr Bool
+varsToGuard (VarModel vars) = sAnd $ Set.fromList $ map (\(var :=> val) -> has @ExprType val $ withExprConstraints (typeOf' val) $ sVar var .== val) $ DMap.assocs vars
+
 fromConst' :: ConstType a => Constant a -> a
 fromConst' = fromConst
 
@@ -632,6 +693,12 @@ noAssignment = VarModel DMap.empty
 
 substConst :: Valuation -> Expr t -> Expr t
 substConst valuation = subst (valuationToVarModel valuation)
+
+-- | Apply a substitution to the right-hand-side expressions of a 'VarModel', leaving its keys untouched.
+-- Composing substitutions this way lets an assignment be resolved against an accumulated substitution:
+-- @substVarModel sigma assign@ rewrites every value-expression in @assign@ according to @sigma@.
+substVarModel :: VarModel -> VarModel -> VarModel
+substVarModel sigma (VarModel m) = VarModel $ DMap.map (subst sigma) m
 
 -- | Substitute variables by value expressions in a value expression.
 --
@@ -844,3 +911,43 @@ reduce (Either vl vr (reduce -> l) (reduce -> r) (reduce -> x))
     reduce $ view $ subst' (VarModel $ DMap.singleton vr $ Expr $ Const x') r
   | otherwise = Either vl vr l r x
 
+mapExpressionVars :: (forall a. Variable a -> Variable a) -> Expr t -> Expr t
+mapExpressionVars f = Expr . mapExpressionVars' f . view
+
+mapExpressionVars' :: (forall a. Variable a -> Variable a) -> ExprView t -> ExprView t
+mapExpressionVars' _ e@(Const _) = e
+mapExpressionVars' f (Var v) = Var $ f v -- this line is effectively the purpose of this function
+mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
+mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (Modulo t n)            = Modulo (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (DivideFloat t n)       = DivideFloat (mapExpressionVars' f t) (mapExpressionVars' f n)
+mapExpressionVars' f (Sum s)                 = Sum (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
+mapExpressionVars' f (SumFloat s)            = SumFloat (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
+mapExpressionVars' f (Product p)             = Product (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
+mapExpressionVars' f (ProductFloat p)        = ProductFloat (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
+mapExpressionVars' f (Length t vexp)           = Length t (mapExpressionVars' f vexp)
+mapExpressionVars' f (GezInt v)                = GezInt (mapExpressionVars' f v)
+mapExpressionVars' f (GezFloat v)              = GezFloat (mapExpressionVars' f v)
+mapExpressionVars' f (And vexps)               = And (Set.map (mapExpressionVars' f) vexps)
+mapExpressionVars' f (Not vexp)                = Not (mapExpressionVars' f vexp)
+mapExpressionVars' f (Equal t x y)                = Equal t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (LElem t x y)                = LElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (SElem t x y)                = SElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (Concat x)                = Concat (mapExpressionVars' f x)
+mapExpressionVars' f (Cons x xs)                = Cons (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Append x xs)                = Append (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Take x xs)                = Take (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Drop x xs)                = Drop (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (First t x)                = First t (mapExpressionVars' f x)
+mapExpressionVars' f (Second t x)                = Second t (mapExpressionVars' f x)
+mapExpressionVars' f (Pair x xs)                = Pair (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (SInsert x xs)                = SInsert (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Head v)                = Head (mapExpressionVars' f v)
+mapExpressionVars' f (Tail v)                = Tail (mapExpressionVars' f v)
+mapExpressionVars' f (ELeft v)                = ELeft (mapExpressionVars' f v)
+mapExpressionVars' f (ERight v)                = ERight (mapExpressionVars' f v)
+mapExpressionVars' f (Map v x xs)                = Map (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Filter v x xs)                = Filter (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldr v1 v2 g i xs)                = Foldr (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldl v1 v2 g i xs)                = Foldl (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Either v1 v2 l r x)   = Either (f v1) (f v2) (mapExpressionVars' f l) (mapExpressionVars' f r) (mapExpressionVars' f x)

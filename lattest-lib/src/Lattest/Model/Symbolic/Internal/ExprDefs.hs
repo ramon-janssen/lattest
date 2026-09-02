@@ -400,6 +400,8 @@ instance Has (ComposeC Show Expr) Variable where
   has _ k = k
 instance Has ExprType Variable where
   has v = has @ExprType (varType v)
+instance Has ExprType Expr where
+  has e = has @ExprType (view e)
 
 instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
@@ -1000,7 +1002,6 @@ instance Has ExprType ExprView where
     Foldr _ x _ _ _ -> has @ExprType x k
     Foldl x _ _ _ _ -> has @ExprType x k
 
-
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
 showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
     where
@@ -1021,11 +1022,6 @@ isConst :: ExprView v -> Bool
 isConst (Const _) = True
 isConst _ = False
 
-
-
--- ----------------------------------------------------------------------------------------- --
---
--- ----------------------------------------------------------------------------------------- --
 
 freeVars :: Expr t -> Set.Set (Some Variable)
 freeVars = Set.fromList . freeVars' . view

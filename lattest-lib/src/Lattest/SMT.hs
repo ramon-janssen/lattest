@@ -23,13 +23,13 @@ module Lattest.SMT (
 ) where
 
 import Data.SBV(constrain, SBV, SymVal (..), freshVar, RCSet(..), Kind (..))
-import Data.SBV.Control( CheckSatResult, checkSat, getModel, query, Query)
+import Data.SBV.Control( CheckSatResult, checkSat, query, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation(..), Expr, Type (..), Constant (..), view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), view)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -75,9 +75,20 @@ runSMT :: SMT a -> IO a
 runSMT = SBV.runSMT . query . flip evalStateT Map.empty
 
 getSolution :: [Some Variable] -> SMT Valuation
-getSolution vs = -- `intersection` returns values in 'val' whose keys are also in the second argument, the values in the second argument are irrelevant
-  (\(Valuation val) -> Valuation $ DMap.intersection val $ foldr (\(Some v) -> DMap.insert v (error "dummy variable that should never be evaluated")) mempty vs)
-  . sbvModelToValuation <$> lift getModel
+getSolution vs =
+  Valuation . foldr DMap.union mempty
+  <$> mapM getVarValue vs
+  where
+    getVarValue :: Some Variable -> SMT (DMap.DMap Variable Val)
+    getVarValue (Some v@(Variable nm tp)) = do
+        sval <- gets (\m -> case m Map.!? nm of
+            Nothing -> error $ show nm <> "is not in the map"
+            Just (Some (SBVI.SBV x)) -> x)
+        (Constant _ c) <- lift $ svalToConstant tp sval
+        return $ DMap.singleton v (withExprConstraints tp $ Val c)
+
+svalToConstant :: Type a -> SBVI.SVal -> Query (Constant a)
+svalToConstant t s = withExprConstraints t $ Constant t <$> SBV.getValue (SBVI.SBV s)
 
 addAssertions :: [Expr Bool] -> SMT ()
 addAssertions = mapM_ (lift . constrain <=< smt'tosmt . exprToSymbolic . view)
