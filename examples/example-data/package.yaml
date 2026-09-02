@@ -11,6 +11,7 @@ dependencies:
 - lattest-lib >= 0.1.0.0
 - containers
 - dependent-map
+- sbv >= 14.7
 
 ghc-options:
 - -Wall

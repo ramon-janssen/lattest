@@ -27,7 +27,7 @@ import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), Expr (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
 import qualified Data.Dependent.Map as DMap
 import Data.SBV (RCSet(..))
 
@@ -336,7 +336,20 @@ evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
 
 solveTests :: [Test]
-solveTests = [testSolveNegativeModulo]
+solveTests = [testSolveNegativeModulo, testSolveTwiceInSession]
+
+-- | Solving two satisfiable guards within a single SMT run session
+testSolveTwiceInSession :: Test
+testSolveTwiceInSession = TestCase $ do
+    let v = Variable "j" IntType
+        guard = sVar v .== sConst (41 :: Integer)
+    (firstSolve, secondSolve) <- SMT.runSMT $ do
+        a <- solveGuard [SMT.Some v] guard
+        b <- solveGuard [SMT.Some v] guard
+        return (a, b)
+    let valueOf mVal = (DMap.lookup v . runValuation) =<< mVal
+    assertEqual "first solve of j == 41 in a session"  (Just (Val 41)) (valueOf firstSolve)
+    assertEqual "second solve of j == 41 in the same session" (Just (Val 41)) (valueOf secondSolve)
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)

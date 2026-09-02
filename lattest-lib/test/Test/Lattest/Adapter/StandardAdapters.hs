@@ -41,7 +41,6 @@ import Test.HUnit hiding (Path, path)
 testJSONSocketAdapterByte :: Test
 testJSONSocketAdapterByte = TestCase $ withSocketsDo $ do
     -- TODO use Control.Exception.bracketOnError to do cleanup
-    -- TODO fix "threadWait: invalid argument (Bad file descriptor)" message when running these tests. Maybe this has to do with the forked threads in ForkStreams.mux?
     -- test whether the socket adapter works by passing numbers around
     let addr = tupleToHostAddress (127, 0, 0, 1)
     listenSock <- listenTCPAddr (SockAddrInet 2929 addr) 10 -- the SUT listens for adapter connections
@@ -68,11 +67,9 @@ testJSONSocketAdapterByte = TestCase $ withSocketsDo $ do
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "6" -- the SUT sends 6
     assertObserveBytes (C8.pack "6") adap -- the adapter observes 6 from the SUT
 
-    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
     close adap
-    Socket.gracefulClose listenConn 1000
-    Socket.gracefulClose listenSock 1000
-    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
+    Socket.gracefulClose listenConn 100
+    Socket.gracefulClose listenSock 100
 
 testAdapterAcceptingInput :: Test
 testAdapterAcceptingInput = TestCase $ do
@@ -101,7 +98,7 @@ testAdapterAcceptingInput = TestCase $ do
     atomically $ writeTQueue actQueue (Just 6) -- let underlying adap produce an output
     assertReadTQueue 5 icQueue -- input is sent to the underlying adap
     assertObserve 5 adap -- input is observed
-    threadDelay 100000 -- wait 100ms to ensure that the adap output is received
+    threadDelay 1000 -- wait 1ms to ensure that the adap output is received
     assertObserve 6 adap -- output is observed
 
     void $ send 7 adap -- send an input
@@ -110,7 +107,7 @@ testAdapterAcceptingInput = TestCase $ do
     atomically $ writeTQueue actQueue (Just 10) -- let underlying adap produce an output
     assertObserve 7 adap -- input is observed
     assertObserveNonDet 8 9 adap -- input and output are observed, in arbitrary order
-    threadDelay 100000 -- wait 100ms to ensure that the adap output is received
+    threadDelay 1000 -- wait 1ms to ensure that the adap output is received
     assertObserve 10 adap -- output is observed
     assertReadTQueue 7 icQueue -- input is sent to the underlying adap    
     assertReadTQueue 9 icQueue -- input is sent to the underlying adap    
@@ -154,11 +151,9 @@ testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
     void $ BSock.send listenConn $ encodeUtf8 . pack $ "6\n" -- the SUT sends 6
     assertObserve 6 adap -- the adapter observes 6 from the SUT
 
-    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
     close adap
-    Socket.gracefulClose listenConn 1000
-    Socket.gracefulClose listenSock 1000
-    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
+    Socket.gracefulClose listenConn 100
+    Socket.gracefulClose listenSock 100
 
 _assertRecv :: String -> String -> Socket -> IO ()
 _assertRecv name s sock = void $ assertRecv name s sock
@@ -274,11 +269,9 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
         "{\"comment\":\"seventh!\",\"element\":7,\"tag\":\"Cons\",\"tail\":{\"comment\":\"eighth!\",\"element\":8,\"tag\":\"Cons\",\"tail\":{\"tag\":\"Nil\"}}}\n" -- the SUT sends [7,8].
     assertObserve list78 adap -- the adapter observes [7,8] from the SUT
 
-    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
     close adap
-    Socket.gracefulClose listenConn 1000
-    Socket.gracefulClose listenSock 1000
-    threadDelay 10000 -- FIXME these resolve a clash between the socket test cases. Find a more elegant solution.
+    Socket.gracefulClose listenConn 100
+    Socket.gracefulClose listenSock 100
 
 
 
@@ -291,8 +284,8 @@ testQuiscence :: Test
 testQuiscence = TestCase $ do
     -- NOTE this tests the timing behaviour of quiescence so is inherently timing-dependent, and therefore potentially unstable. Raise the deltaMillis
     -- and/or marginMillis for increased stability (and increased duration of this test)
-    let deltaMillis = 50
-    let marginMillis = 20
+    let deltaMillis = 4
+    let marginMillis = 2
     let halfDeltaMillis = deltaMillis `div` 2
     let twoAndHalfDeltaMillis = (deltaMillis * 5) `div` 2
     let threeAndHalfDeltaMillis = (deltaMillis * 7) `div` 2

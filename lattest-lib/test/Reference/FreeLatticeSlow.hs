@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 module Reference.FreeLatticeSlow (
-FreeLatticeSlow,
+FreeLatticeSlow(..),
 )
 
 where
