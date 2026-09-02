@@ -19,9 +19,7 @@ import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
 import Lattest.Model.Symbolic.SolveSymPrim
 import qualified Lattest.SMT as SMT
-import Lattest.SMT (Some(..))
 
-import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
 import qualified Control.Monad as CM
@@ -29,7 +27,7 @@ import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), Expr (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
 import qualified Data.Dependent.Map as DMap
 import Data.SBV (RCSet(..))
 
@@ -346,8 +344,8 @@ testSolveTwiceInSession = TestCase $ do
     let v = Variable "j" IntType
         guard = sVar v .== sConst (41 :: Integer)
     (firstSolve, secondSolve) <- SMT.runSMT $ do
-        a <- solveGuard [Some v] guard
-        b <- solveGuard [Some v] guard
+        a <- solveGuard [SMT.Some v] guard
+        b <- solveGuard [SMT.Some v] guard
         return (a, b)
     let valueOf mVal = (DMap.lookup v . runValuation) =<< mVal
     assertEqual "first solve of j == 41 in a session"  (Just (Val 41)) (valueOf firstSolve)
