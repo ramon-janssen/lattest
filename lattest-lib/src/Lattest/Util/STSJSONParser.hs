@@ -1,11 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BlockArguments #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -13,9 +13,10 @@ module Lattest.Util.STSJSONParser (
 
 import Control.Monad (forM)
 import qualified Data.Aeson as JSON
+import Data.Dependent.Sum (DSum (..))
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map.Strict as Map
-import Data.Scientific (floatingOrInteger, toRealFloat, Scientific)
+import Data.Scientific (toRealFloat)
 import qualified Data.Set as Set
 import Data.Text (unpack)
 import Data.Maybe (fromMaybe)
@@ -33,173 +34,185 @@ import Data.SBV (RCSet (..))
 
 data UntypedExpr
     = UEBool Bool
-    | UENumber Scientific
+    | UEFloat Double
+    | UEInt  Integer
     | UEStr  String
     | UEVar  String  -- Variable reference, e.g. { "var": "name" }
     | UEOp1  String UntypedExpr
     | UEOp2  String UntypedExpr UntypedExpr
+    | UEOp3  String UntypedExpr UntypedExpr UntypedExpr
+    | UEOp5  String UntypedExpr UntypedExpr UntypedExpr UntypedExpr UntypedExpr
     deriving (Show, Eq)
 
 instance JSON.FromJSON UntypedExpr where
     parseJSON (JSON.Bool b)   = pure (UEBool b)
-    parseJSON (JSON.Number n) = pure (UENumber n)
+    parseJSON (JSON.Number _) = error "untagged constant integer or float"
     parseJSON (JSON.String s) = pure (UEStr (unpack s))
     parseJSON (JSON.Object o) = do
         mvar <- o JSON..:? "var"
         case mvar of
             Just name -> pure (UEVar name)
             Nothing -> do
-                (op :: String) <- o JSON..: "op"
-                case op of
-                    "neg" -> UEOp1 op <$> o JSON..: "rhs"
-                    "not" -> UEOp1 op <$> o JSON..: "rhs"
-                    _     -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+              mint <- o JSON..:? "integer"
+              case mint of
+                Just i -> pure (UEInt i)
+                Nothing -> do
+                  mfloat <- o JSON..:? "float"
+                  case mfloat of
+                    Just f -> pure (UEFloat f)
+                    Nothing -> do
+                      (op :: String) <- o JSON..: "op"
+                      case op of
+                        "neg" -> UEOp1 op <$> o JSON..: "rhs"
+                        "not" -> UEOp1 op <$> o JSON..: "rhs"
+                        "map"    -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                        "filter" -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                        "foldr"  -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb" <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                        "foldl"  -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama" <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                        "either" -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb" <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
+                        _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
     parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
 
-lookupVar :: VarMap -> String -> Type t -> (Variable t -> Expr a) -> Either String (Expr a)
-lookupVar varmap name expected mk = case Map.lookup name varmap of
-    Just (Some v@(Variable _ t)) | Just Refl <- t `geq` expected -> Right (mk v)
-    Just (Some (Variable _ t)) -> Left $ "variable '" ++ name ++ "' has type " ++ show t ++ ", expected " ++ show expected
+lookupVar :: VarMap -> String -> Either String (DSum Type Expr)
+lookupVar varmap name = case Map.lookup name varmap of
+    Just (Some v@(Variable _ t)) -> Right $ t :=> sVar v
     Nothing             -> Left $ "unknown variable: " ++ name
 
--- Used for equality and ordering comparisons, where the result is defined based on the type of lhs and rhs.
--- A variable's declared type always takes priority over a literal's type
-inferOperandType :: VarMap -> UntypedExpr -> UntypedExpr -> Either String (Some Type)
-inferOperandType varmap lhs rhs =
-    case (varOperandType lhs, varOperandType rhs) of
-        (Just t, _) -> Right t
-        (_, Just t) -> Right t
-        _ -> case (literalOperandType lhs, literalOperandType rhs) of
-            (Just t, _) -> Right t
-            (_, Just t) -> Right t
-            _           -> Left "cannot determine operand type for operator"
-    where
-        varOperandType (UEVar name) = (\(Some x) -> Some (varType x)) <$> Map.lookup name varmap
-        varOperandType _            = Nothing
-        literalOperandType (UEBool _)  = Just $ Some BoolType
-        literalOperandType (UENumber n)
-          | Left _ <- floatingOrInteger @Double @Integer n = Just $ Some FloatType
-          | otherwise = Just $ Some IntType
-        literalOperandType _           = Nothing
-
--- handles the polymorphic cases, and redirects to the other parsers for other cases
-toExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr t)
-toExpr t varmap (UEVar name) = lookupVar varmap name t sVar
-toExpr t varmap (UEOp1 "head" e) = withExprConstraints t $ sHead <$> toExpr (ListType t) varmap e
--- todo: Ite, First, Second, Either (the deconstructor)
--- what do we even want if-then-else to look like?
--- problem for First and Second: don't know the type of the other half of the tuple
--- toExpr t varmap (UEOp1 "first" e) = sFirst <$> toExpr (TupleType t undefined) varmap e
--- toExpr t varmap (UEOp1 "second" e) = sSecond <$> toExpr (TupleType t undefined) varmap e
--- problem for Either: similarly, we don't know the type of the either
--- toExpr t varmap (UEOp5 "either" vl vr l r e) = sEither <$> _ vl <*> _ vr <*> toExpr t varmap l <*> toExpr t varmap r <*> toExpr undefined varmap e
-toExpr t varmap e = toExpr' t varmap e -- the rest of the cases get delegated to special-purpose parsers
+data TwoExprs a = Two (Expr a) (Expr a)
+toExpr :: VarMap -> UntypedExpr -> Either String (DSum Type Expr)
+toExpr varmap = \case
+  UEVar name -> lookupVar varmap name
+  UEBool  b -> Right $ BoolType  :=> sConst b
+  UEInt   i -> Right $ IntType   :=> sConst i
+  UEFloat f -> Right $ FloatType :=> sConst f
+  UEStr   s -> Right $ ListType CharType :=> sConst s
+  UEOp1 o e -> go e >>= op1 o
+  UEOp2 o e1 e2 -> do
+    t1 :=> x <- go e1
+    t2 :=> y <- go e2
+    case geq t1 t2 of
+      Just Refl -> op2ET o (t1 :=> Two x y)
+      Nothing -> op2 o (t1 :=> x) (t2 :=> y)
+  UEOp3 o e1 e2 e3 -> do
+    x <- go e1
+    y <- go e2
+    z <- go e3
+    op3 o x y z
+  UEOp5 o e1 e2 e3 e4 e5 -> do
+    a <- go e1
+    b <- go e2
+    c <- go e3
+    d <- go e4
+    e <- go e5
+    op5 o a b c d e
   where
-    toExpr' :: Type t -> VarMap -> UntypedExpr -> Either String (Expr t)
-    toExpr' = \case
-      IntType -> toIntExpr
-      BoolType -> toBoolExpr
-      FloatType -> toFloatExpr
-      CharType -> toCharExpr
-      ListType tp -> toListExpr tp
-      SetType tp -> toSetExpr tp
-      TupleType a b -> toTupleExpr a b
-      SumType a b -> toEitherExpr a b
+    -- ExprViews that don't (yet) have a parse:
+    --   Ite
 
-toBoolExpr :: VarMap -> UntypedExpr -> Either String (Expr Bool)
-toBoolExpr _   (UEBool b)          = Right (sConst b)
-toBoolExpr varmap (UEOp1 "not" e)    = sNot  <$> toExpr BoolType varmap e
-toBoolExpr varmap (UEOp2 "&&" e1 e2) = (.&&) <$> toExpr BoolType varmap e1 <*> toExpr BoolType varmap e2
-toBoolExpr varmap (UEOp2 "||" e1 e2) = (.||) <$> toExpr BoolType varmap e1 <*> toExpr BoolType varmap e2
-toBoolExpr varmap (UEOp2 "==" e1 e2) = do
-    t <- inferOperandType varmap e1 e2
-    case t of
-      Some tp -> withExprConstraints tp $ (.==) <$> toExpr tp varmap e1 <*> toExpr tp varmap e2
-toBoolExpr varmap (UEOp2 "!=" e1 e2) = sNot <$> toExpr BoolType varmap (UEOp2 "==" e1 e2)
-toBoolExpr varmap (UEOp2 "<"  e1 e2) = toComparisonExpr (.<)  varmap e1 e2
-toBoolExpr varmap (UEOp2 "<=" e1 e2) = toComparisonExpr (.<=) varmap e1 e2
-toBoolExpr varmap (UEOp2 ">"  e1 e2) = toComparisonExpr (.>)  varmap e1 e2
-toBoolExpr varmap (UEOp2 ">=" e1 e2) = toComparisonExpr (.>=) varmap e1 e2
-toBoolExpr varmap (UEOp2 "LElem" e1 e2) =
-  let tp = case inferOperandType varmap e1 e1 of
-        Right t -> Just t
-        _ -> case inferOperandType varmap e2 e2 of
-          Right (Some (ListType t)) -> Just (Some t)
-          _ -> Nothing
-  in case tp of
-    Nothing -> Left "Cannot infer list type of LElem"
-    Just (Some t) -> sElem <$> toExpr t varmap e1 <*> toExpr (ListType t) varmap e2
-toBoolExpr varmap (UEOp2 "SElem" e1 e2) =
-  let tp = case inferOperandType varmap e1 e1 of
-        Right t -> Just t
-        _ -> case inferOperandType varmap e2 e2 of
-          Right (Some (SetType t)) -> Just (Some t)
-          _ -> Nothing
-  in case tp of
-    Nothing -> Left "Cannot infer set type of SElem"
-    Just (Some t) -> sSElem <$> toExpr t varmap e1 <*> toExpr (SetType t) varmap e2
-toBoolExpr _   e                   = Left $ "not a boolean expression: " ++ show e
+    go = toExpr varmap
 
--- Numeric ordering comparisons are defined for both Integer and Float operands, but never mixed.
-toComparisonExpr :: (forall t. ExprNum t => Expr t -> Expr t -> Expr Bool) -> VarMap -> UntypedExpr -> UntypedExpr -> Either String (Expr Bool)
-toComparisonExpr cmp varmap e1 e2 = do
-    t <- inferOperandType varmap e1 e2
-    case t of
-        Some IntType   -> cmp <$> toExpr IntType   varmap e1 <*> toExpr IntType   varmap e2
-        Some FloatType -> cmp <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
-        Some tp        -> Left $ "comparison operator is not defined for type " ++ show tp
+    op1 :: String -> DSum Type Expr -> Either String (DSum Type Expr)
+    -- TODO: define non-polymorphic sum types in the json, translate them to our adts before parsing the exprs.
+    -- We need to know the type of the other half of an Either to construct it;
+    -- which is why e.g. "left" isn't part of the JSON syntax.
+    -- instead, if we want e.g. availability = Av | PartAv,
+    -- we'll need the json to contain that declaration,
+    -- from which we'd generate Av = Left :: Either () (),
+    -- and then parse "Av" into TupleType () () :=> sLeft ().
+    -- op1 "left"  (tp :=> x) = Right $ TupleType tp undefined :=> sLeft  x
+    -- op1 "right" (tp :=> x) = Right $ TupleType undefined tp :=> sRight x
+    op1 o (tp :=> x) = case tp of
+      BoolType -> case o of
+        "not" -> Right $ BoolType :=> sNot x
+        _ -> Left $ "unknown op1 @Bool: " <> o
+      ListType t -> withExprConstraints t case o of
+        "concat" -> case t of
+          ListType t' -> withExprConstraints t' $ Right $ t :=> sConcat x
+          _ -> Left "concat on non-nested list"
+        "length" -> Right $ IntType :=> sLength x
+        "head" -> Right $ t :=> sHead x
+        "tail" -> Right $ ListType t :=> sTail x
+        _ -> Left $ "unknown op1 @List: " <> o
+      TupleType t1 t2 -> withExprConstraints t1 $ withExprConstraints t2 case o of
+        "first" -> Right $ t1 :=> sFirst x
+        "second" -> Right $ t2 :=> sSecond x
+        _ -> Left $ "unknown op1 @Tuple: " <> o
+      _ -> error "todo"
 
-toIntExpr :: VarMap -> UntypedExpr -> Either String (Expr Integer)
-toIntExpr _   (UENumber n)
- | Right i <- floatingOrInteger @Double n = Right (sConst i)
-toIntExpr varmap (UEOp1 "neg" e)     = sNeg <$> toExpr IntType varmap e
-toIntExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
-toIntExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
-toIntExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
-toIntExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
-toIntExpr varmap (UEOp2 "%"  e1 e2)  = (.%) <$> toExpr IntType varmap e1 <*> toExpr IntType varmap e2
-toIntExpr _   e                    = Left $ "not an integer expression: " ++ show e
+    -- for two equally-typed expressions
+    op2ET :: String -> DSum Type TwoExprs -> Either String (DSum Type Expr)
+    op2ET "==" (t :=> Two x y) = withExprConstraints t $ Right $ BoolType :=> x .== y
+    op2ET o (t :=> Two x y) = case t of
+      BoolType -> case o of
+        "!=" -> Right $ BoolType :=> withExprConstraints t (sNot $ x .== y)
+        "&&" -> Right $ BoolType :=> x .&& y
+        "||" -> Right $ BoolType :=> x .|| y
+        _ -> op2 o (t :=> x) (t :=> y)
+      IntType -> case o of
+        "%" -> Right $ t :=> x .% y
+        "/" -> Right $ t :=> x ./ y
+        "+" -> Right $ t :=> x .+ y
+        "*" -> Right $ t :=> x .* y
+        "<" -> Right $ BoolType :=> x .< y
+        "<=" -> Right $ BoolType :=> x .<= y
+        ">" -> Right $ BoolType :=> x .> y
+        ">=" -> Right $ BoolType :=> x .>= y
+        _ -> op2 o (t :=> x) (t :=> y)
+      FloatType -> case o of
+        "/" -> Right $ t :=> x ./ y
+        "+" -> Right $ t :=> x .+ y
+        "*" -> Right $ t :=> x .* y
+        "<" -> Right $ BoolType :=> x .< y
+        "<=" -> Right $ BoolType :=> x .<= y
+        ">" -> Right $ BoolType :=> x .> y
+        ">=" -> Right $ BoolType :=> x .>= y
+        _ -> op2 o (t :=> x) (t :=> y)
+      ListType _ -> case o of
+        "++" -> Right $ t :=> sAppend x y
+        _ -> op2 o (t :=> x) (t :=> y)
 
-toListExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr [t])
-toListExpr t varmap e = case e of
-  UEOp1 "concat" e1 -> withExprConstraints t $ sConcat <$> toExpr (ListType $ ListType t) varmap e1
-  UEOp1 "tail"   e1 -> withExprConstraints t $ sTail   <$> toExpr (ListType t)            varmap e1
-  UEOp2 "cons"   e1 e2 -> sCons   <$> toExpr t            varmap e1 <*> toExpr (ListType t) varmap e2
-  UEOp2 "append" e1 e2 -> sAppend <$> toExpr (ListType t) varmap e1 <*> toExpr (ListType t) varmap e2
-  UEOp2 "take"   e1 e2 -> sTake   <$> toExpr IntType      varmap e1 <*> toExpr (ListType t) varmap e2
-  UEOp2 "drop"   e1 e2 -> sDrop   <$> toExpr IntType      varmap e1 <*> toExpr (ListType t) varmap e2
-  -- problem: can't parse Map without knowing the types
-  _ -> Left $ "not a list expression: " ++ show e
+      _ -> error "todo"
+    -- for two potentially unequally-typed expressions
+    op2 :: String -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
+    op2 "cons" (t1 :=> x) (ListType t2 :=> xs) = case geq t1 t2 of
+      Just Refl -> Right $ ListType t1 :=> sCons x xs
+      Nothing -> Left "mismatched type for cons"
+    op2 "elem" (t1 :=> x) (ListType t2 :=> xs) = case geq t1 t2 of
+      Just Refl -> Right $ BoolType :=> sElem x xs
+      Nothing -> Left "mismatched type for list elem"
+    op2 "take" (IntType :=> i) (ListType t :=> xs) = Right $ ListType t :=> sTake i xs
+    op2 "drop" (IntType :=> i) (ListType t :=> xs) = Right $ ListType t :=> sDrop i xs
+    op2 "pair" (t1 :=> x) (t2 :=> y) = Right $ TupleType t1 t2 :=> sPair x y
+    op2 "selem" (t1 :=> x) (SetType t2 :=> y) = case geq t1 t2 of
+      Just Refl -> Right $ BoolType :=> sSElem x y
+      Nothing -> Left "mismatched type for set elem"
+    op2 "insert" (t1 :=> x) (SetType t2 :=> y) = withExprConstraints t1 case geq t1 t2 of
+      Just Refl -> Right $ SetType t1 :=> sInsert x y
+      Nothing -> Left "mismatched type for set insert"
+    op2 o _ _ = Left $ "unknown or badly typed op2: " <> o
 
-toSetExpr :: Type t -> VarMap -> UntypedExpr -> Either String (Expr (RCSet t))
-toSetExpr t varmap e = case e of
-  -- TODO: add operators that return sets
-  _ -> Left $ "not a set expression: " ++ show e
+    op3 :: String -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
+    op3 "map" (tv :=> (view -> Var v)) (tb :=> f) (ListType ta :=> xs) = withExprConstraints ta $ withExprConstraints tb case geq ta tv of
+      Just Refl -> Right $ ListType tb :=> sMap v f xs
+      Nothing -> Left "unable to parse map"
+    op3 "filter" (tv :=> (view -> Var v)) (BoolType :=> f) (ListType ta :=> xs) = withExprConstraints ta case geq ta tv of
+      Just Refl -> Right $ ListType ta :=> sFilter v f xs
+      Nothing -> Left "unable to parse filter"
+    op3 o _ _ _ = Left $ "unknown or wrongly typed op3: " <> o
 
-toTupleExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (a,b))
-toTupleExpr t1 t2 varmap e = case e of
-  -- TODO: add operators that return tuples
-  _ -> Left $ "not a tuple expression: " ++ show e
-
-toEitherExpr :: Type a -> Type b -> VarMap -> UntypedExpr -> Either String (Expr (Either a b))
-toEitherExpr t1 t2 varmap e = case e of
-  -- TODO: add operators that return eithers
-  _ -> Left $ "not an either expression: " ++ show e
-
-toFloatExpr :: VarMap -> UntypedExpr -> Either String (Expr Double)
-toFloatExpr _   (UENumber n)          = Right (sConst $ toRealFloat n)
-toFloatExpr varmap (UEOp1 "neg" e)     = sNeg <$> toExpr FloatType varmap e
-toFloatExpr varmap (UEOp2 "+"  e1 e2)  = (.+) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
-toFloatExpr varmap (UEOp2 "-"  e1 e2)  = (.-) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
-toFloatExpr varmap (UEOp2 "*"  e1 e2)  = (.*) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
-toFloatExpr varmap (UEOp2 "/"  e1 e2)  = (./) <$> toExpr FloatType varmap e1 <*> toExpr FloatType varmap e2
-toFloatExpr _   e                    = Left $ "not a real expression: " ++ show e
-
-toCharExpr :: VarMap -> UntypedExpr -> Either String (Expr Char)
-toCharExpr _      (UEStr [c])  = Right (sConst c)
-toCharExpr _      e            = Left $ "not a character expression: " ++ show e
+    op5 :: String -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
+    op5 "foldr" (ta :=> (view -> Var va)) (tb :=> (view -> Var vb)) (tb' :=> f) (tb'' :=> i) (ListType ta' :=> xs) = withExprConstraints ta case (geq ta ta', geq tb tb', geq tb tb'') of
+      (Just Refl, Just Refl, Just Refl) -> Right $ tb :=> sFoldr va vb f i xs
+      _ -> Left "unable to parse foldr"
+    op5 "foldl" (tb :=> (view -> Var vb)) (ta :=> (view -> Var va)) (tb' :=> f) (tb'' :=> i) (ListType ta' :=> xs) = withExprConstraints ta case (geq ta ta', geq tb tb', geq tb tb'') of
+      (Just Refl, Just Refl, Just Refl) -> Right $ tb :=> sFoldl vb va f i xs
+      _ -> Left "unable to parse foldl"
+    op5 "either" (ta :=> (view -> Var va)) (tb :=> (view -> Var vb)) (tc :=> fa) (tc' :=> fb) (SumType ta' tb' :=> x) = withExprConstraints ta $ withExprConstraints tb $ withExprConstraints tc case (geq ta ta', geq tb tb', geq tc tc') of
+      (Just Refl, Just Refl, Just Refl) -> Right $ tc :=> sEither va vb fa fb x
+      _ -> Left "unable to parse either"
+    op5 o _ _ _ _ _ = Left $ "unknown or wrongly typed op3: " <> o
 
 -- Location IDs can be integers or strings in JSON; both are mapped to String for consistency.
 newtype LocationId = LocationId { locId :: String }
@@ -225,7 +238,7 @@ instance JSON.FromJSON VarDefJson where
     parseJSON = JSON.withObject "VarDefJson" $ \o ->
         VarDefJson <$> o JSON..: "type"
 
-data GateDefJson = GateDefJson 
+data GateDefJson = GateDefJson
     { gateDefJsonShortname :: Maybe String
     , gateDefJsonParams :: [String]
     }
@@ -332,15 +345,10 @@ buildAssignment varMap name def = do
         Nothing -> Left $ "unknown variable '" ++ assignmentJsonVar def ++ "' in assignment '" ++ name ++ "'"
     let expr = assignmentJsonExpr def
     case var of
-      Some v -> case varType v of
-        IntType   -> (v =:) <$> toExpr IntType   varMap expr
-        FloatType -> (v =:) <$> toExpr FloatType varMap expr
-        BoolType  -> (v =:) <$> toExpr BoolType  varMap expr
-        CharType  -> (v =:) <$> toExpr CharType  varMap expr
-        ListType t -> (v =:) <$> toExpr (ListType t) varMap expr
-        SetType  t -> (v =:) <$> toExpr (SetType  t) varMap expr
-        TupleType a b -> (v =:) <$> toExpr (TupleType a b) varMap expr
-        SumType   a b -> (v =:) <$> toExpr (SumType   a b) varMap expr
+      Some v -> toExpr varMap expr >>= \(tp :=> e) ->
+        case geq (varType v) tp of
+          Just Refl -> Right $ v =: e
+          Nothing -> Left "assigment to variable of wrong type"
 
 buildAssignmentMap
     :: VarMap
@@ -428,7 +436,10 @@ convertSTSJson json = do
     outputGateMap <- buildGateMap Out varMap (stsJsonOutputGates json)
     let gateMap = inputGateMap `Map.union` outputGateMap
         alphabet  = Set.fromList (Map.elems gateMap)
-    guardMap  <- traverse (toExpr BoolType varMap) (stsJsonGuards json)
+    guardMap' <- traverse (toExpr varMap) (stsJsonGuards json)
+    guardMap <- traverse (\(tp :=> e) -> case tp of
+      BoolType -> Right e
+      _ -> Left "guard with non-bool type") guardMap'
     assignMap <- buildAssignmentMap varMap (stsJsonAssignments json)
     switchList <- buildSwitchList gateMap guardMap assignMap (stsJsonSwitches json)
     let transRel = buildTransitionRel switchList
