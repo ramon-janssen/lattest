@@ -85,6 +85,7 @@ import Control.Monad ((<=<))
 import Data.Data (Data)
 import Data.Bifunctor (Bifunctor(..))
 import qualified Data.Aeson.Types as JSON
+import qualified Debug.Trace
 
 data Type a where
   IntType :: Type Integer
@@ -95,7 +96,6 @@ data Type a where
   SetType :: Type a -> Type (RCSet a)
   TupleType :: Type a -> Type b -> Type (a,b)
   SumType :: Type a -> Type b -> Type (Either a b)
-  -- FunType :: Type a -> Type b -> Type (a -> b)
 
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
@@ -118,7 +118,7 @@ instance GEq Type where
   geq (SetType a) (SetType b) = (\Refl -> Refl) <$> geq a b
   geq (TupleType a b) (TupleType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
   geq (SumType a b) (SumType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
-  geq _ _ = Nothing
+  geq a b = Debug.Trace.traceShow (a,b) $ Nothing
 instance GCompare Type where
   gcompare = \cases
     IntType IntType -> GEQ
