@@ -9,6 +9,7 @@
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
+    stsListFromJSONFile,
 ) where
 
 import Control.Monad (forM)
@@ -40,38 +41,50 @@ data UntypedExpr
     | UEVar  String  -- Variable reference, e.g. { "var": "name" }
     | UEOp1  String UntypedExpr
     | UEOp2  String UntypedExpr UntypedExpr
-    | UEOp3  String UntypedExpr UntypedExpr UntypedExpr
-    | UEOp5  String UntypedExpr UntypedExpr UntypedExpr UntypedExpr UntypedExpr
+    -- Op3 and Op5 always start with one or two variable names { "lam": "name" }, respectively
+    | UEOp3  String String UntypedExpr UntypedExpr
+    | UEOp5  String String String UntypedExpr UntypedExpr UntypedExpr
     deriving (Show, Eq)
 
 instance JSON.FromJSON UntypedExpr where
-    parseJSON (JSON.Bool b)   = pure (UEBool b)
-    parseJSON (JSON.Number _) = error "untagged constant integer or float"
-    parseJSON (JSON.String s) = pure (UEStr (unpack s))
-    parseJSON (JSON.Object o) = do
-        mvar <- o JSON..:? "var"
-        case mvar of
-            Just name -> pure (UEVar name)
-            Nothing -> do
-              mint <- o JSON..:? "integer"
-              case mint of
-                Just i -> pure (UEInt i)
-                Nothing -> do
-                  mfloat <- o JSON..:? "float"
-                  case mfloat of
-                    Just f -> pure (UEFloat f)
-                    Nothing -> do
-                      (op :: String) <- o JSON..: "op"
-                      case op of
-                        "neg" -> UEOp1 op <$> o JSON..: "rhs"
-                        "not" -> UEOp1 op <$> o JSON..: "rhs"
-                        "map"    -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                        "filter" -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                        "foldr"  -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb" <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                        "foldl"  -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama" <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                        "either" -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb" <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
-                        _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
-    parseJSON _ = fail "expected expression"
+  parseJSON (JSON.Bool b)   = pure (UEBool b)
+  parseJSON (JSON.Number _) = error "untagged constant integer or float"
+  parseJSON (JSON.String s) = pure (UEStr (unpack s))
+  parseJSON (JSON.Object o) = do
+    mvar <- o JSON..:? "var"
+    case mvar of
+      Just name -> pure (UEVar name)
+      Nothing -> do
+        mint <- o JSON..:? "integer"
+        case mint of
+          Just i -> pure (UEInt i)
+          Nothing -> do
+            mfloat <- o JSON..:? "float"
+            case mfloat of
+              Just f -> pure (UEFloat f)
+              Nothing -> do
+                mbool <- o JSON..:? "boolean"
+                case mbool of
+                  Just b -> pure (UEBool b)
+                  Nothing -> do
+                    mstr <- o JSON..:? "string"
+                    case mstr of
+                      Just s -> pure (UEStr s)
+                      Nothing -> do
+                        (op :: String) <- o JSON..: "op"
+                        case op of
+                          "neg" -> UEOp1 op <$> o JSON..: "rhs"
+                          "not" -> UEOp1 op <$> o JSON..: "rhs"
+                          "map"    -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                          "filter" -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                          "forall" -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "exp" <*> o JSON..: "over"
+                          "exists" -> UEOp3 op <$> o JSON..: "lam" <*> o JSON..: "exp" <*> o JSON..: "over"
+                          "cardinality" -> UEOp5 op <$> o JSON..: "lam"  <*> o JSON..: "quantifier" <*> o JSON..: "exp"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
+                          "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                          "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                          "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
+                          _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+  parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
 
@@ -95,18 +108,8 @@ toExpr varmap = \case
     case geq t1 t2 of
       Just Refl -> op2ET o (t1 :=> Two x y)
       Nothing -> op2 o (t1 :=> x) (t2 :=> y)
-  UEOp3 o e1 e2 e3 -> do
-    x <- go e1
-    y <- go e2
-    z <- go e3
-    op3 o x y z
-  UEOp5 o e1 e2 e3 e4 e5 -> do
-    a <- go e1
-    b <- go e2
-    c <- go e3
-    d <- go e4
-    e <- go e5
-    op5 o a b c d e
+  UEOp3 o v e1 e2 -> op3 o v e1 e2
+  UEOp5 o v1 v2 e1 e2 e3 -> op5 o v1 v2 e1 e2 e3
   where
     -- ExprViews that don't (yet) have a parse:
     --   Ite
@@ -193,26 +196,72 @@ toExpr varmap = \case
       Nothing -> Left "mismatched type for set insert"
     op2 o _ _ = Left $ "unknown or badly typed op2: " <> o
 
-    op3 :: String -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
-    op3 "map" (tv :=> (view -> Var v)) (tb :=> f) (ListType ta :=> xs) = withExprConstraints ta $ withExprConstraints tb case geq ta tv of
-      Just Refl -> Right $ ListType tb :=> sMap v f xs
-      Nothing -> Left "unable to parse map"
-    op3 "filter" (tv :=> (view -> Var v)) (BoolType :=> f) (ListType ta :=> xs) = withExprConstraints ta case geq ta tv of
-      Just Refl -> Right $ ListType ta :=> sFilter v f xs
-      Nothing -> Left "unable to parse filter"
-    op3 o _ _ _ = Left $ "unknown or wrongly typed op3: " <> o
+    op3 :: String -> String -> UntypedExpr -> UntypedExpr -> Either String (DSum Type Expr)
+    op3 op v f xs = do
+      t'' :=> ys <- go xs
+      case t'' of
+        ListType t -> do
+          t' :=> g <- toExpr (Map.insert v (Some (Variable v t)) varmap) f
+          withExprConstraints t $ withExprConstraints t' case op of
+            "map" -> Right $ ListType t' :=> sMap (Variable v t) g ys
+            "filter" -> case geq BoolType t' of
+              Just Refl -> Right $ ListType t :=> sFilter (Variable v t) g ys
+              Nothing -> Left "non-bool function in filter"
+            "forall" -> case geq BoolType t' of
+              Just Refl -> Right $ BoolType :=> let y = Variable "forallAccumulator" BoolType
+                                                    x = Variable "forallIterator" BoolType
+                                                in sFoldr x y (sVar x .&& sVar y) sTrue $ sMap (Variable v t) g ys
+              Nothing -> Left "non-bool function in forall"
+            "exists" -> case geq BoolType t' of
+              Just Refl -> Right $ BoolType :=> let y = Variable "existsAccumulator" BoolType
+                                                    x = Variable "existsIterator" BoolType
+                                                in sFoldr x y (sVar x .|| sVar y) sFalse $ sMap (Variable v t) g ys
+              Nothing -> Left "non-bool function in forall"
+            _ -> Left $ "unknown or mistyped op3: " <> op
+        _ -> Left "op3 received non-list as third expression"
 
-    op5 :: String -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
-    op5 "foldr" (ta :=> (view -> Var va)) (tb :=> (view -> Var vb)) (tb' :=> f) (tb'' :=> i) (ListType ta' :=> xs) = withExprConstraints ta case (geq ta ta', geq tb tb', geq tb tb'') of
-      (Just Refl, Just Refl, Just Refl) -> Right $ tb :=> sFoldr va vb f i xs
-      _ -> Left "unable to parse foldr"
-    op5 "foldl" (tb :=> (view -> Var vb)) (ta :=> (view -> Var va)) (tb' :=> f) (tb'' :=> i) (ListType ta' :=> xs) = withExprConstraints ta case (geq ta ta', geq tb tb', geq tb tb'') of
-      (Just Refl, Just Refl, Just Refl) -> Right $ tb :=> sFoldl vb va f i xs
-      _ -> Left "unable to parse foldl"
-    op5 "either" (ta :=> (view -> Var va)) (tb :=> (view -> Var vb)) (tc :=> fa) (tc' :=> fb) (SumType ta' tb' :=> x) = withExprConstraints ta $ withExprConstraints tb $ withExprConstraints tc case (geq ta ta', geq tb tb', geq tc tc') of
-      (Just Refl, Just Refl, Just Refl) -> Right $ tc :=> sEither va vb fa fb x
-      _ -> Left "unable to parse either"
-    op5 o _ _ _ _ _ = Left $ "unknown or wrongly typed op3: " <> o
+    op5 :: String -> String -> String -> UntypedExpr -> UntypedExpr -> UntypedExpr -> Either String (DSum Type Expr)
+    op5 "either" v1 v2 e1 e2 e3 = do
+      st :=> e <- go e3
+      case st of
+        SumType t1 t2 -> do
+          t  :=> l <- toExpr (Map.insert v1 (Some (Variable v1 t1)) varmap) e1
+          t' :=> r <- toExpr (Map.insert v2 (Some (Variable v2 t2)) varmap) e2
+          withExprConstraints t1 $ withExprConstraints t2 $ withExprConstraints t case geq t t' of
+            Just Refl -> Right $ t :=> sEither (Variable v1 t1) (Variable v2 t2) l r e
+            Nothing -> Left "wrongly typed either"
+        _ -> Left "non-Either in either"
+    op5 "foldr" v1 v2 f i xs = do
+      lt :=> ys <- go xs
+      case lt of
+        ListType ta -> do
+          tb :=> i' <- go i
+          tb' :=> g <- toExpr (Map.insert v1 (Some (Variable v1 ta)) $ Map.insert v2 (Some (Variable v2 tb)) varmap) f
+          withExprConstraints ta case geq tb tb' of
+            Just Refl -> Right $ tb :=> sFoldr (Variable v1 ta) (Variable v2 tb) g i' ys
+            Nothing -> Left "wrongly typed foldr"
+        _ -> Left "non-list in foldr"
+    op5 "foldl" v1 v2 f i xs = do
+      lt :=> ys <- go xs
+      case lt of
+        ListType ta -> do
+          tb :=> i' <- go i
+          tb' :=> g <- toExpr (Map.insert v1 (Some (Variable v1 tb)) $ Map.insert v2 (Some (Variable v2 ta)) varmap) f
+          withExprConstraints ta case geq tb tb' of
+            Just Refl -> Right $ tb :=> sFoldl (Variable v1 tb) (Variable v2 ta) g i' ys
+            Nothing -> Left "wrongly typed foldr"
+        _ -> Left "non-list in foldl"
+    -- "cardinality" is the only case that doesn't actually take 2 variables and 3 expressions;
+    -- we just pass the 'quantity' string in place of the second variable and the size as the final UE
+    op5 "cardinality" v quantity f xs (UEInt n) =
+      op3 "filter" v f xs >>= \case
+        ListType _ :=> ys -> case quantity of
+          "exactly"  -> Right $ BoolType :=> sLength ys .== sConst n
+          "at least" -> Right $ BoolType :=> sLength ys .>= sConst n
+          "at most"  -> Right $ BoolType :=> sLength ys .<= sConst n
+          _ -> Left "unknown quantifier in cardinality"
+        _ -> error "op3 'filter' did something very weird"
+    op5 _ _ _ _ _ _ = Left "unkown or wrongly typed op5"
 
 -- Location IDs can be integers or strings in JSON; both are mapped to String for consistency.
 newtype LocationId = LocationId { locId :: String }

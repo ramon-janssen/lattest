@@ -4,14 +4,14 @@ module Lib
 
 import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp)
 import           Lattest.Model.StandardAutomata
-import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
+-- import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 
 run :: IO ()
 run = do
     putStrLn "loading STSs from JSON..."
-    result <- stsListFromJSONFile "sts_example.json"
+    result <- stsListFromJSONFile "example.json"
     stss <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
@@ -27,10 +27,10 @@ run = do
 
     putStrLn $ prettyPrintIntrp model
 
-    putStrLn "computing offline test cases..."
-    let nrSteps = 10
-        randomSeed = 456
-        controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
-    tests <- offlineTests model controller
-
-    print tests
+    -- putStrLn "computing offline test cases..."
+    -- let nrSteps = 10
+    --     randomSeed = 456
+    --     controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+    -- tests <- offlineTests model controller
+    --
+    -- print tests
