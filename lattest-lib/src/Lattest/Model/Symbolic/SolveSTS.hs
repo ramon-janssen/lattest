@@ -22,24 +22,22 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInt
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables)
 import Lattest.SMT(SMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&), first, second)
+import Control.Arrow((&&&))
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
-import qualified Data.Set as Set
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
 import Data.Maybe (mapMaybe)
+import Data.Some (Some, mapSome)
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -62,16 +60,16 @@ solveRandomInteraction intrpr subsetFunction r = do
         -- `interactsToSpecifiedCondition` puts the (single) step's variables in SSA form, indexing them with `_0`, so
         -- index the gate parameters we solve for and read the solution back from with the same suffix. Otherwise the
         -- SMT declarations (taken from these parameters) wouldn't match the variables mentioned in the guard.
-        indexParams (SymInteract g' params) = SymInteract g' (indexVar 0 <$> params)
+        indexParams (SymInteract g' params) = SymInteract g' (mapSome (indexVar 0) <$> params)
 
 
 interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
+interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
+interactsToAllowedCondition = interactsToGuard asExpr
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToGuard f intrpr interacts = f (treeToGuard f interacts BM.<#> seTree intrpr)
 
@@ -106,7 +104,7 @@ newtype SETree m i = SETree (Map.Map i (m (SEIte (m (SETree m i)))))
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Eq (SETree m i)
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Ord (SETree m i)
 
-seTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+seTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> m (SETree m (IOSymInteract i o))
 seTree intrpr =
     let smlocs = intrpStateToSym BM.<#> stateConf intrpr
@@ -116,7 +114,7 @@ seTree intrpr =
     t loc = Map.map (BM.ordMap completeSTSLoc) (transRel (syntacticAutomaton intrpr) loc)
     --seTree' :: Int -> SymIntrpState loc -> SETree m i
     -- the LHS pvar contains the indexed vars of the previous step, RHS contains only interaction variables
-    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (\i -> BM.ordMap $ seStep' i) (t ploc)
+    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (BM.ordMap . seStep') (t ploc)
         where
         --seStep' :: (SymGuard, VarModel, loc) -> SEBranch (SETree m i)
         seStep' i (tguard, completedAssign, tloc) =
@@ -133,9 +131,9 @@ seTree intrpr =
     completeSTSLoc (STSLoc (tguard, tassign), tloc) =
         let completedAssign = tassign `varUnion` identityVarModel locVarSet
         in (tguard, completedAssign, tloc)
-    locVarSet :: [Variable]
+    locVarSet :: [Some Variable]
     locVarSet = -- a bit hacky: we assume that there is a global set of state variables, but we extract it from the assignment of an arbitrary transition
-        let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
+        let mArbitraryState = toList (stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
@@ -143,9 +141,10 @@ seTree intrpr =
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
 
 indexExpr :: Int -> Expr t -> Expr t
-indexExpr n e = mapExpressionVars (indexVar n) e
-indexVar :: Int -> Variable -> Variable
---indexVar 0 v = v
+indexExpr n = mapExpressionVars (indexVar n)
+
+indexVar :: Int -> Variable a -> Variable a
+indexVar 0 v = v
 indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables

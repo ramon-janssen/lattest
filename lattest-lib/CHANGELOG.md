@@ -7,6 +7,7 @@ and this project adheres to the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
+Refactor the STS expression language, adding support for sets, lists, sum and product types.
 
 ## 0.1.1 - 2026-07-15
 Bugfix patch: adds instance OrdTraversable FreeLattice, and properly kills the reading thread before its socket is closed.

@@ -1,3 +1,6 @@
-resolver: nightly-2026-06-22
+resolver: nightly-2026-07-13
 packages:
-  - .
+- .
+
+extra-deps:
+- sbv-14.7

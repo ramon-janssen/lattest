@@ -8,9 +8,7 @@ import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
-import qualified Lattest.SMT as SMT
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
-import qualified Data.Maybe as M
 
 import Test.Tasty
 import Test.Tasty.Runners as Tasty
@@ -50,8 +48,8 @@ quickCheckTests = testGroup "Quickcheck"
 --  Disable symbolic expression tests for now as they are too flaky
 --    quickCheckWithTimeoutWithNum (prop_evalSymbolic :: PropEvalSymbolic Bool) 10000
 --    quickCheckWithTimeoutWithNumWithSize prop_solveSymbolic 100 2
-  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith 15 "consumeBufferedWith"
-  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) 10000 "latticeIsCNF"
+  , quickCheckWithTimeoutWithNum prop_consumeBufferedWith (15 :: Int) "consumeBufferedWith"
+  , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) (10000 :: Int) "latticeIsCNF"
   -- concrete-trace specified/allowed correspondence, with traces generated from the model alphabet
   , testProperty "specifiedAllowedCorrespondence" $
       within (durationSeconds * 1000000) $ withMaxSuccess 200 $
@@ -59,8 +57,8 @@ quickCheckTests = testGroup "Quickcheck"
   ]
 
     where
-    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop 100
-    quickCheckWithTimeoutWithNum prop n name = testProperty name $ \testparam -> 
+    quickCheckWithTimeout prop = quickCheckWithTimeoutWithNum prop (100 :: Int)
+    quickCheckWithTimeoutWithNum prop _ name = testProperty name $ \testparam ->
       within (durationSeconds * 1000000) $ withMaxSize 20 $
       -- Shrinking interacts really badly with the timeout: QuickCheck ends up on a search for the smallest input that exceeds the timelimit.
       noShrinking $ prop testparam
@@ -102,6 +100,7 @@ makeHUnitTests regenerate = do
         testRandomFIncorrectInput,
         testSTSHappyFlow,
         testSTSHappyFlowFloat,
+        testSTSHappyFlowLists,
         testErrorThrowingGates,
         testSTSUnHappyFlow,
         testComposedSeTreeStructure regenerate,

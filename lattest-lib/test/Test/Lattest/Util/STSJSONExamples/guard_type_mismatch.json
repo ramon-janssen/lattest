@@ -3,7 +3,8 @@
     "locationVariables": {
         "counter": { "type": "integer" },
         "label":   { "type": "string"  },
-        "active":  { "type": "bool"    }
+        "active":  { "type": "bool"    },
+        "selector": { "type": "char"   }
     },
     "parameters": {
         "counter_p": { "type": "integer" },
@@ -11,7 +12,8 @@
     },
     "initialValuation": {
         "counter": 1,
-        "active": false
+        "active": false,
+        "selector": "a"
     },
     "locations": [0, 1, 2],
     "inputGates": {
@@ -23,17 +25,17 @@
         "O2": { "shortname": "confirm",  "parameters": ["counter_p"] }
     },
     "guards": {
-        "G1": { "lhs": "counter", "op": "<",  "rhs": 5       },
-        "G2": { "lhs": "counter", "op": ">=", "rhs": 5       },
-        "G3": { "lhs": "active",  "op": "==", "rhs": true    },
-        "G4": { "lhs": "label",   "op": "==", "rhs": 123 }
+        "G1": { "lhs": {"var": "counter"}, "op": "<",  "rhs": 5       },
+        "G2": { "lhs": {"var": "counter"}, "op": ">=", "rhs": 5       },
+        "G3": { "lhs": {"var": "active"},  "op": "==", "rhs": true    },
+        "G4": { "lhs": {"var": "selector"},   "op": "==", "rhs": "a String is no Char" }
     },
     "assignments": {
-        "A1": { "target": "counter", "expression": { "lhs": "counter", "op": "+", "rhs": "counter_p" } },
+        "A1": { "target": "counter", "expression": { "lhs": {"var": "counter"}, "op": "+", "rhs": {"var": "counter_p"} } },
         "A2": { "target": "active",  "expression": false     },
         "A3": { "target": "active",  "expression": true      },
-        "A4": { "target": "label",   "expression": "label_p" },
-        "A5": { "target": "counter", "expression": { "lhs": "counter", "op": "+", "rhs": 1 } }       
+        "A4": { "target": "label",   "expression": {"var": "label_p"} },
+        "A5": { "target": "counter", "expression": { "lhs": {"var": "counter"}, "op": "+", "rhs": 1 } }       
     },
     "switches": {
         "r_low":    { "init_loc": 0, "gate": "I2", "guard": "G1", "assignments": ["A1"], "end_loc": 1 },

@@ -8,8 +8,15 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
-{-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes #-}
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -42,35 +49,40 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , (.%)
   -- *** Comparisons GEZ
 , sIsNonNegative
-  -- ** String Operators to create Value Expressions
-  -- *** Length operator
+  -- ** List operations
 , sLength
-  -- *** Concat operator
 , sConcat
-  -- ** Regular Expression Operators to create Value Expressions
-  -- *** String in Regular Expression operator
---, cstrStrInRe
-  -- ** Algebraic Data Type Operators to create Value Expressions
-  -- *** Algebraic Data Type constructor operator
---, cstrCstr
-  -- *** Algebraic Data Type IsConstructor function
---, cstrIsCstr
-  -- *** Algebraic Data Type Accessor
---, cstrAccess
+, sCons
+, sNil
+, sAppend
+, sElem
+, sTake
+, sDrop
+, sHead
+, sTail
+, sMap
+  -- ** Set operations
+, sInsert
+, sEmptySet
+, sSElem
+  -- ** Pair operations
+, sFirst
+, sSecond
+, sPair
+  -- ** Either
+, sEither
+, sLeft
+, sRight
 
--- to be documented
---, cstrPredef
 -- * Substitution of var by value
-, VarModel
-, Assignable
+, VarModel(..)
 , assign
+, Valuation(..)
+, Val(..)
 , varUnion
 , mapVars
 , mapVarExprs
-, Valuation
 , valuationToVarModel
-, toConstantsMap
-, fromConstantsMap
 , emptyValuation
 , assignValues
 , assignValue
@@ -85,76 +97,33 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , assignment
 , noAssignment
 , (=:)
+, eval
+, reduce
 , mapExpressionVars
 )
 where
 
 import           Control.Arrow   (first)
-import qualified Data.List       as List
-import qualified Data.Map        as Map
 import qualified Data.Set        as Set
---import           Text.Regex.TDFA
 
 import qualified Lattest.Model.Symbolic.Internal.Boute as Boute
 import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX        as FMX
 import           Lattest.Model.Symbolic.Internal.Product as Product
---import           Lattest.Model.Symbolic.Expr.RegexXSD2Posix
 import           Lattest.Model.Symbolic.Internal.Sum as Sum
 import           Lattest.Model.Symbolic.Internal.ExprDefs
+import Data.Dependent.Map (DMap)
+import qualified Data.Dependent.Map as DMap
+import Data.Constraint.Extras (Has (..))
+import Data.Constraint.Compose (ComposeC)
+import qualified Data.List as List
+import Data.SBV (RCSet(..))
+import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
+import GHC.Integer (divInteger)
+import Data.Maybe (catMaybes)
+import Data.Some (Some (..))
+import Data.Dependent.Sum (DSum(..))
 
--- | Create a function call.
--- Preconditions are /not/ checked.
-{-cstrFunc :: (Variable v, Variable w) => Map.Map FuncId (FuncDef v) -> FuncId -> [Expr w] -> Expr w
-cstrFunc fis fi arguments =
-    case Map.lookup fi fis of
-        Nothing ->
-            -- When implementing the body of a recursive function, a function
-            -- call is made while the implementation is not (yet) finished and
-            -- available.
-            Expr (Vfunc fi arguments)
-        Just (FuncDef params body)->
-            case view body of
-                Vconst x -> cons x
-                _        -> if all isConst arguments
-                            then compSubst (Map.fromList (zip params arguments)) fis body
-                            else Expr (Vfunc fi arguments)
-
--- | Apply ADT Constructor of constructor with CstrId and the provided arguments (the list of value expressions).
--- Preconditions are /not/ checked.
-cstrCstr :: CstrId -> [Expr] -> Expr
-cstrCstr c a = if all isConst a
-                then cons (Ccstr c (map toConst a) )
-                else Expr (Vcstr c a)
-    where   toConst :: Expr -> Constant
-            toConst (view -> Vconst v) = v
-            toConst _                  = error "Impossible when all satisfy isConst"
-
--- | Is the provided value expression made by the ADT constructor with CstrId?
--- Preconditions are /not/ checked.
-cstrIsCstr :: CstrId -> Expr -> Expr
-cstrIsCstr c1 (view -> Vcstr c2 _)          = cons (Cbool (c1 == c2) )
-cstrIsCstr c1 (view -> Vconst (Ccstr c2 _)) = cons (Cbool (c1 == c2) )
-cstrIsCstr c e                              = Expr (Viscstr c e)
-
--- | Apply ADT Accessor of constructor with CstrId on field with given position on the provided value expression.
--- Preconditions are /not/ checked.
-cstrAccess :: CstrId -> T.Text -> Int -> Expr -> Expr
-cstrAccess c1 n1 p1 (view -> Vcstr c2 fields) =
-    if c1 == c2 -- prevent crashes due to model errors
-        then fields!!p1
-        else error ("Error in model: Accessing field " ++ show n1 ++ " of constructor " ++ show c1 ++ " on instance from constructor " ++ show c2)
-cstrAccess c1 n1 p1 (view -> Vconst (Ccstr c2 fields)) =
-    if c1 == c2 -- prevent crashes due to model errors
-        then cons (fields!!p1)
-        else error ("Error in model: Accessing field " ++ show n1 ++ " of constructor " ++ show c1 ++ " on value from constructor " ++ show c2)
-cstrAccess c n p e = Expr (Vaccess c n p e)
--}
--- | Is Expr a Constant/Value Expression?
---isConst :: Expr -> Bool
---isConst (view -> Vconst{}) = True
---isConst _                  = False
-
-sConst :: ExprType t => t -> Expr t
+sConst :: ExprConstraints t => t -> Expr t
 sConst = Expr . Const
 
 sTrue :: Expr Bool
@@ -163,27 +132,8 @@ sTrue = sConst True
 sFalse :: Expr Bool
 sFalse = sConst False
 
-class VarExpr t where
-    sVar :: Variable -> Expr t
-
-instance VarExpr Integer where
-    sVar v@(Variable _ IntType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Integer, received " ++ show t
-
-instance VarExpr Bool where
-    sVar v@(Variable _ BoolType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Bool, received " ++ show t
-
-instance VarExpr String where
-    sVar v@(Variable _ StringType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected String, received " ++ show t
-
-instance VarExpr Double where
-    sVar v@(Variable _ FloatType) = sVar' v
-    sVar (Variable n t) = error $ "Variable expression for '" ++ n ++ "' of wrong type: expected Real, received " ++ show t
-
-sVar' :: Variable -> Expr t
-sVar' = Expr . Var
+sVar :: Variable t -> Expr t
+sVar = Expr . Var
 
 -- | Apply operator ITE (IF THEN ELSE) on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -192,23 +142,8 @@ sIfThenElse (view -> Const True) t _ = t
 sIfThenElse (view -> Const False) _ f = f
 sIfThenElse (view -> c) (view -> t) (view -> f) = Expr $ Ite c t f
 
--- | Create a variable as a value expression.
--- typeclass because every type has its own ExprView-constructor
-class EqExpr t where
-    (.==) :: Expr t -> Expr t -> Expr Bool
-
-instance EqExpr Integer where
-    (.==) (view -> x) (view -> y) = Expr $ EqualInt x y
-
-instance EqExpr Bool where
-    (.==) (view -> x) (view -> y) = Expr $ EqualBool x y
-
-instance EqExpr String where
-    (.==) (view -> x) (view -> y) = Expr $ EqualString x y
-
-instance EqExpr Double where
-    (.==) (view -> x) (view -> y) = Expr $ EqualFloat x y
-
+(.==) :: ExprConstraints t => Expr t -> Expr t -> Expr Bool
+x .== y = Expr $ Equal (typeOf' x) (view x) (view y)
 infix 4 .==
 
 {-
@@ -548,7 +483,7 @@ infixl 7 .%
 sIsNonNegativeInt :: Expr Integer -> Expr Bool
 -- Simplification Values
 sIsNonNegativeInt (view -> Const v) = sConst (0 <= v)
-sIsNonNegativeInt (view -> Length _)   = sConst True        -- length of string is always Greater or equal to zero
+sIsNonNegativeInt (view -> Length _ _)   = sConst True        -- length of list is always Greater or equal to zero
 sIsNonNegativeInt (view -> ve)         = Expr (GezInt ve)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided floating-point value expression.
@@ -577,21 +512,8 @@ instance ExprNum Double where
     sIsNonNegative = sIsNonNegativeFloat
     (./) = divideFloat
 
--- | Apply operator Length on the provided value expression.
--- Preconditions are /not/ checked.
-sLength :: Expr String -> Expr Integer
-sLength (view -> Const s) = sConst (Prelude.toInteger (length s))
-sLength (view -> v)             = Expr (Length v)
-
--- | Apply operator Concat on the provided sequence of value expressions.
--- Preconditions are /not/ checked.
-sConcat :: [Expr String] -> Expr String
-sConcat l =
-    let n = (mergeVals . flatten . filter (sConst "" /= ) ) l in
-        case n of
-          [] -> sConst ""
-          [x] -> x
-          _ -> Expr (Concat $ fmap view n)
+sConcat :: ExprConstraints a => Expr [[a]] -> Expr [a]
+sConcat = Expr . Concat . view
 
 -- implementation details:
 -- Properties incorporated
@@ -599,17 +521,66 @@ sConcat l =
 --    "a" ++ "b" == "ab"    - concat consecutive string values
 --   remove all nested sConcat, since (a ++ b) ++ (c ++ d) == (a ++ b ++ c ++ d)
 
-mergeVals :: [Expr String] -> [Expr String]
-mergeVals []            = []
-mergeVals [x]           = [x]
-mergeVals ( (view -> Const s1) : (view -> Const s2) : xs) =
-                          mergeVals (sConst (s1 <> s2): xs)
-mergeVals (x1:x2:xs)    = x1 : mergeVals (x2:xs)
+sLength :: Expr [x] -> Expr Integer
+sLength (view -> x) = Expr $ Length (case has @ExprType x $ typeOf' x of ListType t -> t) x
 
-flatten :: [Expr String] -> [Expr String]
-flatten []                       = []
-flatten ((view -> Concat l):xs) = fmap Expr l ++ flatten xs
-flatten (x:xs)                   = x : flatten xs
+sCons :: Expr x -> Expr [x] -> Expr [x]
+sCons (view -> x) (view -> xs) = Expr $ Cons x xs
+
+sNil :: ExprConstraints x => Expr [x]
+sNil = Expr $ Const []
+
+sAppend :: Expr [x] -> Expr [x] -> Expr [x]
+sAppend (view -> xs) (view -> ys) = Expr $ Append xs ys
+
+sElem :: Expr x -> Expr [x] -> Expr Bool
+sElem (view -> x) (view -> xs) = Expr $ LElem (has @ExprType x $ typeOf' x) x xs
+
+sTake :: Expr Integer -> Expr [x] -> Expr [x]
+sTake (view -> i) (view -> xs) = Expr $ Take i xs
+
+sDrop :: Expr Integer -> Expr [x] -> Expr [x]
+sDrop (view -> i) (view -> xs) = Expr $ Drop i xs
+
+sFirst :: ExprType b => Expr (t, b) -> Expr t
+sFirst (view -> i) = Expr $ First (typeOf undefined) i
+
+sSecond :: ExprType a => Expr (a, t) -> Expr t
+sSecond (view -> i) = Expr $ Second (typeOf undefined) i
+
+sPair :: Expr a -> Expr b -> Expr (a, b)
+sPair (view -> x) (view -> y) = Expr $ Pair x y
+
+sHead :: ExprConstraints x => Expr [x] -> Expr x
+sHead (view -> xs) = Expr $ Head xs
+
+sTail :: ExprConstraints x => Expr [x] -> Expr [x]
+sTail (view -> xs) = Expr $ Tail xs
+
+-- | Map a function over a list. Think of the variable a and the expression b as morally forming a function a -> b:
+-- the variable will, within the expression, represent the argument to the function.
+sMap :: (ExprConstraints a, ExprConstraints b) => Variable a -> Expr b -> Expr [a] -> Expr [b]
+sMap v (view -> b) (view -> xs) = Expr $ Map v b xs
+
+-- | Case-of on Either: If sMap can be thought of as having type `(a -> b) -> List a -> List b`,
+-- SEither should be considered as having type `(a -> c) -> (b -> c) -> Either a b -> c`.
+sEither :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Variable a -> Variable b -> Expr c -> Expr c -> Expr (Either a b) -> Expr c
+sEither lv rv (view -> le) (view -> re) (view -> e) = Expr $ Either lv rv le re e
+
+sLeft :: (ExprConstraints a, ExprConstraints b) => Expr a -> Expr (Either a b)
+sLeft (view -> a) = Expr $ ELeft a
+
+sRight :: (ExprConstraints a, ExprConstraints b) => Expr b -> Expr (Either a b)
+sRight (view -> b) = Expr $ ERight b
+
+sEmptySet :: (ExprConstraints a, ExprConstraints (RCSet a)) => Expr (RCSet a)
+sEmptySet = Expr $ Const $ RegularSet $ Set.fromList []
+
+sInsert :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr (RCSet a)
+sInsert (view -> x) (view -> xs) = Expr $ SInsert x xs
+
+sSElem :: Expr a -> Expr (RCSet a) -> Expr Bool
+sSElem (view -> x) (view -> xs) = withExprConstraints x $ Expr $ SElem (typeOf' x) x xs
 
 -- | Apply String In Regular Expression operator on the provided value expressions.
 -- Preconditions are /not/ checked.
@@ -623,199 +594,117 @@ cstrPredef :: PredefKind -> FuncId -> [Expr] -> Expr
 cstrPredef p f a = Expr (Vpredef p f a)
 -}
 
-type TypedValuation t = Map.Map Variable t
-data Valuation = Valuation {
-    intValuation :: TypedValuation Integer,
-    boolValuation :: TypedValuation Bool,
-    stringValuation :: TypedValuation String,
-    floatValuation :: TypedValuation Double
-    }
-    deriving (Eq, Ord)
+data Val t where
+  Val :: ExprConstraints t => { runVal :: t } -> Val t
+deriving instance Eq (Val t)
+deriving instance Ord (Val t)
+instance Show (Val t) where
+  show (Val t) = show t
+newtype Valuation = Valuation { runValuation :: DMap Variable Val }
+  deriving (Eq, Ord)
+instance Has (ComposeC Eq Val) Variable where
+  has _ k = k
+instance Has (ComposeC Ord Val) Variable where
+  has _ k = k
+instance Has (ComposeC Show Val) Variable where
+  has _ k = k
 
 instance Show Valuation where
-    show (Valuation i b s f) = "{" ++ List.intercalate "," (printAsAssignments i ++ printAsAssignments b ++ printAsAssignments s ++ printAsAssignments f) ++ "}"
-        where
-        printAsAssignments :: Show t => Map.Map Variable t -> [String]
-        printAsAssignments m = printAsAssignment <$> Map.toList m
-        printAsAssignment (v,t) = varName v ++ ":=" ++ show t
-
-toConstantsMap :: Valuation -> Map.Map Variable Constant
-toConstantsMap valuation = Map.map Cint (intValuation valuation)
-                            `Map.union` Map.map Cbool (boolValuation valuation)
-                            `Map.union` Map.map Cstring (stringValuation valuation)
-                            `Map.union` Map.map Cfloat (floatValuation valuation)
-
-fromConstantsMap :: Map.Map Variable Constant -> Valuation
-fromConstantsMap = assignValues . fmap (uncurry insertIntoValuation) . Map.toList
+  show (Valuation val) = "{" ++ List.intercalate "," (printAsAssignments val) ++ "}"
+    where
+    printAsAssignments :: DMap Variable Val -> [String]
+    printAsAssignments = DMap.foldrWithKey printAsAssignment []
+    printAsAssignment v t strs = (varName v ++ ":=" ++ show t) : strs
 
 assignValues :: [Valuation -> Valuation] -> Valuation
 assignValues = foldr ($) emptyValuation
 
 emptyValuation :: Valuation
-emptyValuation = Valuation Map.empty Map.empty Map.empty Map.empty
+emptyValuation = Valuation DMap.empty
 
-type TypedVarModel t = Map.Map Variable (Expr t)
-data VarModel = VarModel {
-    intVars :: TypedVarModel Integer,
-    boolVars :: TypedVarModel Bool,
-    stringVars :: TypedVarModel String,
-    floatVars :: TypedVarModel Double
-    }
-    deriving (Eq, Ord)
+newtype VarModel = VarModel {runVarModel :: DMap Variable Expr}
+  deriving (Eq, Ord)
+instance Show VarModel where
+  show (VarModel vm) = "{" ++ List.intercalate ", " (printAsAssignments vm) ++ "}"
+    where
+    printAsAssignments :: DMap Variable Expr -> [String]
+    printAsAssignments = DMap.foldrWithKey printAsAssignment []
+    printAsAssignment v t strs = (varName v ++ ":=" ++ show t) : strs
 
 assignment :: [VarModel -> VarModel] -> VarModel
 assignment = foldr ($) noAssignment
 
-typedValuationToVarModel :: ExprType t => TypedValuation t -> TypedVarModel t
-typedValuationToVarModel = Map.map sConst
-
 valuationToVarModel :: Valuation -> VarModel
-valuationToVarModel vals = VarModel {
-    intVars = typedValuationToVarModel $ intValuation vals,
-    boolVars = typedValuationToVarModel $ boolValuation vals,
-    stringVars = typedValuationToVarModel $ stringValuation vals,
-    floatVars = typedValuationToVarModel $ floatValuation vals
-    }
+valuationToVarModel = VarModel . DMap.map (\(Val v) -> sConst v) . runValuation
 
-getVariables :: Valuation -> [Variable]
-getVariables vals =
-    (Map.keys $ intValuation vals) ++
-    (Map.keys $ boolValuation vals) ++
-    (Map.keys $ stringValuation vals) ++
-    (Map.keys $ floatValuation vals)
+insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
+insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ CharType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 
-assignIdentity :: Variable -> VarModel -> VarModel
-assignIdentity v@(Variable _ IntType) = assign v (sVar v :: Expr Integer)
-assignIdentity v@(Variable _ BoolType) = assign v (sVar v :: Expr Bool)
-assignIdentity v@(Variable _ StringType) = assign v (sVar v :: Expr String)
-assignIdentity v@(Variable _ FloatType) = assign v (sVar v :: Expr Double)
+getVariables :: Valuation -> [Some Variable]
+getVariables = DMap.keys . runValuation
 
-identityVarModel :: [Variable] -> VarModel
-identityVarModel vars = assignment $ assignIdentity <$> vars
+assignIdentity :: Variable a -> VarModel -> VarModel
+assignIdentity v = assign v (sVar v)
+
+identityVarModel :: [Some Variable] -> VarModel
+identityVarModel vars = assignment $ (\(Some v) -> assignIdentity v) <$> vars
 
 varUnion :: VarModel -> VarModel -> VarModel
-varUnion vars1 vars2 = VarModel {
-    intVars = intVars vars1 `Map.union` intVars vars2,
-    boolVars = boolVars vars1 `Map.union` boolVars vars2,
-    stringVars = stringVars vars1 `Map.union` stringVars vars2,
-    floatVars = floatVars vars1 `Map.union` floatVars vars2
-    }
+varUnion (VarModel vars1) (VarModel vars2) = VarModel $ DMap.union vars1 vars2
 
-mapVars :: (Variable -> Variable) -> VarModel -> VarModel
-mapVars f vars = VarModel {
-    intVars = Map.mapKeys f $ intVars vars,
-    boolVars = Map.mapKeys f $ boolVars vars,
-    stringVars = Map.mapKeys f $ stringVars vars,
-    floatVars = Map.mapKeys f $ floatVars vars
-    }
+mapVars :: (forall a. Variable a -> Variable a) -> VarModel -> VarModel
+mapVars f (VarModel vars) = VarModel $ DMap.mapKeysWith (error "mapVars mapped two distinct variables to the same variable") f vars
 
-mapVarExprs :: (Variable -> Variable) -> VarModel -> VarModel
-mapVarExprs f vars = VarModel {
-    intVars = Map.map (mapExpressionVars f) $ intVars vars,
-    boolVars = Map.map (mapExpressionVars f) $ boolVars vars,
-    stringVars = Map.map (mapExpressionVars f) $ stringVars vars,
-    floatVars = Map.map (mapExpressionVars f) $ floatVars vars
-    }
+mapVarExprs :: (forall a. Variable a -> Variable a) -> VarModel -> VarModel
+mapVarExprs f (VarModel vars) = VarModel $ DMap.map (mapExpressionVars f) vars
 
 varsToGuard :: VarModel -> Expr Bool
-varsToGuard vars = sAnd $ Set.fromList $
-    typedVarsToBools (intVars vars) ++
-    typedVarsToBools (boolVars vars) ++
-    typedVarsToBools (stringVars vars) ++
-    typedVarsToBools (floatVars vars)
+varsToGuard (VarModel vars) = sAnd $ Set.fromList $ map (\(var :=> val) -> has @ExprType val $ withExprConstraints (typeOf' val) $ sVar var .== val) $ DMap.assocs vars
 
-typedVarsToBools :: (VarExpr t, EqExpr t, ExprType t) => TypedVarModel t -> [Expr Bool]
-typedVarsToBools = fmap (\(var, val) -> sVar var .== val) . Map.toList
+fromConst' :: ConstType a => Constant a -> a
+fromConst' = fromConst
 
-insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
-insertIntoValuation v@(Variable name IntType) c = assignValue v (fromConst' c name IntType :: Integer)
-insertIntoValuation v@(Variable name BoolType) c = assignValue v (fromConst' c name BoolType :: Bool)
-insertIntoValuation v@(Variable name StringType) c = assignValue v (fromConst' c name StringType :: String)
-insertIntoValuation v@(Variable name FloatType) c = assignValue v (fromConst' c name FloatType :: Double)
-fromConst' :: (ConstType a, Show b) => Constant -> String -> b -> a
-fromConst' smtValue name t = case fromConst smtValue of
-    Left err -> error $ "error reading " ++ name ++ " as " ++ show t ++ ": " ++ err
-    Right val -> val
 
-class Assignable t where
-    assign :: Variable -> Expr t -> VarModel -> VarModel
-    assignValue :: Variable -> t -> Valuation -> Valuation
-    assignedExpr :: Variable -> VarModel -> Maybe (Expr t)
-    assignedExprWithDefault :: Variable -> VarModel -> Expr t
-
-(=:) :: Assignable t => Variable -> Expr t -> VarModel -> VarModel
+(=:) :: Variable t -> Expr t -> VarModel -> VarModel
 (=:) = assign
 infixr 0 =:
 
-instance Assignable Integer where
-    assign v@(Variable _ IntType) e m = m {intVars = Map.insert v e (intVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignValue v@(Variable _ IntType) val m = m {intValuation = Map.insert v val (intValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Integer, received " ++ show t
-    assignedExpr v@(Variable _ IntType) (VarModel ints _bools _strings _floats) = Map.lookup v ints
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
-    assignedExprWithDefault v@(Variable _ IntType) (VarModel ints _bools _strings _floats) = Map.findWithDefault (sVar v) v ints
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Integer"
+assign :: Variable t -> Expr t -> VarModel -> VarModel
+assign v e = VarModel . DMap.insert v e . runVarModel
 
-instance Assignable Bool where
-    assign v@(Variable _ BoolType) e m = m {boolVars = Map.insert v e (boolVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignValue v@(Variable _ BoolType) val m = m {boolValuation = Map.insert v val (boolValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Bool, received " ++ show t
-    assignedExpr v@(Variable _ BoolType) (VarModel _ints bools _strings _floats) = Map.lookup v bools
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
-    assignedExprWithDefault v@(Variable _ BoolType) (VarModel _ints bools _strings _floats) = Map.findWithDefault (sVar v) v bools
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Bool"
+assignValue :: ExprConstraints t => Variable t -> t -> Valuation -> Valuation
+assignValue v val = Valuation . DMap.insert v (Val val) . runValuation
 
-instance Assignable String where
-    assign v@(Variable _ StringType) e m = m {stringVars = Map.insert v e (stringVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignValue v@(Variable _ StringType) val m = m {stringValuation = Map.insert v val (stringValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected String, received " ++ show t
-    assignedExpr v@(Variable _ StringType) (VarModel _ints _bools strings _floats) = Map.lookup v strings
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
-    assignedExprWithDefault v@(Variable _ StringType) (VarModel _ints _bools strings _floats) = Map.findWithDefault (sVar v) v strings
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received String"
+assignedExpr :: Variable t -> VarModel -> Maybe (Expr t)
+assignedExpr v = DMap.lookup v . runVarModel
 
-instance Assignable Double where
-    assign v@(Variable _ FloatType) e m = m {floatVars = Map.insert v e (floatVars m)}
-    assign (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
-    assignValue v@(Variable _ FloatType) val m = m {floatValuation = Map.insert v val (floatValuation m)}
-    assignValue (Variable n t) _ _ = error $ "Assignment to '" ++ n ++ "' to wrong type: expected Real, received " ++ show t
-    assignedExpr v@(Variable _ FloatType) (VarModel _ints _bools _strings floats) = Map.lookup v floats
-    assignedExpr (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
-    assignedExprWithDefault v@(Variable _ FloatType) (VarModel _ints _bools _strings floats) = Map.findWithDefault (sVar v) v floats
-    assignedExprWithDefault (Variable n t) _ = error $ "Assignment from '" ++ n ++ "' to wrong type: expected " ++ show t ++ ", received Real"
+assignedExprWithDefault :: Variable t -> VarModel -> Expr t
+assignedExprWithDefault v = DMap.findWithDefault (sVar v) v . runVarModel
 
 noAssignment :: VarModel
-noAssignment = VarModel Map.empty Map.empty Map.empty Map.empty
+noAssignment = VarModel DMap.empty
 
-instance Show VarModel where
-    show (VarModel ints bools strings floats) = showMapList $ showList' ints ++ showList' bools ++ showList' strings ++ showList' floats
-        where
-        showMapList m' = "{" ++ List.intercalate ", " m' ++ "}"
-        showList' m' = showAssign <$> Map.toList m'
-        showAssign (v,e) = varName v ++ ":=" ++ show e
-
-substConst :: Assignable t => Valuation -> Expr t -> Expr t
+substConst :: Valuation -> Expr t -> Expr t
 substConst valuation = subst (valuationToVarModel valuation)
 
 -- | Apply a substitution to the right-hand-side expressions of a 'VarModel', leaving its keys untouched.
 -- Composing substitutions this way lets an assignment be resolved against an accumulated substitution:
 -- @substVarModel sigma assign@ rewrites every value-expression in @assign@ according to @sigma@.
 substVarModel :: VarModel -> VarModel -> VarModel
-substVarModel sigma (VarModel ints bools strings floats) = VarModel {
-    intVars = Map.map (subst sigma) ints,
-    boolVars = Map.map (subst sigma) bools,
-    stringVars = Map.map (subst sigma) strings,
-    floatVars = Map.map (subst sigma) floats
-    }
+substVarModel sigma (VarModel m) = VarModel $ DMap.map (subst sigma) m
 
 -- | Substitute variables by value expressions in a value expression.
 --
 -- Preconditions are /not/ checked.
 --
-subst :: Assignable t => VarModel      -- ^ Map from variables to value expressions.
+subst :: VarModel      -- ^ Map from variables to value expressions.
 {-      -> Map.Map FuncId (FuncDef w e) -- ^ Map from identifiers to their
                                     -- definitions, this is used to replace
                                     -- function calls by their bodies if all
@@ -827,7 +716,7 @@ subst :: Assignable t => VarModel      -- ^ Map from variables to value expressi
 --subst ve _ x   | ve == Map.empty = x
 subst ve x = subst' ve (view x)
 
-subst' :: Assignable t => VarModel -> ExprView t -> Expr t
+subst' :: VarModel -> ExprView t -> Expr t
 subst' _  (Const const')          = sConst const'
 subst' ve (Var vid)               = assignedExprWithDefault vid ve
 subst' ve (Ite cond vexp1 vexp2)  = sIfThenElse (subst' ve cond) (subst' ve vexp1) (subst' ve vexp2)
@@ -838,24 +727,195 @@ subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subs
 subst' ve (SumFloat s)            = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
 subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (ProductFloat p)        = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
-subst' ve (Length vexp)           = sLength (subst' ve vexp)
-
+subst' ve (Length _ vexp) = sLength $ subst' ve vexp
 subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
+subst' ve (Equal _ vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (GezFloat v)              = sIsNonNegative (subst' ve v)
-subst' ve (EqualInt vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualBool vexp1 vexp2)   = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualString vexp1 vexp2) = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (EqualFloat vexp1 vexp2)  = (.==) (subst' ve vexp1) (subst' ve vexp2)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
+subst' ve (Concat vexps)                = sConcat $ subst' ve vexps
+subst' ve (Cons x xs) = has @ExprType x $ sCons (subst' ve x) (subst' ve xs)
+subst' ve (Append xs ys) = sAppend (subst' ve xs) (subst' ve ys)
+subst' ve (LElem t x xs) = has @ExprType t $ sElem (subst' ve x) (subst' ve xs)
+subst' ve (Take x xs) = sTake (subst' ve x) (subst' ve xs)
+subst' ve (Drop x xs) = sDrop (subst' ve x) (subst' ve xs)
+subst' ve (First t x) = has @ExprType t $ sFirst $ subst' ve x
+subst' ve (Second t x) = has @ExprType t $ sSecond $ subst' ve x
+subst' ve (Pair x y) = sPair (subst' ve x) (subst' ve y)
+subst' ve (Head x) = sHead $ subst' ve x
+subst' ve (Tail x) = sTail $ subst' ve x
+subst' ve (ELeft x) = sLeft $ subst' ve x
+subst' ve (ERight x) = sRight $ subst' ve x
+subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
+subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
+subst' ve (Map v f xs) = Expr $ Map (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Filter v f xs) = Expr $ Filter (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Foldr v1 v2 f i xs) = Expr $ Foldr (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)
+subst' ve (Foldl v1 v2 f i xs) = Expr $ Foldl (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)
+subst' ve (Either vl vr l r x) = Expr $ Either
+  (case assignedExprWithDefault vl ve of { Expr (Var v) -> v; _ -> error "impossible"})
+  (case assignedExprWithDefault vr ve of { Expr (Var v) -> v; _ -> error "impossible"})
+  (view $ subst' ve l)
+  (view $ subst' ve r)
+  (view $ subst' ve x)
 
-subst' ve (Concat vexps)                = sConcat $ map (subst' ve) vexps
 
-mapExpressionVars :: (Variable -> Variable) -> Expr t -> Expr t
+-- | Evaluate the provided value expression.
+-- Either the Right Constant Value is returned or a (Left) error message.
+eval :: Expr v -> Either String v
+eval = evalView . view
+
+evalView :: ExprView v -> Either String v
+evalView (reduce -> Const v) = Right v
+evalView _ = Left "Value Expression is not a constant value"
+
+reduce :: ExprView v -> ExprView v
+reduce (Var v) = Var v
+reduce (Const v) = Const v
+reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
+reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
+reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (SumFloat (mapFreeMonoidX reduce -> es)) = SumFloat es
+reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (ProductFloat (mapFreeMonoidX reduce -> es)) = ProductFloat es
+reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
+reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y
+reduce (Modulo (reduce -> e1) (reduce -> e2)) = Modulo e1 e2
+reduce (Divide (reduce -> e1) (reduce -> e2@(Const 0))) = Divide e1 e2 -- leave divisions by zero as expressions
+reduce (Divide (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `divInteger` y
+reduce (Divide (reduce -> e1) (reduce -> e2)) = Divide e1 e2
+reduce (DivideFloat (reduce -> e1) (reduce -> e2@(Const 0))) = DivideFloat e1 e2 -- leave divisions by zero as expressions
+reduce (DivideFloat (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x / y
+reduce (DivideFloat (reduce -> e1) (reduce -> e2)) = DivideFloat e1 e2
+reduce (Length _ (reduce -> Const xs)) = Const $ fromIntegral $ length xs
+reduce (Length t (reduce -> e)) = Length t e
+reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
+reduce (Equal t (reduce -> e1) (reduce -> e2)) = Equal t e1 e2
+reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezInt (reduce -> e)) = GezInt e
+reduce (GezFloat (reduce -> (Const x))) = Const $ x >= 0
+reduce (GezFloat (reduce -> e)) = GezFloat e
+reduce (Not (reduce -> (Const b))) = Const $ not b
+reduce (Not (reduce -> e)) = Not e
+reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
+reduce (And (Set.map reduce -> es)) = And es
+reduce (Concat (reduce -> es))
+  | Const as <- es = Const $ concat as
+reduce (Concat (reduce -> e)) = Concat e
+reduce (Cons (reduce -> x) (reduce -> xs))
+  | Const a <- x
+  , Const as <- xs = Const $ a : as
+  | otherwise = Cons x xs
+reduce (Append (reduce -> xs) (reduce -> ys))
+  | Const as <- xs
+  , Const bs <- ys = Const $ as ++ bs
+  | otherwise = Append xs ys
+reduce (LElem t (reduce -> x) (reduce -> xs))
+  | Const a <- x
+  , Const as <- xs = Const $ a `elem` as
+  | otherwise = LElem t x xs
+reduce (Take (reduce -> i) (reduce -> xs))
+  | Const j <- i
+  , Const as <- xs = Const $ take (fromInteger j) as
+  | otherwise = Take i xs
+reduce (Drop (reduce -> i) (reduce -> xs))
+  | Const j <- i
+  , Const as <- xs = Const $ drop (fromInteger j) as
+  | otherwise = Drop i xs
+reduce (First tp (reduce -> x))
+  | Const (y,_) <- x = case typeOf' x of
+      TupleType t _ -> withExprConstraints t $ Const y
+  | otherwise = First tp x
+reduce (Second tp (reduce -> x))
+  | Const (_,y) <- x = case typeOf' x of
+      TupleType _ t -> withExprConstraints t $ Const y
+  | otherwise = Second tp x
+reduce (Pair (reduce -> x) (reduce -> y))
+  | Const a <- x
+  , Const b <- y = Const (a,b)
+  | otherwise = Pair x y
+reduce (Head (reduce -> xs))
+  | Const (y:_) <- xs = Const y
+  | Const [] <- xs = error "Head of empty list"
+  | otherwise = Head xs
+reduce (Tail (reduce -> xs))
+  | Const (_:y) <- xs = Const y
+  | Const [] <- xs = error "Tail of empty list"
+  | otherwise = Tail xs
+reduce (ELeft (reduce -> x))
+  | Const y <- x = Const (Left y)
+  | otherwise = ELeft x
+reduce (ERight (reduce -> x))
+  | Const y <- x = Const (Right y)
+  | otherwise = ERight x
+reduce (SElem t (reduce -> x) (reduce -> xs))
+  | Const y <- x
+  , Const ys <- xs = case ys of
+      RegularSet    s -> Const $       y `Set.member` s
+      ComplementSet s -> Const $ not $ y `Set.member` s
+  | otherwise = SElem t x xs
+reduce (SInsert (reduce -> x) (reduce -> xs))
+  | Const y <- x
+  , Const ys <- xs = case ys of
+      RegularSet    s -> Const $ RegularSet    $ y `Set.insert` s
+      ComplementSet s -> Const $ ComplementSet $ y `Set.delete` s
+  | otherwise = SInsert x xs
+-- We can't lift this into sbv, which is why we don't currently have a set.size in exprview
+-- reduce (Size (reduce -> x)) = case x of
+--   Const (RegularSet xs) -> Const (toInteger (Set.size xs))
+--   Const (ComplementSet xs) -> case inhabitants (typeOf' x) of
+--     Nothing -> error "requesting size of an infinite list"
+--     Just i -> Const (toInteger $ i - Set.size xs)
+--   xs -> Size xs
+reduce (Map v (reduce -> f') (reduce -> xs))
+  | Const ys <- xs =
+    let f y = reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
+        zs = map f ys
+    in case traverse (\case
+                        Const a -> Just a
+                        _ -> Nothing) zs of
+      Just as -> Const as
+      Nothing -> Map v f' xs
+  | otherwise = Map v f' xs
+reduce (Filter v (reduce -> f') (reduce -> xs))
+  | Const ys <- xs =
+    let f y = (y,) $ reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
+        zs = map f ys
+    in case traverse (\case -- innermost Maybe is whether the filter accepts the element, outermost Maybe is whether the reduction succeeds
+                        (y, Const True) -> Just (Just y)
+                        (_, Const False) -> Just Nothing
+                        _ -> Nothing) zs of
+      Just as -> Const $ catMaybes as
+      Nothing -> Filter v f' xs
+  | otherwise = Filter v f' xs
+reduce (Foldr v1 v2 (reduce -> f') (reduce -> i') (reduce -> xs))
+  | Const ys <- xs
+  , Const i <- i' =
+    let f a b = reduce $ view $ subst' (VarModel $ DMap.insert v2 (Expr b) $ DMap.singleton v1 $ Expr $ Const a) f'
+    in foldr f (Const i) ys
+  | otherwise = Foldr v1 v2 f' i' xs
+reduce (Foldl v1 v2 (reduce -> f') (reduce -> i') (reduce -> xs))
+  | Const ys <- xs
+  , Const i <- i' =
+    let f b a = reduce $ view $ subst' (VarModel $ DMap.insert v1 (Expr b) $ DMap.singleton v2 $ Expr $ Const a) f'
+    in foldl f (Const i) ys
+  | otherwise = Foldl v1 v2 f' i' xs
+reduce (Either vl vr (reduce -> l) (reduce -> r) (reduce -> x))
+  | Const (Left x') <- x =
+    reduce $ view $ subst' (VarModel $ DMap.singleton vl $ Expr $ Const x') l
+  | Const (Right x') <- x =
+    reduce $ view $ subst' (VarModel $ DMap.singleton vr $ Expr $ Const x') r
+  | otherwise = Either vl vr l r x
+
+mapExpressionVars :: (forall a. Variable a -> Variable a) -> Expr t -> Expr t
 mapExpressionVars f = Expr . mapExpressionVars' f . view
 
-mapExpressionVars' :: (Variable -> Variable) -> ExprView t -> ExprView t
-mapExpressionVars' f e@(Const _) = e
+mapExpressionVars' :: (forall a. Variable a -> Variable a) -> ExprView t -> ExprView t
+mapExpressionVars' _ e@(Const _) = e
 mapExpressionVars' f (Var v) = Var $ f v -- this line is effectively the purpose of this function
 mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
 mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)
@@ -865,15 +925,29 @@ mapExpressionVars' f (Sum s)                 = Sum (FMX.mapTerms (SumTerm . mapE
 mapExpressionVars' f (SumFloat s)            = SumFloat (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
 mapExpressionVars' f (Product p)             = Product (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
 mapExpressionVars' f (ProductFloat p)        = ProductFloat (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
-mapExpressionVars' f (Length vexp)           = Length (mapExpressionVars' f vexp)
-
+mapExpressionVars' f (Length t vexp)           = Length t (mapExpressionVars' f vexp)
 mapExpressionVars' f (GezInt v)                = GezInt (mapExpressionVars' f v)
 mapExpressionVars' f (GezFloat v)              = GezFloat (mapExpressionVars' f v)
-mapExpressionVars' f (EqualInt vexp1 vexp2)    = EqualInt (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
-mapExpressionVars' f (EqualBool vexp1 vexp2)   = EqualBool (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
-mapExpressionVars' f (EqualString vexp1 vexp2) = EqualString (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
-mapExpressionVars' f (EqualFloat vexp1 vexp2)  = EqualFloat (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
 mapExpressionVars' f (And vexps)               = And (Set.map (mapExpressionVars' f) vexps)
 mapExpressionVars' f (Not vexp)                = Not (mapExpressionVars' f vexp)
-
-mapExpressionVars' f (Concat vexps)            = Concat (fmap (mapExpressionVars' f) vexps)
+mapExpressionVars' f (Equal t x y)                = Equal t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (LElem t x y)                = LElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (SElem t x y)                = SElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (Concat x)                = Concat (mapExpressionVars' f x)
+mapExpressionVars' f (Cons x xs)                = Cons (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Append x xs)                = Append (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Take x xs)                = Take (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Drop x xs)                = Drop (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (First t x)                = First t (mapExpressionVars' f x)
+mapExpressionVars' f (Second t x)                = Second t (mapExpressionVars' f x)
+mapExpressionVars' f (Pair x xs)                = Pair (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (SInsert x xs)                = SInsert (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Head v)                = Head (mapExpressionVars' f v)
+mapExpressionVars' f (Tail v)                = Tail (mapExpressionVars' f v)
+mapExpressionVars' f (ELeft v)                = ELeft (mapExpressionVars' f v)
+mapExpressionVars' f (ERight v)                = ERight (mapExpressionVars' f v)
+mapExpressionVars' f (Map v x xs)                = Map (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Filter v x xs)                = Filter (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldr v1 v2 g i xs)                = Foldr (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldl v1 v2 g i xs)                = Foldl (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Either v1 v2 l r x)   = Either (f v1) (f v2) (mapExpressionVars' f l) (mapExpressionVars' f r) (mapExpressionVars' f x)
