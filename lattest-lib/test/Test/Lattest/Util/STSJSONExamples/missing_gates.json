@@ -21,8 +21,8 @@
         "O2": { "shortname": "confirm",  "parameters": ["counter_p"] }
     },
     "guards": {
-        "G1": { "lhs": {"var": "counter"}, "op": "<",  "rhs": 5       },
-        "G2": { "lhs": {"var": "counter"}, "op": ">=", "rhs": 5       },
+        "G1": { "lhs": {"var": "counter"}, "op": "<",  "rhs": {"integer": 5}       },
+        "G2": { "lhs": {"var": "counter"}, "op": ">=", "rhs": {"integer": 5}       },
         "G3": { "lhs": {"var": "active"},  "op": "==", "rhs": true    },
         "G4": { "lhs": {"var": "label"},   "op": "==", "rhs": {"var": "label_p"} }
     },
@@ -31,7 +31,7 @@
         "A2": { "target": "active",  "expression": false     },
         "A3": { "target": "active",  "expression": true      },
         "A4": { "target": "label",   "expression": {"var": "label_p"} },
-        "A5": { "target": "counter", "expression": { "lhs": {"var": "counter"}, "op": "+", "rhs": 1 } }       
+        "A5": { "target": "counter", "expression": { "lhs": {"var": "counter"}, "op": "+", "rhs": {"integer": 1} } }       
     },
     "switches": {
         "r_low":    { "init_loc": 0, "gate": "I2", "guard": "G1", "assignments": ["A1"], "end_loc": 1 },

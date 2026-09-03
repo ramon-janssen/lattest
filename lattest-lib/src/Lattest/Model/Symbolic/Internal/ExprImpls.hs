@@ -61,6 +61,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sHead
 , sTail
 , sMap
+, sFilter
+, sFoldr
+, sFoldl
   -- ** Set operations
 , sInsert
 , sEmptySet
@@ -561,6 +564,15 @@ sTail (view -> xs) = Expr $ Tail xs
 -- the variable will, within the expression, represent the argument to the function.
 sMap :: (ExprConstraints a, ExprConstraints b) => Variable a -> Expr b -> Expr [a] -> Expr [b]
 sMap v (view -> b) (view -> xs) = Expr $ Map v b xs
+
+sFilter :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr [a] -> Expr [a]
+sFilter v (view -> b) (view -> xs) = Expr $ Filter v b xs
+
+sFoldr :: (ExprConstraints a) => Variable a -> Variable b -> Expr b -> Expr b -> Expr [a] -> Expr b
+sFoldr va vb (view -> b) (view -> i) (view -> xs) = Expr $ Foldr va vb b i xs
+
+sFoldl :: (ExprConstraints a) => Variable b -> Variable a -> Expr b -> Expr b -> Expr [a] -> Expr b
+sFoldl vb va (view -> b) (view -> i) (view -> xs) = Expr $ Foldl vb va b i xs
 
 -- | Case-of on Either: If sMap can be thought of as having type `(a -> b) -> List a -> List b`,
 -- SEither should be considered as having type `(a -> c) -> (b -> c) -> Either a b -> c`.
