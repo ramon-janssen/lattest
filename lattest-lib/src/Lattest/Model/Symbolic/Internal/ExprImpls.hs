@@ -15,7 +15,9 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
+
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
   -- ** Constant value
@@ -60,6 +62,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sHead
 , sTail
 , sMap
+, sFilter
+, sFoldr
+, sFoldl
   -- ** Set operations
 , sInsert
 , sEmptySet
@@ -76,12 +81,12 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 -- * Substitution of var by value
 , VarModel(..)
 , assign
+, Valuation(..)
+, Val(..)
 , varUnion
 , mapVars
 , mapVarExprs
 , valuationToVarModel
-, Valuation(..)
-, Val(..)
 , emptyValuation
 , assignValues
 , assignValue
@@ -96,9 +101,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , assignment
 , noAssignment
 , (=:)
-, mapExpressionVars
 , eval
 , reduce
+, mapExpressionVars
 )
 where
 
@@ -118,6 +123,7 @@ import qualified Data.List as List
 import Data.SBV (RCSet(..))
 import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
 import GHC.Integer (divInteger)
+import Data.Maybe (catMaybes)
 import Data.Some (Some (..))
 import Data.Dependent.Sum (DSum(..))
 
@@ -560,6 +566,15 @@ sTail (view -> xs) = Expr $ Tail xs
 sMap :: (ExprConstraints a, ExprConstraints b) => Variable a -> Expr b -> Expr [a] -> Expr [b]
 sMap v (view -> b) (view -> xs) = Expr $ Map v b xs
 
+sFilter :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr [a] -> Expr [a]
+sFilter v (view -> b) (view -> xs) = Expr $ Filter v b xs
+
+sFoldr :: (ExprConstraints a) => Variable a -> Variable b -> Expr b -> Expr b -> Expr [a] -> Expr b
+sFoldr va vb (view -> b) (view -> i) (view -> xs) = Expr $ Foldr va vb b i xs
+
+sFoldl :: (ExprConstraints a) => Variable b -> Variable a -> Expr b -> Expr b -> Expr [a] -> Expr b
+sFoldl vb va (view -> b) (view -> i) (view -> xs) = Expr $ Foldl vb va b i xs
+
 -- | Case-of on Either: If sMap can be thought of as having type `(a -> b) -> List a -> List b`,
 -- SEither should be considered as having type `(a -> c) -> (b -> c) -> Either a b -> c`.
 sEither :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Variable a -> Variable b -> Expr c -> Expr c -> Expr (Either a b) -> Expr c
@@ -635,6 +650,16 @@ assignment = foldr ($) noAssignment
 valuationToVarModel :: Valuation -> VarModel
 valuationToVarModel = VarModel . DMap.map (\(Val v) -> sConst v) . runValuation
 
+insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
+insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ CharType) c = assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+
 getVariables :: Valuation -> [Some Variable]
 getVariables = DMap.keys . runValuation
 
@@ -655,16 +680,6 @@ mapVarExprs f (VarModel vars) = VarModel $ DMap.map (mapExpressionVars f) vars
 
 varsToGuard :: VarModel -> Expr Bool
 varsToGuard (VarModel vars) = sAnd $ Set.fromList $ map (\(var :=> val) -> has @ExprType val $ withExprConstraints (typeOf' val) $ sVar var .== val) $ DMap.assocs vars
-
-insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
-insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ CharType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
 
 fromConst' :: ConstType a => Constant a -> a
 fromConst' = fromConst
@@ -747,6 +762,9 @@ subst' ve (ERight x) = sRight $ subst' ve x
 subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
 subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
 subst' ve (Map v f xs) = Expr $ Map (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Filter v f xs) = Expr $ Filter (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
+subst' ve (Foldr v1 v2 f i xs) = Expr $ Foldr (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)
+subst' ve (Foldl v1 v2 f i xs) = Expr $ Foldl (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)
 subst' ve (Either vl vr l r x) = Expr $ Either
   (case assignedExprWithDefault vl ve of { Expr (Var v) -> v; _ -> error "impossible"})
   (case assignedExprWithDefault vr ve of { Expr (Var v) -> v; _ -> error "impossible"})
@@ -859,6 +877,13 @@ reduce (SInsert (reduce -> x) (reduce -> xs))
       RegularSet    s -> Const $ RegularSet    $ y `Set.insert` s
       ComplementSet s -> Const $ ComplementSet $ y `Set.delete` s
   | otherwise = SInsert x xs
+-- We can't lift this into sbv, which is why we don't currently have a set.size in exprview
+-- reduce (Size (reduce -> x)) = case x of
+--   Const (RegularSet xs) -> Const (toInteger (Set.size xs))
+--   Const (ComplementSet xs) -> case inhabitants (typeOf' x) of
+--     Nothing -> error "requesting size of an infinite list"
+--     Just i -> Const (toInteger $ i - Set.size xs)
+--   xs -> Size xs
 reduce (Map v (reduce -> f') (reduce -> xs))
   | Const ys <- xs =
     let f y = reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
@@ -869,13 +894,35 @@ reduce (Map v (reduce -> f') (reduce -> xs))
       Just as -> Const as
       Nothing -> Map v f' xs
   | otherwise = Map v f' xs
+reduce (Filter v (reduce -> f') (reduce -> xs))
+  | Const ys <- xs =
+    let f y = (y,) $ reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
+        zs = map f ys
+    in case traverse (\case -- innermost Maybe is whether the filter accepts the element, outermost Maybe is whether the reduction succeeds
+                        (y, Const True) -> Just (Just y)
+                        (_, Const False) -> Just Nothing
+                        _ -> Nothing) zs of
+      Just as -> Const $ catMaybes as
+      Nothing -> Filter v f' xs
+  | otherwise = Filter v f' xs
+reduce (Foldr v1 v2 (reduce -> f') (reduce -> i') (reduce -> xs))
+  | Const ys <- xs
+  , Const i <- i' =
+    let f a b = reduce $ view $ subst' (VarModel $ DMap.insert v2 (Expr b) $ DMap.singleton v1 $ Expr $ Const a) f'
+    in foldr f (Const i) ys
+  | otherwise = Foldr v1 v2 f' i' xs
+reduce (Foldl v1 v2 (reduce -> f') (reduce -> i') (reduce -> xs))
+  | Const ys <- xs
+  , Const i <- i' =
+    let f b a = reduce $ view $ subst' (VarModel $ DMap.insert v1 (Expr b) $ DMap.singleton v2 $ Expr $ Const a) f'
+    in foldl f (Const i) ys
+  | otherwise = Foldl v1 v2 f' i' xs
 reduce (Either vl vr (reduce -> l) (reduce -> r) (reduce -> x))
   | Const (Left x') <- x =
     reduce $ view $ subst' (VarModel $ DMap.singleton vl $ Expr $ Const x') l
   | Const (Right x') <- x =
     reduce $ view $ subst' (VarModel $ DMap.singleton vr $ Expr $ Const x') r
   | otherwise = Either vl vr l r x
-
 
 mapExpressionVars :: (forall a. Variable a -> Variable a) -> Expr t -> Expr t
 mapExpressionVars f = Expr . mapExpressionVars' f . view
@@ -913,5 +960,7 @@ mapExpressionVars' f (Tail v)                = Tail (mapExpressionVars' f v)
 mapExpressionVars' f (ELeft v)                = ELeft (mapExpressionVars' f v)
 mapExpressionVars' f (ERight v)                = ERight (mapExpressionVars' f v)
 mapExpressionVars' f (Map v x xs)                = Map (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Filter v x xs)                = Filter (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldr v1 v2 g i xs)                = Foldr (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldl v1 v2 g i xs)                = Foldl (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
 mapExpressionVars' f (Either v1 v2 l r x)   = Either (f v1) (f v2) (mapExpressionVars' f l) (mapExpressionVars' f r) (mapExpressionVars' f x)
-

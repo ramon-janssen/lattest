@@ -23,8 +23,8 @@
         "O2": { "shortname": "confirm",  "parameters": ["counter_p"] }
     },
     "guards": {
-        "G1": { "lhs": {"var": "counter"}, "op": "<",  "rhs": 5       },
-        "G2": { "lhs": {"var": "counter"}, "op": ">=", "rhs": 5       },
+        "G1": { "lhs": {"var": "counter"}, "op": "<",  "rhs": {"integer": 5}       },
+        "G2": { "lhs": {"var": "counter"}, "op": ">=", "rhs": {"integer": 5}       },
         "G3": { "lhs": {"var": "active"},  "op": "?!?", "rhs": true    },
         "G4": { "lhs": {"var": "label"},   "op": "==", "rhs": {"var": "label_p"} }
     },

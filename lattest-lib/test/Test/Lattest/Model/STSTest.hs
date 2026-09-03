@@ -69,7 +69,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
 import Algebra.Lattice.Free(Free(..))
@@ -83,6 +83,9 @@ import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algeb
 import qualified Lattest.SMT as SMT
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Sum (DSum(..))
+ -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
+import qualified Lattest.SMT as SMT
 
 pvar :: Variable Integer
 pvar = Variable "p" IntType
@@ -872,6 +875,7 @@ treeSTS =
 milkvar :: Variable Bool
 milkvar = (Variable "milk" BoolType)
 milk = sVar milkvar
+a,b,tea,espresso,take :: SymInteract (IOAct String String)
 a = SymInteract (In "a") []
 b = SymInteract (In "b") [Some pvar]
 tea = SymInteract (Out "tea") [Some pvar]
@@ -1273,10 +1277,6 @@ testSeqComposedSTS = TestCase $ do
     intrp6 <- assertAfter "after ok 16: " intrp5 (GateValue (Out "ok") [Some $ CInt 16]) (getSTSIntrpStateEither (Right 0) 16)
     _ <- assertAfter "after coffee: " intrp6 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     -- branch 2: startWithWater
-    let intrp8 = after intrp1 (GateValue (In "startWithWater") [Some $ CInt 16])
-    assertEqual "after startWithWater: " (getSTSIntrpStateEither (Left 2) 16) (stateConf intrp8)
-    let intrp9 = after intrp8 (GateValue (Out "coffee") [])
-    assertEqual "after coffee: " (getSTSIntrpStateEither (Right 2) 16) (stateConf intrp9)
     intrp8 <- assertAfter "after startWithWater: " intrp1 (GateValue (In "startWithWater") [Some $ CInt 16]) (getSTSIntrpStateEither (Left 2) 16)
     _ <- assertAfter "after coffee: " intrp8 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     return ()
@@ -1294,10 +1294,6 @@ testSeqComposedAtSTS = TestCase $ do
     intrp6 <- assertAfter "after ok 16: " intrp5 (GateValue (Out "ok") [Some $ CInt 16]) (getSTSIntrpStateEither (Right 0) 16)
     _ <- assertAfter "after coffee: " intrp6 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     -- branch 2: startWithWater
-    let intrp8 = after intrp1 (GateValue (In "startWithWater") [Some $ CInt 16])
-    assertEqual "after startWithWater: " (getSTSIntrpStateEither (Left 2) 16) (stateConf intrp8)
-    let intrp9 = after intrp8 (GateValue (Out "coffee") [])
-    assertEqual "after coffee: " (getSTSIntrpStateEither (Right 2) 16) (stateConf intrp9)
     intrp8 <- assertAfter "after startWithWater: " intrp1 (GateValue (In "startWithWater") [Some $ CInt 16]) (getSTSIntrpStateEither (Left 2) 16)
     _ <- assertAfter "after coffee: " intrp8 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     return ()

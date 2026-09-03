@@ -47,10 +47,10 @@ import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
 import Data.Maybe (mapMaybe, catMaybes)
+import Data.Some (Some, mapSome)
 import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..))
 import Control.Monad (forM)
 import qualified Data.Set as Set
-import Data.Some (mapSome)
 import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
@@ -159,6 +159,7 @@ seTree intrpr =
 
 indexExpr :: Int -> Expr t -> Expr t
 indexExpr n = mapExpressionVars (indexVar n)
+
 indexVar :: Int -> Variable a -> Variable a
 indexVar 0 v = v
 indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead

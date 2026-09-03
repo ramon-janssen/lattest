@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -107,6 +108,7 @@ import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..))
 import Data.Constraint.Extras (Has(..))
 
 ------------
@@ -773,7 +775,7 @@ redirectToComposed isOldInit composedInit dest = BM.ordBind dest $ \(td, l) -> i
 
 -- | Rename locations of a given STS with the given renaming function, returning the renamed initial configuration and
 -- the renamed transition relation.
-renameLocs :: (Ord loc, Ord loc', Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc'))) =>
+renameLocs :: (Ord loc, Ord loc', Ord tdest, BoundedMonad m, Foldable m) =>
     (loc -> loc') -> AutSyntax m loc t tdest ->
     (m loc', Map.Map loc' (Map.Map t (m (tdest, loc'))))
 renameLocs renamingFun sts = (renamingFun BM.<#> initConf sts, wrappedSwitches)
@@ -784,7 +786,7 @@ renameLocs renamingFun sts = (renamingFun BM.<#> initConf sts, wrappedSwitches)
         ]
 
 -- | Combine automata with the same loc type
-composeGeneric :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, loc)), Completable t) =>
+composeGeneric :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t) =>
     (m loc -> m loc -> m loc) -> Set.Set t ->
     [(m loc, Map.Map loc (Map.Map t (m (tdest, loc))))] ->
     AutSyntax m loc t tdest
@@ -808,7 +810,7 @@ composeGeneric combine newAlphabet renamedLocs
     leads back to one of its own original initial locations to the composed initial state instead.
     Every other transition is kept as-is (just expressed as 'Either loc1 loc2' location type).
 -}
-composeInitial :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t) =>
+composeInitial :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t) =>
     (m (Either loc1 loc2) -> m (Either loc1 loc2) -> m (Either loc1 loc2)) ->
     AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
 composeInitial combine sts1 sts2 =
@@ -821,7 +823,7 @@ infixl 1 //\\
     of the initial locations in the transitions of sts1 and sts2 with the composed initial state. The resulting automaton has a joint alphabet and locations of
     type 'Either loc1 loc2'.
 -}
-(//\\) :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t, MeetSemiLattice (m (Either loc1 loc2))) =>
+(//\\) :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, MeetSemiLattice (m (Either loc1 loc2))) =>
     AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
 (//\\) = composeInitial (/\)
 
@@ -831,7 +833,7 @@ infixl 1 \\//
     of the initial locations in the transitions of sts1 and sts2 with the composed initial state. The resulting automaton has a joint alphabet and locations of
     type 'Either loc1 loc2'.
 -}
-(\\//) :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, Either loc1 loc2)), Completable t, JoinSemiLattice (m (Either loc1 loc2))) =>
+(\\//) :: (Ord loc1, Ord loc2, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, JoinSemiLattice (m (Either loc1 loc2))) =>
     AutSyntax m loc1 t tdest -> AutSyntax m loc2 t tdest -> AutSyntax m (Either loc1 loc2) t tdest
 (\\//) = composeInitial (\/)
 
@@ -841,7 +843,7 @@ infixl 1 \\//
     Every other transition is kept as-is, just tagged as a tuple (k, loc) where k is the automaton's label.
     Throws an error if the list is empty, or if any label is used more than once.
 -}
-composeInitialAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, (k, loc))), Completable t) =>
+composeInitialAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t) =>
     (m (k, loc) -> m (k, loc) -> m (k, loc)) -> [(k, AutSyntax m loc t tdest)] -> AutSyntax m (k, loc) t tdest
 composeInitialAll _ [] = errorWithoutStackTrace "composeInitialAll: no automata to combine"
 composeInitialAll combine labeledSTSList
@@ -856,7 +858,7 @@ composeInitialAll combine labeledSTSList
     The conjunction of any number of labeled automata. Locations are identified with a tuple of sts identifier and location of such automaton.
     All STSs must share the same location type. Throws an error if the list is empty, or if any label is used more than once.
 -}
-conjunctionAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, (k, loc))), Completable t, MeetSemiLattice (m (k, loc))) =>
+conjunctionAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, MeetSemiLattice (m (k, loc))) =>
     [(k, AutSyntax m loc t tdest)] -> AutSyntax m (k, loc) t tdest
 conjunctionAll = composeInitialAll (/\)
 
@@ -864,7 +866,7 @@ conjunctionAll = composeInitialAll (/\)
     The disjunction of any number of labeled automata. Locations are identified with a tuple of sts identifier and location of such automaton.
     All STSs must share the same location type. Throws an error if the list is empty, or if any label is used more than once.
 -}
-disjunctionAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m (tdest, (k, loc))), Completable t, JoinSemiLattice (m (k, loc))) =>
+disjunctionAll :: (Ord k, Show k, Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Completable t, JoinSemiLattice (m (k, loc))) =>
     [(k, AutSyntax m loc t tdest)] -> AutSyntax m (k, loc) t tdest
 disjunctionAll = composeInitialAll (\/)
 
@@ -876,7 +878,7 @@ data CheckLoc loc g = Stable loc | Pending loc g loc deriving (Eq, Ord)
 
 instance (Show loc, Show g) => Show (CheckLoc loc g) where
     show (Stable loc)          = show loc
-    show (Pending src g target) = "pending " ++ show g ++ " -> " ++ show target
+    show (Pending _ g target) = "pending " ++ show g ++ " -> " ++ show target
 
 {- |
     Complete an STS by prepending a "check" input before every output switch: an original switch l0 --o1!--> l1
