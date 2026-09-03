@@ -57,7 +57,6 @@ testSTSJSONParserNominal = TestCase $ do
                  DMap.insert (Variable "counter" IntType)  (Val 5) $
                  DMap.insert (Variable "label" (ListType CharType)) (Val "") $
                  DMap.insert (Variable "active" BoolType)  (Val False) $
-                 DMap.insert (Variable "selector" CharType) (Val 'a')
                  mempty)
                 valuation
             assertEqual "alphabet"
@@ -74,7 +73,7 @@ testSTSJSONParserNominal = TestCase $ do
                 actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
                 failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
                 expected = [QQ.r|
-current state configuration: ("0",{active:=False,counter:=5,label:="",selector:='a'})
+current state configuration: ("0",{active:=False,counter:=5,label:=""})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
@@ -153,13 +152,13 @@ testSTSJSONParserUnknownType = TestCase $ do
 testSTSJSONParserAssignmentTypeMismatch :: Test
 testSTSJSONParserAssignmentTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "assignment_type_mismatch.json")
-    assertErrorContains "Test assignment type mismatch" "not a list expression" result
+    assertErrorContains "Test assignment type mismatch" "assigment to variable of wrong type" result
 
 -- | Guard compares integer with string using ==
 testSTSJSONParserGuardTypeMismatch :: Test
 testSTSJSONParserGuardTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "guard_type_mismatch.json")
-    assertErrorContains "Test guard type mismatch" "not a character expression" result
+    assertErrorContains "Test guard type mismatch" "unknown or badly typed op2: ==" result
 
 -- | Switch refers to an undefined gate
 testSTSJSONParserGateIdDup :: Test
@@ -167,17 +166,17 @@ testSTSJSONParserGateIdDup = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "gate_id_dup.json")
     assertErrorContains "Test gate id inconsistency" "unknown gate" result
 
--- | Guard expression uses operator "??" which is not handled by toBoolExpr.
+-- | Guard expression uses operator "?!?" which is not a recognised op2.
 testSTSJSONParserUnsupportedGuardOperand :: Test
 testSTSJSONParserUnsupportedGuardOperand = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unsupported_guard_operand.json")
-    assertErrorContains "Test unsupported guard operand" "not a boolean expression" result
+    assertErrorContains "Test unsupported guard operand" "unknown or badly typed op2: ?!?" result
 
 -- | Assignment expression uses an unsupported operator
 testSTSJSONParserUnsupportedAssignmentOperand :: Test
 testSTSJSONParserUnsupportedAssignmentOperand = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unsupported_assignment_operand.json")
-    assertErrorContains "Test unsupported assignment operand" "not an integer expression" result
+    assertErrorContains "Test unsupported assignment operand" "unknown or badly typed op2: ???" result
 
 -- | The mandatory "switches" field is absent from the JSON.
 testSTSJSONParserMissingSwitches :: Test
