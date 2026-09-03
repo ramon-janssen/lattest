@@ -14,6 +14,7 @@ module Lattest.Util.STSJSONParser (
 ) where
 
 import Control.Monad (forM)
+import Data.Foldable (toList)
 import qualified Data.Aeson as JSON
 import Data.Dependent.Sum (DSum (..))
 import qualified Data.ByteString.Lazy as BSL
@@ -361,19 +362,26 @@ instance JSON.FromJSON AssignmentDefJson where
 data SwitchDefJson = SwitchDefJson
     { switchJsonInitLoc     :: LocationId
     , switchJsonGate        :: GateId
-    , switchJsonGuard       :: Maybe String
+    , switchJsonGuard       :: Maybe [String]  -- names of guards to be conjoined
     , switchJsonAssignments :: [String]
     , switchJsonEndLoc      :: LocationId
     }
 
+-- A "guard" field may be a single guard name, or an array of guard names (merged with &&).
 instance JSON.FromJSON SwitchDefJson where
     parseJSON = JSON.withObject "SwitchDefJson" $ \o ->
         SwitchDefJson
             <$> o JSON..:  "init_loc"
             <*> o JSON..:  "gate"
-            <*> o JSON..:? "guard"
+            <*> (o JSON..:? "guard" >>= traverse parseGuardNames)
             <*> (o JSON..:? "assignments" JSON..!= [])
             <*> o JSON..:  "end_loc"
+      where
+        parseGuardNames (JSON.String s) = pure [unpack s]
+        parseGuardNames (JSON.Array a)  = mapM parseGuardName (toList a)
+        parseGuardNames _               = fail "guard must be a string or an array of strings"
+        parseGuardName (JSON.String s) = pure (unpack s)
+        parseGuardName _               = fail "guard array elements must be strings"
 
 data STSJsonFormat = STSJsonFormat
     { stsJsonId            :: String
@@ -479,10 +487,10 @@ buildSwitchList gateMap guardMap assignMap switchDefs =
             Just a  -> Right a
             Nothing -> Left $ "unknown gate '" ++ unGateId (switchJsonGate def) ++ "' in switch '" ++ name ++ "'"
         guard' <- case switchJsonGuard def of
-            Nothing    -> Right sTrue
-            Just gname -> case Map.lookup gname guardMap of
+            Nothing     -> Right sTrue
+            Just gnames -> foldr (.&&) sTrue <$> forM gnames (\gname -> case Map.lookup gname guardMap of
                 Just g  -> Right g
-                Nothing -> Left $ "unknown guard '" ++ gname ++ "' in switch '" ++ name ++ "'"
+                Nothing -> Left $ "unknown guard '" ++ gname ++ "' in switch '" ++ name ++ "'")
         varModel <- buildVarModel assignMap (switchJsonAssignments def) name
         let initLoc = locId (switchJsonInitLoc def)
             endLoc  = locId (switchJsonEndLoc  def)
