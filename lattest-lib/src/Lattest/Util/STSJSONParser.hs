@@ -321,7 +321,7 @@ instance JSON.FromJSON VarDefJson where
             JSON.Object o' <- o JSON..: "attributes"
             ((t, a), b) <- mkStructure $ JSON.toList o'
             pure (t, a++b)
-          _ -> error "unknown type"
+          _ -> fail $ "unknown variable type: " ++ tp
       k = pure . (,[])
       mkStructure :: [(JSON.Key, JSON.Value)] -> JSON.Parser ((Some Type, [(String, Some Expr -> Some Expr)]), [(String, Some Expr -> Some Expr)])
       mkStructure [] = error "empty structure"
