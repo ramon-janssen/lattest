@@ -1,8 +1,12 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BlockArguments #-}
 {-|
     Find concrete values to take transitions in STSes, using an SMT solver.
 -}
@@ -15,31 +19,34 @@ seTree,
 treeToGuard,
 SETree(..),
 SEIte(..),
+offlineTests,
+OfflineTests(..)
 )
 where
 
-import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..))
-import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
+import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
+import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.StandardAutomata(STS)
-import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
-import Lattest.SMT(SMT)
+import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), toConstantsMap, sFalse, (.==), sVar, sConst, ExprView (And))
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..))
+import Lattest.SMT(SMT, runSMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&), first, second)
+import Control.Arrow((&&&))
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
-import qualified Data.Set as Set
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, catMaybes)
+import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..))
+import Control.Monad (forM)
+import qualified Data.Set as Set
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -66,12 +73,12 @@ solveRandomInteraction intrpr subsetFunction r = do
 
 
 interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr intrpr interacts
+interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
+interactsToAllowedCondition = interactsToGuard asExpr
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToGuard f intrpr interacts = f (treeToGuard f interacts BM.<#> seTree intrpr)
 
@@ -106,7 +113,7 @@ newtype SETree m i = SETree (Map.Map i (m (SEIte (m (SETree m i)))))
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Eq (SETree m i)
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Ord (SETree m i)
 
-seTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+seTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> m (SETree m (IOSymInteract i o))
 seTree intrpr =
     let smlocs = intrpStateToSym BM.<#> stateConf intrpr
@@ -116,7 +123,7 @@ seTree intrpr =
     t loc = Map.map (BM.ordMap completeSTSLoc) (transRel (syntacticAutomaton intrpr) loc)
     --seTree' :: Int -> SymIntrpState loc -> SETree m i
     -- the LHS pvar contains the indexed vars of the previous step, RHS contains only interaction variables
-    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (\i -> BM.ordMap $ seStep' i) (t ploc)
+    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (BM.ordMap . seStep') (t ploc)
         where
         --seStep' :: (SymGuard, VarModel, loc) -> SEBranch (SETree m i)
         seStep' i (tguard, completedAssign, tloc) =
@@ -135,7 +142,7 @@ seTree intrpr =
         in (tguard, completedAssign, tloc)
     locVarSet :: [Variable]
     locVarSet = -- a bit hacky: we assume that there is a global set of state variables, but we extract it from the assignment of an arbitrary transition
-        let mArbitraryState = (toList $ stateConf intrpr) List.!? 0
+        let mArbitraryState = toList (stateConf intrpr) List.!? 0
         in case mArbitraryState of
             Just (IntrpState _ arbitraryValuation) -> getVariables arbitraryValuation
             Nothing -> []
@@ -143,11 +150,116 @@ seTree intrpr =
     ioInteractToImpliticLocation (SymInteract (Out _) _) = BM.forbidden
 
 indexExpr :: Int -> Expr t -> Expr t
-indexExpr n e = mapExpressionVars (indexVar n) e
+indexExpr n = mapExpressionVars (indexVar n)
 indexVar :: Int -> Variable -> Variable
---indexVar 0 v = v
+indexVar 0 v = v
 indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
+-- TODO: unsure whether this should hold arbitrary 'r's, or Verdicts, or both.
+-- If 'r's: it would be good to have a test controller combinator that makes a test controller return a Verdict
+-- If 'Verdict's: See the final couple lines of this file: I'm not sure how to disambiguate them. Should I just pass the interaction to the automaton and look at the state?
+data OfflineTests i o r
+  = OfflineTests
+      (Map.Map o             -- Map each output to:
+        ([Constant]          -- The expected valuation;
+        , OnlyOrInconclusive -- Whether that is the only allowed valuation, or other valuations should be marked as 'inconclusive';
+        , OfflineTests i o r)) -- And the rest of the test.
+      (Either (GateValue i, OfflineTests i o r) r) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
+
+data OnlyOrInconclusive = Only | Inconclusiv
+
+instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
+  show (OfflineTests os is) = "\\case\n" <> indentOfflineTree os' <> indentOfflineTree is'
+    where
+      os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> show cs <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
+                  Only -> ""
+                  Inconclusiv -> "!"<> show o <> "[..] -> Inconclusive") $ Map.toList os
+      is' = case is of
+        Right r -> if Map.null os then show r else ""
+        Left (i, ot) -> "?" <> show i <> " -> \n" <> indentOfflineTree (show ot)
+      indentOfflineTree "" = ""
+      indentOfflineTree s = reverse . ('\n':) . dropWhile (\x -> x == '\n' || x == ' ') . reverse -- ugly hack to remove empty lines
+                          . unlines . map ("  " ++) $ lines s
+
+getInputOffline :: OfflineTests i o r -> Either (GateValue i, OfflineTests i o r) r
+getInputOffline (OfflineTests _ i) = i
+
+giveOutputOffline :: Ord o => OfflineTests i o Verdict -> GateValue o -> Either (OfflineTests i o Verdict) Verdict
+giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
+  Nothing -> Right Fail
+  Just (cs, ooi, rest)
+    | cs == os  -> Left rest
+    | otherwise -> case ooi of
+      Only -> Right Fail
+      Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
+
+offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
+             => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+             -> IO (OfflineTests i o r)
+offlineTests intrpr tc = do
+  inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
+  i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
+        Right r -> pure $ Right r
+        Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
+          Right r -> pure $ Right r
+          Left (tc', intrpr') -> do
+            ot <- offlineTests intrpr' tc'
+            pure $ Left (i', ot)
+  o <- Map.fromList . catMaybes <$> do
+    let os = mapMaybe (\case
+                SymInteract (Out o) vs -> Just $ SymInteract o vs
+                SymInteract (In _) _ -> Nothing)
+              (toList $ alphabet $ syntacticAutomaton intrpr)
+    forM os $ \(SymInteract o vs) -> do
+      let guard = interactsToAllowedCondition intrpr [SymInteract (Out o) vs]
+      mv <- runSMT $ solveGuard vs guard
+      case mv of
+        Nothing -> pure Nothing
+        Just (toConstantsMap -> m) -> let vs' = map (\v -> case m Map.!? v of
+                                                              Just x -> x
+                                                              Nothing -> error $ show v <> "is not in" <> show m) vs in
+          (\x y -> Just (o,(vs',x,y)))
+          <$> do -- checking whether this is the only valid assignment for this gate, by adding a guard specifying that at least one value should differ
+                let guard' = guard .&& (if null vs then sFalse else sNot $ Expr $ And $ Set.fromList $ zipWith (\v c -> view case c of
+                                Cbool b   -> sVar v .== sConst b
+                                Cint x    -> sVar v .== sConst x
+                                Cstring s -> sVar v .== sConst s
+                                Cfloat f  -> sVar v .== sConst f
+                                Ccstr _ _ -> error "not used"
+                                ) vs vs')
+                runSMT $ solveGuard vs guard' >>= \case
+                  Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
+                  Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
+          <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
+             Right r -> pure $ OfflineTests mempty $ Right r
+             Left (tc', intrpr') -> offlineTests intrpr' tc')
+  pure $ OfflineTests o i
+  where
+    handleAction :: IOGateValue i o
+                 ->   TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+                 ->   AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+                 -> IO (Either
+                    ( TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+                    , AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
+                    r)
+    handleAction x t i = updateTestController t (testControllerState t) i x (stateConf i) >>= \case
+      Right r -> pure $ Right r
+      -- $ case x of
+        -- GateValue (In  _) _ -> Pass -- TODO: testcontrollers with a fixed number of steps do trigger this. Need a way to also deal with them in in the output case! -- error "this should never happen, I think: the testcontroller choosing to stop rather than update based on an input it chose itself"
+        -- GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail? Not necessarily, what if it's just a stopcondition?
+      Left st -> pure $ Left (t {testControllerState = st}, after i x)
+
+-- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it.
+-- For outputs, it returns both the given output and the starting location.
+toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
+        => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+        -> OfflineTests i o r
+        -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Constant], m (IntrpState loc))]
+toTrace _ (OfflineTests (Map.toList -> []) (Right _)) = Just []
+toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
+toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
+toTrace _ _ = Nothing -- either multiple outputs, or input and output
 
