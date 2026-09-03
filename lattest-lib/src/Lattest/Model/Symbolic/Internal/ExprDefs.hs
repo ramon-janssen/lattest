@@ -400,8 +400,8 @@ instance Has (ComposeC Show Expr) Variable where
   has _ k = k
 instance Has ExprType Variable where
   has v = has @ExprType (varType v)
-instance Has ExprType Expr where
-  has e = has @ExprType (view e)
+-- instance Has ExprType Expr where
+--   has e = has @ExprType (view e) -- TODO: Unclear during merge
 
 instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
