@@ -121,7 +121,7 @@ makeHUnitTests regenerate = do
         testConjunctionAllGuardedSTS,
         testDisjunctionAllGuardedSTS,
         testPrintTriDisj,
-        testPrintDisjOfSTSWithMultpInitStates,
+        testErrorDisjOfSTSWithMultpInitStates,
         testPrintPrependOutputChecksDisj,
         testPrintPrependOutputChecksConj,
         testPrependOutputChecksDisj,

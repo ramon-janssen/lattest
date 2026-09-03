@@ -686,7 +686,7 @@ sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphab
         [ (t, BM.ordMap (second Right) (BM.ordBind (initConf sts2) (\l2 -> transRel sts2 l2 Map.! t)))
         | t <- Set.toList (alphabet sts2) ]
 
-    -- conjunct sts1's own transition with the copied one, but only where both are specified
+    -- conjunct sts1's own transition with the copied one, but only where both are specified (and not forbiddden)
     pick own other
         | BM.isIndefinite own && BM.isIndefinite other = own /\ other
         | BM.isIndefinite own                          = own
@@ -788,7 +788,10 @@ composeGeneric :: (Ord loc, Ord t, Ord tdest, BoundedMonad m, Foldable m, Ord (m
     (m loc -> m loc -> m loc) -> Set.Set t ->
     [(m loc, Map.Map loc (Map.Map t (m (tdest, loc))))] ->
     AutSyntax m loc t tdest
-composeGeneric combine newAlphabet renamedLocs = automaton newInitConf newAlphabet switches
+composeGeneric combine newAlphabet renamedLocs
+    | any (\(ic, _) -> Foldable.length ic /= 1) renamedLocs = errorWithoutStackTrace
+        "composeGeneric: the initial state of the automaton(s) is not atomic, which is currently not supported"
+    | otherwise = automaton newInitConf newAlphabet switches
   where
     allInitLocs = Set.unions [ Set.fromList (Foldable.toList ic) | (ic, _) <- renamedLocs ]
     isOldInit l = l `Set.member` allInitLocs
