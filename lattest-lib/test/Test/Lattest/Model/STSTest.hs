@@ -1,11 +1,14 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Test.Lattest.Model.STSTest (
     testSTSHappyFlow,
+    testSTSHappyFlowLists,
     testSTSHappyFlowFloat,
     testLatticeCoffeeSTS,
     testErrorThrowingGates,
@@ -45,9 +48,13 @@ module Test.Lattest.Model.STSTest (
 where
 
 import Prelude hiding (take)
+import Data.Constraint.Extras (Has(..))
+import Data.GADT.Compare (GEq(..))
+import Data.Type.Equality ((:~:)(..))
 import Test.HUnit
+import Data.Dependent.Sum
 import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
-import Data.Maybe(fromJust, isJust, catMaybes)
+import Data.Maybe(isJust, catMaybes)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -62,7 +69,7 @@ import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
-import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
+import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
 import Algebra.Lattice.Free(Free(..))
@@ -74,29 +81,35 @@ import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 import qualified Lattest.SMT as SMT
+import Data.Some (Some (..))
+import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Sum (DSum(..))
+ -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
+import qualified Lattest.SMT as SMT
 
-pvar :: Variable
-pvar = (Variable "p" IntType)
-qvar :: Variable
-qvar = (Variable "q" IntType)
-xvar :: Variable
-xvar = (Variable "x" IntType)
+pvar :: Variable Integer
+pvar = Variable "p" IntType
+qvar :: Variable Integer
+qvar = Variable "q" IntType
+xvar :: Variable Integer
+xvar = Variable "x" IntType
+
 stsExampleInitAssign :: Valuation
-stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+stsExampleInitAssign = Valuation $ DMap.singleton xvar (Val 0)
 
 stsExample :: IOSTS Det Integer String String
 stsExample =
-    let p = sVar pvar :: Expr Integer
-        x = sVar xvar :: Expr Integer
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
+    let p = sVar pvar
+        x = sVar xvar
+        water = SymInteract (In "water") [Some pvar]
+        ok = SymInteract (Out "ok") [Some pvar]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
         coffeeGuard = x .>= 15
         initConf = return 0
-        switches = \q -> case q of
+        switches = \case
             0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
                                 (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
             1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
@@ -106,7 +119,7 @@ stsExampleIntrpr :: STSIntrp Det Integer (IOAct String String)
 stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
-getSTSIntrpState loc val = pure $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpState loc val = pure $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 {- |
     Takes a tuple of description, STS model, gate-parameter value pair and expected state and computes
@@ -122,26 +135,77 @@ assertAfter msg intrp act expected = do
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExampleIntrpr)
-    intrp2 <- assertAfter "after water 7: " stsExampleIntrpr (GateValue (In "water") [Cint 7]) (getSTSIntrpState 1 7)
-    intrp3 <- assertAfter "after ok 7: " intrp2 (GateValue (Out "ok") [Cint 7]) (getSTSIntrpState 0 7)
-    intrp4 <- assertAfter "after water 9: " intrp3 (GateValue (In "water") [Cint 9]) (getSTSIntrpState 1 16)
-    intrp5 <- assertAfter "after ok 16: " intrp4 (GateValue (Out "ok") [Cint 16]) (getSTSIntrpState 0 16)
+    intrp2 <- assertAfter "after water 7: " stsExampleIntrpr (GateValue (In "water") [Some $ CInt 7]) (getSTSIntrpState 1 7)
+    intrp3 <- assertAfter "after ok 7: " intrp2 (GateValue (Out "ok") [Some $ CInt 7]) (getSTSIntrpState 0 7)
+    intrp4 <- assertAfter "after water 9: " intrp3 (GateValue (In "water") [Some $ CInt 9]) (getSTSIntrpState 1 16)
+    intrp5 <- assertAfter "after ok 16: " intrp4 (GateValue (Out "ok") [Some $ CInt 16]) (getSTSIntrpState 0 16)
     _ <- assertAfter "after coffee: " intrp5 (GateValue (Out "coffee") []) (getSTSIntrpState 2 16)
+    return ()
+
+pvar' :: Variable [Integer]
+pvar' = Variable "p" $ ListType IntType
+xvar' :: Variable [[Integer]]
+xvar' = Variable "x" $ ListType $ ListType IntType
+mapvar1 :: Variable [Integer]
+mapvar1 = Variable "map1" $ ListType IntType
+mapvar2 :: Variable Integer
+mapvar2 = Variable "map2" IntType
+
+stsExampleInitAssign' :: Valuation
+stsExampleInitAssign' = Valuation $ DMap.singleton xvar' (Val [[1,2,3],[4,5,6]])
+
+stsExample' :: IOSTS Det Integer String String
+stsExample' =
+    let p = sVar pvar'
+        x = sVar xvar'
+        water = SymInteract (In "water") [Some pvar']
+        ok = SymInteract (Out "ok") [Some pvar']
+        coffee = SymInteract (Out "coffee") []
+        waterGuard = 1 .< sLength p .&& sLength p .<= 10
+        waterAssign = assignment [xvar' =: sMap mapvar1 (sMap mapvar2 (sLength p + sVar mapvar2) $ sVar mapvar1) x] -- map (map (+length p)) x
+        okGuard = sHead (sHead x) .== sLength p
+        coffeeGuard = sHead (sHead x) .>= 15
+        initConf = return 0
+        switches = \case
+            0 -> Map.fromList [(water, pure (stsTLoc waterGuard waterAssign, 1)),
+                                (coffee, pure (stsTLoc coffeeGuard noAssignment, 2))]
+            1 -> Map.fromList [(ok, pure (stsTLoc okGuard noAssignment, 0))]
+            2 -> Map.empty
+    in automaton initConf (Set.fromList [water,ok,coffee]) switches
+stsExampleIntrpr' :: STSIntrp Det Integer (IOAct String String)
+stsExampleIntrpr' = interpretSTS stsExample' stsExampleInitAssign'
+
+getSTSIntrpState'' :: Integer -> [[Integer]] -> Det (IntrpState Integer)
+getSTSIntrpState'' loc val = pure $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" $ ListType $ ListType IntType) (Val val)
+
+testSTSHappyFlowLists :: Test
+testSTSHappyFlowLists = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpState'' 0 [[1,2,3],[4,5,6]]) (stateConf stsExampleIntrpr')
+    let intrp2 = after stsExampleIntrpr' (GateValue (In "water") [list @Integer [1,2,3,4,5,6,7]])
+    assertEqual "after water 7: " (getSTSIntrpState'' 1 [[8,9,10],[11,12,13]]) (stateConf intrp2)
+    let intrp3 = after intrp2 (GateValue (Out "ok") [list @Integer [1,2,3,4,5,6,7,8]])
+    assertEqual "after ok 7: " (getSTSIntrpState'' 0 [[8,9,10],[11,12,13]]) (stateConf intrp3)
+    let intrp4 = after intrp3 (GateValue (In "water") [list @Integer [1,2,3,4,5,6,7,8,9]])
+    assertEqual "after water 9: " (getSTSIntrpState'' 1 [[17,18,19],[20,21,22]]) (stateConf intrp4)
+    let intrp5 = after intrp4 (GateValue (Out "ok") [list @Integer [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]])
+    assertEqual "after ok 16: " (getSTSIntrpState'' 0 [[17,18,19],[20,21,22]]) (stateConf intrp5)
+    let intrp6 = after intrp5 (GateValue (Out "coffee") [])
+    assertEqual "after coffee: " (getSTSIntrpState'' 2 [[17,18,19],[20,21,22]]) (stateConf intrp6)
     return ()
 
 testErrorThrowingGates :: Test
 testErrorThrowingGates = TestCase $ do
-    let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [Cint 7])
+    let intrp1 = after stsExampleIntrpr (GateValue (Out "water") [int 7])
     assertThrowsError "gate not in STS alphabet" (stateConf intrp1)
     let intrp2 = after stsExampleIntrpr (GateValue (In "water") [])
     assertThrowsError "nr of values unequal to nr of parameters: 0 values and 1 variables" (stateConf intrp2)
-    let intrp3 = after stsExampleIntrpr (GateValue (In "water") [Cbool True])
+    let intrp3 = after stsExampleIntrpr (GateValue (In "water") [bool True])
     assertThrowsError "type of variable and value do not match. Variables: [p:Int], Values: [True]" (stateConf intrp3)
 
 testSTSUnHappyFlow :: Test
 testSTSUnHappyFlow = TestCase $ do
-    _ <- assertAfter "after ok: " stsExampleIntrpr (GateValue (Out "ok") [Cint 0]) forbidden -- output not enabled
-    _ <- assertAfter "after water 11: " stsExampleIntrpr (GateValue (In "water") [Cint 11]) underspecified -- value for input does not satisfy guard
+    _ <- assertAfter "after ok: " stsExampleIntrpr (GateValue (Out "ok") [Some $ CInt 0]) forbidden -- output not enabled
+    _ <- assertAfter "after water 11: " stsExampleIntrpr (GateValue (In "water") [Some $ CInt 11]) underspecified -- value for input does not satisfy guard
     _ <- assertAfter "after coffee: " stsExampleIntrpr (GateValue (Out "coffee") []) forbidden -- value of variable does not satisfy guard
     return ()
 
@@ -182,9 +246,9 @@ data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 -- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
 tExampleCorrect :: (Ord i, Ord o, IsString i, IsString o) => (ImpExampleLoc, Integer) -> Map.Map (GateValue (IOAct i o)) (ImpExampleLoc, Integer)
 tExampleCorrect (L0, x) = Map.fromList $
-    [((GateValue (In "water") [Cint p]), (L1, x+p)) | p <- [1..10]] ++ [((GateValue (Out "coffee") []), (L2, 0)) | x > 15]
-tExampleCorrect (L1, x) = Map.fromList $ [((GateValue (Out "ok") [Cint x]), (L0, x))]
-tExampleCorrect (L2, _) = Map.fromList $ []
+    [(GateValue (In "water") [int p], (L1, x+p)) | p <- [1..10]] ++ [(GateValue (Out "coffee") [], (L2, 0)) | x > 15]
+tExampleCorrect (L1, x) = Map.fromList  [(GateValue (Out "ok") [int x], (L0, x))]
+tExampleCorrect (L2, _) = mempty
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impExampleCorrect = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tExampleCorrect) (L0, 0) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -200,40 +264,41 @@ testSTSTestSelection = TestCase $ do
     (verdict, ((observed, _), _)) <- runSMTTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     let checkObserved = go 0 0 observed
     let exampleObserved = [
-          inp "water" [Cint 1],
-          out "ok" [Cint 1],
-          inp "water" [Cint 1],
-          out "ok" [Cint 2],
+        -- TODO: inp, out seem to be the same as inpL, outL?
+          inp "water" [int 1],
+          out "ok"    [int 1],
+          inp "water" [int 1],
+          out "ok"    [int 2],
           GateValue δ [],
-          inp "water" [Cint 1],
-          out "ok" [Cint 3],
-          inp "water" [Cint 1],
-          outL "ok" [Cint 4],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 5],
+          inp "water" [int 1],
+          out "ok"    [int 3],
+          inp "water" [int 1],
+          outL "ok"   [int 4],
+          inpL "water" [int 1],
+          outL "ok"    [int 5],
           GateValue δ [],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 6],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 7],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 8],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 9],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 10],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 11],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 12],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 13],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 14],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 15],
-          inpL "water" [Cint 1],
-          outL "ok" [Cint 16],
+          inpL "water" [int 1],
+          outL "ok"    [int 6],
+          inpL "water" [int 1],
+          outL "ok"    [int 7],
+          inpL "water" [int 1],
+          outL "ok"    [int 8],
+          inpL "water" [int 1],
+          outL "ok"    [int 9],
+          inpL "water" [int 1],
+          outL "ok"    [int 10],
+          inpL "water" [int 1],
+          outL "ok"    [int 11],
+          inpL "water" [int 1],
+          outL "ok"    [int 12],
+          inpL "water" [int 1],
+          outL "ok"    [int 13],
+          inpL "water" [int 1],
+          outL "ok"    [int 14],
+          inpL "water" [int 1],
+          outL "ok"    [int 15],
+          inpL "water" [int 1],
+          outL "ok"    [int 16],
           outL "coffee" [],
           GateValue δ [],
           GateValue δ []
@@ -242,35 +307,36 @@ testSTSTestSelection = TestCase $ do
     assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
-    inpL g vals = GateValue (In (InputAttempt (g, True))) vals
-    outL g vals = GateValue (Out (OutSusp g)) vals
+    inpL g = GateValue (In (InputAttempt (g, True)))
+    outL g = GateValue (Out (OutSusp g))
+    go :: Int -> Integer -> [SuspendedIFGateValue String String] -> (Int, Integer)
     go ds waterlevel [] = (ds, waterlevel)
     go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
     go ds waterlevel gv@(GateValue x y:os)
       | x == In (InputAttempt ("water", True))
-      , [Cint w] <- y = go ds (waterlevel+w) os
+      , [Some (CInt w)] <- y = go ds (waterlevel + w) os
       | x == Out (OutSusp "ok")
-      , [Cint w] <- y
+      , [Some (CInt w)] <- y
       , w == waterlevel = go ds waterlevel os
       | x == Out (OutSusp "coffee")
       , [] <- y
       , waterlevel > 15 = go ds waterlevel os
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
-pvarf :: Variable
-pvarf = (Variable "p" FloatType)
-xvarf :: Variable
-xvarf = (Variable "x" FloatType)
+pvarf :: Variable Double
+pvarf = Variable "p" FloatType
+xvarf :: Variable Double
+xvarf = Variable "x" FloatType
 
 stsExampleInitAssignFloat :: Valuation
-stsExampleInitAssignFloat = fromConstantsMap $ Map.singleton xvarf (Cfloat (0.0 :: Double))
+stsExampleInitAssignFloat = Valuation $ DMap.singleton xvarf (Val 0.0)
 
 stsExampleFloat :: IOSTS FreeLattice Integer String String
 stsExampleFloat =
     let p = sVar pvarf :: Expr Double
         x = sVar xvarf :: Expr Double
-        water = SymInteract (In "water") [pvarf]
-        ok = SymInteract (Out "ok") [pvarf]
+        water = SymInteract (In "water") [Some pvarf]
+        ok = SymInteract (Out "ok") [Some pvarf]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvarf =: x .+ p]
@@ -288,38 +354,37 @@ stsExampleIntrprFloat :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrprFloat = interpretSTS stsExampleFloat stsExampleInitAssignFloat
 
 getSTSIntrpStateFloat :: Integer -> Double -> FreeLattice (IntrpState Integer)
-getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" FloatType) (Cfloat val)]
+getSTSIntrpStateFloat loc val = disjunction [IntrpState loc $ Valuation $ DMap.singleton (Variable "x" FloatType) (Val val)]
 
 testSTSHappyFlowFloat :: Test
 testSTSHappyFlowFloat = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpStateFloat 0 0.0) (stateConf stsExampleIntrprFloat)
-    intrp2 <- assertAfter "after water 7.5: " stsExampleIntrprFloat (GateValue (In "water") [Cfloat (7.5 :: Double)]) (getSTSIntrpStateFloat 1 (7.5 :: Double))
-    intrp3 <- assertAfter "after ok 7.5: " intrp2 (GateValue (Out "ok") [Cfloat 7.5]) (getSTSIntrpStateFloat 0 (7.5 :: Double))
-    intrp4 <- assertAfter "after water 8.5: " intrp3 (GateValue (In "water") [Cfloat 8.5]) (getSTSIntrpStateFloat 1 (16.0 :: Double))
-    intrp5 <- assertAfter "after ok 16.0: " intrp4 (GateValue (Out "ok") [Cfloat 16.0]) (getSTSIntrpStateFloat 0 (16.0 :: Double))
+    intrp2 <- assertAfter "after water 7.5: " stsExampleIntrprFloat (GateValue (In "water") [Some $ CFloat (7.5 :: Double)]) (getSTSIntrpStateFloat 1 (7.5 :: Double))
+    intrp3 <- assertAfter "after ok 7.5: " intrp2 (GateValue (Out "ok") [Some $ CFloat 7.5]) (getSTSIntrpStateFloat 0 (7.5 :: Double))
+    intrp4 <- assertAfter "after water 8.5: " intrp3 (GateValue (In "water") [Some $ CFloat 8.5]) (getSTSIntrpStateFloat 1 (16.0 :: Double))
+    intrp5 <- assertAfter "after ok 16.0: " intrp4 (GateValue (Out "ok") [Some $ CFloat 16.0]) (getSTSIntrpStateFloat 0 (16.0 :: Double))
     _ <- assertAfter "after coffee: " intrp5 (GateValue (Out "coffee") []) (getSTSIntrpStateFloat 2 (16.0 :: Double))
     return ()
 
 
 stsExample2 :: (IOSTS FreeLattice Integer String String, IOSTS FreeLattice Integer String String)
 stsExample2 =
-    let p = sVar pvar :: Expr Integer
-        x = sVar xvar :: Expr Integer
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
+    let p = sVar pvar
+        x = sVar xvar
+        water = SymInteract (In "water") [Some pvar]
+        ok = SymInteract (Out "ok") [Some pvar]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 4
         waterGuard1 = 4 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
         okGuard = x .== p
-        coffeeGuard = x .>= 15
         initConf = atom 0
-        switches = \q -> case q of
+        switches = \case
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1) /\ atom (stsTLoc waterGuard1 waterAssign, 2) )]
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
         initConf2 = atom 0 /\ atom 2
-        switches2 = \q -> case q of
+        switches2 = \case
             0 -> Map.fromList [(water, atom (stsTLoc waterGuard waterAssign, 1))]
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.fromList [(water, atom (stsTLoc waterGuard1 waterAssign, 3))]
@@ -333,7 +398,7 @@ stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
 getSTSValuation :: Integer -> Valuation
-getSTSValuation val = fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSValuation val = Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
@@ -344,17 +409,17 @@ testLatticeCoffeeSTS :: Test
 testLatticeCoffeeSTS = TestCase $ do
      assertEqual "\ninitial state " (getSTSIntrpState2 0 0) (stateConf stsExampleIntrpr2a)
      assertEqual "\ninitial state " (getSTSIntrpState2 0 0 /\ getSTSIntrpState2 2 0) (stateConf stsExampleIntrpr2b)
-     intrp2a <- assertAfter "2a after water 3: " stsExampleIntrpr2a (GateValue (In "water") [Cint 3]) (getSTSIntrpState2 1 3)
-     intrp2b <- assertAfter "2b after water 3: " stsExampleIntrpr2b (GateValue (In "water") [Cint 3]) (getSTSIntrpState2 1 3)
-     intrp3a <- assertAfter "2a after ok 3: " intrp2a (GateValue (Out "ok") [Cint 3]) (getSTSIntrpState2 0 3)
-     intrp3b <- assertAfter "2b after ok 3: " intrp2b (GateValue (Out "ok") [Cint 3]) (getSTSIntrpState2 0 3)
-     intrp4a <- assertAfter "3a after water 4: " intrp3a (GateValue (In "water") [Cint 4]) (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7)
+     intrp2a <- assertAfter "2a after water 3: " stsExampleIntrpr2a (GateValue (In "water") [Some $ CInt 3]) (getSTSIntrpState2 1 3)
+     intrp2b <- assertAfter "2b after water 3: " stsExampleIntrpr2b (GateValue (In "water") [Some $ CInt 3]) (getSTSIntrpState2 1 3)
+     intrp3a <- assertAfter "2a after ok 3: " intrp2a (GateValue (Out "ok") [Some $ CInt 3]) (getSTSIntrpState2 0 3)
+     intrp3b <- assertAfter "2b after ok 3: " intrp2b (GateValue (Out "ok") [Some $ CInt 3]) (getSTSIntrpState2 0 3)
+     intrp4a <- assertAfter "3a after water 4: " intrp3a (GateValue (In "water") [Some $ CInt 4]) (getSTSIntrpState2 1 7 /\ getSTSIntrpState2 2 7)
      -- NOTE: Merging only the initial states drops transitions that loop back to the initial state.
-     intrp4b <- assertAfter "3b after water 4: " intrp3b (GateValue (In "water") [Cint 4]) (getSTSIntrpState2 1 7)
-     intrp5a <- assertAfter "4a after ok 7: " intrp4a (GateValue (Out "ok") [Cint 7]) (getSTSIntrpState2 0 7)
-     intrp5b <- assertAfter "4b after ok 7: " intrp4b (GateValue (Out "ok") [Cint 7]) (getSTSIntrpState2 0 7)
-     _ <- assertAfter "5a after water 5: " intrp5a (GateValue (In "water") [Cint 5]) (getSTSIntrpState2 2 12)
-     _ <- assertAfter "5b after water 5: " intrp5b (GateValue (In "water") [Cint 5]) underspecified
+     intrp4b <- assertAfter "3b after water 4: " intrp3b (GateValue (In "water") [Some $ CInt 4]) (getSTSIntrpState2 1 7)
+     intrp5a <- assertAfter "4a after ok 7: " intrp4a (GateValue (Out "ok") [Some $ CInt 7]) (getSTSIntrpState2 0 7)
+     intrp5b <- assertAfter "4b after ok 7: " intrp4b (GateValue (Out "ok") [Some $ CInt 7]) (getSTSIntrpState2 0 7)
+     _ <- assertAfter "5a after water 5: " intrp5a (GateValue (In "water") [Some $ CInt 5]) (getSTSIntrpState2 2 12)
+     _ <- assertAfter "5b after water 5: " intrp5b (GateValue (In "water") [Some $ CInt 5]) underspecified
      return ()
 
 
@@ -375,11 +440,11 @@ testLatticeCoffeeSTS = TestCase $ do
 -}
 specParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> (forall a.FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Bool -> IOSTS FreeLatticeSlow Integer String String
 specParameterized startType endType comp splitFirst =
-    let p = sVar pvar :: Expr Integer
-        q = sVar qvar :: Expr Integer
-        x = sVar xvar :: Expr Integer
-        start = SymInteract (startType "start") [pvar]
-        end = SymInteract (endType "end") [pvar, qvar]
+    let p = sVar pvar
+        q = sVar qvar
+        x = sVar xvar
+        start = SymInteract (startType "start") [Some pvar]
+        end = SymInteract (endType "end") [Some pvar, Some qvar]
         done = SymInteract (Out "done") []
         initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
@@ -388,14 +453,14 @@ specParameterized startType endType comp splitFirst =
         assignX = assignment [xvar =: p]
         switches =
             if splitFirst
-                then \s -> case s of
+                then \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) `comp` pure (stsTLoc guardStart assignX, 2))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
                         2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 4))]
                         3 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
                         4 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 5))]
                         5 -> Map.empty
-                else \s -> case s of
+                else \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) `comp` pure (stsTLoc guardEnd2 noAssignment, 3))]
                         2 -> Map.fromList [(done, pure (stsTLoc sTrue noAssignment, 4))]
@@ -411,10 +476,10 @@ specParameterized startType endType comp splitFirst =
   * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
 -}
 t1 :: (Ord i, Ord o, Num a1, Num a2, IsString t1, IsString t2, IsString o, Eq a1) => (t1 -> IOAct i o) -> (t2 -> IOAct i o) -> Integer -> Integer -> Integer -> a1 -> Map.Map (GateValue (IOAct i o)) a2
-t1 startType _ p1 _ _ 0 = Map.fromList $ [((GateValue (startType "start") [Cint p1]), 1)]
-t1 _ endType _ p2 q2 1 = Map.fromList $ [((GateValue (endType "end") [Cint p2, Cint q2]), 2)]
-t1 _ _ _ _ _ 2 = Map.fromList $ [((GateValue (Out "done") []), 3)]
-t1 _ _ _ _ _ 3 = Map.fromList $ []
+t1 startType _ p1 _ _ 0 = Map.fromList [(GateValue (startType "start") [int p1], 1)]
+t1 _ endType _ p2 q2 1 = Map.fromList [(GateValue (endType "end") [int p2, int q2], 2)]
+t1 _ _ _ _ _ 2 = Map.fromList [(GateValue (Out "done") [], 3)]
+t1 _ _ _ _ _ 3 = Map.empty
 impParameterized :: (String -> IOAct String String) -> (String -> IOAct String String) -> Integer -> Integer -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impParameterized startType endType p1 p2 q2 = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> t1 startType endType p1 p2 q2) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -438,20 +503,20 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
         Nothing -> do
             assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
             assertEqual (testName ++ ": expected conformal trace") [
-                startType' "start" [Cint p1],
-                endType' "end" [Cint p2, Cint q2],
+                startType' "start" [int p1],
+                endType' "end" [int p2, int q2],
                 out "done" [],
                 GateValue δ []
                 ] observed
         Just t -> do
             assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
             assertEqual (testName ++ ": expected nonconformal trace") t observed
-inp :: i -> [Constant] -> GateValue (IOAct (InputAttempt i) o)
-inp g vals = GateValue (In (InputAttempt (g, True))) vals
-inpf :: i -> [Constant] -> GateValue (IOAct (InputAttempt i) o)
-inpf g vals = GateValue (In (InputAttempt (g, False))) vals
-out :: o -> [Constant] -> GateValue (IOAct i (Suspended o))
-out g vals = GateValue (Out (OutSusp g)) vals
+inp :: i -> [Some Constant] -> GateValue (IOAct (InputAttempt i) o)
+inp g = GateValue (In (InputAttempt (g, True)))
+inpf :: i -> [Some Constant] -> GateValue (IOAct (InputAttempt i) o)
+inpf g = GateValue (In (InputAttempt (g, False)))
+out :: o -> [Some Constant] -> GateValue (IOAct i (Suspended o))
+out g = GateValue (Out (OutSusp g))
 
 testLatticeSTSParameterized :: String -> Bool -> (forall a. FreeLatticeSlow a -> FreeLatticeSlow a -> FreeLatticeSlow a) -> Integer -> Integer -> Integer -> Maybe [SuspendedIFGateValue String String] -> [Test]
 testLatticeSTSParameterized testName inputThenOut comp p1 p2 q2 expectedNonConformalTrace = [
@@ -465,18 +530,18 @@ testLatticeSTS = concat [
     testLatticeSTSParameterized "a1" inputThenOutput (\/) 2 2 2 Nothing, -- pass: output (2,2) satisfies the first guard
     testLatticeSTSParameterized "a2" inputThenOutput (\/) 2 4 2 Nothing, -- pass: output (4,2) satisfies the second guard
     testLatticeSTSParameterized "a3" inputThenOutput (\/) 2 3 1 Nothing, -- pass: output (3,1) satisfies both guards
-    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]), -- fail: output (4,4) satisfies neither guard
-    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [Cint 2], out "end" [Cint 2, Cint 2]]), -- fail: output (2,2) satisfies the first guards, but not both
-    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 2]]), -- fail: output (4,2) satisfies the second guards, but not both
-    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [Cint 2], out "end" [Cint 4, Cint 4]]), -- fail: output (4,4) satisfies neither guard
+    testLatticeSTSParameterized "a4" inputThenOutput (\/) 2 4 4 (Just [inp "start" [int 2], out "end" [int 4, int 4]]), -- fail: output (4,4) satisfies neither guard
+    testLatticeSTSParameterized "a5" inputThenOutput (/\) 2 2 2 (Just [inp "start" [int 2], out "end" [int 2, int 2]]), -- fail: output (2,2) satisfies the first guards, but not both
+    testLatticeSTSParameterized "a6" inputThenOutput (/\) 2 4 2 (Just [inp "start" [int 2], out "end" [int 4, int 2]]), -- fail: output (4,2) satisfies the second guards, but not both
+    testLatticeSTSParameterized "a7" inputThenOutput (/\) 2 4 4 (Just [inp "start" [int 2], out "end" [int 4, int 4]]), -- fail: output (4,4) satisfies neither guard
     testLatticeSTSParameterized "a8" inputThenOutput (/\) 2 3 1 Nothing, -- pass: output (3,1) satisfies both guards
 
     testLatticeSTSParameterized "b1" outputThenInput (\/) 2 3 1 Nothing, -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested and observed
-    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 3, Cint 1]]) -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested but refused
+    testLatticeSTSParameterized "b2" outputThenInput (\/) 2 5 5 (Just [out "start" [int 2], inpf "end" [int 3, int 1]]) -- pass: (3,1) is the only input that matches both guards, so is the only specified input overall, thus will be tested but refused
      -- FIXME the next tests are actually unsound: it will pass under the assumption that the test selection (SMT solver) will pick the last two number parameters as input,
      -- but if not, the test case will incorrectly fail. To fix this, change the implementation to accept any (p,q) satisfying any of the guards 〚p+q=4〛 or 〚p-q=2〛
     --testLatticeSTSParameterized "b3" outputThenInput (/\) 2 0 (-2) Nothing, -- pass: (0,-2) is an input that matches one of the guards, so is specified, thus may be tested and in that case will be observed
-    --testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [Cint 2], inpf "end" [Cint 0, Cint (-2)]]) -- fail: the tester will pick an input that matches one of the guards, but will be rejected by the implementation
+    --testLatticeSTSParameterized "b4" outputThenInput (/\) 2 5 5 (Just [out "start" [int 2], inpf "end" [int 0, CInt (-2)]]) -- fail: the tester will pick an input that matches one of the guards, but will be rejected by the implementation
     ]
     where
     inputThenOutput = True
@@ -494,16 +559,16 @@ testLatticeSTS = concat [
 -}
 specQ :: IOSTS FreeLatticeSlow Integer String String
 specQ =
-    let p = sVar pvar :: Expr Integer
-        q = sVar qvar :: Expr Integer
-        x = sVar xvar :: Expr Integer
-        start = SymInteract (In "start") [pvar]
-        end = SymInteract (Out "end") [pvar, qvar]
+    let p = sVar pvar
+        q = sVar qvar
+        x = sVar xvar
+        start = SymInteract (In "start") [Some pvar]
+        end = SymInteract (Out "end") [Some pvar, Some qvar]
         initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd = p .+ q .== p .+ q .+ x
         assignX = assignment [xvar =: p]
-        switches = \s -> case s of
+        switches = \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd noAssignment, 2))]
                         2 -> Map.empty
@@ -517,8 +582,8 @@ specQ =
   * p
 -}
 tq :: (Ord g, IsString t, Num a1, Num a2, Eq a1) => (t -> g) -> Integer -> a1 -> Map.Map (GateValue g) a2
-tq startType p 0 = Map.fromList $ [((GateValue (startType "start") [Cint p]), 1)]
-tq _ _ 1 = Map.fromList $ []
+tq startType p 0 = Map.fromList [(GateValue (startType "start") [int p], 1)]
+tq _ _ 1 = Map.empty
 impQParameterized :: (String -> IOAct String String) -> Integer -> IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
 impQParameterized startType p = do
     imp <- pureAdapter (mkStdGen 123) 0.5 (Map.mapKeys gateValueAsIOAct <$> tq startType p) (0 :: Integer) :: IO (Adapter.Adapter (SuspendedIF (GateValue String) (GateValue String)) (Maybe (GateValue String)))
@@ -536,7 +601,7 @@ testLatticeSTSQuiescentPass testName _ = TestCase $ do
 
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
     assertEqual (testName ++ ": expected conformal trace") [
-                inp "start" [Cint 2],
+                inp "start" [int 2],
                 GateValue δ []
                 ] observed
 
@@ -552,7 +617,7 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
 
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
-                inp "start" [Cint 2],
+                inp "start" [int 2],
                 GateValue δ []
                 ] observed
 
@@ -568,8 +633,8 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
 
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
-                inp "start" [Cint 2],
-                out "end" [Cint 42, Cint 42]
+                inp "start" [int 2],
+                out "end" [int 42, int 42]
                 ] observed
 
 
@@ -587,11 +652,11 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
 -}
 specUnimplementableParameterized :: Bool -> IOSTS FreeLatticeSlow Integer String String
 specUnimplementableParameterized splitFirst =
-    let p = sVar pvar :: Expr Integer
-        q = sVar qvar :: Expr Integer
-        x = sVar xvar :: Expr Integer
-        start = SymInteract (In "start") [pvar]
-        end = SymInteract (Out "end") [pvar, qvar]
+    let p = sVar pvar
+        q = sVar qvar
+        x = sVar xvar
+        start = SymInteract (In "start") [Some pvar]
+        end = SymInteract (Out "end") [Some pvar, Some qvar]
         initConf = pure 0 :: FreeLatticeSlow Integer
         guardStart = 1 .< p .&& p .< 3
         guardEnd1 = p .+ q .== x .+ 2
@@ -599,12 +664,12 @@ specUnimplementableParameterized splitFirst =
         assignX = assignment [xvar =: p]
         switches =
             if splitFirst
-                then \s -> case s of
+                then \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1) /\ pure (stsTLoc guardStart assignX, 2))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 3))]
                         2 -> Map.fromList [(end, pure (stsTLoc guardEnd2 noAssignment, 3))]
                         3 -> Map.empty
-                else \s -> case s of
+                else \case
                         0 -> Map.fromList [(start, pure (stsTLoc guardStart assignX, 1))]
                         1 -> Map.fromList [(end, pure (stsTLoc guardEnd1 noAssignment, 2) /\ pure (stsTLoc guardEnd2 noAssignment, 3))]
                         2 -> Map.empty
@@ -623,7 +688,7 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
 
     assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
-                inp "start" [Cint 2],
+                inp "start" [int 2],
                 GateValue δ []
                 ] observed
 
@@ -632,21 +697,21 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
 -}
 data Divisibility = Prime | Divisible deriving (Eq, Ord, Show)
 
-ivar :: Variable
+ivar :: Variable Integer
 ivar = Variable "i" IntType
-jvar :: Variable
+jvar :: Variable Integer
 jvar = Variable "j" IntType
 
 guardedInputSTS :: IOSTS Det Bool Divisibility ()
 guardedInputSTS =
     let i = sVar ivar :: Expr Integer
         j = sVar jvar :: Expr Integer
-        echo = SymInteract (Out ()) [jvar]
+        echo = SymInteract (Out ()) [Some jvar]
         echoAssign = assignment [ivar =: 1 .+ j]
-        yes = SymInteract (In Prime) [jvar]
+        yes = SymInteract (In Prime) [Some jvar]
         yesGuard = i .% 2 .== 0 .&& j .== i .- 1
         yesAssign = assignment [ivar =: i .+ j]
-        no = SymInteract (In Divisible) [jvar]
+        no = SymInteract (In Divisible) [Some jvar]
         noGuard = i .% 2 .== 1 .&& j .== i .- 1
         noAssign = assignment [ivar =: i .+ j]
         initConf = return False
@@ -657,7 +722,7 @@ guardedInputSTS =
     in automaton initConf (Set.fromList [echo, yes, no]) switches
 
 guardedInputInitAssign :: Valuation
-guardedInputInitAssign = fromConstantsMap $ Map.singleton ivar (Cint 42)
+guardedInputInitAssign = Valuation $ DMap.singleton ivar (Val 42)
 
 guardedInputModel :: STSIntrp Det Bool (IOAct Divisibility ())
 guardedInputModel = interpretSTS guardedInputSTS guardedInputInitAssign
@@ -675,8 +740,8 @@ testSTSDataSelectionGuardedInput = TestCase $ do
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     (verdict, ((observed, _), _)) <- runSMTTester guardedInputModel testSelector adap
     assertEqual ("expected the selector to pick the only guard-satisfying input ?Prime [41], got " <> show observed)
-        [ GateValue (In Prime) [Cint 41]
-        , GateValue (Out ()) [Cint 41]
+        [ GateValue (In Prime) [Some $ CInt 41]
+        , GateValue (Out ()) [Some $ CInt 41]
         ] observed
     assertEqual ("expected Pass after " <> show observed) Pass verdict
 
@@ -692,32 +757,25 @@ testLatticeSTSQuiescence = [
     testLatticeSTSUnimplementable "u2'" False -- an unimplementable specification (two conjunctive conditions contradicting eachother) is not implemented by a quiescent implementation
     ]
 
--- ============================================================================
--- Symbolic path-condition / execution-tree tests (merged from feature branch).
--- Ported to the sbv-based backend: the old Lattest.SMT.SMT/Config solver is
--- replaced by Lattest.SMT.runSMT, FreeLattice by the (now CNF) FreeLattice,
--- and the non-normalising free lattice by Reference.FreeLatticeSlow.
--- ============================================================================
-
+-- TODO: put these in a let or where
 p, q, x :: Expr Integer
 p = sVar pvar
 q = sVar qvar
 x = sVar xvar
-
 water, ok, coffee :: SymInteract (IOAct String String)
-water = SymInteract (In "water") [pvar]
-ok = SymInteract (Out "ok") [pvar]
+water = SymInteract (In "water") [Some pvar]
+ok = SymInteract (Out "ok") [Some pvar]
 coffee = SymInteract (Out "coffee") []
 
 -- Interactions and STS for the branching tests, using the CNF lattice monad (FreeLattice).
 -- Input variants (unsatisfied guard -> underspecified/top) and output variants (unsatisfied guard -> forbidden/bottom).
-gateA = SymInteract (In "a") [pvar, qvar]
-gateB = SymInteract (In "b") [pvar, qvar]
-gateAo = SymInteract (Out "a") [pvar, qvar]
-gateBo = SymInteract (Out "b") [pvar, qvar]
+gateA = SymInteract (In "a") [Some pvar, Some qvar]
+gateB = SymInteract (In "b") [Some pvar, Some qvar]
+gateAo = SymInteract (Out "a") [Some pvar, Some qvar]
+gateBo = SymInteract (Out "b") [Some pvar, Some qvar]
 
 branchInitAssign :: Valuation
-branchInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+branchInitAssign = Valuation $ DMap.singleton xvar (Val 0)
 
 -- A depth-2 binary-branching STS over the CNF monad:
 --   loc 0 --a--> {loc 1, loc 2}   combined with op0
@@ -801,9 +859,9 @@ testBranchingPathCondition = TestCase $ do
 --   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
 -- One input gate keeps the symbolic-execution tree narrow enough to read.
 inGate :: SymInteract (IOAct String String)
-inGate = SymInteract (In "a") [pvar]
+inGate = SymInteract (In "a") [Some pvar]
 outGate :: SymInteract (IOAct String String)
-outGate = SymInteract (Out "x") [pvar]
+outGate = SymInteract (Out "x") [Some pvar]
 
 treeSTS :: IOSTS FreeLattice Integer String String
 treeSTS =
@@ -814,17 +872,18 @@ treeSTS =
             _ -> Map.empty
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate, outGate]) switches
 
-milkvar :: Variable
+milkvar :: Variable Bool
 milkvar = (Variable "milk" BoolType)
 milk = sVar milkvar
+a,b,tea,espresso,take :: SymInteract (IOAct String String)
 a = SymInteract (In "a") []
-b = SymInteract (In "b") [pvar]
-tea = SymInteract (Out "tea") [pvar]
-espresso = SymInteract (Out "esp") [pvar, milkvar]
+b = SymInteract (In "b") [Some pvar]
+tea = SymInteract (Out "tea") [Some pvar]
+espresso = SymInteract (Out "esp") [Some pvar, Some milkvar]
 take = SymInteract (In "take") []
 
 composedCoffeeMachineAssign :: Valuation
-composedCoffeeMachineAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
+composedCoffeeMachineAssign = Valuation $ DMap.singleton xvar (Val 0)
 
 composedCoffeeMachine :: IOSTS FreeLatticeSlow String String String
 composedCoffeeMachine =
@@ -874,7 +933,7 @@ prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t
     goConf ind _   (FreeLatticeSlow Top)    = [ind ++ "⊤ (underspecified)"]
     goConf ind _   (FreeLatticeSlow Bottom) = [ind ++ "⊥ (forbidden)"]
     goConf ind sub (FreeLatticeSlow (Levitate free)) = goFree ind sub free
-    goFree ind sub (Var e) = sub ind e
+    goFree ind sub (Algebra.Lattice.Free.Var e) = sub ind e
     goFree ind sub free@(_ :/\: _) =
         let conjuncts = meets free
         in (ind ++ "∧ (" ++ show (length conjuncts) ++ " conjuncts):")
@@ -922,7 +981,7 @@ testComposedPathCondition regenerate = TestCase $ goldenAssert
         , "" ]
 
 -- | One step of a concrete trace: a symbolic interaction together with the concrete values for its parameters.
-type ConcreteStep = (IOSymInteract String String, [Constant])
+type ConcreteStep = (IOSymInteract String String, [Some Constant])
 
 -- | The concrete gate value of a step, for feeding to `after`.
 stepGateValue :: ConcreteStep -> GateValue (IOAct String String)
@@ -931,25 +990,28 @@ stepGateValue (SymInteract g _, vals) = GateValue g vals
 -- | Build the valuation that fills the symbolic guards: the parameter `v` of the interaction at trace position `n`
 -- appears in the guards as `v_n` (matching `indexVar` in SolveSTS.hs), and is bound here to its concrete value.
 traceValuation :: [ConcreteStep] -> Valuation
-traceValuation steps = fromConstantsMap $ Map.unions $ zipWith stepConstMap [0..] steps
+traceValuation steps = Valuation $ DMap.unions $ zipWith stepConstMap [0..] steps
     where
-    stepConstMap n (SymInteract _ vars, vals) = Map.fromList $ zipWith (\var val -> (indexVar n var, val)) vars vals
+    stepConstMap :: Int -> ConcreteStep -> DMap.DMap Variable Val
+    stepConstMap n (SymInteract _ vars, vals) = DMap.fromList $ zipWith (\(Some var) (Some (Constant t val)) -> has @ExprType var $ case geq (typeOf' var) t of
+      Just r@Refl -> indexVar n var :=> withExprConstraints t (Val val)) vars vals
+    indexVar 0 var = var
     indexVar n (Variable name t) = Variable (name ++ "_" ++ show n) t
 
 testConcreteTraceSpecifiedAllowedCorrespondence :: Test
 testConcreteTraceSpecifiedAllowedCorrespondence = TestList
     [ correspondenceCase "[water 3]"                         -- neither: input, guard x<10 holds (x=0)
-        [(water, [Cint 3])] Indefinite
+        [(water, [Some $ CInt 3])] Indefinite
     , correspondenceCase "[water 3, water 5]"                -- neither: second water still has x=3<10
-        [(water, [Cint 3]), (water, [Cint 5])] Indefinite
+        [(water, [Some $ CInt 3]), (water, [Some $ CInt 5])] Indefinite
     , correspondenceCase "[water 12, water 5]"               -- underspecified: second water blocked, x=12>=10
-        [(water, [Cint 12]), (water, [Cint 5])] Underspecified
+        [(water, [Some $ CInt 12]), (water, [Some $ CInt 5])] Underspecified
     , correspondenceCase "[water 6, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
-        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool True])] Indefinite
+        [(water, [Some $ CInt 6]), (b, [Some $ CInt 4]), (espresso, [Some $ CInt 4, Some $ CBool True])] Indefinite
     , correspondenceCase "[water 6, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
-        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 5, Cbool True])] Forbidden
+        [(water, [Some $ CInt 6]), (b, [Some $ CInt 4]), (espresso, [Some $ CInt 5, Some $ CBool True])] Forbidden
     , correspondenceCase "[water 6, b 4, esp 4 nomilk]"      -- forbidden: esp output violates milk
-        [(water, [Cint 6]), (b, [Cint 4]), (espresso, [Cint 4, Cbool False])] Forbidden
+        [(water, [Some $ CInt 6]), (b, [Some $ CInt 4]), (espresso, [Some $ CInt 4, Some $ CBool False])] Forbidden
     ]
     where
     correspondenceCase label steps expectedSpecifiedness = TestCase $ do
@@ -984,10 +1046,11 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
 -- | Generate a concrete value for a symbolic parameter, based only on its declared type. The ranges are deliberately
 -- small: the example models are toy examples, so large integers would only slow things down without exercising new
 -- behaviour (guards compare against small constants like 2, 10).
-genConstantForType :: Variable -> Gen Constant
-genConstantForType (Variable _ IntType)    = Cint <$> choose (-5, 20)
-genConstantForType (Variable _ BoolType)   = Cbool <$> elements [False, True]
-genConstantForType (Variable _ StringType) = Cstring <$> elements ["", "a", "b", "c"]
+genConstantForType :: Variable a -> Gen (Constant a)
+genConstantForType (Variable _ IntType)    = CInt <$> choose (-5, 20)
+genConstantForType (Variable _ BoolType)   = CBool <$> elements [False, True]
+genConstantForType (Variable _ CharType)   = CChar <$> elements ['a', 'b', 'c']
+genConstantForType _ = error "not used at other types"
 
 -- | Generate a concrete trace over a model's alphabet: pick interactions (and hence their symbolic parameters) from
 -- the syntactic automaton, then fill in a value for each parameter. Traces are kept short, both because the toy
@@ -998,7 +1061,7 @@ genConcreteTrace intrpr = do
     len <- choose (0, 4)
     vectorOf len $ do
         interaction@(SymInteract _ vars) <- elements alph
-        vals <- traverse genConstantForType vars
+        vals <- traverse (\(Some v) -> Some <$> genConstantForType v) vars
         return (interaction, vals)
 
 -- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
@@ -1087,7 +1150,7 @@ stsConjOfDifferentVals =
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate]) switches
 
 getSTSIntrpState' :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
-getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 stsConjOfDifferentValsIntrpr :: STSIntrp FreeLattice Integer (IOAct String String)
 stsConjOfDifferentValsIntrpr = interpretSTS treeSTS branchInitAssign
@@ -1095,7 +1158,7 @@ stsConjOfDifferentValsIntrpr = interpretSTS treeSTS branchInitAssign
 testConjunctionOfDifferentValuations :: Test
 testConjunctionOfDifferentValuations = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpState' 0 0) (stateConf stsConjOfDifferentValsIntrpr)
-    _ <- assertAfter "after x: " stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Cint 0]) forbidden
+    _ <- assertAfter "after x: " stsConjOfDifferentValsIntrpr (GateValue (Out "x") [Some $ CInt 0]) forbidden
     return ()
 
 -----------------------------
@@ -1106,8 +1169,8 @@ stsExampleFL :: IOSTS FreeLattice Integer String String
 stsExampleFL =
     let p = sVar pvar :: Expr Integer
         x = sVar xvar :: Expr Integer
-        water = SymInteract (In "water") [pvar]
-        ok = SymInteract (Out "ok") [pvar]
+        water = SymInteract (In "water") [Some pvar]
+        ok = SymInteract (Out "ok") [Some pvar]
         coffee = SymInteract (Out "coffee") []
         waterGuard = 1 .<= p .&& p .<= 10
         waterAssign = assignment [xvar =: x .+ p]
@@ -1127,7 +1190,7 @@ stsPrelude =
     let p = sVar pvar :: Expr Integer
         x = sVar xvar :: Expr Integer
         startEmpty = SymInteract (In "startEmpty") []
-        startWithWater = SymInteract (In "startWithWater") [pvar]
+        startWithWater = SymInteract (In "startWithWater") [Some pvar]
         error = SymInteract (Out "error") []
         waterAssign = assignment [xvar =: x .+ p]
         initConf = ordReturn 0
@@ -1150,7 +1213,7 @@ stsSeqComposedAtOne :: STSIntrp FreeLattice (Either Integer Integer) (IOAct Stri
 stsSeqComposedAtOne = interpretSTS (sequentiallyAt stsPrelude [1] stsExampleFL) stsExampleInitAssign
 
 getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
-getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 testPrintSeqCompSTS :: Test
 testPrintSeqCompSTS = TestCase $ assertBool failureMessage (expected == actual)
@@ -1208,13 +1271,13 @@ testSeqComposedSTS = TestCase $ do
     -- branch 1: startEmpty
     intrp2 <- assertAfter "after startEmpty: " intrp1 (GateValue (In "startEmpty") []) (getSTSIntrpStateEither (Left 1) 0)
     -- behavior transitions to sts2
-    intrp3 <- assertAfter "after water 7: " intrp2 (GateValue (In "water") [Cint 7]) (getSTSIntrpStateEither (Right 1) 7)
-    intrp4 <- assertAfter "after ok 7: " intrp3 (GateValue (Out "ok") [Cint 7]) (getSTSIntrpStateEither (Right 0) 7)
-    intrp5 <- assertAfter "after water 9: " intrp4 (GateValue (In "water") [Cint 9]) (getSTSIntrpStateEither (Right 1) 16)
-    intrp6 <- assertAfter "after ok 16: " intrp5 (GateValue (Out "ok") [Cint 16]) (getSTSIntrpStateEither (Right 0) 16)
+    intrp3 <- assertAfter "after water 7: " intrp2 (GateValue (In "water") [Some $ CInt 7]) (getSTSIntrpStateEither (Right 1) 7)
+    intrp4 <- assertAfter "after ok 7: " intrp3 (GateValue (Out "ok") [Some $ CInt 7]) (getSTSIntrpStateEither (Right 0) 7)
+    intrp5 <- assertAfter "after water 9: " intrp4 (GateValue (In "water") [Some $ CInt 9]) (getSTSIntrpStateEither (Right 1) 16)
+    intrp6 <- assertAfter "after ok 16: " intrp5 (GateValue (Out "ok") [Some $ CInt 16]) (getSTSIntrpStateEither (Right 0) 16)
     _ <- assertAfter "after coffee: " intrp6 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     -- branch 2: startWithWater
-    intrp8 <- assertAfter "after startWithWater: " intrp1 (GateValue (In "startWithWater") [Cint 16]) (getSTSIntrpStateEither (Left 2) 16)
+    intrp8 <- assertAfter "after startWithWater: " intrp1 (GateValue (In "startWithWater") [Some $ CInt 16]) (getSTSIntrpStateEither (Left 2) 16)
     _ <- assertAfter "after coffee: " intrp8 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     return ()
 
@@ -1225,13 +1288,13 @@ testSeqComposedAtSTS = TestCase $ do
     -- branch 1: startEmpty
     intrp2 <- assertAfter "after startEmpty: " intrp1 (GateValue (In "startEmpty") []) (getSTSIntrpStateEither (Left 1) 0)
     -- behavior transitions to sts2
-    intrp3 <- assertAfter "after water 7: " intrp2 (GateValue (In "water") [Cint 7]) (getSTSIntrpStateEither (Right 1) 7)
-    intrp4 <- assertAfter "after ok 7: " intrp3 (GateValue (Out "ok") [Cint 7]) (getSTSIntrpStateEither (Right 0) 7)
-    intrp5 <- assertAfter "after water 9: " intrp4 (GateValue (In "water") [Cint 9]) (getSTSIntrpStateEither (Right 1) 16)
-    intrp6 <- assertAfter "after ok 16: " intrp5 (GateValue (Out "ok") [Cint 16]) (getSTSIntrpStateEither (Right 0) 16)
+    intrp3 <- assertAfter "after water 7: " intrp2 (GateValue (In "water") [Some $ CInt 7]) (getSTSIntrpStateEither (Right 1) 7)
+    intrp4 <- assertAfter "after ok 7: " intrp3 (GateValue (Out "ok") [Some $ CInt 7]) (getSTSIntrpStateEither (Right 0) 7)
+    intrp5 <- assertAfter "after water 9: " intrp4 (GateValue (In "water") [Some $ CInt 9]) (getSTSIntrpStateEither (Right 1) 16)
+    intrp6 <- assertAfter "after ok 16: " intrp5 (GateValue (Out "ok") [Some $ CInt 16]) (getSTSIntrpStateEither (Right 0) 16)
     _ <- assertAfter "after coffee: " intrp6 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     -- branch 2: startWithWater
-    intrp8 <- assertAfter "after startWithWater: " intrp1 (GateValue (In "startWithWater") [Cint 16]) (getSTSIntrpStateEither (Left 2) 16)
+    intrp8 <- assertAfter "after startWithWater: " intrp1 (GateValue (In "startWithWater") [Some $ CInt 16]) (getSTSIntrpStateEither (Left 2) 16)
     _ <- assertAfter "after coffee: " intrp8 (GateValue (Out "coffee") []) (getSTSIntrpStateEither (Right 2) 16)
     return ()
 
@@ -1244,8 +1307,8 @@ testSequentiallyAtNonSinkLocation = TestCase $ do
     let intrpr0 = interpretSTS (sequentiallyAt stsPrelude [0] stsExampleFL) stsExampleInitAssign
     assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf intrpr0)
     intrp1 <- assertAfter "after error, stsPrelude's own transition at location 0 still works: " intrpr0 (GateValue (Out "error") []) (getSTSIntrpStateEither (Left 0) 0)
-    intrp2 <- assertAfter "after water 7, entering stsExample directly from location 0: " intrp1 (GateValue (In "water") [Cint 7]) (getSTSIntrpStateEither (Right 1) 7)
-    intrp3 <- assertAfter "after ok 7: " intrp2 (GateValue (Out "ok") [Cint 7]) (getSTSIntrpStateEither (Right 0) 7)
+    intrp2 <- assertAfter "after water 7, entering stsExample directly from location 0: " intrp1 (GateValue (In "water") [Some $ CInt 7]) (getSTSIntrpStateEither (Right 1) 7)
+    intrp3 <- assertAfter "after ok 7: " intrp2 (GateValue (Out "ok") [Some $ CInt 7]) (getSTSIntrpStateEither (Right 0) 7)
     -- the transition is not allowed; once behavior moves to the second sts, actions in the first one are no longer allowed
     _ <- assertAfter "after error: " intrp3 (GateValue (Out "error") []) forbidden
     return ()
@@ -1255,10 +1318,10 @@ testSequentiallyAtNonSinkLocation = TestCase $ do
 stsGuardedA :: IOSTS FreeLattice Integer String String
 stsGuardedA =
     let p = sVar pvar :: Expr Integer
-        step = SymInteract (In "step") [pvar]
+        step = SymInteract (In "step") [Some pvar]
         stepA = SymInteract (In "stepA") []
         outA = SymInteract (Out "outA") []
-        outC = SymInteract (Out "outC") [pvar]
+        outC = SymInteract (Out "outC") [Some pvar]
         outGuardA = 1 .<= p .&& p .<= 2
         stepGuard = 3 .<= p .&& p .<= 5
         initConf = ordReturn 0
@@ -1272,11 +1335,11 @@ stsGuardedA =
 stsGuardedB :: IOSTS FreeLattice Integer String String
 stsGuardedB =
     let p = sVar pvar :: Expr Integer
-        step = SymInteract (In "step") [pvar]
+        step = SymInteract (In "step") [Some pvar]
         stepB = SymInteract (In "stepB") []
         outA = SymInteract (Out "outA") []
         outB = SymInteract (Out "outB") []
-        outC = SymInteract (Out "outC") [pvar]
+        outC = SymInteract (Out "outC") [Some pvar]
         outGuardB = 2 .<= p .&& p .<= 3 -- overlaps with outGuardA at 2
         stepGuard = 1 .<= p .&& p .<= 3
         initConf = ordReturn 0
@@ -1296,10 +1359,10 @@ testSequentiallyAtSameAction :: Test
 testSequentiallyAtSameAction = TestCase $ do
     let intrpr0 = interpretSTS (sequentiallyAt stsGuardedA [0] stsGuardedB) stsExampleInitAssign
     assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf intrpr0)
-    _ <- assertAfter "after step 4, only A's guard holds: " intrpr0 (GateValue (In "step") [Cint 4]) (getSTSIntrpStateEither (Left 1) 0)
-    _ <- assertAfter "after step 1, only B's guard holds: " intrpr0 (GateValue (In "step") [Cint 1]) (getSTSIntrpStateEither (Right 1) 0)
+    _ <- assertAfter "after step 4, only A's guard holds: " intrpr0 (GateValue (In "step") [Some $ CInt 4]) (getSTSIntrpStateEither (Left 1) 0)
+    _ <- assertAfter "after step 1, only B's guard holds: " intrpr0 (GateValue (In "step") [Some $ CInt 1]) (getSTSIntrpStateEither (Right 1) 0)
     -- satisfies both guards: the merged configuration conjunctively requires both destinations
-    intrp3 <- assertAfter "after step 3, both guards hold: " intrpr0 (GateValue (In "step") [Cint 3])
+    intrp3 <- assertAfter "after step 3, both guards hold: " intrpr0 (GateValue (In "step") [Some $ CInt 3])
         (getSTSIntrpStateEither (Left 1) 0 /\ getSTSIntrpStateEither (Right 1) 0)
     _ <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateEither (Left 2) 0 /\ getSTSIntrpStateEither (Right 2) 0)
@@ -1323,7 +1386,7 @@ testSelfSeqComposed = TestCase $ do
     intrp1 <- assertAfter "after error: " stsSelfSeqComposed (GateValue (Out "error") []) (getSTSIntrpState' 0 0)
     intrp2 <- assertAfter "after startEmpty: " intrp1 (GateValue (In "startEmpty") []) (getSTSIntrpState' 1 0)
     intrp3 <- assertAfter "after error: " intrp2 (GateValue (Out "error") []) (getSTSIntrpState' 0 0)
-    intrp4 <- assertAfter "after startWithWater 7: " intrp3 (GateValue (In "startWithWater") [Cint 7]) (getSTSIntrpState' 2 7)
+    intrp4 <- assertAfter "after startWithWater 7: " intrp3 (GateValue (In "startWithWater") [Some $ CInt 7]) (getSTSIntrpState' 2 7)
     _ <- assertAfter "after startEmpty: " intrp4 (GateValue (In "startEmpty") []) (getSTSIntrpState' 1 7)
     return ()
 
@@ -1334,7 +1397,7 @@ testSelfSeqComposedAt = TestCase $ do
     intrp1 <- assertAfter "after error: " stsSelfSeqComposed (GateValue (Out "error") []) (getSTSIntrpState' 0 0)
     intrp2 <- assertAfter "after startEmpty: " intrp1 (GateValue (In "startEmpty") []) (getSTSIntrpState' 1 0)
     intrp3 <- assertAfter "after error: " intrp2 (GateValue (Out "error") []) (getSTSIntrpState' 0 0)
-    intrp4 <- assertAfter "after startWithWater 7: " intrp3 (GateValue (In "startWithWater") [Cint 7]) (getSTSIntrpState' 2 7)
+    intrp4 <- assertAfter "after startWithWater 7: " intrp3 (GateValue (In "startWithWater") [Some $ CInt 7]) (getSTSIntrpState' 2 7)
     _ <- assertAfter "after startEmpty: " intrp4 (GateValue (In "startEmpty") []) (getSTSIntrpState' 1 7)
     return ()
 
@@ -1344,7 +1407,7 @@ testSelfSeqComposedAtOne = TestCase $ do
     intrp1 <- assertAfter "after error: " stsSelfSeqComposedAtOne (GateValue (Out "error") []) (getSTSIntrpState' 0 0)
     intrp2 <- assertAfter "after startEmpty: " intrp1 (GateValue (In "startEmpty") []) (getSTSIntrpState' 1 0)
     intrp3 <- assertAfter "after startEmpty: " intrp2 (GateValue (In "startEmpty") []) (getSTSIntrpState' 1 0)
-    intrp4 <- assertAfter "after startWithWater 7: " intrp3 (GateValue (In "startWithWater") [Cint 7]) (getSTSIntrpState' 2 7)
+    intrp4 <- assertAfter "after startWithWater 7: " intrp3 (GateValue (In "startWithWater") [Some $ CInt 7]) (getSTSIntrpState' 2 7)
     -- Sequentially composed only at location 1, so 2 remains sink.
     _ <- assertAfter "after startEmpty: " intrp4 (GateValue (Out "error") []) forbidden
     return ()
@@ -1386,20 +1449,20 @@ testConjunctionGuardedSTS = TestCase $ do
     assertEqual "\ninitial state " conjInitState (stateConf stsConjGuarded)
     _ <- assertAfter "after outA: " stsConjGuarded (GateValue (In "stepA") []) conjInitState
     -- only stsGuardedA's guard holds
-    _ <- assertAfter "after step 4, only stsGuardedA's guard holds: " stsConjGuarded (GateValue (In "step") [Cint 4]) (getSTSIntrpStateEither (Left 1) 0)
+    _ <- assertAfter "after step 4, only stsGuardedA's guard holds: " stsConjGuarded (GateValue (In "step") [Some $ CInt 4]) (getSTSIntrpStateEither (Left 1) 0)
     -- only B's guard holds
-    _ <- assertAfter "after step 1, only B's guard holds: " stsConjGuarded (GateValue (In "step") [Cint 1]) (getSTSIntrpStateEither (Right 1) 0)
+    _ <- assertAfter "after step 1, only B's guard holds: " stsConjGuarded (GateValue (In "step") [Some $ CInt 1]) (getSTSIntrpStateEither (Right 1) 0)
     -- both guards hold: conjunction of both destinations
-    intrp3 <- assertAfter "after step 3, both guards hold: " stsConjGuarded (GateValue (In "step") [Cint 3])
+    intrp3 <- assertAfter "after step 3, both guards hold: " stsConjGuarded (GateValue (In "step") [Some $ CInt 3])
         (getSTSIntrpStateEither (Left 1) 0 /\ getSTSIntrpStateEither (Right 1) 0)
     -- outA is allowed by both
     intrp4 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateEither (Left 2) 0 /\ getSTSIntrpStateEither (Right 2) 0)
     -- only the overlapping value for outC (2) is allowed
-    _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Cint 2])
+    _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Some $ CInt 2])
         (getSTSIntrpStateEither (Left 0) 0 /\ getSTSIntrpStateEither (Right 0) 0)
-    _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Cint 3]) forbidden
-    _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Cint 1]) forbidden
+    _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Some $ CInt 3]) forbidden
+    _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Some $ CInt 1]) forbidden
     -- outB is only allowed by B, so the conjunction forbids it
     _ <- assertAfter "after outB: " intrp3 (GateValue (Out "outB") []) forbidden
     return ()
@@ -1410,11 +1473,11 @@ testDisjunctionGuardedSTS = TestCase $ do
     let disjInitState = getSTSIntrpStateEither (Left 0) 0 \/ getSTSIntrpStateEither (Right 0) 0
     assertEqual "\ninitial state " disjInitState (stateConf stsDisjGuarded)
     -- only defined for B
-    _ <- assertAfter "after step 4: " stsDisjGuarded (GateValue (In "step") [Cint 4]) underspecified
+    _ <- assertAfter "after step 4: " stsDisjGuarded (GateValue (In "step") [Some $ CInt 4]) underspecified
     -- only defined for A
-    _ <- assertAfter "after step 1: " stsDisjGuarded (GateValue (In "step") [Cint 1]) underspecified
+    _ <- assertAfter "after step 1: " stsDisjGuarded (GateValue (In "step") [Some $ CInt 1]) underspecified
     -- both guards hold
-    intrp3 <- assertAfter "after step 3, both guards hold: " stsDisjGuarded (GateValue (In "step") [Cint 3])
+    intrp3 <- assertAfter "after step 3, both guards hold: " stsDisjGuarded (GateValue (In "step") [Some $ CInt 3])
         (getSTSIntrpStateEither (Left 1) 0 \/ getSTSIntrpStateEither (Right 1) 0)
     -- outB is only allowed by B (still allowed by the disjunction):
     _ <- assertAfter "after outB: " intrp3 (GateValue (Out "outB") []) (getSTSIntrpStateEither (Right 2) 0)
@@ -1422,19 +1485,19 @@ testDisjunctionGuardedSTS = TestCase $ do
     intrp5 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateEither (Left 2) 0 \/ getSTSIntrpStateEither (Right 2) 0)
     -- only the overlapping value for outC (2) is allowed
-    _ <- assertAfter "after outC 2: " intrp5 (GateValue (Out "outC") [Cint 2]) disjInitState
-    _ <- assertAfter "after outC 3: " intrp5 (GateValue (Out "outC") [Cint 3]) disjInitState
-    _ <- assertAfter "after outC 1: " intrp5 (GateValue (Out "outC") [Cint 1]) disjInitState
+    _ <- assertAfter "after outC 2: " intrp5 (GateValue (Out "outC") [Some $ CInt 2]) disjInitState
+    _ <- assertAfter "after outC 3: " intrp5 (GateValue (Out "outC") [Some $ CInt 3]) disjInitState
+    _ <- assertAfter "after outC 1: " intrp5 (GateValue (Out "outC") [Some $ CInt 1]) disjInitState
     return ()
 
 stsGuardedC :: IOSTS FreeLattice Integer String String
 stsGuardedC =
     let p = sVar pvar :: Expr Integer
-        step = SymInteract (In "step") [pvar]
+        step = SymInteract (In "step") [Some pvar]
         stepC = SymInteract (In "stepC") []
         outA = SymInteract (Out "outA") []
         outD = SymInteract (Out "outD") []
-        outC = SymInteract (Out "outC") [pvar]
+        outC = SymInteract (Out "outC") [Some pvar]
         outGuardC = 2 .== p
         stepGuard = 2 .<= p .&& p .<= 4
         initConf = ordReturn 0
@@ -1446,7 +1509,7 @@ stsGuardedC =
     in automaton initConf (Set.fromList [step, stepC, outA, outD, outC]) switches
 
 getSTSIntrpStateLabeled :: String -> Integer -> Integer -> FreeLattice (IntrpState (String, Integer))
-getSTSIntrpStateLabeled k loc val = ordReturn $ IntrpState (k, loc) $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getSTSIntrpStateLabeled k loc val = ordReturn $ IntrpState (k, loc) $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 stsConjGuardedAll :: STSIntrp FreeLattice (String, Integer) (IOAct String String)
 stsConjGuardedAll = interpretSTS (conjunctionAll [("A", stsGuardedA), ("B", stsGuardedB), ("C", stsGuardedC)]) stsExampleInitAssign
@@ -1461,20 +1524,20 @@ testConjunctionAllGuardedSTS = TestCase $ do
     -- only specified at A, still allowed
     _ <- assertAfter "after stepA: " stsConjGuardedAll (GateValue (In "stepA") []) conjInitState
     -- only A's guard holds
-    _ <- assertAfter "after step 5, only A's guard holds: " stsConjGuardedAll (GateValue (In "step") [Cint 5]) (getSTSIntrpStateLabeled "A" 1 0)
+    _ <- assertAfter "after step 5, only A's guard holds: " stsConjGuardedAll (GateValue (In "step") [Some $ CInt 5]) (getSTSIntrpStateLabeled "A" 1 0)
     -- only A and C's guards hold
-    _ <- assertAfter "after step 4, A and C's guards hold: " stsConjGuardedAll (GateValue (In "step") [Cint 4])
+    _ <- assertAfter "after step 4, A and C's guards hold: " stsConjGuardedAll (GateValue (In "step") [Some $ CInt 4])
         (getSTSIntrpStateLabeled "A" 1 0 /\ getSTSIntrpStateLabeled "C" 1 0)
     -- all three guards hold: genuine three-way conjunction of all destinations
-    intrp3 <- assertAfter "after step 3, all three guards hold: " stsConjGuardedAll (GateValue (In "step") [Cint 3])
+    intrp3 <- assertAfter "after step 3, all three guards hold: " stsConjGuardedAll (GateValue (In "step") [Some $ CInt 3])
         (getSTSIntrpStateLabeled "A" 1 0 /\ getSTSIntrpStateLabeled "B" 1 0 /\ getSTSIntrpStateLabeled "C" 1 0)
     -- outA is allowed by all three
     intrp4 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateLabeled "A" 2 0 /\ getSTSIntrpStateLabeled "B" 2 0 /\ getSTSIntrpStateLabeled "C" 2 0)
     -- only the overlapping value for outC (2) is allowed; back to the composed initial state
-    _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Cint 2]) conjInitState
-    _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Cint 3]) forbidden -- only B's guard holds, forbidden
-    _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Cint 1]) forbidden -- only A's guard holds, forbidden
+    _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Some $ CInt 2]) conjInitState
+    _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Some $ CInt 3]) forbidden -- only B's guard holds, forbidden
+    _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Some $ CInt 1]) forbidden -- only A's guard holds, forbidden
     -- outB is only allowed by B, outD is only allowed by C: the conjunction forbids both
     _ <- assertAfter "after outB: " intrp3 (GateValue (Out "outB") []) forbidden
     _ <- assertAfter "after outD: " intrp3 (GateValue (Out "outD") []) forbidden
@@ -1484,10 +1547,10 @@ testDisjunctionAllGuardedSTS :: Test
 testDisjunctionAllGuardedSTS = TestCase $ do
     let disjInitState = getSTSIntrpStateLabeled "A" 0 0 \/ getSTSIntrpStateLabeled "B" 0 0 \/ getSTSIntrpStateLabeled "C" 0 0
     assertEqual "\ninitial state " disjInitState (stateConf stsDisjGuardedAll)
-    _ <- assertAfter "after step 5: " stsDisjGuardedAll (GateValue (In "step") [Cint 5]) underspecified -- only A's guard holds
-    _ <- assertAfter "after step 4: " stsDisjGuardedAll (GateValue (In "step") [Cint 4]) underspecified -- B's guard fails
+    _ <- assertAfter "after step 5: " stsDisjGuardedAll (GateValue (In "step") [Some $ CInt 5]) underspecified -- only A's guard holds
+    _ <- assertAfter "after step 4: " stsDisjGuardedAll (GateValue (In "step") [Some $ CInt 4]) underspecified -- B's guard fails
     -- all three guards hold
-    intrp3 <- assertAfter "after step 3, all three guards hold: " stsDisjGuardedAll (GateValue (In "step") [Cint 3])
+    intrp3 <- assertAfter "after step 3, all three guards hold: " stsDisjGuardedAll (GateValue (In "step") [Some $ CInt 3])
         (getSTSIntrpStateLabeled "A" 1 0 \/ getSTSIntrpStateLabeled "B" 1 0 \/ getSTSIntrpStateLabeled "C" 1 0)
     -- outA is allowed by all three
     intrp4 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
@@ -1496,9 +1559,9 @@ testDisjunctionAllGuardedSTS = TestCase $ do
     _ <- assertAfter "after outB: " intrp3 (GateValue (Out "outB") []) (getSTSIntrpStateLabeled "B" 2 0)
     _ <- assertAfter "after outD: " intrp3 (GateValue (Out "outD") []) (getSTSIntrpStateLabeled "C" 2 0)
     -- All values for outC are allowed, regardless of which guards hold
-    _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Cint 2]) disjInitState -- all guards hold
-    _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Cint 3]) disjInitState -- only B's guard holds
-    _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Cint 1]) disjInitState -- only A's guard holds
+    _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Some $ CInt 2]) disjInitState -- all guards hold
+    _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Some $ CInt 3]) disjInitState -- only B's guard holds
+    _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Some $ CInt 1]) disjInitState -- only A's guard holds
     return ()
 
 stsTriangle0 :: IOSTS FreeLattice Integer String String
@@ -1621,7 +1684,7 @@ testErrorDisjOfSTSWithMultpInitStates = TestCase $
 
 startGate = SymInteract (In "start") []
 o1Gate = SymInteract (Out "o1") []
-o2Gate = SymInteract (Out "o2") [pvar]
+o2Gate = SymInteract (Out "o2") [Some pvar]
 resetGate = SymInteract (In "reset") []
 
 stsPrependChecks :: IOSTS FreeLattice Integer String String
@@ -1648,7 +1711,7 @@ stsPrependChecksDisjIntrpr :: STSIntrp FreeLattice (CheckLoc Integer (IOSymInter
 stsPrependChecksDisjIntrpr = interpretSTS stsPrependChecksDisj stsExampleInitAssign
 
 getStableOrPendingState :: CheckLoc Integer (IOSymInteract String String) -> Integer -> FreeLattice (IntrpState (CheckLoc Integer (IOSymInteract String String)))
-getStableOrPendingState loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
+getStableOrPendingState loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 testPrintPrependOutputChecksDisj :: Test
 testPrintPrependOutputChecksDisj = TestCase $ assertBool failureMessage (expected == actual)
@@ -1716,16 +1779,16 @@ testPrependOutputChecksDisj = TestCase $ do
     assertEqual "\ninitial state " (s (Stable 0) 0) (stateConf stsPrependChecksDisjIntrpr)
     -- First case: same output gate, same initial location, same target location
     intrp0 <- assertAfter "after check_o2: " stsPrependChecksDisjIntrpr (GateValue (In "check_o2") []) (s (Pending 0 o2Gate 2) 0)
-    _ <- assertAfter "after o2 (meets only guard a): " intrp0 (GateValue (Out "o2") [Cint 6]) (s (Stable 2) 0)
-    _ <- assertAfter "after o2 (meets both guards): " intrp0 (GateValue (Out "o2") [Cint 4]) (s (Stable 2) 0)
-    _ <- assertAfter "after o2 (meets only guard b): " intrp0 (GateValue (Out "o2") [Cint 2]) (s (Stable 2) 0)
-    _ <- assertAfter "after o2 (meets no guard): " intrp0 (GateValue (Out "o2") [Cint 48]) forbidden
+    _ <- assertAfter "after o2 (meets only guard a): " intrp0 (GateValue (Out "o2") [Some $ CInt 6]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets both guards): " intrp0 (GateValue (Out "o2") [Some $ CInt 4]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets only guard b): " intrp0 (GateValue (Out "o2") [Some $ CInt 2]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets no guard): " intrp0 (GateValue (Out "o2") [Some $ CInt 48]) forbidden
     intrp1 <- assertAfter "after start: " stsPrependChecksDisjIntrpr (GateValue (In "start") []) (s (Stable 1) 0)
     -- Second case: outputs with different gates. If one is checked, the other is forbidden
     _ <- assertAfter "after o1: " intrp1 (GateValue (Out "o1") []) forbidden
     intrp2 <- assertAfter "after check_o1: " intrp1 (GateValue (In "check_o1") []) (s (Pending 1 o1Gate 2) 0)
     -- while pending, only the checked output is available: every other output stays forbidden
-    _ <- assertAfter "o2 while pending o1: " intrp2 (GateValue (Out "o2") [Cint 0]) forbidden
+    _ <- assertAfter "o2 while pending o1: " intrp2 (GateValue (Out "o2") [Some $ CInt 0]) forbidden
     _ <- assertAfter "next while pending o1: " intrp2 (GateValue (In "reset") []) underspecified
     _ <- assertAfter "check_o2 while pending o1: " intrp2 (GateValue (In "check_o2") []) underspecified
     intrp3 <- assertAfter "after o1: " intrp2 (GateValue (Out "o1") []) (s (Stable 2) 0)
@@ -1733,9 +1796,9 @@ testPrependOutputChecksDisj = TestCase $ do
     _ <- assertAfter "after next: " intrp3 (GateValue (In "reset") []) (s (Stable 0) 0)
     intrp4 <- assertAfter "after check_o2: " intrp3 (GateValue (In "check_o2") []) (s (Pending 2 o2Gate 3) 0)
     -- Third case: outputs with the same gate and same target location, but different initial location
-    _ <- assertAfter "after o2 (meets only guard b): " intrp4 (GateValue (Out "o2") [Cint 4]) forbidden
-    _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Cint 2]) (s (Stable 3) 0)
-    _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Cint 0]) (s (Stable 3) 0)
+    _ <- assertAfter "after o2 (meets only guard b): " intrp4 (GateValue (Out "o2") [Some $ CInt 4]) forbidden
+    _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Some $ CInt 2]) (s (Stable 3) 0)
+    _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Some $ CInt 0]) (s (Stable 3) 0)
     return ()
 
 stsPrependChecksConj :: IOSTS FreeLattice (CheckLoc Integer (IOSymInteract String String)) String String
@@ -1810,16 +1873,16 @@ testPrependOutputChecksConj = TestCase $ do
     assertEqual "\ninitial state " (s (Stable 0) 0) (stateConf stsPrependChecksConjIntrpr)
     -- First case: same output gate, same initial location, same target location
     intrp0 <- assertAfter "after check_o2: " stsPrependChecksConjIntrpr (GateValue (In "check_o2") []) (s (Pending 0 o2Gate 2) 0)
-    _ <- assertAfter "after o2 (meets only guard a): " intrp0 (GateValue (Out "o2") [Cint 6]) forbidden
-    _ <- assertAfter "after o2 (meets both guards): " intrp0 (GateValue (Out "o2") [Cint 4]) (s (Stable 2) 0)
-    _ <- assertAfter "after o2 (meets only guard b): " intrp0 (GateValue (Out "o2") [Cint 2]) forbidden
-    _ <- assertAfter "after o2 (meets no guard): " intrp0 (GateValue (Out "o2") [Cint 48]) forbidden
+    _ <- assertAfter "after o2 (meets only guard a): " intrp0 (GateValue (Out "o2") [Some $ CInt 6]) forbidden
+    _ <- assertAfter "after o2 (meets both guards): " intrp0 (GateValue (Out "o2") [Some $ CInt 4]) (s (Stable 2) 0)
+    _ <- assertAfter "after o2 (meets only guard b): " intrp0 (GateValue (Out "o2") [Some $ CInt 2]) forbidden
+    _ <- assertAfter "after o2 (meets no guard): " intrp0 (GateValue (Out "o2") [Some $ CInt 48]) forbidden
     intrp1 <- assertAfter "after start: " stsPrependChecksConjIntrpr (GateValue (In "start") []) (s (Stable 1) 0)
     -- Second case: outputs with different gates. If one is checked, the other is forbidden
     _ <- assertAfter "after o1: " intrp1 (GateValue (Out "o1") []) forbidden
     intrp2 <- assertAfter "after check_o1: " intrp1 (GateValue (In "check_o1") []) (s (Pending 1 o1Gate 2) 0)
     -- while pending, only the checked output is available: every other output stays forbidden
-    _ <- assertAfter "o2 while pending o1: " intrp2 (GateValue (Out "o2") [Cint 0]) forbidden
+    _ <- assertAfter "o2 while pending o1: " intrp2 (GateValue (Out "o2") [Some $ CInt 0]) forbidden
     _ <- assertAfter "next while pending o1: " intrp2 (GateValue (In "reset") []) underspecified
     _ <- assertAfter "check_o2 while pending o1: " intrp2 (GateValue (In "check_o2") []) underspecified
     intrp3 <- assertAfter "after o1: " intrp2 (GateValue (Out "o1") []) (s (Stable 2) 0)
@@ -1827,7 +1890,7 @@ testPrependOutputChecksConj = TestCase $ do
     _ <- assertAfter "after next: " intrp3 (GateValue (In "reset") []) (s (Stable 0) 0)
     intrp4 <- assertAfter "after check_o2: " intrp3 (GateValue (In "check_o2") []) (s (Pending 2 o2Gate 3) 0)
     -- Third case: outputs with the same gate and same target location, but different initial location
-    _ <- assertAfter "after o2 (meets only guard b): " intrp4 (GateValue (Out "o2") [Cint 4]) forbidden
-    _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Cint 2]) (s (Stable 3) 0)
-    _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Cint 0]) (s (Stable 3) 0)
+    _ <- assertAfter "after o2 (meets only guard b): " intrp4 (GateValue (Out "o2") [Some $ CInt 4]) forbidden
+    _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Some $ CInt 2]) (s (Stable 3) 0)
+    _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Some $ CInt 0]) (s (Stable 3) 0)
     return ()
