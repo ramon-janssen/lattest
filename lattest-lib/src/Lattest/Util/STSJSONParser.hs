@@ -172,6 +172,7 @@ toExpr varmap accmap = \case
         "%" -> Right $ t :=> x .% y
         "/" -> Right $ t :=> x ./ y
         "+" -> Right $ t :=> x .+ y
+        "-" -> Right $ t :=> x .- y
         "*" -> Right $ t :=> x .* y
         "<" -> Right $ BoolType :=> x .< y
         "<=" -> Right $ BoolType :=> x .<= y
@@ -181,6 +182,7 @@ toExpr varmap accmap = \case
       FloatType -> case o of
         "/" -> Right $ t :=> x ./ y
         "+" -> Right $ t :=> x .+ y
+        "-" -> Right $ t :=> x .- y
         "*" -> Right $ t :=> x .* y
         "<" -> Right $ BoolType :=> x .< y
         "<=" -> Right $ BoolType :=> x .<= y
