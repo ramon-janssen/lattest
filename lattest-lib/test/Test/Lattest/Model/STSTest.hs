@@ -129,17 +129,6 @@ assertAfter msg intrp act expected = do
     assertEqual msg expected (stateConf intrp')
     return intrp'
 
-{- |
-    Takes a tuple of description, STS model, gate-parameter value pair and expected state and computes
-    STS `after` interaction, asserting that the resulting state configuration matches the expected one.
--}
-assertAfter :: (After m loc q t tdest act, Ord (m q), Ord q, Show (m q)) =>
-    String -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (AutIntrpr m loc q t tdest act)
-assertAfter msg intrp act expected = do
-    let intrp' = after intrp act
-    assertEqual msg expected (stateConf intrp')
-    return intrp'
-
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
     assertEqual "\ninitial state " (getSTSIntrpState 0 0) (stateConf stsExampleIntrpr)
