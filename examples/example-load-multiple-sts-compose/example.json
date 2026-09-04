@@ -64,18 +64,15 @@
                         }
                     }
                 }
-            },
-            "critical-section-lane_p": {
-                "type": "integer"
-            },
-            "critical-section-start_p": {
-                "type": "float"
-            },
-            "critical-section-end_p": {
-                "type": "float"
             }
         },
-        "initialValuation": {},
+        "initialValuation": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 1.5,
+            "critical-section-end": 2.5
+        },
         "locations": [
             "L0_1",
             "L1_1",
@@ -139,7 +136,7 @@
                             },
                             "op": "!=",
                             "rhs": {
-                                "var": "critical-section-lane_p"
+                                "var": "critical-section-lane"
                             }
                         },
                         "op": "||",
@@ -155,7 +152,7 @@
                             },
                             "op": "<=",
                             "rhs": {
-                                "var": "critical-section-start_p"
+                                "var": "critical-section-start"
                             }
                         }
                     },
@@ -172,7 +169,7 @@
                         },
                         "op": ">=",
                         "rhs": {
-                            "var": "critical-section-end_p"
+                            "var": "critical-section-end"
                         }
                     }
                 }
@@ -400,18 +397,15 @@
                         }
                     }
                 }
-            },
-            "critical-section-lane_p": {
-                "type": "integer"
-            },
-            "critical-section-start_p": {
-                "type": "float"
-            },
-            "critical-section-end_p": {
-                "type": "float"
             }
         },
-        "initialValuation": {},
+        "initialValuation": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 1.5,
+            "critical-section-end": 2.5
+        },
         "locations": [
             "L0_2",
             "L1_2",
@@ -477,7 +471,7 @@
                             },
                             "op": "==",
                             "rhs": {
-                                "var": "critical-section-lane_p"
+                                "var": "critical-section-lane"
                             }
                         },
                         "op": "&&",
@@ -493,7 +487,7 @@
                             },
                             "op": ">",
                             "rhs": {
-                                "var": "critical-section-start_p"
+                                "var": "critical-section-start"
                             }
                         }
                     },
@@ -510,7 +504,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "var": "critical-section-end_p"
+                            "var": "critical-section-end"
                         }
                     }
                 }
@@ -738,18 +732,15 @@
                         }
                     }
                 }
-            },
-            "critical-section-lane_p": {
-                "type": "integer"
-            },
-            "critical-section-start_p": {
-                "type": "float"
-            },
-            "critical-section-end_p": {
-                "type": "float"
             }
         },
-        "initialValuation": {},
+        "initialValuation": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 1.5,
+            "critical-section-end": 2.5
+        },
         "locations": [
             "L0_3",
             "L1_3",
@@ -815,7 +806,7 @@
                             },
                             "op": "==",
                             "rhs": {
-                                "var": "critical-section-lane_p"
+                                "var": "critical-section-lane"
                             }
                         },
                         "op": "&&",
@@ -831,7 +822,7 @@
                             },
                             "op": ">",
                             "rhs": {
-                                "var": "critical-section-start_p"
+                                "var": "critical-section-start"
                             }
                         }
                     },
@@ -848,7 +839,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "var": "critical-section-end_p"
+                            "var": "critical-section-end"
                         }
                     }
                 }
@@ -1076,18 +1067,15 @@
                         }
                     }
                 }
-            },
-            "critical-section-lane_p": {
-                "type": "integer"
-            },
-            "critical-section-start_p": {
-                "type": "float"
-            },
-            "critical-section-end_p": {
-                "type": "float"
             }
         },
-        "initialValuation": {},
+        "initialValuation": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 1.5,
+            "critical-section-end": 2.5
+        },
         "locations": [
             "L0_4",
             "L1_4",

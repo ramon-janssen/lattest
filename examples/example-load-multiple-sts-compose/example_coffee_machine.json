@@ -1,0 +1,553 @@
+[
+    {
+        "id": "sts_001",
+        "description": "01: brewing starts when sufficient resources are available",
+        "documentation": "",
+        "initial_state": true,
+        "initial_location": "L0_1",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "water-level": {
+                "type": "integer"
+            },
+            "coffee-beans-level": {
+                "type": "integer"
+            },
+            "machine-status": {
+                "type": "string"
+            }
+        },
+        "parameters": {
+            "water-level_p": {
+                "type": "integer"
+            },
+            "coffee-beans-level_p": {
+                "type": "integer"
+            },
+            "machine-status_p": {
+                "type": "string"
+            }
+        },
+        "initialValuation": {
+            "machine-status": "READY"
+        },
+        "locations": [
+            "L0_1",
+            "L1_1",
+            "L2_1",
+            "L3_1",
+            "L4_1",
+            "L5_1"
+        ],
+        "inputGates": {
+            "In1": {
+                "text": "the user issues a brew request",
+                "parameters": []
+            },
+            "In2": {
+                "text": "the machine has a current",
+                "parameters": [
+                    "water-level_p",
+                    "coffee-beans-level_p"
+                ]
+            }
+        },
+        "outputGates": {
+            "Out1": {
+                "text": "the user interface displays",
+                "parameters": [
+                    "machine-status_p"
+                ]
+            },
+            "Out2": {
+                "text": "the machine serves coffee",
+                "parameters": []
+            }
+        },
+        "guards": {
+            "G1": {
+                "lhs": {
+                    "var": "machine-status"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "READY"
+                }
+            },
+            "G2": {
+                "boolean": true
+            },
+            "G3": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": ">",
+                    "rhs": {
+                        "integer": 20
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "coffee-beans-level_p"
+                    },
+                    "op": ">",
+                    "rhs": {
+                        "integer": 10
+                    }
+                }
+            },
+            "G4": {
+                "lhs": {
+                    "var": "machine-status_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "BREWING"
+                }
+            },
+            "G5": {
+                "boolean": true
+            },
+            "G6": {
+                "lhs": {
+                    "var": "machine-status_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "READY"
+                }
+            },
+            "G_water-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 100
+                    }
+                }
+            },
+            "G_coffee-beans-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "coffee-beans-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "coffee-beans-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 100
+                    }
+                }
+            }
+        },
+        "assignments": {
+            "A1": {
+                "target": "water-level",
+                "expression": {
+                    "var": "water-level_p"
+                }
+            },
+            "A2": {
+                "target": "coffee-beans-level",
+                "expression": {
+                    "var": "coffee-beans-level_p"
+                }
+            },
+            "A3": {
+                "target": "machine-status",
+                "expression": {
+                    "var": "machine-status_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_1",
+                "gate": "In1",
+                "guard": [
+                    "G1",
+                    "G2"
+                ],
+                "assignments": [],
+                "end_loc": "L1_1"
+            },
+            "r_2": {
+                "init_loc": "L1_1",
+                "gate": "In2",
+                "guard": [
+                    "G3",
+                    "G_water-level",
+                    "G_coffee-beans-level"
+                ],
+                "assignments": [
+                    "A1",
+                    "A2"
+                ],
+                "end_loc": "L2_1"
+            },
+            "r_3": {
+                "init_loc": "L2_1",
+                "gate": "Out1",
+                "guard": [
+                    "G4"
+                ],
+                "assignments": [
+                    "A3"
+                ],
+                "end_loc": "L3_1"
+            },
+            "r_4": {
+                "init_loc": "L3_1",
+                "gate": "Out2",
+                "guard": "G5",
+                "assignments": [],
+                "end_loc": "L4_1"
+            },
+            "r_5": {
+                "init_loc": "L4_1",
+                "gate": "Out1",
+                "guard": [
+                    "G6"
+                ],
+                "assignments": [
+                    "A3"
+                ],
+                "end_loc": "L5_1"
+            }
+        }
+    },
+    {
+        "id": "sts_002",
+        "description": "02: brewing fails when the water level is too low",
+        "documentation": "",
+        "initial_state": true,
+        "initial_location": "L0_2",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "water-level": {
+                "type": "integer"
+            },
+            "coffee-beans-level": {
+                "type": "integer"
+            },
+            "machine-status": {
+                "type": "string"
+            }
+        },
+        "parameters": {
+            "water-level_p": {
+                "type": "integer"
+            },
+            "coffee-beans-level_p": {
+                "type": "integer"
+            },
+            "machine-status_p": {
+                "type": "string"
+            }
+        },
+        "initialValuation": {
+            "machine-status": "READY"
+        },
+        "locations": [
+            "L0_2",
+            "L1_2",
+            "L2_2",
+            "L3_2"
+        ],
+        "inputGates": {
+            "In1": {
+                "text": "the user issues a brew request",
+                "parameters": []
+            },
+            "In2": {
+                "text": "the machine has a current",
+                "parameters": [
+                    "water-level_p",
+                    "coffee-beans-level_p"
+                ]
+            }
+        },
+        "outputGates": {
+            "Out1": {
+                "text": "the user interface displays",
+                "parameters": [
+                    "machine-status_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1": {
+                "lhs": {
+                    "var": "machine-status"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "READY"
+                }
+            },
+            "G2": {
+                "boolean": true
+            },
+            "G3": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 20
+                    }
+                },
+                "op": "||",
+                "rhs": {
+                    "lhs": {
+                        "var": "coffee-beans-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 10
+                    }
+                }
+            },
+            "G4": {
+                "lhs": {
+                    "var": "machine-status_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "ERROR"
+                }
+            },
+            "G_water-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 100
+                    }
+                }
+            },
+            "G_coffee-beans-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "coffee-beans-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "coffee-beans-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 100
+                    }
+                }
+            }
+        },
+        "assignments": {
+            "A1": {
+                "target": "water-level",
+                "expression": {
+                    "var": "water-level_p"
+                }
+            },
+            "A2": {
+                "target": "coffee-beans-level",
+                "expression": {
+                    "var": "coffee-beans-level_p"
+                }
+            },
+            "A3": {
+                "target": "machine-status",
+                "expression": {
+                    "var": "machine-status_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_2",
+                "gate": "In1",
+                "guard": [
+                    "G1",
+                    "G2"
+                ],
+                "assignments": [],
+                "end_loc": "L1_2"
+            },
+            "r_2": {
+                "init_loc": "L1_2",
+                "gate": "In2",
+                "guard": [
+                    "G3",
+                    "G_water-level",
+                    "G_coffee-beans-level"
+                ],
+                "assignments": [
+                    "A1",
+                    "A2"
+                ],
+                "end_loc": "L2_2"
+            },
+            "r_3": {
+                "init_loc": "L2_2",
+                "gate": "Out1",
+                "guard": [
+                    "G4"
+                ],
+                "assignments": [
+                    "A3"
+                ],
+                "end_loc": "L3_2"
+            }
+        }
+    },
+    {
+        "id": "sts_003",
+        "description": "03: brewing error recovery",
+        "documentation": "",
+        "initial_state": false,
+        "initial_location": "L0_3",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "water-level": {
+                "type": "integer"
+            },
+            "coffee-beans-level": {
+                "type": "integer"
+            },
+            "machine-status": {
+                "type": "string"
+            }
+        },
+        "parameters": {
+            "water-level_p": {
+                "type": "integer"
+            },
+            "coffee-beans-level_p": {
+                "type": "integer"
+            },
+            "machine-status_p": {
+                "type": "string"
+            }
+        },
+        "initialValuation": {
+            "machine-status": "READY"
+        },
+        "locations": [
+            "L0_3",
+            "L1_3",
+            "L2_3"
+        ],
+        "inputGates": {
+            "In3": {
+                "text": "the user does a manual reset",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out1": {
+                "text": "the user interface displays",
+                "parameters": [
+                    "machine-status_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1": {
+                "lhs": {
+                    "var": "machine-status"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "ERROR"
+                }
+            },
+            "G2": {
+                "boolean": true
+            },
+            "G3": {
+                "lhs": {
+                    "var": "machine-status_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "READY"
+                }
+            }
+        },
+        "assignments": {
+            "A1": {
+                "target": "machine-status",
+                "expression": {
+                    "var": "machine-status_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_3",
+                "gate": "In3",
+                "guard": [
+                    "G1",
+                    "G2"
+                ],
+                "assignments": [],
+                "end_loc": "L1_3"
+            },
+            "r_2": {
+                "init_loc": "L1_3",
+                "gate": "Out1",
+                "guard": [
+                    "G3"
+                ],
+                "assignments": [
+                    "A1"
+                ],
+                "end_loc": "L2_3"
+            }
+        }
+    }
+]
