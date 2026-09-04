@@ -17,6 +17,7 @@ module Lattest.Model.Symbolic.SolveSTS (
 solveRandomInteraction,
 interactsToSpecifiedCondition,
 interactsToAllowedCondition,
+interactsToIndefiniteCondition,
 seTree,
 treeToGuard,
 SETree(..),
@@ -72,7 +73,7 @@ solveRandomInteraction intrpr subsetFunction r = do
     selectInteractionsAndGuards :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
     selectInteractionsAndGuards intrpr' subsetFunction' =
         let alph = toList $ alphabet $ syntacticAutomaton intrpr'
-        in mapMaybe (distributeFirstMaybe . (fmap indexParams . subsetFunction' &&& (\interaction -> interactsToSpecifiedCondition intrpr' [interaction]))) alph
+        in mapMaybe (distributeFirstMaybe . (fmap indexParams . subsetFunction' &&& (\interaction -> interactsToIndefiniteCondition intrpr' [interaction]))) alph
         where
         -- `interactsToSpecifiedCondition` puts the (single) step's variables in SSA form, indexing them with `_0`, so
         -- index the gate parameters we solve for and read the solution back from with the same suffix. Otherwise the
@@ -85,6 +86,9 @@ interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToAllowedCondition = interactsToGuard asExpr
+
+interactsToIndefiniteCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToIndefiniteCondition intrpr interacts = interactsToSpecifiedCondition intrpr interacts .&& interactsToAllowedCondition intrpr interacts
 
 interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
