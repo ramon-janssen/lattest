@@ -4,7 +4,7 @@ module Lib
 
 import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp)
 import           Lattest.Model.StandardAutomata
--- import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
+import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 
@@ -27,10 +27,10 @@ run = do
 
     putStrLn $ prettyPrintIntrp model
 
-    -- putStrLn "computing offline test cases..."
-    -- let nrSteps = 10
-    --     randomSeed = 456
-    --     controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
-    -- tests <- offlineTests model controller
-    --
-    -- print tests
+    putStrLn "computing offline test cases..."
+    let nrSteps = 10
+        randomSeed = 10
+        controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+    tests <- offlineTests model controller
+    
+    print tests
