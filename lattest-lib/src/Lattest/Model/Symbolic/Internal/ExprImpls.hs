@@ -679,10 +679,10 @@ valuationToVarModel vals = VarModel {
 
 getVariables :: Valuation -> [Variable]
 getVariables vals =
-    (Map.keys $ intValuation vals) ++
-    (Map.keys $ boolValuation vals) ++
-    (Map.keys $ stringValuation vals) ++
-    (Map.keys $ floatValuation vals)
+    Map.keys (intValuation vals) ++
+    Map.keys (boolValuation vals) ++
+    Map.keys (stringValuation vals) ++
+    Map.keys (floatValuation vals)
 
 assignIdentity :: Variable -> VarModel -> VarModel
 assignIdentity v@(Variable _ IntType) = assign v (sVar v :: Expr Integer)
@@ -724,7 +724,7 @@ varsToGuard vars = sAnd $ Set.fromList $
     typedVarsToBools (stringVars vars) ++
     typedVarsToBools (floatVars vars)
 
-typedVarsToBools :: (VarExpr t, EqExpr t, ExprType t) => TypedVarModel t -> [Expr Bool]
+typedVarsToBools :: (VarExpr t, EqExpr t) => TypedVarModel t -> [Expr Bool]
 typedVarsToBools = fmap (\(var, val) -> sVar var .== val) . Map.toList
 
 insertIntoValuation :: Variable -> Constant -> Valuation -> Valuation
@@ -855,7 +855,7 @@ mapExpressionVars :: (Variable -> Variable) -> Expr t -> Expr t
 mapExpressionVars f = Expr . mapExpressionVars' f . view
 
 mapExpressionVars' :: (Variable -> Variable) -> ExprView t -> ExprView t
-mapExpressionVars' f e@(Const _) = e
+mapExpressionVars' _ e@(Const _) = e
 mapExpressionVars' f (Var v) = Var $ f v -- this line is effectively the purpose of this function
 mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (mapExpressionVars' f vexp1) (mapExpressionVars' f vexp2)
 mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)

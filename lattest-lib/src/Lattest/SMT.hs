@@ -108,7 +108,9 @@ push = lift $ SBV.push 1
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: (Show a, SBV.SymVal a) => ExprView a -> SMT (SBV a)
 exprToSymbolic v = case v of
-  Var (Variable nm _tp) -> gets (SBVI.SBV . (Map.! nm))
+  Var (Variable nm _tp) -> gets (SBVI.SBV . (\m -> case m Map.!? nm of
+            Nothing -> error $ show nm <> "is not in" <> show m
+            Just x -> x))
   Const t -> pure $ literal t
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   EqualInt    l r -> (SBV..==) <$> go l <*> go r

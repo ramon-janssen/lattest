@@ -46,7 +46,7 @@ configuration:
       step ?"a" [], branches:
         ⊤ (underspecified)
       step ?"b" [p:Int], branches:
-        if ((-p_0)) ≥ 0 then
+        if ((-p)) ≥ 0 then
             step ?"a" [], branches:
               ⊤ (underspecified)
             step ?"b" [p:Int], branches:
@@ -56,7 +56,7 @@ configuration:
             step ?"water" [p:Int], branches:
               ⊤ (underspecified)
             step !"esp" [p:Int,milk:Bool], branches:
-              if (p_1) = (p_0) then
+              if (p_1) = (p) then
                   step ?"a" [], branches:
                     ⊤ (underspecified)
                   step ?"b" [p:Int], branches:
@@ -87,7 +87,7 @@ configuration:
       step ?"a" [], branches:
         ⊤ (underspecified)
       step ?"b" [p:Int], branches:
-        if ((-p_0)) ≥ 0 then
+        if ((-p)) ≥ 0 then
             step ?"a" [], branches:
               ⊤ (underspecified)
             step ?"b" [p:Int], branches:
@@ -210,7 +210,7 @@ configuration:
         else:
             ⊤ (underspecified)
       step ?"b" [p:Int], branches:
-        if ((-p_0)) ≥ 0 then
+        if ((-p)) ≥ 0 then
             step ?"a" [], branches:
               ⊤ (underspecified)
             step ?"b" [p:Int], branches:
@@ -300,7 +300,7 @@ configuration:
           conjunct 1:
             if True then
                 step ?"a" [], branches:
-                  if ((p_0+-2)) ≥ 0 then
+                  if ((p+-2)) ≥ 0 then
                       step ?"a" [], branches:
                         ⊤ (underspecified)
                       step ?"b" [p:Int], branches:
@@ -335,7 +335,7 @@ configuration:
                 step ?"a" [], branches:
                   ⊤ (underspecified)
                 step ?"b" [p:Int], branches:
-                  if ((p_0+-p_1)) ≥ 0 then
+                  if ((p+-p_1)) ≥ 0 then
                       step ?"a" [], branches:
                         ⊤ (underspecified)
                       step ?"b" [p:Int], branches:
@@ -368,7 +368,7 @@ configuration:
                 step ?"a" [], branches:
                   ⊤ (underspecified)
                 step ?"b" [p:Int], branches:
-                  if ((p_0+-p_1)) ≥ 0 then
+                  if ((p+-p_1)) ≥ 0 then
                       step ?"a" [], branches:
                         ⊤ (underspecified)
                       step ?"b" [p:Int], branches:
@@ -399,7 +399,7 @@ configuration:
           conjunct 4:
             if True then
                 step ?"a" [], branches:
-                  if ((p_0+-2)) ≥ 0 then
+                  if ((p+-2)) ≥ 0 then
                       step ?"a" [], branches:
                         ⊤ (underspecified)
                       step ?"b" [p:Int], branches:
@@ -421,7 +421,7 @@ configuration:
                   else:
                       ⊤ (underspecified)
                 step ?"b" [p:Int], branches:
-                  if ((p_0+-p_1)) ≥ 0 then
+                  if ((p+-p_1)) ≥ 0 then
                       step ?"a" [], branches:
                         ⊤ (underspecified)
                       step ?"b" [p:Int], branches:
@@ -447,9 +447,9 @@ configuration:
                 step ?"water" [p:Int], branches:
                   ∧ (4 conjuncts):
                     conjunct 1:
-                      if ¬(((p_0+-10)) ≥ 0) then
+                      if ¬(((p+-10)) ≥ 0) then
                           step ?"a" [], branches:
-                            if ((p_0+p_1+-2)) ≥ 0 then
+                            if ((p+p_1+-2)) ≥ 0 then
                                 … (depth limit)
                             else:
                                 ⊤ (underspecified)
@@ -466,11 +466,11 @@ configuration:
                       else:
                           ⊤ (underspecified)
                     conjunct 2:
-                      if ¬(((p_0+-10)) ≥ 0) then
+                      if ¬(((p+-10)) ≥ 0) then
                           step ?"a" [], branches:
                             ⊤ (underspecified)
                           step ?"b" [p:Int], branches:
-                            if ((p_0+p_1+-p_2)) ≥ 0 then
+                            if ((p+p_1+-p_2)) ≥ 0 then
                                 … (depth limit)
                             else:
                                 ⊤ (underspecified)
@@ -485,11 +485,11 @@ configuration:
                       else:
                           ⊤ (underspecified)
                     conjunct 3:
-                      if ¬(((p_0+-10)) ≥ 0) then
+                      if ¬(((p+-10)) ≥ 0) then
                           step ?"a" [], branches:
                             ⊤ (underspecified)
                           step ?"b" [p:Int], branches:
-                            if ((p_0+p_1+-p_2)) ≥ 0 then
+                            if ((p+p_1+-p_2)) ≥ 0 then
                                 … (depth limit)
                             else:
                                 ⊤ (underspecified)
@@ -504,14 +504,14 @@ configuration:
                       else:
                           ⊤ (underspecified)
                     conjunct 4:
-                      if ¬(((p_0+-10)) ≥ 0) then
+                      if ¬(((p+-10)) ≥ 0) then
                           step ?"a" [], branches:
-                            if ((p_0+p_1+-2)) ≥ 0 then
+                            if ((p+p_1+-2)) ≥ 0 then
                                 … (depth limit)
                             else:
                                 ⊤ (underspecified)
                           step ?"b" [p:Int], branches:
-                            if ((p_0+p_1+-p_2)) ≥ 0 then
+                            if ((p+p_1+-p_2)) ≥ 0 then
                                 … (depth limit)
                             else:
                                 ⊤ (underspecified)
@@ -520,22 +520,22 @@ configuration:
                           step ?"water" [p:Int], branches:
                             ∧ (4 conjuncts):
                               conjunct 1:
-                                if ¬(((p_0+p_1+-10)) ≥ 0) then
+                                if ¬(((p+p_1+-10)) ≥ 0) then
                                     … (depth limit)
                                 else:
                                     ⊤ (underspecified)
                               conjunct 2:
-                                if ¬(((p_0+p_1+-10)) ≥ 0) then
+                                if ¬(((p+p_1+-10)) ≥ 0) then
                                     … (depth limit)
                                 else:
                                     ⊤ (underspecified)
                               conjunct 3:
-                                if ¬(((p_0+p_1+-10)) ≥ 0) then
+                                if ¬(((p+p_1+-10)) ≥ 0) then
                                     … (depth limit)
                                 else:
                                     ⊤ (underspecified)
                               conjunct 4:
-                                if ¬(((p_0+p_1+-10)) ≥ 0) then
+                                if ¬(((p+p_1+-10)) ≥ 0) then
                                     … (depth limit)
                                 else:
                                     ⊤ (underspecified)

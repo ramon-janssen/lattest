@@ -6,6 +6,7 @@ import qualified Lattest.Model.Automaton as Aut
 import qualified Lattest.Model.Alphabet as Alph
 import           Lattest.Model.Alphabet(IOAct(In, Out))
 import           Lattest.Model.Symbolic.Expr
+import           Lattest.Model.Symbolic.SolveSTS
 import qualified Lattest.SMT as SMT
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -41,9 +42,14 @@ stsExample =
 stsExampleInitAssign = fromConstantsMap $ Map.singleton xvar (Cint 0)
 
 model = interpretSTSQuiescent stsExample stsExampleInitAssign
+model' = interpretSTS stsExample stsExampleInitAssign
 
 run :: IO ()
 run = do
+    let controller = randomDataTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 10
+    offlinetests <- offlineTests model' controller
+    print offlinetests
+
     putStrLn $ "connecting to SUT..."
     let quiesenceMillis = 300
     let delayMillis = 100
