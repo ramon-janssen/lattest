@@ -423,8 +423,7 @@ buildVarMap defs = do
       (Some t', accessors) -> return ((name, Some $ Variable name t'), accessors))
   let accessors = Map.fromList $ concat accessorss
   let varmap' = Map.fromList varmap
-  -- for some reason this type is getting evaluated somewhere
-  pure (varmap' <> Map.mapWithKey (\nm -> const $ Some $ Variable nm CharType{- error $ "getting the type of a field accessor as if it were a variable: " <> nm -}) accessors, accessors)
+  pure (varmap', accessors)
 
 buildGateMap
     :: (String -> IOAct String String)
@@ -518,6 +517,7 @@ buildValuation locVarCtx initVal =
             (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
             (CharType,   Just (JSON.String (unpack -> [c]))) -> Right (name, insertIntoValuation var (CChar c))
             (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
+            (ListType CharType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CList (unpack s) CharType))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
             (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
