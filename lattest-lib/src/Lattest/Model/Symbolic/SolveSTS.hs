@@ -29,7 +29,7 @@ where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation (..))
-import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
+import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
 import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
@@ -215,8 +215,12 @@ offlineTests intrpr tc = do
         Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
           Right r -> pure $ Right r
           Left (tc', intrpr') -> do
-            ot <- offlineTests intrpr' tc'
-            pure $ Left (i', ot)
+            case BM.specifiedness (stateConf intrpr') of
+              Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"
+              Forbidden -> error "generated an input that went to bottom: good job on the test selector, but I don't think the lattest interface is supposed to let you define automata where this is possible"
+              Indefinite -> do
+                ot <- offlineTests intrpr' tc'
+                pure $ Left (i', ot)
   o <- Map.fromList . catMaybes <$> do
     let os = mapMaybe (\case
                 SymInteract (Out o) vs -> Just $ SymInteract o vs
