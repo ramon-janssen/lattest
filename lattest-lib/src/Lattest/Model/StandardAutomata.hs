@@ -18,6 +18,8 @@ sequentiallyAtPruned,
 (|>),
 selfSequentiallyAt,
 (|>>),
+prependOutputChecks,
+CheckLoc(..),
 -- * Conjunction and Disjunction Helper functions
 (//\\),
 (\\//),
