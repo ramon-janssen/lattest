@@ -4,7 +4,7 @@ module Lib
 
 import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp)
 import           Lattest.Model.StandardAutomata
-import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
+import           Lattest.Model.Symbolic.SolveSTS (offlineTests, toTrace)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 
@@ -32,5 +32,6 @@ run = do
         randomSeed = 10
         controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
     tests <- offlineTests model controller
-    
+
     print tests
+    print $ toTrace model tests

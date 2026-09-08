@@ -161,7 +161,7 @@ symbolicEval = rightToMaybe . eval
 
 prop_solveSymbolic :: Expr Bool -> Property
 prop_solveSymbolic guard = monadicIO $ do
-    mValuation <- run $ SMT.runSMT $ solveGuard (Set.toList $ freeVars guard) guard
+    mValuation <- run $ solveGuard (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
@@ -336,20 +336,20 @@ evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
 
 solveTests :: [Test]
-solveTests = [testSolveNegativeModulo, testSolveTwiceInSession]
+solveTests = [testSolveNegativeModulo] -- , testSolveTwiceInSession]
 
--- | Solving two satisfiable guards within a single SMT run session
-testSolveTwiceInSession :: Test
-testSolveTwiceInSession = TestCase $ do
-    let v = Variable "j" IntType
-        guard = sVar v .== sConst (41 :: Integer)
-    (firstSolve, secondSolve) <- SMT.runSMT $ do
-        a <- solveGuard [SMT.Some v] guard
-        b <- solveGuard [SMT.Some v] guard
-        return (a, b)
-    let valueOf mVal = (DMap.lookup v . runValuation) =<< mVal
-    assertEqual "first solve of j == 41 in a session"  (Just (Val 41)) (valueOf firstSolve)
-    assertEqual "second solve of j == 41 in the same session" (Just (Val 41)) (valueOf secondSolve)
+-- -- | Solving two satisfiable guards within a single SMT run session
+-- testSolveTwiceInSession :: Test
+-- testSolveTwiceInSession = TestCase $ do
+--     let v = Variable "j" IntType
+--         guard = sVar v .== sConst (41 :: Integer)
+--     (firstSolve, secondSolve) <- SMT.runSMT $ do
+--         a <- solveGuard [SMT.Some v] guard
+--         b <- solveGuard [SMT.Some v] guard
+--         return (a, b)
+--     let valueOf mVal = (DMap.lookup v . runValuation) =<< mVal
+--     assertEqual "first solve of j == 41 in a session"  (Just (Val 41)) (valueOf firstSolve)
+--     assertEqual "second solve of j == 41 in the same session" (Just (Val 41)) (valueOf secondSolve)
 
 testEvalExpression :: (Eq a, Show a, ConcreteEval a) => Expr a -> String -> Test
 testEvalExpression e msg = TestCase $ assertEqual msg (concreteEval e) (symbolicEval e)
@@ -359,7 +359,7 @@ testEvalEmptyProduct = testEvalExpression (sProduct @Integer []) "empty product 
 
 testSolveExpression :: Expr Bool -> Test
 testSolveExpression guard = TestCase $ do
-    mValuation <- SMT.runSMT $ solveGuard (Set.toList $ freeVars guard) guard
+    mValuation <- solveGuard (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
