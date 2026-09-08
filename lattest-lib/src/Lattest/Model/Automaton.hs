@@ -562,7 +562,7 @@ hasSymbolicQuiescence stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
     -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> runSMT (solveAnySequential outputsAndCombinedGuards)
+    Maybe.isNothing <$> solveAnySequential outputsAndCombinedGuards
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 

@@ -63,7 +63,7 @@ import qualified Data.Dependent.Map as DMap
     generator and returns the new random generator state. The returned gate values for that interaction are not randomized in any way, picking values
     is left to the SMT solver.
 -}
-solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
+solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> IO (Maybe (GateValue g'), r)
 solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
@@ -228,7 +228,7 @@ offlineTests intrpr tc = do
               (toList $ alphabet $ syntacticAutomaton intrpr)
     forM os $ \(SymInteract o vs) -> do
       let guard = interactsToAllowedCondition intrpr [SymInteract (Out o) vs]
-      mv <- runSMT $ solveGuard vs guard
+      mv <- solveGuard vs guard
       case mv of
         Nothing -> pure Nothing
         Just (runValuation -> m) -> let vs' = map (\(Some v) -> case DMap.lookup v m of
@@ -240,7 +240,7 @@ offlineTests intrpr tc = do
                            $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
                                     Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
                                     Nothing -> error "internal type mismatch") vs vs')
-                runSMT $ solveGuard vs guard' >>= \case
+                solveGuard vs guard' >>= \case
                   Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case

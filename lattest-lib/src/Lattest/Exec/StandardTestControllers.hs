@@ -203,7 +203,7 @@ randomDataOrWaitForOutputTestSelectorFromGen g pWait = selector g (solveRandomOr
 solveRandomInput :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a))
     => r -> (IOSymInteract i o -> Maybe (SymInteract sub)) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> IO (Maybe (GateValue sub), r)
 solveRandomInput g f intrpr = do
-    (maybeGateValue, g') <- runSMT $ solveRandomInteraction intrpr f g
+    (maybeGateValue, g') <- solveRandomInteraction intrpr f g
     return (maybeGateValue, g') -- append the new state to the solved value, if any
 {-        maybeFromIFInteraction' (SymInteract gate vars) = case maybeFromInput gate of
             Just i -> Just $ SymInteract i vars

@@ -1,6 +1,7 @@
 {-# OPTIONS_HADDOCK hide, prune #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE BlockArguments #-}
 module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
@@ -14,7 +15,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType)
-import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
+import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT, runSMT, query)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
@@ -45,7 +46,7 @@ evaluateGuard guard = case eval guard of
     For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
     any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
 -}
-solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+solveAnySequential :: [(SymInteract g,SymGuard)] -> IO (Maybe (GateValue g))
 solveAnySequential [] = return Nothing
 solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
@@ -72,18 +73,18 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
-solveGuard :: [Some Variable] -> SymGuard -> SMT (Maybe Valuation)
-solveGuard vars guard = do
-    push
-    addDeclarations vars
-    addAssertions [guard]
+solveGuard :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
+solveGuard vars guard = runSMT do
+  addDeclarations vars
+  addAssertions [guard]
+  -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
+  query $ do
     solveOutcome <- getSolvable
-    mSolution <- case solveOutcome of
+    case solveOutcome of
         Sat -> do
             solution <- getSolution vars
             return $ Just solution
         Unsat -> return Nothing
         Unknown -> return Nothing
         --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
-    pop
-    return mSolution
+
