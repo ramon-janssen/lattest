@@ -650,14 +650,7 @@ valuationToVarModel :: Valuation -> VarModel
 valuationToVarModel = VarModel . DMap.map (\(Val v) -> sConst v) . runValuation
 
 insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
-insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ CharType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v c = withExprConstraints (varType v) $ assignValue v (fromConst' c)
 
 getVariables :: Valuation -> [Some Variable]
 getVariables = DMap.keys . runValuation

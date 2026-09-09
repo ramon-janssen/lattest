@@ -525,6 +525,7 @@ buildValuation locVarCtx initVal =
         -- this by test in the future
         defaultConst :: Type t -> Constant t
         defaultConst IntType    = CInt 0
+        defaultConst UnitType = CUnit
         defaultConst FloatType  = CFloat 0.0
         defaultConst BoolType   = CBool False
         defaultConst CharType = CChar 'a'
