@@ -217,7 +217,7 @@ offlineTests intrpr tc = do
           Left (tc', intrpr') -> do
             case BM.specifiedness (stateConf intrpr') of
               Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"
-              Forbidden -> error "generated an input that went to bottom: good job on the test selector, but I don't think the lattest interface is supposed to let you define automata where this is possible"
+              Forbidden -> error "generated an input that went to bottom. TODO: should just be a 'fail' verdict, but: 1. that means changing the type of results 'r' to 'Verdict', and it's surprisingly hard to write a testcontroller that returns a Verdict. 2. This situation is kinda weird; while technically allowed it usually shows a bug in the model definition. Don't want to change this until we have a proper sanity check in place that warns about this case."
               Indefinite -> do
                 ot <- offlineTests intrpr' tc'
                 pure $ Left (i', ot)
