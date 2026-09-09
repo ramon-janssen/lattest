@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 module Test.Lattest.Exec.StandardTestControllers (
 testRandomFCorrect,
 testRandomFIncorrectOutput,
@@ -72,7 +71,7 @@ testRandomFIncorrectOutput = TestCase $ do
     -- the only non-conformance is the output Y from Q2fd
     assertEqual "expected test failure on !Y" (Out $ OutSusp X) (last observed)
     -- the only observations leading to Q2fd are X and Y
-    assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ OutSusp X) == prev || (Out $ OutSusp Y) == prev
+    assertBool "expected observation before the test failure to be !X or !Y" $ Out (OutSusp X) == prev || Out (OutSusp Y) == prev
     assertEqual "state before the final state should be inconclusive" (Just True) (not . isConclusive <$> maybePrvMq)
     assertEqual "final state should be conclusive" (Just True) (isConclusive <$> maybeMq)
 
@@ -92,11 +91,12 @@ testRandomFIncorrectInput = TestCase $ do
     assertEqual "testRandomFIncorrectInput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
     -- the only non-conformance is the output Y from Q2fd
-    assertEqual "expected test failure on ?B" (In $ InputAttempt(B, False)) (last observed)
+    assertEqual "expected test failure on ?B" (In $ InputAttempt (B, False)) (last observed)
     -- the only observation leading to Q2fd is Y
-    assertBool "expected observation before the test failure to be !X or !Y" $ (Out $ OutSusp X) == prev || (Out $ OutSusp Y) == prev
+    assertBool "expected observation before the test failure to be !X or !Y" $ Out (OutSusp X) == prev || Out (OutSusp Y) == prev
     assertEqual "final state should be forbidden" (Just True) (isForbidden <$> maybeMq)
-    
+
+
 
 
 

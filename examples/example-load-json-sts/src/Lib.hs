@@ -13,7 +13,7 @@ run :: IO ()
 run = do
     putStrLn "loading STS from JSON..."
     result <- stsFromJSONFile "toy_example_sts_coffee.json"
-    (sts, initVal) <- case result of
+    (id, sts, initVal) <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
 

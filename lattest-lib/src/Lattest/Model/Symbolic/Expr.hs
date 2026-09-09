@@ -7,15 +7,26 @@ module Lattest.Model.Symbolic.Expr
 ( Expr
 , view
 , ExprView(..)
+, ExprType(..)
 , Type(..)
-, Constant(..)
+, Constant(Constant, CInt, CUnit, CBool, CString, CList, CTuple, CFloat)
+, int
+, unit
+, float
+, bool
+, string
+, char
+, list
+, set
+, tuple
+, option
 , constType
 , ConstType
 , fromConst
 , toConst
 , Variable(..)
-, eval
 , freeVars
+, withExprConstraints
 , module Lattest.Model.Symbolic.Internal.ExprImpls
 , module Lattest.Model.Symbolic.Internal.ExprImplsExtension
 )
