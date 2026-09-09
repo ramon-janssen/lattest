@@ -37,6 +37,7 @@ import qualified Data.Aeson.Types as JSON
 import qualified Data.Aeson.KeyMap as JSON
 import Data.Bifunctor (Bifunctor(..))
 import Data.Aeson.Key (toString)
+import qualified Debug.Trace
 
 
 data UntypedExpr
@@ -519,7 +520,7 @@ buildValuation locVarCtx initVal =
             (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
             (ListType CharType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CList (unpack s) CharType))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
-            (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
+            (_, Nothing) -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
