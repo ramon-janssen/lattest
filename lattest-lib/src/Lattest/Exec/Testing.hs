@@ -75,7 +75,7 @@ data ActionController act i r state = ActionController {
 data Verdict = Pass | Fail | Inconclusive InconclusiveReason deriving (Ord, Eq, Show)
 
 -- | In case of an inconclusive verdict, details on why the test is inconclusive
-newtype InconclusiveReason = AutomatonException AutomatonException deriving (Ord, Eq, Show)
+data InconclusiveReason = AutomatonException AutomatonException | OutputNotInOfflineTest deriving (Ord, Eq, Show)
 
 {- |
     The controller of a testing experiment. The tester may return a result at the end of a testing experiment. Note that it does
@@ -92,8 +92,7 @@ data TestController m loc q t tdest act state i r = TestController {
     -}
     selectTest :: (TestChoice i act) => state -> AutIntrpr m loc q t tdest act -> m q -> IO (Either (i, state) r),
     {- |
-        Select a test based on test controller state, the specification (in its current state), an observed action, and previous specification
-        configuration. Either select a new controller state, /or/ stop testing and return a result from the controller.
+        Handle a transition.
     -}
     updateTestController :: state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
     -- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.
@@ -213,7 +212,7 @@ class RunTester tdest where
     -> IO (Verdict, r)
 
 instance RunTester () where
-  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q))
+  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q), Show t, Show (m ((),loc)))
   runTester = runLTSTester
 
 instance RunTester STStdest where

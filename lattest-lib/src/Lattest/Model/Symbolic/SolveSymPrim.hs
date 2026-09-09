@@ -1,4 +1,7 @@
 {-# OPTIONS_HADDOCK hide, prune #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE BlockArguments #-}
 module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
@@ -10,12 +13,13 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr(Valuation,Variable(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs(eval)
-import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
-import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType)
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query)
 
-import qualified Data.Map as Map
+import Data.Some (Some (..))
+import qualified Data.Dependent.Map as DMap
+import Data.Constraint.Extras (Has(..))
 
 {-|
     Combine the given guards into one.
@@ -42,7 +46,7 @@ evaluateGuard guard = case eval guard of
     For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
     any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
 -}
-solveAnySequential :: [(SymInteract g,SymGuard)] -> SMT (Maybe (GateValue g))
+solveAnySequential :: [(SymInteract g,SymGuard)] -> IO (Maybe (GateValue g))
 solveAnySequential [] = return Nothing
 solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
@@ -53,25 +57,35 @@ solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
 --data GateValue g = GateValue g [Constant]
 valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
 valuationToGateValue (SymInteract g' params) valuation =
-    GateValue g' $ fmap (getValueForVar $ E.toConstantsMap valuation) params
+    GateValue g' $ fmap (getValueForVar $ runValuation valuation) params
     where
-        getValueForVar val' var =
-            case Map.lookup var val' of
-                Just value -> value
+        getValueForVar :: DMap.DMap Variable E.Val -> Some Variable -> Some E.Constant
+        getValueForVar val' (Some var) =
+            case DMap.lookup var val' of
+                Just (E.Val value) -> case varType var of
+                  E.IntType -> E.int value
+                  E.UnitType -> E.unit
+                  E.FloatType -> E.float value
+                  E.BoolType -> E.bool value
+                  E.CharType -> E.char value
+                  E.ListType t -> has @ExprType t E.list value
+                  E.SetType t -> has @ExprType t E.set value
+                  E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
+                  E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
-solveGuard :: [Variable] -> SymGuard -> SMT (Maybe Valuation)
-solveGuard vars guard = do
-    push
-    addDeclarations vars
-    addAssertions [guard]
+solveGuard :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
+solveGuard vars guard = runSMT do
+  addDeclarations vars
+  addAssertions [guard]
+  -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
+  query $ do
     solveOutcome <- getSolvable
-    mSolution <- case solveOutcome of
-        Sat -> do
-            solution <- getSolution vars
-            return $ Just solution
-        Unsat -> return Nothing
-        Unknown -> return Nothing
-        --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
-    pop
-    return mSolution
+    case solveOutcome of
+      Sat -> do
+          solution <- getSolution vars
+          return $ Just solution
+      Unsat -> return Nothing
+      Unknown -> return Nothing
+      --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
+

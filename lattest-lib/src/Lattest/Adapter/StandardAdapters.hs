@@ -47,13 +47,14 @@ withInputDelayMillis,
 withSuccessiveInputDelay,
 withSuccessiveInputDelayMillis,
 -- ** Adapters with Data Parameters
+asSymbolicAdapter,
 asSymbolicSuspAdapter,
 connectJSONSocketAdapterSTSwithQuiescence
 )
 where
 
 import Lattest.Adapter.Adapter as Adap (Adapter(..),parseActionsFromSut,mapTestChoices,mapActionsFromSut, map)
-import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), Suspended(..), IOSuspAct, asSuspended, IOSuspGateValue, GateValue(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..))
+import Lattest.Model.Alphabet(TestChoice, choiceToActs, IOAct(..), Suspended(..), IOSuspAct, asSuspended, IOSuspGateValue, GateValue(..), SuspendedIF, isOutput, fromOutput, IFAct, InputAttempt(..), IOGateValue)
 import Lattest.Util.IOUtils(statefulIO', doAfter, ifM_, waitUntil)
 import Lattest.Util.Utils(flipCoin, takeRandom)
 
@@ -593,13 +594,20 @@ connectJSONSocketAdapterAcceptingInputs = connectJSONSocketAdapter >>= accepting
 connectJSONSocketAdapterAcceptingInputsWith :: (ToJSON i, FromJSON o) => SocketSettings act i -> IO (Adapter (IOAct i o) i)
 connectJSONSocketAdapterAcceptingInputsWith settings = connectJSONSocketAdapterWith settings >>= acceptingInputs
 
--- | Transform the given I/O-Adapter (for action `IOAct` by interpreting the input and output actions as gate values with data parameters.
+-- | Transform the given I/O-Adapter (for action `IOAct`) by interpreting the input and output actions as gate values with data parameters.
 asSymbolicSuspAdapter :: Adapter (IOSuspAct (GateValue i) (GateValue o)) (Maybe (GateValue i)) -> IO (Adapter (IOSuspGateValue i o) (Maybe (GateValue i)))
 asSymbolicSuspAdapter = mapActionsFromSut ioSuspActGateToSuspGateValue
     where
         ioSuspActGateToSuspGateValue (In (GateValue i cs)) = GateValue (In i) cs
         ioSuspActGateToSuspGateValue (Out (OutSusp (GateValue o cs))) = GateValue (Out (OutSusp o)) cs
         ioSuspActGateToSuspGateValue (Out Quiescence) = GateValue (Out Quiescence) []
+
+-- | Transform the given I/O-Adapter (for action `IOAct`) by interpreting the input and output actions as gate values with data parameters.
+asSymbolicAdapter :: Adapter (IOAct (GateValue i) (GateValue o)) (GateValue i) -> IO (Adapter (IOGateValue i o) (GateValue i))
+asSymbolicAdapter = mapActionsFromSut ioActGateToGateValue
+    where
+        ioActGateToGateValue (In (GateValue i cs)) = GateValue (In i) cs
+        ioActGateToGateValue (Out (GateValue o cs)) = GateValue (Out o) cs
 
 -- | Create an adapter by connecting to a server socket, with the default settings, and sending inputs and reading outputs with data, in JSON format, observing any input as accepted.
 connectJSONSocketAdapterSTSwithQuiescence ::  (ToJSON i, FromJSON o) => Int -> IO (Adapter (IOSuspGateValue i o) (Maybe (GateValue i)))
