@@ -149,7 +149,7 @@ jobs:
 
     - name: Cache stack
       uses: actions/cache/save@v4
-      if: steps.cache2.outputs.cache-hit != 'true'
+      # if: steps.cache2.outputs.cache-hit != 'true'
       with:
         path: ~/.stack
         key: ${{ steps.cache2.outputs.cache-primary-key }}
