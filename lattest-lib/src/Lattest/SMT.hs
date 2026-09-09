@@ -17,13 +17,14 @@ module Lattest.SMT (
   getSolvable,
   pop,
   push,
+  query,
   runSMT,
   Some(..),
   RCSet(..)
 ) where
 
-import Data.SBV(constrain, SBV, SymVal (..), freshVar, RCSet(..), Kind (..))
-import Data.SBV.Control( CheckSatResult, checkSat, query, Query)
+import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic)
+import Data.SBV.Control( CheckSatResult, checkSat, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
@@ -34,7 +35,7 @@ import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
 import Control.Monad((<=<))
-import Control.Monad.State (StateT (StateT), evalStateT, lift, modify, gets, MonadState (..), runState, State, evalState)
+import Control.Monad.State (StateT (..), evalStateT, lift, modify, gets, MonadState (..), runState, State, evalState)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -65,21 +66,25 @@ data  SolveProblem v  = Solved (Solution v)
                       | UnableToSolve
      deriving (Eq,Ord,Read,Show)
 
-type SMT = StateT (Map String (Some SBV)) Query
+type SMTQ = StateT (Map String (Some SBV)) Query
+type SMT = StateT (Map String (Some SBV)) Symbolic
 type SMT' = State (Map String (Some SBV))
 
 smt'tosmt :: SMT' a -> SMT a
 smt'tosmt smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
 runSMT :: SMT a -> IO a
-runSMT = SBV.runSMT . query . flip evalStateT Map.empty
+runSMT = SBV.runSMT . flip evalStateT Map.empty
 
-getSolution :: [Some Variable] -> SMT Valuation
+query :: SMTQ a -> SMT a
+query = StateT . (\f m -> SBV.query (f m)) . runStateT
+
+getSolution :: [Some Variable] -> SMTQ Valuation
 getSolution vs =
   Valuation . foldr DMap.union mempty
   <$> mapM getVarValue vs
   where
-    getVarValue :: Some Variable -> SMT (DMap.DMap Variable Val)
+    getVarValue :: Some Variable -> SMTQ (DMap.DMap Variable Val)
     getVarValue (Some v@(Variable nm tp)) = do
         sval <- gets (\m -> case m Map.!? nm of
             Nothing -> error $ show nm <> "is not in the map"
@@ -100,15 +105,27 @@ addAssertions = mapM_ (lift . constrain <=< smt'tosmt . exprToSymbolic . view)
 addDeclarations :: [Some Variable] -> SMT ()
 addDeclarations = mapM_ (\(Some v) -> addDeclaration v)
 
-addDeclaration :: forall t. Variable t -> SMT ()
+addDeclaration :: Variable t -> SMT ()
 addDeclaration (Variable nm ty) = do
-    v <- has @SymVal ty $ freshVar @t nm
-    modify $ Map.insert nm $ Some v
+  v <- has @SymVal ty $ lift $ mkvar ty nm
+  modify $ Map.insert nm $ Some v
+  where
+    mkvar :: Type t -> String -> Symbolic (SBV t)
+    mkvar = \case
+      IntType -> SBV.sInteger
+      FloatType -> SBV.sDouble
+      BoolType -> SBV.sBool
+      UnitType -> SBV.sTuple
+      CharType -> SBV.sChar
+      ListType t -> withExprConstraints t SBV.sList
+      SetType t -> withExprConstraints t SBV.sSet
+      TupleType a b -> withExprConstraints a $ withExprConstraints b $ \name -> curry SBV.tuple <$> mkvar a ("fst"<>name) <*> mkvar b ("snd"<>name)
+      SumType a b -> withExprConstraints a $ withExprConstraints b SBV.sEither
 
-getSolvable :: SMT SolvableProblem
+getSolvable :: SMTQ SolvableProblem
 getSolvable = checkSatToSolveProblem <$> lift checkSat
 
-pop, push :: SMT ()
+pop, push :: SMTQ ()
 pop  = lift $ SBV.pop  1
 push = lift $ SBV.push 1
 
@@ -240,6 +257,7 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
           (ListType tp) ys -> withExprConstraints tp $ k (SetType tp) (ComplementSet $ Set.fromList ys)
           _ _ -> error "impossible"
       SBVI.CV (KTuple [k1, k2]) (SBVI.CTuple [x,y]) -> go (SBVI.CV k1 x) $ \t1 x' -> go (SBVI.CV k2 y) $ \t2 y' -> k (TupleType t1 t2) (x', y')
+      SBVI.CV (KTuple []) _ -> k UnitType ()
       SBVI.CV (KADT "Either" _ [("Left", _), ("Right", [rk])]) (SBVI.CADT ("Left", [(k', x)])) -> kindToType rk $ \rty ->
         go (SBVI.CV k' x) $ \tp y -> k (SumType tp rty) (Left y)
       SBVI.CV (KADT "Either" _ [("Left", [lk]), ("Right", _)]) (SBVI.CADT ("Right", [(k', x)])) -> kindToType lk $ \lty ->
@@ -257,4 +275,5 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       KList t -> kindToType t $ k . ListType
       KSet t -> kindToType t $ k . SetType
       KTuple [k1, k2] -> kindToType k1 $ \t1 -> kindToType k2 $ \t2 -> k $ TupleType t1 t2
+      KTuple [] -> k UnitType
       _ -> error $ "couldn't convert kind " <> show kind
