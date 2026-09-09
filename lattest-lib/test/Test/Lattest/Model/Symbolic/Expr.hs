@@ -25,7 +25,7 @@ import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
 import qualified Control.Monad as CM
 import Test.HUnit
-import Test.QuickCheck
+import Test.QuickCheck hiding (Some(..))
 import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
@@ -384,7 +384,7 @@ instance Arbitrary SomeType where
     [ return . ST $ Some IntType
     , return . ST $ Some FloatType
     , return . ST $ Some BoolType
-    -- , return . ST $ Some UnitType
+    , return . ST $ Some UnitType
     , return . ST $ Some CharType
     , (\(ST (Some t)) -> ST (Some $ ListType t)) <$> arbitrary
     , (\(ST (Some t)) -> ST (Some $ SetType t)) <$> arbitrary
