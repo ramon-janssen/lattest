@@ -63,6 +63,7 @@ valuationToGateValue (SymInteract g' params) valuation =
             case DMap.lookup var val' of
                 Just (E.Val value) -> case varType var of
                   E.IntType -> E.int value
+                  E.UnitType -> E.unit
                   E.FloatType -> E.float value
                   E.BoolType -> E.bool value
                   E.CharType -> E.char value

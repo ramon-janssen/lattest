@@ -11,7 +11,8 @@ prop_evalSymbolic,
 PropEvalSymbolic,
 prop_solveSymbolic,
 evalTests,
-solveTests
+solveTests,
+propShowReadType
 )
 where
 
@@ -24,12 +25,16 @@ import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
 import qualified Control.Monad as CM
 import Test.HUnit
-import Test.QuickCheck
+import Test.QuickCheck hiding (Some(..))
 import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
 import qualified Data.Dependent.Map as DMap
 import Data.SBV (RCSet(..))
+import Data.Some (Some (..))
+import Data.Maybe (isJust)
+import Data.GADT.Compare (GEq(..))
+import Data.GADT.Show (gread)
 
 
 
@@ -372,4 +377,21 @@ testEvalNegativeModulo = testEvalExpression ((-2) .% (-2)) "negative mod evaluat
 
 testSolveNegativeModulo :: Test
 testSolveNegativeModulo = testSolveExpression ((-2) .% (-2) .== sVar (Variable "ix" IntType))
+
+newtype SomeType = ST (Some Type) deriving Show
+instance Arbitrary SomeType where
+  arbitrary = oneof
+    [ return . ST $ Some IntType
+    , return . ST $ Some FloatType
+    , return . ST $ Some BoolType
+    , return . ST $ Some UnitType
+    , return . ST $ Some CharType
+    , (\(ST (Some t)) -> ST (Some $ ListType t)) <$> arbitrary
+    , (\(ST (Some t)) -> ST (Some $ SetType t)) <$> arbitrary
+    , (\(ST (Some a)) (ST (Some b)) -> ST (Some $ SumType   a b)) <$> arbitrary <*> arbitrary
+    , (\(ST (Some a)) (ST (Some b)) -> ST (Some $ TupleType a b)) <$> arbitrary <*> arbitrary
+    ]
+
+propShowReadType :: SomeType -> Bool
+propShowReadType (ST (Some t)) = gread (withExprConstraints t $ show t) $ \t' -> isJust $ geq t t'
 

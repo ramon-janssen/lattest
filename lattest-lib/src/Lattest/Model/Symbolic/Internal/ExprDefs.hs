@@ -29,7 +29,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , Expr(..)       -- for local usage only!
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CFloat, CBool, CString, CList, CTuple, CSet, CSum, CChar)
+, Constant(Constant, CInt, CFloat, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
 , constType
 , constValue
 , ConstType(..)
@@ -41,6 +41,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , ExprConstraints
 , withExprConstraints
 , int
+, unit
 , float
 , bool
 , char
@@ -76,7 +77,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
 import Data.SBV (SymVal(..), RCSet (..))
 import Data.EqP (EqP (..))
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, maybeToList)
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
 import qualified Data.Vector as Vec
@@ -85,13 +86,14 @@ import Control.Monad ((<=<))
 import Data.Data (Data)
 import Data.Bifunctor (Bifunctor(..))
 import qualified Data.Aeson.Types as JSON
-import qualified Debug.Trace
+import Data.List (stripPrefix)
 
 data Type a where
   IntType :: Type Integer
   FloatType :: Type Double
   BoolType :: Type Bool
   CharType :: Type Char
+  UnitType :: Type ()
   ListType :: Type a -> Type [a]
   SetType :: Type a -> Type (RCSet a)
   TupleType :: Type a -> Type b -> Type (a,b)
@@ -99,14 +101,6 @@ data Type a where
 
 deriving instance Eq (Type a)
 deriving instance Ord (Type a)
--- instance (SymVal a, ExprConstraints a) => SymVal [a] where
---   literal (List xs) = case literal xs of
---     SBVI.SBV sval -> SBVI.SBV sval
---   fromCV xs = List (fromCV xs)
--- #if MIN_VERSION_sbv(12,0,0)
---   -- This field was added to SymVal in sbv-12.0, and the default instance requires Bounded (which a list is not)
---   minMaxBound = Nothing
--- #endif
 instance EqP Type where
   eqp x y = isJust $ geq x y
 instance GEq Type where
@@ -114,47 +108,67 @@ instance GEq Type where
   geq FloatType FloatType = Just Refl
   geq BoolType BoolType = Just Refl
   geq CharType CharType = Just Refl
+  geq UnitType UnitType = Just Refl
   geq (ListType a) (ListType b) = (\Refl -> Refl) <$> geq a b
   geq (SetType a) (SetType b) = (\Refl -> Refl) <$> geq a b
   geq (TupleType a b) (TupleType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
   geq (SumType a b) (SumType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
-  geq a b = Debug.Trace.traceShow (a,b) $ Nothing
+  geq _ _ = Nothing
 instance GCompare Type where
-  gcompare = \cases
-    IntType IntType -> GEQ
-    IntType _ -> GLT
-    FloatType FloatType -> GEQ
-    FloatType _ -> GLT
-    BoolType BoolType -> GEQ
-    BoolType _ -> GLT
-    CharType CharType -> GEQ
-    CharType _ -> GLT
-    (ListType a) (ListType b) -> case gcompare a b of
-      GGT -> GGT
+  gcompare a b = case (a, b) of
+    (ListType a', ListType b')   -> case gcompare a' b' of
       GLT -> GLT
       GEQ -> GEQ
-    (ListType _) _ -> GLT
-    (SetType a) (SetType b) -> case gcompare a b of
       GGT -> GGT
+    (SetType a', SetType b')     -> case gcompare a' b' of
       GLT -> GLT
       GEQ -> GEQ
-    (SetType _) _ -> GLT
-    (TupleType a b) (TupleType c d) -> case gcompare a c of
       GGT -> GGT
+    (TupleType a1 b1, TupleType a2 b2) -> case gcompare a1 a2 of
       GLT -> GLT
-      GEQ -> case gcompare b d of
-        GGT -> GGT
+      GEQ -> case gcompare b1 b2 of
         GLT -> GLT
         GEQ -> GEQ
-    (TupleType _ _) _ -> GLT
-    (SumType a b) (SumType c d) -> case gcompare a c of
-      GGT -> GGT
-      GLT -> GLT
-      GEQ -> case gcompare b d of
         GGT -> GGT
+      GGT -> GGT
+    (SumType a1 b1, SumType a2 b2) -> case gcompare a1 a2 of
+      GLT -> GLT
+      GEQ -> case gcompare b1 b2 of
         GLT -> GLT
         GEQ -> GEQ
-    (SumType _ _) _ -> GLT
+        GGT -> GGT
+      GGT -> GGT
+    _ -> case compare (typeTag a) (typeTag b) of
+        LT -> GLT
+        EQ -> case a `geq` b of
+          Just Refl -> GEQ
+          Nothing -> error "tags match but geq doesn't; forgot to add a new type to gcompare or geq?"
+        GT -> GGT
+    where
+      -- NOTE: when adding a new recursive case below, make sure to add it above too!
+      typeTag :: Type a -> Int
+      typeTag IntType    = 0
+      typeTag FloatType  = 1
+      typeTag BoolType   = 2
+      typeTag CharType   = 3
+      typeTag UnitType   = 4
+      typeTag (ListType _)   = 5
+      typeTag (SetType _)    = 6
+      typeTag (TupleType _ _) = 7
+      typeTag (SumType _ _)   = 8
+
+instance Show (Type a) where
+    show IntType = "Int"
+    show UnitType = "()"
+    show BoolType = "Bool"
+    show CharType = "Char"
+    show FloatType = "Float"
+    show (ListType t) = "[" ++ show t ++ "]"
+    show (SetType t) = "{" ++ show t ++ "}"
+    show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
+    show (SumType a b) = "<" ++ show a ++ ", " ++ show b ++ ">"
+instance GShow Type where
+  gshowsPrec = defaultGshowsPrec
 
 instance ExprType a => Read (Type a) where
   readsPrec _ =
@@ -168,24 +182,52 @@ instance GRead Type where
   greadsPrec _ =
     readParen False $ \s ->
          [ (Church.mkSome CharType, rest)
-         | ("Char", rest) <- lex s
+         | rest <- mylex "Char" s
          ]
       ++ [ (Church.mkSome IntType, rest)
-         | ("Int", rest) <- lex s
+         | rest <- mylex "Int" s
          ]
       ++ [ (Church.mkSome FloatType, rest)
-         | ("Float", rest) <- lex s
+         | rest <- mylex "Float" s
          ]
       ++ [ (Church.mkSome BoolType, rest)
-         | ("Bool", rest) <- lex s
+         | rest <- mylex "Bool" s
+         ]
+      ++ [ (Church.mkSome UnitType, rest)
+         | rest <- mylex "()" s
          ]
       ++ do
-          ("[", s1) <- lex s
+          s1 <- mylex "[" s
           (t, s2) <- greadsPrec 11 s1
-          ("]", rest) <- lex s2
-          Church.withSome t $ \(tp :: Type t) -> do
+          rest <- mylex "]" s2
+          Church.withSome t $ \(tp :: Type t) ->
             return (Church.mkSome $ ListType tp, rest)
-      ++ error "TODO test lists, make tuples, sets, eithers"
+      ++ do
+          s1 <- mylex "{" s
+          (t, s2) <- greadsPrec 11 s1
+          rest <- mylex "}" s2
+          Church.withSome t $ \(tp :: Type t) ->
+            return (Church.mkSome $ SetType tp, rest)
+      ++ do
+          s1 <- mylex "(" s
+          (a, s2) <- greadsPrec 11 s1
+          s3 <- mylex ", " s2
+          (b, s4) <- greadsPrec 11 s3
+          rest <- mylex ")" s4
+          Church.withSome a $ \(ta :: Type a) ->
+            Church.withSome b $ \(tb :: Type b) ->
+              return (Church.mkSome $ TupleType ta tb, rest)
+      ++ do
+          s1 <- mylex "<" s
+          (a, s2) <- greadsPrec 11 s1
+          s3 <- mylex ", " s2
+          (b, s4) <- greadsPrec 11 s3
+          rest <- mylex ">" s4
+          Church.withSome a $ \(ta :: Type a) ->
+            Church.withSome b $ \(tb :: Type b) ->
+              return (Church.mkSome $ SumType ta tb, rest)
+    where
+      mylex prefix = maybeToList . stripPrefix prefix
 
 instance ExprType a => Eq (RCSet a) where
   a == b = withExprConstraints (typeOf' a) $ case a of
@@ -240,6 +282,7 @@ inhabitants = \case
   SetType _ -> Nothing
   TupleType x y -> (*) <$> inhabitants x <*> inhabitants y
   SumType x y -> (+) <$> inhabitants x <*> inhabitants y
+  UnitType -> Just 1
 
 instance (Ord a, Read a) => Read (RCSet a) where
   readsPrec _ str =
@@ -266,6 +309,7 @@ instance Has ExprType Type where
     IntType -> k
     FloatType -> k
     BoolType -> k
+    UnitType -> k
     CharType -> k
     ListType t' -> has @ExprType t' k
     SetType t' -> has @ExprType t' k
@@ -275,6 +319,7 @@ instance Has ExprType Type where
 instance Has Eq Type where
   has t k = case t of
     IntType -> k
+    UnitType -> k
     FloatType -> k
     BoolType -> k
     CharType -> k
@@ -286,6 +331,7 @@ instance Has Eq Type where
 instance Has Ord Type where
   has t k = case t of
     IntType -> k
+    UnitType -> k
     FloatType -> k
     BoolType -> k
     CharType -> k
@@ -299,6 +345,7 @@ instance Has Show Type where
     IntType -> k
     FloatType -> k
     BoolType -> k
+    UnitType -> k
     CharType -> k
     ListType t' -> has @Show t' k
     SetType t' -> has @Show t' k
@@ -310,6 +357,7 @@ instance Has SymVal Type where
     IntType -> k
     FloatType -> k
     BoolType -> k
+    UnitType -> k
     CharType -> k
     ListType t' -> has @SymVal t' k
     SetType t' -> has @SymVal t' $ has @Ord t' k
@@ -320,6 +368,7 @@ instance Has Read Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    UnitType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Read t' k
@@ -330,6 +379,7 @@ instance Has Read Type where
 instance Has Data Type where
   has t k = case t of
     IntType -> k
+    UnitType -> k
     FloatType -> k
     BoolType -> k
     CharType -> k
@@ -366,16 +416,9 @@ instance (ExprType a, ExprType b) => ExprType (a,b) where
 instance (ExprType a, ExprType b) => ExprType (Either a b) where
     typeOf _ = SumType (typeOf undefined) (typeOf undefined)
     typeOf' _ = SumType (typeOf undefined) (typeOf undefined)
-
-instance Show (Type a) where
-    show IntType = "Int"
-    show BoolType = "Bool"
-    show CharType = "Char"
-    show FloatType = "Float"
-    show (ListType t) = "[" ++ show t ++ "]"
-    show (SetType t) = "[" ++ show t ++ "]"
-    show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
-    show (SumType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
+instance ExprType () where
+    typeOf _ = UnitType
+    typeOf' _ = UnitType
 
 data Variable t = Variable {varName :: String, varType :: Type t} deriving (Eq, Ord)
 instance GEq Variable where
@@ -413,9 +456,11 @@ deriving instance Ord a => Ord (Constant a)
 deriving instance Show a => Show (Constant a)
 deriving instance (Read a, ExprType a) => Read (Constant a)
 
-{-# COMPLETE CBool, CInt, CFloat, CChar, CList, CTuple, CSet, CSum #-}
+{-# COMPLETE CBool, CUnit, CInt, CFloat, CChar, CList, CTuple, CSet, CSum #-}
 pattern CBool :: () => (a ~ Bool) => a -> Constant a
 pattern CBool b = Constant BoolType b
+pattern CUnit :: () => (a ~ ()) => Constant a
+pattern CUnit = Constant UnitType ()
 pattern CInt :: () => (a ~ Integer) => a -> Constant a
 pattern CInt i = Constant IntType i
 pattern CFloat :: () => (a ~ Double) => a -> Constant a
@@ -435,6 +480,8 @@ pattern CSum ab ta tb = (Constant (SumType ta tb) ab)
 
 int :: Integer -> Some Constant
 int i = Some (CInt i)
+unit :: Some Constant
+unit = Some CUnit
 bool :: Bool -> Some Constant
 bool b = Some (CBool b)
 float :: Double -> Some Constant
@@ -488,6 +535,7 @@ instance JSON.FromJSON (Some Constant) where
             Some BoolType -> parseBool $ lkup "value" m
             Some IntType -> parseInt $ lkup "value" m
             Some FloatType -> parseFloat $ lkup "value" m
+            Some UnitType -> parseUnit $ lkup "value" m
             Some CharType -> parseChar $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
             Some (SetType t) -> parseSet t $ lkup "value" m
@@ -499,6 +547,7 @@ instance JSON.FromJSON (Some Constant) where
           "int" -> pure $ Some IntType
           "float" -> pure $ Some FloatType
           "bool" -> pure $ Some BoolType
+          "()" -> pure $ Some UnitType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
           '{':(init -> cs) -> (\(Some t) -> Some $ SetType t)  <$> parseType (JSON.String (Text.pack cs))
           '(':(parseTupleType 0 . init -> (a,b))
@@ -525,6 +574,9 @@ instance JSON.FromJSON (Some Constant) where
         parseBool _ = fail "type indicates bool, but value is not of type bool"
         parseInt (JSON.Number (DS.floatingOrInteger @Double -> Right i)) = return $ int i
         parseInt _ = fail "type indicates int, but value is not of type int"
+        parseUnit (JSON.String s)
+          | "()" <- Text.unpack s = return unit
+        parseUnit _ = fail "failed to parse a unit"
         parseChar (JSON.String s)
          | [c] <- Text.unpack s
          = return $ char c
@@ -586,40 +638,31 @@ instance JSON.FromJSON (Some Constant) where
 instance JSON.ToJSON (Some Constant) where
     toJSON (Some v) = case v of
       CBool b -> JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
+      CUnit -> JSON.Object $ JSON.insert "type" "()" $ JSON.insert "value" (JSON.String $ Text.pack "()") JSON.empty
       CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
       CFloat f -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
       CChar c -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack [c]) JSON.empty
       CList xs t -> JSON.Object
-        $ JSON.insert "type" (fromString . showtype $ ListType t)
+        $ JSON.insert "type" (fromString . show $ ListType t)
         $ JSON.insert "value" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
         JSON.empty
       CSet xs t -> JSON.Object
-        $ JSON.insert "type" (fromString . showtype $ SetType t)
+        $ JSON.insert "type" (fromString . show $ SetType t)
         $ JSON.insert "value" (case xs of
           RegularSet    x -> JSON.Object $ JSON.insert "regularset" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) $ Set.toList x) JSON.empty
           ComplementSet x -> JSON.Object $ JSON.insert "complement" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) $ Set.toList x) JSON.empty
           ) JSON.empty
       --(JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
       CTuple x y a b -> JSON.Object
-        $ JSON.insert "type" (fromString . showtype $ TupleType a b)
+        $ JSON.insert "type" (fromString . show $ TupleType a b)
         $ JSON.insert "value" (JSON.Object $ JSON.insert "left" (JSON.toJSON . Some $ Constant a x) $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
         JSON.empty
       CSum xy a b -> JSON.Object
-        $ JSON.insert "type" (fromString . showtype $ SumType a b)
+        $ JSON.insert "type" (fromString . show $ SumType a b)
         $ JSON.insert "value" (case xy of
           Left  x -> JSON.Object $ JSON.insert "left"  (JSON.toJSON . Some $ Constant a x) JSON.empty
           Right y -> JSON.Object $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
         JSON.empty
-      where
-        showtype :: Type a -> String
-        showtype BoolType = "bool"
-        showtype IntType = "int"
-        showtype FloatType = "float"
-        showtype CharType = "char"
-        showtype (ListType tp) = "[" <> showtype tp <> "]"
-        showtype (SetType tp) = "{" <> showtype tp <> "}"
-        showtype (TupleType a b) = "(" <> showtype a <> "," <> showtype b <> ")"
-        showtype (SumType a b) = "<" <> showtype a <> "," <> showtype b <> ">"
 
 -- | convert a Constant to an typed value
 class ExprType t => ConstType t where
@@ -636,6 +679,7 @@ instance Has ConstType Type where
     FloatType -> k
     BoolType -> k
     CharType -> k
+    UnitType -> k
     ListType t' -> has @ConstType t' k
     SetType t' -> has @ConstType t' k
     TupleType a b -> has @ConstType a $ has @ConstType b k

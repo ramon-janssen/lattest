@@ -54,6 +54,7 @@ quickCheckTests = testGroup "Quickcheck"
   , testProperty "specifiedAllowedCorrespondence" $
       within (durationSeconds * 1000000) $ withMaxSuccess 200 $
       prop_specifiedAllowedCorrespondence composedCoffeeMachineIntrpr
+  , testProperty "show and read types" propShowReadType
   ]
 
     where
