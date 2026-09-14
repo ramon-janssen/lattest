@@ -55,6 +55,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
+import Lattest.Model.StandardAutomata (sanityCheckSTS)
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -204,11 +205,13 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
+offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
-             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
-             -> IO (OfflineTests i o r)
-offlineTests intrpr tc = do
+             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) (Maybe Verdict)
+             -> IO (OfflineTests i o (Maybe Verdict))
+offlineTests intrpr tc
+  | not (sanityCheckSTS intrpr) = error "sanity check failed"
+  | otherwise = do
   inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
         Right r -> pure $ Right r
@@ -217,7 +220,7 @@ offlineTests intrpr tc = do
           Left (tc', intrpr') -> do
             case BM.specifiedness (stateConf intrpr') of
               Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"
-              Forbidden -> error "generated an input that went to bottom. TODO: should just be a 'fail' verdict, but: 1. that means changing the type of results 'r' to 'Verdict', and it's surprisingly hard to write a testcontroller that returns a Verdict. 2. This situation is kinda weird; while technically allowed it usually shows a bug in the model definition. Don't want to change this until we have a proper sanity check in place that warns about this case."
+              Forbidden -> pure $ Left (i', OfflineTests mempty $ Right $ Just Fail)
               Indefinite -> do
                 ot <- offlineTests intrpr' tc'
                 pure $ Left (i', ot)
