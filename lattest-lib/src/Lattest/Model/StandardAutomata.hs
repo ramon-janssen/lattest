@@ -66,11 +66,14 @@ SuspSTSIntrp,
 interpretSTSQuiescent,
 SuspInputAttemptSTSIntrp,
 interpretSTSQuiescentInputAttemptConcrete,
+
+sanityCheckSTS,
+sanityCheckLTS,
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue)
-import Lattest.Model.Automaton (AutSyntax, automaton, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract, IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue, isInput, isInputInteract)
+import Lattest.Model.Automaton (AutSyntax (..), automaton, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, AutIntrpr, interpret, Completable, implicitDestination,IntrpState(..),STStdest, Valuation, transRel,syntacticAutomaton, reachableFrom, reachable)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
@@ -82,6 +85,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import  Data.Maybe as Maybe
 import qualified Data.Set as Set
+import Data.Bifunctor (Bifunctor(..))
+import qualified Debug.Trace
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -267,4 +272,26 @@ type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSy
 
 interpretSTSQuiescentInputAttemptConcrete  :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o
 interpretSTSQuiescentInputAttemptConcrete sts initialValuation = interpret sts (`IntrpState` initialValuation)
+
+
+sanityCheckLTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
+            => AutIntrpr m loc q (IOAct i o) tdest act -> Bool
+sanityCheckLTS = sanityCheckInternal isInput
+sanityCheckSTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
+            => AutIntrpr m loc q (IOSymInteract i o) tdest act -> Bool
+sanityCheckSTS = sanityCheckInternal isInputInteract
+sanityCheckInternal :: (Show loc, Show t, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
+            => (t -> Bool) -> AutIntrpr m loc q t tdest act -> Bool
+sanityCheckInternal isIn intrpr = noInputToForbidden
+  where
+    noInputToForbidden =
+      let errs = concatMap (\l -> map (l,) . Map.toList . Map.filterWithKey (\act m -> isIn act && BM.isForbidden m) $ trans l) locations
+      in null errs || error
+      ("Sanity check failed: found transition(s) that lead an input to Forbidden. "
+      <> "This is technically allowed, but usually a bug: it'd make more sense to "
+      <> "turn every output that leads to this location lead to Forbidden instead, "
+      <> "if this behaviour is intentional. This concerns these transitions: " <> show errs)
+    syn = syntacticAutomaton intrpr
+    trans = transRel syn
+    locations = Set.toList $ reachable syn `Set.union` Set.fromList (Foldable.toList (initConf syn))
 
