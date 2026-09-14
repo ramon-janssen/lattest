@@ -116,7 +116,7 @@ import Data.Constraint.Extras (Has(..))
     Syntactical automaton model, with locations and transitions. This is analogous to an automaton drawn on paper
     with points and arrows. Transitions are mapped to /state configurations/, see "Lattest.Model.BoundedMonad".
     Furthermore, transitions contain transition labels, both on the 'outside' and in the 'inside' of the state configuration.
-    
+
     These labels are abstract and may be interpreted in various ways, e.g. a simple automaton model may directly have
     observable actions as labels, whereas a more complex automaton model may have symbolic data variables with guards,
     assignments, clocks for timing, etc.
@@ -615,16 +615,19 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
 
 {- |
     Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
+    Does not necessarily include the initial locations.
 -}
 reachable :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> Set loc
 reachable aut = reachableFrom aut $ initConf aut
 
 {- |
     Compute the set of locations that is syntactically reachable from the given locations.
-    
+
     Note that this not involve any interpretation of the automaton, e.g. if a location of symbolic automaton is only reachable via a transition with
     a guard that is always `False`, then that location is still considered to be reachable, even if a symbolic interpretation of that automaton
     can never reach that location for any trace of concrete values.
+
+    Does not include the given locations, unless they can be reached after at least one transition.
 -}
 reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Set loc
 reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable.toList locations

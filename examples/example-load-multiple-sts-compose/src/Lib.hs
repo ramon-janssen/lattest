@@ -7,6 +7,8 @@ import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
+import Lattest.Exec.Testing (Verdict(..))
+import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
 
 run :: IO ()
 run = do
@@ -31,6 +33,11 @@ run = do
     putStrLn "computing offline test cases..."
     let nrSteps = 10
         randomSeed = 456
-        controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+        observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
+        observeVerdict Nothing _ _ lattice
+          | isForbidden lattice = pure $ Just Fail
+          | isUnderspecified lattice = pure $ Just Pass
+          | otherwise = pure Nothing
+        controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
     tests <- offlineTests model controller
     print tests
