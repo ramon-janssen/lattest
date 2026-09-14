@@ -2,7 +2,7 @@ module Lib
     ( run
     ) where
 
-import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp)
+import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp, prettyPrint)
 import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
@@ -16,6 +16,7 @@ run = do
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
 
+    putStrLn $ unlines $ map (\(_,sts,_) -> prettyPrint sts) stss
     -- Compose all parsed STSs
     let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _) <- stss ]
         conjmodel   = conjunctionAll checked
@@ -32,5 +33,4 @@ run = do
         randomSeed = 456
         controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
     tests <- offlineTests model controller
-    
     print tests

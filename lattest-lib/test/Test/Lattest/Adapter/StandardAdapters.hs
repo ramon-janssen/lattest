@@ -68,8 +68,8 @@ testJSONSocketAdapterByte = TestCase $ withSocketsDo $ do
     assertObserveBytes (C8.pack "6") adap -- the adapter observes 6 from the SUT
 
     close adap
-    Socket.gracefulClose listenConn 100
-    Socket.gracefulClose listenSock 100
+    Socket.gracefulClose listenConn 200
+    Socket.gracefulClose listenSock 200
 
 testAdapterAcceptingInput :: Test
 testAdapterAcceptingInput = TestCase $ do
@@ -152,8 +152,8 @@ testJSONSocketAdapterInt = TestCase $ withSocketsDo $ do
     assertObserve 6 adap -- the adapter observes 6 from the SUT
 
     close adap
-    Socket.gracefulClose listenConn 100
-    Socket.gracefulClose listenSock 100
+    Socket.gracefulClose listenConn 200
+    Socket.gracefulClose listenSock 200
 
 _assertRecv :: String -> String -> Socket -> IO ()
 _assertRecv name s sock = void $ assertRecv name s sock
@@ -270,8 +270,8 @@ testJSONSocketAdapterObject = TestCase $ withSocketsDo $ do
     assertObserve list78 adap -- the adapter observes [7,8] from the SUT
 
     close adap
-    Socket.gracefulClose listenConn 100
-    Socket.gracefulClose listenSock 100
+    Socket.gracefulClose listenConn 200
+    Socket.gracefulClose listenSock 200
 
 
 

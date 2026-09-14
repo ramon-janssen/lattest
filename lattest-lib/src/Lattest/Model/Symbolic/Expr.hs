@@ -9,9 +9,9 @@ module Lattest.Model.Symbolic.Expr
 , ExprView(..)
 , ExprType(..)
 , Type(..)
-, ExprType(..)
 , Constant(Constant, CInt, CBool, CString, CList, CSet, CSum, CTuple, CFloat, CChar)
 , int
+, unit
 , float
 , bool
 , string
