@@ -13,7 +13,7 @@ import qualified Data.Dependent.Map as DMap
 import qualified Data.Maybe as Maybe
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.StandardAutomata
-import           Lattest.Exec.Testing(TestController(..), Verdict(..), runSMTTester, Verdict(Pass))
+import           Lattest.Exec.Testing(TestController(..), Verdict(..), runSTSTester, Verdict(Pass))
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
 import Lattest.SMT (Some(..))
@@ -62,7 +62,7 @@ run = do
         randomSeed = 456
         testSelector = randomDataOrWaitForOutputTestSelectorFromSeed randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    (verdict, (observed, maybeMq)) <- runSMTTester model testSelector adap
+    (verdict, (observed, maybeMq)) <- runSTSTester model testSelector adap
 
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed

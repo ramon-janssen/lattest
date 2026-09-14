@@ -13,7 +13,7 @@ import qualified Data.Map as Map
 import qualified Data.Dependent.Map as DMap
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.StandardAutomata
-import           Lattest.Exec.Testing(runSMTTester)
+import           Lattest.Exec.Testing(runSTSTester)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
 import Lattest.Model.Symbolic.Expr (Constant(..))
@@ -103,7 +103,7 @@ someFunc = do
         randomSeed = 456
         testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    (verdict, (observed, maybeMq)) <- runSMTTester model testSelector adap
+    (verdict, (observed, maybeMq)) <- runSTSTester model testSelector adap
 
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed
