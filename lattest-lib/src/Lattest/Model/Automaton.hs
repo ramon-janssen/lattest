@@ -900,9 +900,9 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
         -- keep input switches as-is
         [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
         ++
-        -- output switches are replaced by a check gate leading to a pending state
+        -- (allowed) output switches are replaced by a check gate leading to a pending state
         [ (checkGateFor t, BM.ordMap (\(_, target) -> (identityTdest, Pending loc t target)) mval)
-        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t ]
+        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t, not (isForbidden mval) ]
 
     -- Additional switches starting from `pending` locations
     switches (Pending src t target) = Map.singleton t outcomes
