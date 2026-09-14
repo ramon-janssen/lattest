@@ -94,6 +94,7 @@ import Lattest.Model.Symbolic.SolveSTS (interactsToSpecifiedCondition, interacts
 import System.IO.Unsafe (unsafePerformIO)
 import Lattest.SMT (runSMT)
 import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
+import Data.Either (fromRight)
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -575,14 +576,15 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     the two are conjuncted with (/\). If only one of the two is specified (the other being forbidden or underspecified), that one is used as-is.
     This version prunes merge transitions that aren't satisfiable away, but requires sts1 to be a tree (no loops).
     This version takes an AutIntrpr for sts1, because we need an initial valuation to compute reachability.
+    Returns both the pruned sequentially composed automaton, and a list of all pruned away transitions (if any)
 -}
 sequentiallyAtPruned
   :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a))
   => AutIntrpr m loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act
   -> [loc1]
   -> AutSyntax m loc2 (IOSymInteract i o) STStdest
-  -> AutSyntax m (Either loc1 loc2) (IOSymInteract i o) STStdest
-sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphabet switches
+  -> (AutSyntax m (Either loc1 loc2) (IOSymInteract i o) STStdest, [(loc1, IOSymInteract i o, m loc2)])
+sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `seq` (automaton newInitConf newAlphabet switches, pruned)
     where
     locs1 = validMergeLocs "sequentiallyAt" sts1 mergeLocs
     locs2 = allLocations sts2
@@ -598,12 +600,13 @@ sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `s
 
     -- the new transitions we actually add to this location, i.e. those of initTransOf2 that are satisfiable
     newTransOf1 l1 = let tr = getTraceTo l1
-      in flip Map.filterWithKey initTransOf2 $
+      in flip Map.partitionWithKey initTransOf2 $
           \t _ -> Maybe.isJust $ unsafePerformIO $ runSMT $ solveGuard [] $
              case t of
                SymInteract (In _)  _ -> interactsToSpecifiedCondition (AutInterpretation initconf sts1) (tr ++ [t])
                SymInteract (Out _) _ -> interactsToAllowedCondition (AutInterpretation initconf sts1) (tr ++ [t])
 
+    pruned = concatMap (\l1 -> map (\(act, l2) -> (l1, act, (fromRight (error "only Left expected") . snd) BM.<#> l2)) . Map.toList . snd $ newTransOf1 l1) mergeLocs
 
     -- conjunct sts1's own transition with the copied one, but only where both are specified (and not forbiddden)
     -- TODO: I feel like this should differ between inputs and outputs? This somehow feels wrong, but should look
@@ -614,7 +617,7 @@ sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `s
         | otherwise                                    = other
 
     transOf1 l1
-        | l1 `Set.member` mergeLocSet = Map.unionWith pick ownTrans $ newTransOf1 l1
+        | l1 `Set.member` mergeLocSet = Map.unionWith pick ownTrans $ fst $ newTransOf1 l1
         | otherwise                   = ownTrans
         where
         ownTrans = Map.map (second Left BM.<#>) (transRel sts1 l1)
@@ -630,10 +633,10 @@ sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `s
     getTraceTo = reverse . getInvertedTraceTo
     flippedMap1 = Map.fromList $
       (\xs -> if length xs == length (List.nub $ map fst xs) then xs else error "sts1 is not a tree") $
-      [ (snd BM.<#> to, (interact, from))
+      [ (snd BM.<#> to, (interact', from))
       | from <- Set.toList $ allLocations sts1
-      , (interact, to) <- Map.toList $ transRel sts1 from]
+      , (interact', to) <- Map.toList $ transRel sts1 from]
     getInvertedTraceTo l = case flippedMap1 Map.!? BM.ordReturn l of
       Nothing -> if BM.ordReturn l == initConf sts1 then [] else error $ "unreachable location: " <> show l
-      Just (interact, source) -> interact : getInvertedTraceTo source
+      Just (interact', source) -> interact' : getInvertedTraceTo source
 
