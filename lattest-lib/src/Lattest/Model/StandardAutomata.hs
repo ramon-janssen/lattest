@@ -290,12 +290,14 @@ sanityCheckInternal isIn intrpr = noInputToForbidden && noOutputToUnderspecified
       ("Sanity check failed: found transition(s) that lead an input to Forbidden. "
       <> "This is technically allowed, but usually a bug: it'd make more sense to "
       <> "turn every output that leads to this location lead to Forbidden instead, "
-      <> "if this behaviour is intentional. This concerns these transitions: " <> show errs)
+      <> "if this behaviour is intentional. This concerns these transitions: " <> show errs
+      <> " To bypass this check; use runLTSTester or runSTSTester instead of runTester.")
     noOutputToUnderspecified =
       let errs = concatMap (\l -> map (l,) . Map.toList . Map.filterWithKey (\act m -> isOut act && BM.isUnderspecified m) $ trans l) locations
       in null errs || error
       ("Sanity check failed: found transition(s) that lead an output to Underspecified. "
-      <> "This is technically allowed, but usually a bug. This concerns these transitions: " <> show errs)
+      <> "This is technically allowed, but usually a bug. This concerns these transitions: " <> show errs
+      <> " To bypass this check; use runLTSTester or runSTSTester instead of runTester.")
     syn = syntacticAutomaton intrpr
     trans = transRel syn
     isOut = not . isIn
