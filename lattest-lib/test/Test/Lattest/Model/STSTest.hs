@@ -1721,7 +1721,7 @@ current state configuration: (0,{x:=0})
 initial location configuration: 0
 locations: 0, 1, 2, 3, pending !"o2" [p:Int] -> 2, pending !"o1" [] -> 2, pending !"o2" [p:Int] -> 3, pending !"o2" [p:Int] -> 3
 transitions:
-0  ――?"check_o1" []⟶  ⊥
+0  ――?"check_o1" []⟶  ⊤
 0  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 2)
 0  ――?"reset" []⟶  ⊤
 0  ――?"start" []⟶  (True, {},1)
@@ -1733,14 +1733,14 @@ transitions:
 1  ――?"start" []⟶  ⊤
 1  ――!"o1" []⟶  ⊥
 1  ――!"o2" [p:Int]⟶  ⊥
-2  ――?"check_o1" []⟶  ⊥
+2  ――?"check_o1" []⟶  ⊤
 2  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
 2  ――?"reset" []⟶  (True, {},0)
 2  ――?"start" []⟶  ⊤
 2  ――!"o1" []⟶  ⊥
 2  ――!"o2" [p:Int]⟶  ⊥
-3  ――?"check_o1" []⟶  ⊥
-3  ――?"check_o2" []⟶  ⊥
+3  ――?"check_o1" []⟶  ⊤
+3  ――?"check_o2" []⟶  ⊤
 3  ――?"reset" []⟶  ⊤
 3  ――?"start" []⟶  ⊤
 3  ――!"o1" []⟶  ⊥
@@ -1815,7 +1815,7 @@ current state configuration: (0,{x:=0})
 initial location configuration: 0
 locations: 0, 1, 2, 3, pending !"o2" [p:Int] -> 2, pending !"o1" [] -> 2, pending !"o2" [p:Int] -> 3, pending !"o2" [p:Int] -> 3
 transitions:
-0  ――?"check_o1" []⟶  ⊥
+0  ――?"check_o1" []⟶  ⊤
 0  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 2)
 0  ――?"reset" []⟶  ⊤
 0  ――?"start" []⟶  (True, {},1)
@@ -1827,14 +1827,14 @@ transitions:
 1  ――?"start" []⟶  ⊤
 1  ――!"o1" []⟶  ⊥
 1  ――!"o2" [p:Int]⟶  ⊥
-2  ――?"check_o1" []⟶  ⊥
+2  ――?"check_o1" []⟶  ⊤
 2  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
 2  ――?"reset" []⟶  (True, {},0)
 2  ――?"start" []⟶  ⊤
 2  ――!"o1" []⟶  ⊥
 2  ――!"o2" [p:Int]⟶  ⊥
-3  ――?"check_o1" []⟶  ⊥
-3  ――?"check_o2" []⟶  ⊥
+3  ――?"check_o1" []⟶  ⊤
+3  ――?"check_o2" []⟶  ⊤
 3  ――?"reset" []⟶  ⊤
 3  ――?"start" []⟶  ⊤
 3  ――!"o1" []⟶  ⊥
