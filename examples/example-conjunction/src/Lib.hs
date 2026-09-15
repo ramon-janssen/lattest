@@ -7,7 +7,7 @@ import Lattest.Model.Alphabet(IOAct(..))
 import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptingInputs,withQuiescenceMillis)
 import Lattest.Model.StandardAutomata(automaton, ioAlphabet, nonDetConcTransFromMRel,interpretQuiescentConcrete, atom, top, (\/), (/\), FreeLattice,)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runTester)
+import Lattest.Exec.Testing(runTester, runLTSTester)
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
@@ -65,7 +65,8 @@ someFunc = do
     imp <- withQuiescenceMillis 200 adap
     let model = interpretQuiescentConcrete sG
     putStrLn "starting test..."
-    (verdict, (observed, maybeMq)) <- runTester model testSelector imp
+    -- ignoring the sanity check for outputs to top by not running runTester
+    (verdict, (observed, maybeMq)) <- runLTSTester model testSelector imp
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed
     putStrLn $ "final state: " ++ show maybeMq

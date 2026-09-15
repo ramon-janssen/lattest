@@ -75,6 +75,8 @@ where
 import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..))
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
+import Data.Some (Some (..))
+import Data.List (intercalate)
 
 {- |
     If an input type is an 'TestChoice' to a type of observable actions, this means that
@@ -274,18 +276,18 @@ fromSuspendedInputAttempt _ = error "failed fromSuspendedInputAttempt"
 
 
 -- STS data types
-data SymInteract g = SymInteract g [Variable] deriving (Eq, Ord, Functor)
+data SymInteract g = SymInteract g [Some Variable] deriving (Eq, Ord, Functor)
 type IOSymInteract i o = SymInteract (IOAct i o)
 
 interactionGate :: SymInteract g -> g
 interactionGate (SymInteract g' _) = g'
 
 instance (Show g) => Show (SymInteract g) where
-    show (SymInteract g' vars) = show g' ++ " " ++ show vars
+  show (SymInteract g' vars) = show g' ++ " [" ++ intercalate "," (map (\(Some v) -> show v) vars) ++ "]"
 
 type SymGuard = Expr Bool
 
-data GateValue g = GateValue {gate :: g, values :: [Constant]} deriving (Eq, Ord, Functor, Generic)
+data GateValue g = GateValue {gate :: g, values :: [Some Constant]} deriving (Eq, Ord, Functor, Generic)
 
 instance FromJSON a => FromJSON (GateValue a)
 instance ToJSON a => ToJSON (GateValue a)
@@ -294,6 +296,9 @@ type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where
     show (GateValue g' vals) = show g' ++ if null vals then "" else show vals
+
+instance Read g => Read (GateValue g) where
+  readsPrec = error "todo; would be useful for defining adapters"
 
 valueGate :: GateValue g -> g
 valueGate (GateValue g' _) = g'
@@ -311,16 +316,16 @@ isOutputGate (GateValue (Out _) _) = True
 isOutputGate _ = False
 
 isInputGate :: IOGateValue i o -> Bool
-isInputGate (GateValue (In _) _) = False
-isInputGate _ = True
+isInputGate (GateValue (In _) _) = True
+isInputGate _ = False
 
 isOutputInteract :: IOSymInteract i o -> Bool
 isOutputInteract (SymInteract (Out _) _) = True
 isOutputInteract _ = False
 
 isInputInteract :: IOSymInteract i o -> Bool
-isInputInteract (SymInteract (In _) _) = False
-isInputInteract _ = True
+isInputInteract (SymInteract (In _) _) = True
+isInputInteract _ = False
 
 maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
 maybeFromInputInteraction (SymInteract g' vars) = case maybeFromInput g' of

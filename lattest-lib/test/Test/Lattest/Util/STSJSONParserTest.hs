@@ -15,15 +15,16 @@ module Test.Lattest.Util.STSJSONParserTest
     ) where
 
 import Data.List (isInfixOf)
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Text.RawString.QQ as QQ
 import Test.HUnit
 import Lattest.Model.Alphabet(IOAct(..), SymInteract(..))
 import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
-import Lattest.Model.Symbolic.Expr(Constant(..), Type(..), Variable(..), fromConstantsMap)
+import Lattest.Model.Symbolic.Expr(Type(..), Variable(..), Val (..), Valuation(..))
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
+import qualified Data.Dependent.Map as DMap
+import Data.Some (Some(..))
 
 testDir :: FilePath
 testDir = "./test/Test/Lattest/Util/STSJSONExamples/"
@@ -49,20 +50,21 @@ testSTSJSONParserNominal = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_all_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (sts, valuation) -> do
+        Right (id, sts, valuation) -> do
+            assertEqual "STS id" "STS1" id
             assertEqual "initial valuation"
-                (fromConstantsMap $ Map.fromList
-                    [ (Variable "counter" IntType,    Cint    5    )
-                    , (Variable "label"   StringType, Cstring ""   )
-                    , (Variable "active"  BoolType,   Cbool   False)
-                    ])
+                (Valuation $
+                 DMap.insert (Variable "counter" IntType)  (Val 5) $
+                 DMap.insert (Variable "label" (ListType CharType)) (Val "") $
+                 DMap.insert (Variable "active" BoolType)  (Val False) $
+                 mempty)
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Variable "label_p"   StringType]
-                    , SymInteract (In  "update")    [Variable "counter_p" IntType   ]
+                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   (ListType CharType)]
+                    , SymInteract (In  "update")    [Some $ Variable "counter_p" IntType   ]
                     , SymInteract (Out "O1")        []
-                    , SymInteract (Out "confirm")   [Variable "counter_p" IntType   ]
+                    , SymInteract (Out "confirm")   [Some $ Variable "counter_p" IntType   ]
                     ])
                 (alphabet sts)
             assertBool failureMessage (expected == actual)
@@ -71,19 +73,19 @@ testSTSJSONParserNominal = TestCase $ do
                 actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
                 failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
                 expected = [QQ.r|
-current state configuration: ("0",{counter:=5,active:=False,label:=""})
+current state configuration: ("0",{active:=False,counter:=5,label:=""})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
-"0"  ――?"register" [label_p:String]⟶  ⊤
+"0"  ――?"register" [label_p:[Char]]⟶  ⊤
 "0"  ――?"update" [counter_p:Int]⟶  (((counter+-4)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5)) ≥ 0), {counter:=(counter+counter_p)},"1")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Int]⟶  ⊥
-"1"  ――?"register" [label_p:String]⟶  ((label) = (label_p), {counter:=(counter+1), active:=True},"0") ∧ ((active) = (True), {label:=label_p},"0")
+"1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1)},"0")
 "1"  ――?"update" [counter_p:Int]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Int]⟶  ⊥
-"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"register" [label_p:[Char]]⟶  ⊤
 "2"  ――?"update" [counter_p:Int]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
 "2"  ――!"confirm" [counter_p:Int]⟶  ⊥
@@ -97,20 +99,21 @@ testSTSJSONParserNominalFloat = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_float_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (sts, valuation) -> do
+        Right (id, sts, valuation) -> do
+            assertEqual "STS id" "" id  -- no ID defined
             assertEqual "initial valuation"
-                (fromConstantsMap $ Map.fromList
-                    [ (Variable "counter" FloatType,  Cfloat  0.0  )
-                    , (Variable "label"   StringType, Cstring ""   )
-                    , (Variable "active"  BoolType,   Cbool   False)
-                    ])
+                (Valuation $
+                    DMap.insert (Variable "counter" FloatType)  (Val 0.0) $
+                    DMap.insert (Variable "label"   (ListType CharType)) (Val "") $
+                    DMap.insert (Variable "active"  BoolType)   (Val False)
+                    mempty)
                 valuation
             assertEqual "alphabet"
                 (Set.fromList
-                    [ SymInteract (In  "register")  [Variable "label_p"   StringType]
-                    , SymInteract (In  "update")    [Variable "counter_p" FloatType  ]
+                    [ SymInteract (In  "register")  [Some $ Variable "label_p"   (ListType CharType)]
+                    , SymInteract (In  "update")    [Some $ Variable "counter_p" FloatType  ]
                     , SymInteract (Out "O1")        []
-                    , SymInteract (Out "confirm")   [Variable "counter_p" FloatType  ]
+                    , SymInteract (Out "confirm")   [Some $ Variable "counter_p" FloatType  ]
                     ])
                 (alphabet sts)
             assertBool failureMessage (expected == actual)
@@ -119,19 +122,19 @@ testSTSJSONParserNominalFloat = TestCase $ do
                 actual   = "\n" ++ prettyPrintIntrp intrpsts ++ "\n"
                 failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
                 expected = [QQ.r|
-current state configuration: ("0",{active:=False,label:="",counter:=0.0})
+current state configuration: ("0",{active:=False,counter:=0.0,label:=""})
 initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
-"0"  ――?"register" [label_p:String]⟶  ⊤
-"0"  ――?"update" [counter_p:Float]⟶  (((counter+-5.5)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1")
+"0"  ――?"register" [label_p:[Char]]⟶  ⊤
+"0"  ――?"update" [counter_p:Float]⟶  (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1") ∧ (((counter+-5.5)) ≥ 0, {active:=False},"2")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Float]⟶  ⊥
-"1"  ――?"register" [label_p:String]⟶  ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0") ∧ ((active) = (True), {label:=label_p},"0")
+"1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0")
 "1"  ――?"update" [counter_p:Float]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Float]⟶  ⊥
-"2"  ――?"register" [label_p:String]⟶  ⊤
+"2"  ――?"register" [label_p:[Char]]⟶  ⊤
 "2"  ――?"update" [counter_p:Float]⟶  ⊤
 "2"  ――!"O1" []⟶  (True, {},"0")
 "2"  ――!"confirm" [counter_p:Float]⟶  ⊥
@@ -149,13 +152,13 @@ testSTSJSONParserUnknownType = TestCase $ do
 testSTSJSONParserAssignmentTypeMismatch :: Test
 testSTSJSONParserAssignmentTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "assignment_type_mismatch.json")
-    assertErrorContains "Test assignment type mismatch" "not a string expression" result
+    assertErrorContains "Test assignment type mismatch" "assigment to variable of wrong type" result
 
 -- | Guard compares integer with string using ==
 testSTSJSONParserGuardTypeMismatch :: Test
 testSTSJSONParserGuardTypeMismatch = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "guard_type_mismatch.json")
-    assertErrorContains "Test guard type mismatch" "not a string expression" result
+    assertErrorContains "Test guard type mismatch" "unknown or badly typed op2: ==" result
 
 -- | Switch refers to an undefined gate
 testSTSJSONParserGateIdDup :: Test
@@ -163,17 +166,17 @@ testSTSJSONParserGateIdDup = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "gate_id_dup.json")
     assertErrorContains "Test gate id inconsistency" "unknown gate" result
 
--- | Guard expression uses operator "??" which is not handled by toBoolExpr.
+-- | Guard expression uses operator "?!?" which is not a recognised op2.
 testSTSJSONParserUnsupportedGuardOperand :: Test
 testSTSJSONParserUnsupportedGuardOperand = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unsupported_guard_operand.json")
-    assertErrorContains "Test unsupported guard operand" "not a boolean expression" result
+    assertErrorContains "Test unsupported guard operand" "unknown or badly typed op2: ?!?" result
 
 -- | Assignment expression uses an unsupported operator
 testSTSJSONParserUnsupportedAssignmentOperand :: Test
 testSTSJSONParserUnsupportedAssignmentOperand = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "unsupported_assignment_operand.json")
-    assertErrorContains "Test unsupported assignment operand" "not an integer expression" result
+    assertErrorContains "Test unsupported assignment operand" "unknown or badly typed op2: ???" result
 
 -- | The mandatory "switches" field is absent from the JSON.
 testSTSJSONParserMissingSwitches :: Test

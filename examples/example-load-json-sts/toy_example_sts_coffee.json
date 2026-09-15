@@ -39,23 +39,23 @@
         }
     },
     "guards": {
-        "G1": { "lhs": "waterlevel", "op": "==", "rhs": "waterlevel_p" },
+        "G1": { "lhs": {"var": "waterlevel"}, "op": "==", "rhs": {"var": "waterlevel_p"} },
         "G2": {
-            "lhs": { "lhs": 1, "op": "<=", "rhs": "waterlevel_p" },
+            "lhs": { "lhs": {"integer": 1}, "op": "<=", "rhs": {"var": "waterlevel_p"} },
             "op": "&&",
-            "rhs": { "lhs": "waterlevel_p", "op": "<=", "rhs": 10 }
+            "rhs": { "lhs": {"var": "waterlevel_p"}, "op": "<=", "rhs": {"integer": 10} }
         },
-        "G3": { "lhs": "waterlevel", "op": ">=", "rhs": 15 },
-        "G4": { "lhs": "waterlevel_p", "op": "==", "rhs": 1 }
+        "G3": { "lhs": {"var": "waterlevel"}, "op": ">=", "rhs": {"integer": 15} },
+        "G4": { "lhs": {"var": "waterlevel_p"}, "op": "==", "rhs": {"integer": 1} }
     },
     "assignments": {
         "A1": {
             "target": "waterlevel",
-            "expression": { "lhs": "waterlevel", "op": "+", "rhs": "waterlevel_p" }
+            "expression": { "lhs": {"var": "waterlevel"}, "op": "+", "rhs": {"var": "waterlevel_p"} }
         },
         "A2": {
             "target": "waterlevel",
-            "expression": { "lhs": "waterlevel", "op": "-", "rhs": 10 }
+            "expression": { "lhs": {"var": "waterlevel"}, "op": "-", "rhs": {"integer": 10} }
         }
     },
     "switches": {
