@@ -225,10 +225,16 @@ instance RunTester STStdest where
     | not (sanityCheckSTS intrpr) = error "check failed"
     | otherwise = runSTSTester intrpr
 
+{- |
+    runTester specialized to LTS models, and without running the sanity checks.
+-}
 runLTSTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
 runLTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
+{- |
+    runTester specialized to STS models, and without running the sanity checks.
+-}
 runSTSTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
     AutIntrpr m loc q t STStdest act -> TestController m loc q t STStdest act state i r -> Adapter act i -> IO (Verdict, r)
 runSTSTester spec testSelection = runExperiment (makeTester spec testSelection)
