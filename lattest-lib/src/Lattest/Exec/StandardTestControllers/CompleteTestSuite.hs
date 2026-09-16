@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 module Lattest.Exec.StandardTestControllers.CompleteTestSuite (
 accessSeqSelector,
 adgTestSelector,
@@ -13,13 +15,13 @@ import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended)
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax)
-import Lattest.Model.BoundedMonad(Det(..))
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations)
+import Lattest.Model.BoundedMonad(Det(..), BoundedConfiguration (..), asConjunction, FreeLattice)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
 import Control.Monad (forM)
-import qualified Data.Map as Map ((!))
-import qualified Data.Set as Set (empty, Set)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import System.Random(StdGen)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
@@ -109,3 +111,33 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
             close adap
             return (targetState, verdict, (observed, maybeMq))
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
+
+{- |
+    Compute the set of transitions covered by a trace. Does not support disjunction yet.
+    Currently hardcoded to m ~ FreeLattice.
+    The m ~ Det case is easier, will probably just make 'asConjunction' into a typeclass to support it.
+ -}
+covered :: (Ord q, Ord loc, After FreeLattice loc q t tdest act, Ord act, Show t, Show act)
+        => AutIntrpr FreeLattice loc q t tdest act
+        -> [act]
+        -> Set.Set (loc, t)
+covered _ [] = mempty
+covered intrpr (act:trace)
+  | isForbidden (stateConf intrpr) = mempty
+  | isUnderspecified (stateConf intrpr) = mempty
+  | Left err <- asConjunction (stateConf intrpr) = error $ "Coverage checker error: " <> err -- disjunction case
+  | Right conj <- asConjunction (stateConf intrpr) = let
+      aft = after intrpr act
+      in case asTransition (alphabet (syntacticAutomaton intrpr)) act of
+        Just t -> Set.union (Set.map ((, t) . asLoc) conj ) $ covered aft trace
+        Nothing -> error $ "asTransition failed in `covered`: act outside of alphabet? Act: " <> show act <> ", alphabet: " <> show (alphabet (syntacticAutomaton intrpr))
+
+-- | All transitions syntactically present: for computing the target of coverage checking
+fullCoverageTarget :: (Ord loc, After FreeLattice loc q t tdest act)
+        => AutIntrpr FreeLattice loc q t tdest act
+        -> Set.Set (loc, t)
+fullCoverageTarget intrpr = let
+  syn = syntacticAutomaton intrpr
+  locs = allLocations syn
+  in Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.keys $ transRel syn l) locs
+

@@ -36,7 +36,8 @@ inConfiguration,
 Completable,
 implicitDestination,
 TransitionSemantics,
-StateSemantics,
+TransitionMapping (..),
+StateSemantics (..),
 StepSemantics,
 after,
 afters,
@@ -98,8 +99,6 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 
 import GHC.Stack(CallStack,callStack)
 import Lattest.Model.Symbolic.Expr(Valuation, VarModel, Variable(..),Type(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), toBool, fromConstantsMap, toConstantsMap, assignValues, insertIntoValuation, toConst, ConstType, Assignable, noAssignment, sTrue)
