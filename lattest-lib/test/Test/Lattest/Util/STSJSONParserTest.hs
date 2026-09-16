@@ -50,7 +50,7 @@ testSTSJSONParserNominal = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_all_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (id, sts, valuation) -> do
+        Right (id, sts, gs, as, valuation) -> do
             assertEqual "STS id" "STS1" id
             assertEqual "initial valuation"
                 (Valuation $
@@ -99,7 +99,7 @@ testSTSJSONParserNominalFloat = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_float_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (id, sts, valuation) -> do
+        Right (id, sts, gs, as, valuation) -> do
             assertEqual "STS id" "" id  -- no ID defined
             assertEqual "initial valuation"
                 (Valuation $

@@ -95,7 +95,7 @@
             }
         },
         "guards": {
-            "G1": {
+            "G1_STS001": {
                 "lhs": {
                     "lhs": {
                         "var": "enabledness"
@@ -116,7 +116,7 @@
                     }
                 }
             },
-            "G2": {
+            "G2_STS001": {
                 "op": "forall",
                 "over": {
                     "var": "faulty-detectors_p"
@@ -172,15 +172,6 @@
                             "var": "critical-section-end"
                         }
                     }
-                }
-            },
-            "G3": {
-                "lhs": {
-                    "var": "availability_p"
-                },
-                "op": "==",
-                "rhs": {
-                    "string": "AV"
                 }
             },
             "G_faulty-detectors.lane": {
@@ -289,16 +280,25 @@
                         "integer": 1
                     }
                 }
+            },
+            "G3_STS001": {
+                "lhs": {
+                    "var": "availability_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "AV"
+                }
             }
         },
         "assignments": {
-            "A1": {
+            "A1_STS1": {
                 "target": "faulty-detectors",
                 "expression": {
                     "var": "faulty-detectors_p"
                 }
             },
-            "A2": {
+            "A2_STS1": {
                 "target": "availability",
                 "expression": {
                     "var": "availability_p"
@@ -310,23 +310,25 @@
                 "init_loc": "L0_1",
                 "gate": "In1",
                 "guard": [
-                    "G1",
-                    "G2",
+                    "G1_STS001",
+                    "G2_STS001",
                     "G_faulty-detectors.lane",
                     "G_faulty-detectors.length-position",
                     "G_faulty-detectors.len"
                 ],
                 "assignments": [
-                    "A1"
+                    "A1_STS1"
                 ],
                 "end_loc": "L1_1"
             },
             "r_2": {
                 "init_loc": "L1_1",
                 "gate": "Out1",
-                "guard": "G3",
+                "guard": [
+                    "G3_STS001"
+                ],
                 "assignments": [
-                    "A2"
+                    "A2_STS1"
                 ],
                 "end_loc": "L2_1"
             }
@@ -428,7 +430,7 @@
             }
         },
         "guards": {
-            "G1": {
+            "G1_STS002": {
                 "lhs": {
                     "lhs": {
                         "var": "enabledness"
@@ -449,7 +451,7 @@
                     }
                 }
             },
-            "G2": {
+            "G2_STS002": {
                 "op": "cardinality",
                 "quantifier": "exactly",
                 "n": 1,
@@ -507,15 +509,6 @@
                             "var": "critical-section-end"
                         }
                     }
-                }
-            },
-            "G3": {
-                "lhs": {
-                    "var": "availability_p"
-                },
-                "op": "==",
-                "rhs": {
-                    "string": "PART AV"
                 }
             },
             "G_faulty-detectors.lane": {
@@ -624,16 +617,25 @@
                         "integer": 1
                     }
                 }
+            },
+            "G3_STS002": {
+                "lhs": {
+                    "var": "availability_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "PART AV"
+                }
             }
         },
         "assignments": {
-            "A1": {
+            "A1_STS2": {
                 "target": "faulty-detectors",
                 "expression": {
                     "var": "faulty-detectors_p"
                 }
             },
-            "A2": {
+            "A2_STS2": {
                 "target": "availability",
                 "expression": {
                     "var": "availability_p"
@@ -645,23 +647,25 @@
                 "init_loc": "L0_2",
                 "gate": "In1",
                 "guard": [
-                    "G1",
-                    "G2",
+                    "G1_STS002",
+                    "G2_STS002",
                     "G_faulty-detectors.lane",
                     "G_faulty-detectors.length-position",
                     "G_faulty-detectors.len"
                 ],
                 "assignments": [
-                    "A1"
+                    "A1_STS2"
                 ],
                 "end_loc": "L1_2"
             },
             "r_2": {
                 "init_loc": "L1_2",
                 "gate": "Out1",
-                "guard": "G3",
+                "guard": [
+                    "G3_STS002"
+                ],
                 "assignments": [
-                    "A2"
+                    "A2_STS2"
                 ],
                 "end_loc": "L2_2"
             }
@@ -763,7 +767,7 @@
             }
         },
         "guards": {
-            "G1": {
+            "G1_STS003": {
                 "lhs": {
                     "lhs": {
                         "var": "enabledness"
@@ -784,7 +788,7 @@
                     }
                 }
             },
-            "G2": {
+            "G2_STS003": {
                 "op": "cardinality",
                 "quantifier": "at_least",
                 "n": 2,
@@ -842,15 +846,6 @@
                             "var": "critical-section-end"
                         }
                     }
-                }
-            },
-            "G3": {
-                "lhs": {
-                    "var": "availability_p"
-                },
-                "op": "==",
-                "rhs": {
-                    "string": "NOT AV"
                 }
             },
             "G_faulty-detectors.lane": {
@@ -959,16 +954,25 @@
                         "integer": 1
                     }
                 }
+            },
+            "G3_STS003": {
+                "lhs": {
+                    "var": "availability_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "NOT AV"
+                }
             }
         },
         "assignments": {
-            "A1": {
+            "A1_STS3": {
                 "target": "faulty-detectors",
                 "expression": {
                     "var": "faulty-detectors_p"
                 }
             },
-            "A2": {
+            "A2_STS3": {
                 "target": "availability",
                 "expression": {
                     "var": "availability_p"
@@ -980,23 +984,25 @@
                 "init_loc": "L0_3",
                 "gate": "In1",
                 "guard": [
-                    "G1",
-                    "G2",
+                    "G1_STS003",
+                    "G2_STS003",
                     "G_faulty-detectors.lane",
                     "G_faulty-detectors.length-position",
                     "G_faulty-detectors.len"
                 ],
                 "assignments": [
-                    "A1"
+                    "A1_STS3"
                 ],
                 "end_loc": "L1_3"
             },
             "r_2": {
                 "init_loc": "L1_3",
                 "gate": "Out1",
-                "guard": "G3",
+                "guard": [
+                    "G3_STS003"
+                ],
                 "assignments": [
-                    "A2"
+                    "A2_STS3"
                 ],
                 "end_loc": "L2_3"
             }
@@ -1096,7 +1102,7 @@
             }
         },
         "guards": {
-            "G1": {
+            "G1_STS004": {
                 "lhs": {
                     "var": "enabledness"
                 },
@@ -1105,10 +1111,10 @@
                     "boolean": true
                 }
             },
-            "G2": {
+            "G2_STS004": {
                 "boolean": true
             },
-            "G3": {
+            "G3_STS004": {
                 "lhs": {
                     "var": "enabledness_p"
                 },
@@ -1119,7 +1125,7 @@
             }
         },
         "assignments": {
-            "A1": {
+            "A1_STS4": {
                 "target": "enabledness",
                 "expression": {
                     "var": "enabledness_p"
@@ -1131,8 +1137,8 @@
                 "init_loc": "L0_4",
                 "gate": "In2",
                 "guard": [
-                    "G1",
-                    "G2"
+                    "G1_STS004",
+                    "G2_STS004"
                 ],
                 "assignments": [],
                 "end_loc": "L1_4"
@@ -1140,9 +1146,11 @@
             "r_2": {
                 "init_loc": "L1_4",
                 "gate": "Out2",
-                "guard": "G3",
+                "guard": [
+                    "G3_STS004"
+                ],
                 "assignments": [
-                    "A1"
+                    "A1_STS4"
                 ],
                 "end_loc": "L2_4"
             }
