@@ -268,16 +268,16 @@
                     }
                 },
                 "op": "&&",
-                "rhs": {
+                                "rhs": {
                     "lhs": {
                         "op": "len",
                         "rhs": {
                             "var": "faulty-detectors_p"
                         }
                     },
-                    "op": "<=",
+                    "op": "==",
                     "rhs": {
-                        "integer": 3
+                        "integer": 1
                     }
                 }
             },
@@ -605,16 +605,16 @@
                     }
                 },
                 "op": "&&",
-                "rhs": {
+                                "rhs": {
                     "lhs": {
                         "op": "len",
                         "rhs": {
                             "var": "faulty-detectors_p"
                         }
                     },
-                    "op": "<=",
+                    "op": "==",
                     "rhs": {
-                        "integer": 3
+                        "integer": 1
                     }
                 }
             },
@@ -949,9 +949,9 @@
                             "var": "faulty-detectors_p"
                         }
                     },
-                    "op": "<=",
+                    "op": "==",
                     "rhs": {
-                        "integer": 3
+                        "integer": 1
                     }
                 }
             },

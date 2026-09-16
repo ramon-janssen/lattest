@@ -9,7 +9,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 
 {-|
@@ -86,7 +85,6 @@ import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate)
 import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
-import Lattest.SMT(runSMT)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 
 import Control.Exception(throw,Exception)
@@ -108,7 +106,6 @@ import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ConstType(..))
 import Data.Constraint.Extras (Has(..))
 
 ------------
@@ -119,7 +116,7 @@ import Data.Constraint.Extras (Has(..))
     Syntactical automaton model, with locations and transitions. This is analogous to an automaton drawn on paper
     with points and arrows. Transitions are mapped to /state configurations/, see "Lattest.Model.BoundedMonad".
     Furthermore, transitions contain transition labels, both on the 'outside' and in the 'inside' of the state configuration.
-    
+
     These labels are abstract and may be interpreted in various ways, e.g. a simple automaton model may directly have
     observable actions as labels, whereas a more complex automaton model may have symbolic data variables with guards,
     assignments, clocks for timing, etc.
@@ -562,7 +559,7 @@ hasSymbolicQuiescence stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
     -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> runSMT (solveAnySequential outputsAndCombinedGuards)
+    Maybe.isNothing <$> solveAnySequential outputsAndCombinedGuards
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 
@@ -618,16 +615,19 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
 
 {- |
     Compute the set of locations that is syntactically reachable from the initial location configuration. See `reachableFrom`.
+    Does not necessarily include the initial locations.
 -}
 reachable :: (Ord loc, Foldable m) => AutSyntax m loc t tdest -> Set loc
 reachable aut = reachableFrom aut $ initConf aut
 
 {- |
     Compute the set of locations that is syntactically reachable from the given locations.
-    
+
     Note that this not involve any interpretation of the automaton, e.g. if a location of symbolic automaton is only reachable via a transition with
     a guard that is always `False`, then that location is still considered to be reachable, even if a symbolic interpretation of that automaton
     can never reach that location for any trace of concrete values.
+
+    Does not include the given locations, unless they can be reached after at least one transition.
 -}
 reachableFrom :: (Ord loc, Foldable m, Foldable f) => AutSyntax m loc t tdest -> f loc -> Set loc
 reachableFrom aut locations = reachableFrom' Set.empty $ Set.fromList $ Foldable.toList locations
@@ -909,9 +909,9 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
         -- keep input switches as-is
         [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
         ++
-        -- output switches are replaced by a check gate leading to a pending state
+        -- (allowed) output switches are replaced by a check gate leading to a pending state
         [ (checkGateFor t, BM.ordMap (\(_, target) -> (identityTdest, Pending loc t target)) mval)
-        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t ]
+        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t, not (isForbidden mval) ]
 
     -- Additional switches starting from `pending` locations
     switches (Pending src t target) = Map.singleton t outcomes

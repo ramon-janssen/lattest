@@ -11,7 +11,7 @@ import qualified Lattest.SMT as SMT
 import qualified Data.Set as Set
 import Lattest.Adapter.StandardAdapters
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runSMTTester, Verdict(Pass))
+import Lattest.Exec.Testing(TestController(..), Verdict(..), runSTSTester, Verdict(Pass))
 import Lattest.Model.Alphabet(IOAct(In, Out))
 import Lattest.Model.BoundedMonad(Det)
 import Lattest.Model.StandardAutomata
@@ -53,25 +53,20 @@ model' = interpretSTS stsExample stsExampleInitAssign
 
 run :: IO ()
 run = do
-    let controller = randomDataTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 10
-    offlinetests <- offlineTests model' controller
-    print offlinetests
-    print $ toTrace model' offlinetests
-
-    putStrLn $ "connecting to SUT..."
+    putStrLn "connecting to SUT..."
     let quiesenceMillis = 300
     let delayMillis = 100
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
     adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelayMillis delayMillis >>= asSymbolicSuspAdapter
                  :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
 
-    putStrLn $ "starting test..."
+    putStrLn "starting test..."
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
         testSelector = randomDataOrWaitForOutputTestSelectorFromSeed randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    (verdict, (observed, maybeMq)) <- runSMTTester model testSelector adap
+    (verdict, (observed, maybeMq)) <- runSTSTester model testSelector adap
 
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed

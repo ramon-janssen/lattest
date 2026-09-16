@@ -66,7 +66,7 @@ import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runSMTTester, Verdict(..))
+import Lattest.Exec.Testing(runSTSTester, Verdict(..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
@@ -83,9 +83,7 @@ import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algeb
 import qualified Lattest.SMT as SMT
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
-import Data.Dependent.Sum (DSum(..))
  -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
-import qualified Lattest.SMT as SMT
 
 pvar :: Variable Integer
 pvar = Variable "p" IntType
@@ -261,7 +259,7 @@ testSTSTestSelection = TestCase $ do
     let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
-    (verdict, ((observed, _), _)) <- runSMTTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
+    (verdict, ((observed, _), _)) <- runSTSTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
     let checkObserved = go 0 0 observed
     let exampleObserved = [
         -- TODO: inp, out seem to be the same as inpL, outL?
@@ -497,7 +495,7 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized startType endType p1 p2 q2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSTSTester specIntrpr testSelector imp
 
     case expectedNonConformalTrace of
         Nothing -> do
@@ -597,7 +595,7 @@ testLatticeSTSQuiescentPass testName _ = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSTSTester specIntrpr testSelector imp
 
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Pass verdict
     assertEqual (testName ++ ": expected conformal trace") [
@@ -613,7 +611,7 @@ testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSTSTester specIntrpr testSelector imp
 
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -629,7 +627,7 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSTSTester specIntrpr testSelector imp
 
     assertEqual (testName ++ ": expected Pass after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -684,7 +682,7 @@ testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
-    (verdict, ((observed, _), _)) <- runSMTTester specIntrpr testSelector imp
+    (verdict, ((observed, _), _)) <- runSTSTester specIntrpr testSelector imp
 
     assertEqual (testName ++ ": expected Fail after " ++ show observed) Fail verdict
     assertEqual (testName ++ ": expected nonconformal trace") [
@@ -738,7 +736,7 @@ testSTSDataSelectionGuardedInput = TestCase $ do
         randomSeed = 456
         testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    (verdict, ((observed, _), _)) <- runSMTTester guardedInputModel testSelector adap
+    (verdict, ((observed, _), _)) <- runSTSTester guardedInputModel testSelector adap
     assertEqual ("expected the selector to pick the only guard-satisfying input ?Prime [41], got " <> show observed)
         [ GateValue (In Prime) [Some $ CInt 41]
         , GateValue (Out ()) [Some $ CInt 41]
@@ -815,7 +813,7 @@ testBranchingPathCondition :: Test
 testBranchingPathCondition = TestCase $ do
     let disj = (\/) :: Branch
         conj = (/\) :: Branch
-        isSat guard = SMT.runSMT $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        isSat guard = isJust <$> solveGuard (Set.toList $ freeVars guard) guard
         assertSat lbl g = isSat g >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl g = isSat g >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
         assertNotTautology lbl g = isSat (sNot g) >>= assertBool (lbl ++ " should not be a tautology")
@@ -1119,7 +1117,7 @@ goldenAssert checks = do
 testSTSPathCondition :: Test
 testSTSPathCondition = TestCase $ do
     let -- is the given guard satisfiable, according to the SMT solver?
-        isSat guard = SMT.runSMT $ isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        isSat guard = isJust <$> solveGuard (Set.toList $ freeVars guard) guard
         pathCond = interactsToSpecifiedCondition stsExampleIntrpr
         assertSat lbl prefix = isSat (pathCond prefix) >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl prefix = isSat (pathCond prefix) >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
@@ -1723,7 +1721,7 @@ current state configuration: (0,{x:=0})
 initial location configuration: 0
 locations: 0, 1, 2, 3, pending !"o2" [p:Int] -> 2, pending !"o1" [] -> 2, pending !"o2" [p:Int] -> 3, pending !"o2" [p:Int] -> 3
 transitions:
-0  ――?"check_o1" []⟶  ⊥
+0  ――?"check_o1" []⟶  ⊤
 0  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 2)
 0  ――?"reset" []⟶  ⊤
 0  ――?"start" []⟶  (True, {},1)
@@ -1735,14 +1733,14 @@ transitions:
 1  ――?"start" []⟶  ⊤
 1  ――!"o1" []⟶  ⊥
 1  ――!"o2" [p:Int]⟶  ⊥
-2  ――?"check_o1" []⟶  ⊥
+2  ――?"check_o1" []⟶  ⊤
 2  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
 2  ――?"reset" []⟶  (True, {},0)
 2  ――?"start" []⟶  ⊤
 2  ――!"o1" []⟶  ⊥
 2  ――!"o2" [p:Int]⟶  ⊥
-3  ――?"check_o1" []⟶  ⊥
-3  ――?"check_o2" []⟶  ⊥
+3  ――?"check_o1" []⟶  ⊤
+3  ――?"check_o2" []⟶  ⊤
 3  ――?"reset" []⟶  ⊤
 3  ――?"start" []⟶  ⊤
 3  ――!"o1" []⟶  ⊥
@@ -1817,7 +1815,7 @@ current state configuration: (0,{x:=0})
 initial location configuration: 0
 locations: 0, 1, 2, 3, pending !"o2" [p:Int] -> 2, pending !"o1" [] -> 2, pending !"o2" [p:Int] -> 3, pending !"o2" [p:Int] -> 3
 transitions:
-0  ――?"check_o1" []⟶  ⊥
+0  ――?"check_o1" []⟶  ⊤
 0  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 2)
 0  ――?"reset" []⟶  ⊤
 0  ――?"start" []⟶  (True, {},1)
@@ -1829,14 +1827,14 @@ transitions:
 1  ――?"start" []⟶  ⊤
 1  ――!"o1" []⟶  ⊥
 1  ――!"o2" [p:Int]⟶  ⊥
-2  ――?"check_o1" []⟶  ⊥
+2  ――?"check_o1" []⟶  ⊤
 2  ――?"check_o2" []⟶  (True, {},pending !"o2" [p:Int] -> 3)
 2  ――?"reset" []⟶  (True, {},0)
 2  ――?"start" []⟶  ⊤
 2  ――!"o1" []⟶  ⊥
 2  ――!"o2" [p:Int]⟶  ⊥
-3  ――?"check_o1" []⟶  ⊥
-3  ――?"check_o2" []⟶  ⊥
+3  ――?"check_o1" []⟶  ⊤
+3  ――?"check_o2" []⟶  ⊤
 3  ――?"reset" []⟶  ⊤
 3  ――?"start" []⟶  ⊤
 3  ――!"o1" []⟶  ⊥

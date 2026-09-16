@@ -53,7 +53,7 @@ tf = nonDetConcTransFromMRel
     [(Q0f, af, q0f /\ (q1f \/ q2f))
     ,(Q0f, x, q0f)
     ,(Q0f, y, q0f)
-    ,(Q1f, x, top)
+    ,(Q1f, x, top) -- TODO: this is an output to top transition; which doesn't pass the sanity check. The tests that run this model should use runLTSTester instead of runTester.
     ,(Q2f, bf, q0f)
     ,(Q2f, y, q2f)
     ]
@@ -65,8 +65,8 @@ testSpecF = TestCase $ do
     let rf = interpretConcrete sf
     assertEqual "sf after ?A !X" q0f (stateConf $ rf `after` af `after` x)
     assertEqual "sf after ?A !Y" (q0f /\ q2f) (stateConf $ rf `after` af `after` y)
-    assertEqual "sf after ?A !A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
-    assertEqual "sf after ?A !B" top (stateConf $ rf `after` af `after` bf)
+    assertEqual "sf after ?A ?A" (q0f /\ (q1f \/ q2f)) (stateConf $ rf `after` af `after` af)
+    assertEqual "sf after ?A ?B" top (stateConf $ rf `after` af `after` bf)
 
 testPrintSpecF :: Test
 testPrintSpecF = TestCase $ assertBool failureMessage (expected == actual) -- no assertEquals to avoid printing the unreadable ascii-escaped variant of the tested unicode strings 

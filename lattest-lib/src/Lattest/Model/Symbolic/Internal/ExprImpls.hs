@@ -651,14 +651,7 @@ valuationToVarModel :: Valuation -> VarModel
 valuationToVarModel = VarModel . DMap.map (\(Val v) -> sConst v) . runValuation
 
 insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
-insertIntoValuation v@(Variable _ IntType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ FloatType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ BoolType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ CharType) c = assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(ListType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(SetType _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(TupleType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
-insertIntoValuation v@(Variable _ t@(SumType _ _)) c = withExprConstraints t $ assignValue v (fromConst' c)
+insertIntoValuation v c = withExprConstraints (varType v) $ assignValue v (fromConst' c)
 
 getVariables :: Valuation -> [Some Variable]
 getVariables = DMap.keys . runValuation
@@ -761,6 +754,9 @@ subst' ve (ELeft x) = sLeft $ subst' ve x
 subst' ve (ERight x) = sRight $ subst' ve x
 subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
 subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
+-- note: we purposely substitute the non-free variables too here. This ensures that any nested higher-order functions (e.g. a Map with an Either in the function)
+-- that have shadowing (i.e. the name of the Map variable is also used by one of the Either variables) continue to work as expected:
+-- each use of the variable refers to the closest (innermost) binder
 subst' ve (Map v f xs) = Expr $ Map (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
 subst' ve (Filter v f xs) = Expr $ Filter (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve xs)
 subst' ve (Foldr v1 v2 f i xs) = Expr $ Foldr (case assignedExprWithDefault v1 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (case assignedExprWithDefault v2 ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve f) (view $ subst' ve i) (view $ subst' ve xs)

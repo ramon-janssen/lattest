@@ -37,6 +37,7 @@ import qualified Data.Aeson.Types as JSON
 import qualified Data.Aeson.KeyMap as JSON
 import Data.Bifunctor (Bifunctor(..))
 import Data.Aeson.Key (toString)
+import qualified Debug.Trace
 
 
 data UntypedExpr
@@ -314,6 +315,7 @@ instance JSON.FromJSON VarDefJson where
           "boolean" -> k $ Some BoolType
           "string"  -> k $ Some $ ListType CharType
           "char"    -> k $ Some CharType
+          "()"      -> k $ Some UnitType
           "float"   -> k $ Some FloatType
           "array"   -> do
             o' <- o JSON..: "elements"
@@ -334,7 +336,7 @@ instance JSON.FromJSON VarDefJson where
         (Some  (ta :: Type a), a) <- go o
         ((Some (tb :: Type b), accessors), b) <- mkStructure fields
         withExprConstraints ta $ withExprConstraints tb $
-          pure ((Some (TupleType ta tb), (toString nm, \(Some e) -> Some $ sFirst @b @a $ safeCoerce "left" e) : map (second (\f (Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "right" e)) accessors), a++b)
+          pure ((Some (TupleType ta tb), (toString nm, \(Some e) -> Some $ sFirst @b @a $ safeCoerce "first" e) : map (second (\f (Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "second" e)) accessors), a++b)
       mkStructure _ = error "non-object in attributes"
       -- runtime check whether field accessors are used on expressions of the right type
       safeCoerce :: forall a b. String -> ExprConstraints b => Expr a -> Expr b
@@ -423,8 +425,7 @@ buildVarMap defs = do
       (Some t', accessors) -> return ((name, Some $ Variable name t'), accessors))
   let accessors = Map.fromList $ concat accessorss
   let varmap' = Map.fromList varmap
-  -- for some reason this type is getting evaluated somewhere
-  pure (varmap' <> Map.mapWithKey (\nm -> const $ Some $ Variable nm CharType{- error $ "getting the type of a field accessor as if it were a variable: " <> nm -}) accessors, accessors)
+  pure (varmap', accessors)
 
 buildGateMap
     :: (String -> IOAct String String)
@@ -518,13 +519,15 @@ buildValuation locVarCtx initVal =
             (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
             (CharType,   Just (JSON.String (unpack -> [c]))) -> Right (name, insertIntoValuation var (CChar c))
             (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
+            (ListType CharType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CList (unpack s) CharType))
             (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
-            (_, Nothing) -> Right (name, insertIntoValuation var (defaultConst (varType var)))
+            (_, Nothing) -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
         defaultConst :: Type t -> Constant t
         defaultConst IntType    = CInt 0
+        defaultConst UnitType = CUnit
         defaultConst FloatType  = CFloat 0.0
         defaultConst BoolType   = CBool False
         defaultConst CharType = CChar 'a'
@@ -533,7 +536,10 @@ buildValuation locVarCtx initVal =
         defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
         defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
 
-convertSTSJson :: STSJsonFormat -> Either String (String, IOSTS FreeLattice String String String, Valuation)
+-- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, and the initial valuation.
+type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation)
+
+convertSTSJson :: STSJsonFormat -> Either String STSParseResult
 convertSTSJson json = do
     (locVarMap, accessors1) <- buildVarMap (stsJsonLocVars json)
     (paramMap, accessors2)  <- buildVarMap (stsJsonParams json)
@@ -553,13 +559,13 @@ convertSTSJson json = do
     let transRel = buildTransitionRel switchList
         initCfg  = atom $ locId (stsJsonInitLoc json)
         sts      = automaton initCfg alphabet transRel
-    return (stsJsonId json, sts, initVal)
+    return (stsJsonId json, sts, guardMap, Map.map ($ noAssignment) assignMap, initVal)
 
-{-| 
+{-|
     Read a JSON file and parse an STS from it. Returns a tuple (ID, STS, Initial Valuation) if successful,
     or an error message if parsing fails.
 -}
-stsFromJSONFile :: FilePath -> IO (Either String (String,IOSTS FreeLattice String String String, Valuation))
+stsFromJSONFile :: FilePath -> IO (Either String STSParseResult)
 stsFromJSONFile path = do
     bytes <- BSL.readFile path
     return $ case JSON.eitherDecode bytes of
@@ -569,9 +575,10 @@ stsFromJSONFile path = do
 {-|
     Read a JSON file containing a list of STSs, and parse each one.
 -}
-stsListFromJSONFile :: FilePath -> IO (Either String [(String, IOSTS FreeLattice String String String, Valuation)])
+stsListFromJSONFile :: FilePath -> IO (Either String [STSParseResult])
 stsListFromJSONFile path = do
     bytes <- BSL.readFile path
     return $ case JSON.eitherDecode bytes of
         Left  err      -> Left $ "JSON decode error: " ++ err
         Right stsJsons -> forM stsJsons convertSTSJson
+
