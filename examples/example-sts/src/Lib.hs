@@ -53,19 +53,14 @@ model' = interpretSTS stsExample stsExampleInitAssign
 
 run :: IO ()
 run = do
-    let controller = randomDataTestSelectorFromSeed 456 `untilCondition` stopAfterSteps 10
-    offlinetests <- offlineTests model' controller
-    print offlinetests
-    print $ toTrace model' offlinetests
-
-    putStrLn $ "connecting to SUT..."
+    putStrLn "connecting to SUT..."
     let quiesenceMillis = 300
     let delayMillis = 100
      -- the adapter connects, with explicit typing because it should know how to parse incoming data
     adap <- connectJSONSocketAdapterAcceptingInputs >>= withQuiescenceMillis quiesenceMillis >>= withInputDelayMillis delayMillis >>= asSymbolicSuspAdapter
                  :: IO (Adapter (Alph.IOSuspGateValue String String) (Maybe (Alph.GateValue String)))
 
-    putStrLn $ "starting test..."
+    putStrLn "starting test..."
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
