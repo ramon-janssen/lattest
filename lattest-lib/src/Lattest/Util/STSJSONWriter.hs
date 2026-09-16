@@ -83,7 +83,7 @@ stsToJSON sid sts guardmap assmap valuation =
         , "initial_location" .= initLocationJSON locIds (initConf sts)
         , "initialValuation" .= initValue valuation
         , "locations" .= Map.elems locIds
-        , "switches" .= _
+        , "switches" .= switches'
         -- , "parameters" .= params -- already wrote this, but it uses a different representation of structures, so probably better to just reuse the ones from before merging
         -- , "inputGates" .= -- not needed
         -- , "outputGates" .= -- not needed
@@ -112,17 +112,17 @@ stsToJSON sid sts guardmap assmap valuation =
 data Switch = Switch String (SymInteract (IOAct String String)) (FreeLattice (([String], String), String))
 instance JSON.ToJSON Switch where
   toJSON (Switch loc act guardassignmentloc)
-   | isForbidden guardassignmentloc && isOutputInteract act = mempty
-   | isUnderspecified guardassignmentloc && isInputInteract act = mempty
+   | isForbidden guardassignmentloc && isOutputInteract act = object []
+   | isUnderspecified guardassignmentloc && isInputInteract act = object []
    | Left err <- asConjunction guardassignmentloc = error $ "Error in serializing a switch: " <> err
    | Right (Set.toList -> [((guard, assignment), endloc)]) <- asConjunction guardassignmentloc = object
       [ "init_loc" .= loc
-      , "gate" .= act
+      , "gate" .= show act
       , "guard" .= guard
       , "assignments" .= assignment
       , "end_loc" .= endloc
       ]
-   | Right (Set.toList -> gals) <- asConjunction guardassignmentloc = error "decide on format"
+   | Right (Set.toList -> gals) <- asConjunction guardassignmentloc = JSON.toJSON $ map (Switch loc act . atom) gals
 
 -- for params
 instance JSON.ToJSON (Some Type) where
