@@ -22,20 +22,17 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInt
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
 import qualified Lattest.Model.BoundedMonad as BM
-import Lattest.Model.StandardAutomata(STS)
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential)
-import Lattest.Model.Symbolic.Expr(substConst, subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sFalse, sTrue, sConst, (.&&), (.||), sAnd, sOr, sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, noAssignment)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, Expr(..), VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables)
 import Lattest.SMT(SMT)
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&), first, second)
+import Control.Arrow((&&&))
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
-import qualified Data.Set as Set
 import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
@@ -71,7 +68,7 @@ interactsToSpecifiedCondition intrpr interacts = interactsToGuard asDualExpr int
 interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToAllowedCondition intrpr interacts = interactsToGuard asExpr intrpr interacts
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToGuard f intrpr interacts = f (treeToGuard f interacts BM.<#> seTree intrpr)
 
@@ -106,7 +103,7 @@ newtype SETree m i = SETree (Map.Map i (m (SEIte (m (SETree m i)))))
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Eq (SETree m i)
 deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Ord (SETree m i)
 
-seTree :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+seTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
     => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> m (SETree m (IOSymInteract i o))
 seTree intrpr =
     let smlocs = intrpStateToSym BM.<#> stateConf intrpr
