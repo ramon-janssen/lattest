@@ -316,16 +316,16 @@ isOutputGate (GateValue (Out _) _) = True
 isOutputGate _ = False
 
 isInputGate :: IOGateValue i o -> Bool
-isInputGate (GateValue (In _) _) = False
-isInputGate _ = True
+isInputGate (GateValue (In _) _) = True
+isInputGate _ = False
 
 isOutputInteract :: IOSymInteract i o -> Bool
 isOutputInteract (SymInteract (Out _) _) = True
 isOutputInteract _ = False
 
 isInputInteract :: IOSymInteract i o -> Bool
-isInputInteract (SymInteract (In _) _) = False
-isInputInteract _ = True
+isInputInteract (SymInteract (In _) _) = True
+isInputInteract _ = False
 
 maybeFromInputInteraction :: IOSymInteract i o -> Maybe (SymInteract i)
 maybeFromInputInteraction (SymInteract g' vars) = case maybeFromInput g' of

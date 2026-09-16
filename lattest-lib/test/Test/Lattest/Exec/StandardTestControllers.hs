@@ -11,7 +11,7 @@ import Test.Lattest.Model.StandardAutomata(IF(..),OF(..),StateF,sf)
 
 -- TODO prototype imports, (re)move or insert into alphabetical order
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
+import Lattest.Exec.Testing(TestController(..), Verdict(..), Verdict(Pass), runLTSTester)
 import Lattest.Model.BoundedMonad(isConclusive, isForbidden)
 import qualified Lattest.Model.BoundedMonad as BM (FreeLattice)
 import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete)
@@ -48,7 +48,7 @@ testRandomFCorrect :: Test
 testRandomFCorrect = TestCase $ do
     imp <- impFDetCorrect
     let model = interpretQuiescentInputAttemptConcrete sf
-    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), _)) <- runLTSTester model testSelector imp
     assertEqual "testRandomFCorrect should pass" Pass verdict
     assertEqual "incorrect number of observations made" nrSteps (length observed)
     assertEqual "final state should be inconclusive" (Just True) (not . isConclusive <$> maybeMq)
@@ -64,7 +64,7 @@ testRandomFIncorrectOutput :: Test
 testRandomFIncorrectOutput = TestCase $ do
     imp <- impFDetIncorrectOutput
     let model = interpretQuiescentInputAttemptConcrete sf
-    (verdict, ((observed, maybeMq), maybePrvMq)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), maybePrvMq)) <- runLTSTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectOutput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed
@@ -86,7 +86,7 @@ testRandomFIncorrectInput :: Test
 testRandomFIncorrectInput = TestCase $ do
     imp <- impFDetIncorrectInput
     let model = interpretQuiescentInputAttemptConcrete sf
-    (verdict, ((observed, maybeMq), _)) <- runTester model testSelector imp
+    (verdict, ((observed, maybeMq), _)) <- runLTSTester model testSelector imp
     let prev = last $ init observed
     assertEqual "testRandomFIncorrectInput should fail" Fail verdict
     assertBool "incorrect number of observations " $ nrSteps >= length observed

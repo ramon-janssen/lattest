@@ -29,12 +29,12 @@ where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
 import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation (..))
-import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr)
+import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
 import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
-import Lattest.SMT(SMT, runSMT, Some (..))
+import Lattest.SMT(Some (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 
 import Control.Arrow((&&&))
@@ -47,7 +47,7 @@ import GHC.Stack(callStack)
 import List.Shuffle(shuffle)
 import System.Random(RandomGen)
 import Data.Maybe (mapMaybe, catMaybes)
-import Data.Some (Some, mapSome)
+import Data.Some (mapSome)
 import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..))
 import Control.Monad (forM)
 import qualified Data.Set as Set
@@ -55,6 +55,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
+import Lattest.Model.StandardAutomata (sanityCheckSTS)
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -62,7 +63,7 @@ import qualified Data.Dependent.Map as DMap
     generator and returns the new random generator state. The returned gate values for that interaction are not randomized in any way, picking values
     is left to the SMT solver.
 -}
-solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> SMT (Maybe (GateValue g'), r)
+solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> IO (Maybe (GateValue g'), r)
 solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
@@ -204,19 +205,25 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state r. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
+offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
-             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
-             -> IO (OfflineTests i o r)
-offlineTests intrpr tc = do
+             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) (Maybe Verdict)
+             -> IO (OfflineTests i o (Maybe Verdict))
+offlineTests intrpr tc
+  | not (sanityCheckSTS intrpr) = error "sanity check failed"
+  | otherwise = do
   inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
         Right r -> pure $ Right r
         Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
           Right r -> pure $ Right r
           Left (tc', intrpr') -> do
-            ot <- offlineTests intrpr' tc'
-            pure $ Left (i', ot)
+            case BM.specifiedness (stateConf intrpr') of
+              Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"
+              Forbidden -> pure $ Left (i', OfflineTests mempty $ Right $ Just Fail)
+              Indefinite -> do
+                ot <- offlineTests intrpr' tc'
+                pure $ Left (i', ot)
   o <- Map.fromList . catMaybes <$> do
     let os = mapMaybe (\case
                 SymInteract (Out o) vs -> Just $ SymInteract o vs
@@ -224,7 +231,7 @@ offlineTests intrpr tc = do
               (toList $ alphabet $ syntacticAutomaton intrpr)
     forM os $ \(SymInteract o vs) -> do
       let guard = interactsToAllowedCondition intrpr [SymInteract (Out o) vs]
-      mv <- runSMT $ solveGuard vs guard
+      mv <- solveGuard vs guard
       case mv of
         Nothing -> pure Nothing
         Just (runValuation -> m) -> let vs' = map (\(Some v) -> case DMap.lookup v m of
@@ -236,7 +243,7 @@ offlineTests intrpr tc = do
                            $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
                                     Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
                                     Nothing -> error "internal type mismatch") vs vs')
-                runSMT $ solveGuard vs guard' >>= \case
+                solveGuard vs guard' >>= \case
                   Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case

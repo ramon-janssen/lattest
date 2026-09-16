@@ -13,10 +13,9 @@ import qualified Data.Map as Map
 import qualified Data.Dependent.Map as DMap
 import           Lattest.Adapter.StandardAdapters
 import           Lattest.Model.StandardAutomata
-import           Lattest.Exec.Testing(runSMTTester)
+import           Lattest.Exec.Testing(runTester)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Model.BoundedMonad(Det)
-import Lattest.Model.Symbolic.Expr (Constant(..))
 
 -- silly example to test some data types
 -- the SUT just echos the input back as output
@@ -91,8 +90,6 @@ model = interpretSTS primesieve primesieveInitAssign
 
 someFunc :: IO ()
 someFunc = do
-    -- putStrLn $ Aut.prettyPrintIntrp $ Aut.after model $ GateValue (In Prime) [Some $ CSum (Left 2) IntType $ TupleType IntType $ SetType IntType]
-
     -- simple adapter that flops between A and B and echos its input
     adap <- pureMealyAdapter
       (\() -> const ())
@@ -103,8 +100,9 @@ someFunc = do
         randomSeed = 456
         testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
-    (verdict, (observed, maybeMq)) <- runSMTTester model testSelector adap
+    (verdict, (observed, maybeMq)) <- runTester model testSelector adap
 
     putStrLn $ "verdict: " ++ show verdict
     putStrLn $ "observed: " ++ show observed
     putStrLn $ "final state: " ++ show maybeMq
+
