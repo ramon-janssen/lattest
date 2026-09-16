@@ -116,6 +116,11 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
     Compute the set of transitions covered by a trace. Does not support disjunction yet.
     Currently hardcoded to m ~ FreeLattice.
     The m ~ Det case is easier, will probably just make 'asConjunction' into a typeclass to support it.
+
+    For disjunctions: giving a lower bound is easy (Just only count transitions that are definitely covered).
+    Giving the largest lower bound is hard: Ideally, you want to 'backpropagate' information on which transitions were covered.
+    E.g: from A \/ B, take transition 'x' (A->C,B->D) to C \/ D, then take transition 'y' which is forbidden from C but allowed from D => easy to report [(D, y)],
+    hard but sound to report [(B,x),(D,y)] because this second transition gave information about the first one.
  -}
 covered :: (Ord q, Ord loc, After FreeLattice loc q t tdest act, Ord act, Show t, Show act)
         => AutIntrpr FreeLattice loc q t tdest act
