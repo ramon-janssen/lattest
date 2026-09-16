@@ -13,16 +13,13 @@ import Test.HUnit hiding (Path, path)
 
 import Lattest.Exec.Testing(TestController(..), Verdict(..), runTester, Verdict(Pass))
 import Lattest.Model.Automaton(AutSyntax, automaton)
-import Lattest.Model.StandardAutomata(interpretQuiescentConcrete)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), SuspendedIF)
 import Lattest.Model.BoundedMonad
 import qualified Data.Map as Map (Map, insert, fromList)
 import Data.Maybe (fromJust)
-import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter)
-
-import Lattest.Adapter.StandardAdapters(pureAdapter)
+import Lattest.Adapter.StandardAdapters(Adapter,pureMealyAdapter, pureAdapter)
 import System.Random(StdGen, mkStdGen)
-import Lattest.Model.StandardAutomata(interpretQuiescentInputAttemptConcrete, detConcTransFromRel)
+import Lattest.Model.StandardAutomata(interpretQuiescentConcrete, interpretQuiescentInputAttemptConcrete, detConcTransFromRel)
 import Lattest.Exec.StandardTestControllers
 
 
@@ -40,7 +37,7 @@ testTraceFailsAtLastOutput = TestCase $ do
     let tspec = [Out 1, Out 2] :: [IOAct Integer Integer]
     adap <- traceAdapter t
     (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification tspec) (ioTraceTestController tspec) adap
-    assertEqual "testTraceFailsAtLastOutput should fail" Fail verdict 
+    assertEqual "testTraceFailsAtLastOutput should fail" Fail verdict
     assertEqual "testTraceFailsAtLastOutput should be complete" True finished
 
 testTraceFailsBeforeLastOutput :: Test
@@ -58,7 +55,7 @@ testTraceIncompleteAtLastOutput = TestCase $ do
     let tController = [Out 1, Out 1] :: [IOAct Integer Integer]
     adap <- traceAdapter t
     (verdict, finished) <- runTester (interpretQuiescentConcrete $ traceSpecification t) (ioTraceTestController tController) adap
-    assertEqual "testTraceIncompleteAtLastOutput should pass" Pass verdict 
+    assertEqual "testTraceIncompleteAtLastOutput should pass" Pass verdict
     assertEqual "testTraceIncompleteAtLastOutput should be complete" True finished
 
 testTraceIncompleteBeforeLastOutput :: Test
@@ -101,7 +98,7 @@ traceTestController steps = TestController {
     where
     traceSelectTest [] _ _ = return $ Right True
     traceSelectTest (Left (Just i):steps') _ _ = return $ Left (Just i, steps')
-    traceSelectTest (Right act:steps') _ _ = return $ Left (Nothing, (Right act:steps')) -- the test controller must choose input but it wanted to make an observation.
+    traceSelectTest (Right act:steps') _ _ = return $ Left (Nothing, Right act:steps') -- the test controller must choose input but it wanted to make an observation.
     traceSelectTest _ _ _ = error "should not happen"
     traceUpdateTestController [] _ _ _ = return $ Right True
     traceUpdateTestController (Left _:_) _ _ _ = return $ Right False -- test controller makes an observation but wanted to choose an input
@@ -125,11 +122,11 @@ traceAdapter steps = pureAdapter traceTrans traceOutput $ if (null $ takeOutputs
     takeOutputs steps' = fst (span isOutput steps')
 -}
 traceAdapter :: (Eq i) => [IOAct i o] -> IO (Adapter (IOSuspAct i o) (Maybe i))
-traceAdapter steps = pureMealyAdapter traceTrans traceOutput steps
+traceAdapter = pureMealyAdapter traceTrans traceOutput
     where
     traceTrans [] _ = []
     traceTrans (In is:steps') (Just i) = if i == is then steps' else []
-    traceTrans (In is:steps') Nothing = (In is:steps')
+    traceTrans (In is:steps') Nothing = In is:steps'
     traceTrans (Out _:steps') _ = steps' -- potential race condition between the (Just i) and the output. Let the adapter win to pester the tester
     traceOutput [] _ = [Out Quiescence] -- if the adapter is not processing any more actions, show timeouts. Even if an input is attempted, because it will not be processed
     traceOutput (In _:_) (Just i) = [In i]
