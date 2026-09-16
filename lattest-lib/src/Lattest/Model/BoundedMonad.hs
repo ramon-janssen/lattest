@@ -38,6 +38,7 @@ FreeLattice(FreeLattice),
 atom,
 top,
 bot,
+asConjunction,
 -- * Specifiednesss
 Specifiedness(..),
 BoundedConfiguration,
@@ -159,6 +160,14 @@ disjunction = joins . fmap atom
 -- | Synonym for 'disjunction'
 (\$/) :: (Functor f, Foldable f, Ord a) => f a -> FreeLattice a
 (\$/) = disjunction
+
+-- | Interprets a FreeLattice as a set of conjuncted elements. Fails if disjunction is present or the lattice is forbidden,
+-- as those are not representable in a single set. Top is returned as an empty set.
+asConjunction :: Ord a => FreeLattice a -> Either String (Set.Set a)
+asConjunction (FreeLattice xs) = ordTraverse (\x -> case Set.toList x of
+  [y] -> Right y
+  [] -> Left "Forbidden found in 'asConjunction'"
+  _ -> Left "Disjunction found in 'asConjunction'") xs
 
 instance BoundedConfiguration FreeLattice where
     isForbidden (FreeLattice x) = any Set.null x

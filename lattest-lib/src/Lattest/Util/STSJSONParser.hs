@@ -315,6 +315,7 @@ instance JSON.FromJSON VarDefJson where
           "boolean" -> k $ Some BoolType
           "string"  -> k $ Some $ ListType CharType
           "char"    -> k $ Some CharType
+          "()"      -> k $ Some UnitType
           "float"   -> k $ Some FloatType
           "array"   -> do
             o' <- o JSON..: "elements"
@@ -335,7 +336,7 @@ instance JSON.FromJSON VarDefJson where
         (Some  (ta :: Type a), a) <- go o
         ((Some (tb :: Type b), accessors), b) <- mkStructure fields
         withExprConstraints ta $ withExprConstraints tb $
-          pure ((Some (TupleType ta tb), (toString nm, \(Some e) -> Some $ sFirst @b @a $ safeCoerce "left" e) : map (second (\f (Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "right" e)) accessors), a++b)
+          pure ((Some (TupleType ta tb), (toString nm, \(Some e) -> Some $ sFirst @b @a $ safeCoerce "first" e) : map (second (\f (Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "second" e)) accessors), a++b)
       mkStructure _ = error "non-object in attributes"
       -- runtime check whether field accessors are used on expressions of the right type
       safeCoerce :: forall a b. String -> ExprConstraints b => Expr a -> Expr b
