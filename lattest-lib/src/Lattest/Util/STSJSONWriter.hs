@@ -10,6 +10,8 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Lattest.Util.STSJSONWriter (
+  stsToJSONFile,
+  stsListToJSONFile,
 ) where
 
 import Data.Aeson (object, (.=))

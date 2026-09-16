@@ -536,7 +536,10 @@ buildValuation locVarCtx initVal =
         defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
         defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
 
-convertSTSJson :: STSJsonFormat -> Either String (String, IOSTS FreeLattice String String String, Valuation)
+-- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, and the initial valuation.
+type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation)
+
+convertSTSJson :: STSJsonFormat -> Either String STSParseResult
 convertSTSJson json = do
     (locVarMap, accessors1) <- buildVarMap (stsJsonLocVars json)
     (paramMap, accessors2)  <- buildVarMap (stsJsonParams json)
@@ -556,13 +559,13 @@ convertSTSJson json = do
     let transRel = buildTransitionRel switchList
         initCfg  = atom $ locId (stsJsonInitLoc json)
         sts      = automaton initCfg alphabet transRel
-    return (stsJsonId json, sts, initVal)
+    return (stsJsonId json, sts, guardMap, Map.map ($ noAssignment) assignMap, initVal)
 
-{-| 
+{-|
     Read a JSON file and parse an STS from it. Returns a tuple (ID, STS, Initial Valuation) if successful,
     or an error message if parsing fails.
 -}
-stsFromJSONFile :: FilePath -> IO (Either String (String,IOSTS FreeLattice String String String, Valuation))
+stsFromJSONFile :: FilePath -> IO (Either String STSParseResult)
 stsFromJSONFile path = do
     bytes <- BSL.readFile path
     return $ case JSON.eitherDecode bytes of
@@ -572,9 +575,10 @@ stsFromJSONFile path = do
 {-|
     Read a JSON file containing a list of STSs, and parse each one.
 -}
-stsListFromJSONFile :: FilePath -> IO (Either String [(String, IOSTS FreeLattice String String String, Valuation)])
+stsListFromJSONFile :: FilePath -> IO (Either String [STSParseResult])
 stsListFromJSONFile path = do
     bytes <- BSL.readFile path
     return $ case JSON.eitherDecode bytes of
         Left  err      -> Left $ "JSON decode error: " ++ err
         Right stsJsons -> forM stsJsons convertSTSJson
+
