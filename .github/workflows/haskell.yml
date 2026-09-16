@@ -62,13 +62,6 @@ jobs:
       with:
         path: lattest-lib/.stack-work
         key: ${{ steps.cache1.outputs.cache-primary-key }}
-        
-    - name: Cache stack
-      uses: actions/cache/save@v4
-      if: steps.cache2.outputs.cache-hit != 'true'
-      with:
-        path: ~/.stack
-        key: ${{ steps.cache2.outputs.cache-primary-key }}
 
     - name: Build
       run: |
@@ -153,3 +146,10 @@ jobs:
             exit 1
           fi
         done
+
+    - name: Cache stack
+      uses: actions/cache/save@v4
+      if: steps.cache2.outputs.cache-hit != 'true'
+      with:
+        path: ~/.stack
+        key: ${{ steps.cache2.outputs.cache-primary-key }}
