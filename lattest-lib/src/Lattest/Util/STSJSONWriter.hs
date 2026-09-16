@@ -25,7 +25,7 @@ import Lattest.Model.BoundedMonad
 import Lattest.Model.StandardAutomata (IOSTS)
 import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
-import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..))
+import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..), VarModel (..))
 import Lattest.SMT (RCSet)
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
@@ -33,6 +33,8 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Dependent.Map as DMap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Debug.Trace
+import qualified Data.List as List
 
 -- TODO: Do we want to export the STS with the check guards?
 
@@ -94,20 +96,21 @@ stsToJSON sid sts guardmap assmap valuation =
     where
     locs = allLocations sts
     locIds = assignLocationIds locs
-    alph = alphabet sts
+    -- alph = alphabet sts
     switches = Set.toList $ Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.toList $ transRel sts l) locs
-    switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getguard g, getassignment a)) (locIds Map.!) <#> ml)) switches
+    switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getGuard g guardmap, getassignment a)) (locIds Map.!) <#> ml)) switches
     -- ws = buildSwitches locIds sts locs
-    getguard :: SymGuard -> [String]
-    getguard g
-      | Just nm <- guardmap Map.!? g = [nm]
-      | And (Set.toList -> gs) <- view g = concatMap (getguard . Expr) gs
-      | otherwise = error $ "Guard not found: " <> show g
+    -- getguard :: SymGuard -> [String]
+    -- getguard g
+    --   | Just nm <- guardmap Map.!? g = Debug.Trace.traceShow ("Found ", show g, nm) [nm]
+    --   | And (Set.toList -> gs) <- view g = Debug.Trace.traceShow ("Couldn't find conjunction of: " :: String, gs) $ concatMap (getguard . Expr) gs
+    --   | otherwise = error $ "Guard not found: " <> show g <> ". Looked in: " <> show guardmap
     getassignment :: VarModel -> String
     getassignment a
       | Just nm <- assmap Map.!? a = nm
-      | otherwise = error $ "Assignment not found: " <> show a
-    params = Map.fromList $ map (\(Some (Variable nm tp)) -> (nm, Some tp)) $ Set.toList $ Set.unions $ Set.map (\(SymInteract _ vs) -> Set.fromList vs) alph
+      | DMap.null (runVarModel a) = ""
+      | otherwise = error $ "Assignment not found: " <> show a <> ". Looked in: " <> show assmap
+    -- params = Map.fromList $ map (\(Some (Variable nm tp)) -> (nm, Some tp)) $ Set.toList $ Set.unions $ Set.map (\(SymInteract _ vs) -> Set.fromList vs) alph
 
 data Switch = Switch String (SymInteract (IOAct String String)) (FreeLattice (([String], String), String))
 instance JSON.ToJSON Switch where
@@ -123,6 +126,22 @@ instance JSON.ToJSON Switch where
       , "end_loc" .= endloc
       ]
    | Right (Set.toList -> gals) <- asConjunction guardassignmentloc = JSON.toJSON $ map (Switch loc act . atom) gals
+
+-- The guard may be a conjunction of guards in the map, and the guards in the map may also be conjunctions
+-- So we're looking for a subset of the guards in the map, such that their union is exactly this guard
+-- We fold over the map, taking any guards we're allowed to that make progress.
+getGuard :: Expr Bool -> Map.Map (Expr Bool) String -> [String]
+getGuard g guardmap
+  | Just nm <- guardmap Map.!? g = [nm]
+  | And gs <- view g = (\(req,_,nms) -> if Set.null req then nms else error "couldn't find guard") $ foldr combine (gs, mempty, []) $ Map.toList guardmap
+    where
+      combine (view -> x,nm) (required, allowed, nms)
+        | x `elem` required = (Set.delete x required, Set.insert x allowed, nm:nms)
+        | And xs <- x
+        , all (`elem` Set.union required allowed) xs
+        , any (`elem` required) xs = (Set.difference required xs, Set.union allowed xs, nm:nms)
+        | otherwise = (required, allowed, nms) -- skipping this guard
+getGuard _ _ = error "couldn't find guard"
 
 -- for params
 instance JSON.ToJSON (Some Type) where
