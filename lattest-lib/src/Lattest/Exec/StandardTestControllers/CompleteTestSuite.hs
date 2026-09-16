@@ -113,14 +113,17 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 {- |
-    Compute the set of transitions covered by a trace. Does not support disjunction yet.
+    Compute the set of transitions covered by a trace.
     Currently hardcoded to m ~ FreeLattice.
-    The m ~ Det case is easier, will probably just make 'asConjunction' into a typeclass to support it.
+    The m ~ Det case is easier, will probably just need to make a typeclass to support it.
 
-    For disjunctions: giving a lower bound is easy (Just only count transitions that are definitely covered).
+    For disjunctions: currently giving an easy lower bound (Just only count transitions that don't originate from a disjunction).
     Giving the largest lower bound is hard: Ideally, you want to 'backpropagate' information on which transitions were covered.
-    E.g: from A \/ B, take transition 'x' (A->C,B->D) to C \/ D, then take transition 'y' which is forbidden from C but allowed from D => easy to report [(D, y)],
-    hard but sound to report [(B,x),(D,y)] because this second transition gave information about the first one.
+
+    E.g: from A \/ B, take transition 'x' (A->C,B->D) to C \/ D, then take transition 'y' which is forbidden from C but allowed from D
+    We currently don't report any of these as covered, but would report the next transition from D as covered.
+    It should be easy to report [(D, y)], though making this compositional (across arbitrary conjunction of disjunctions) might be annoying.
+    It seems hard but sound to report [(B,x),(D,y)]: the second transition gave information about the first one.
  -}
 covered :: (Ord q, Ord loc, After FreeLattice loc q t tdest act, Ord act, Show t, Show act)
         => AutIntrpr FreeLattice loc q t tdest act
@@ -130,7 +133,7 @@ covered _ [] = mempty
 covered intrpr (act:trace)
   | isForbidden (stateConf intrpr) = mempty
   | isUnderspecified (stateConf intrpr) = mempty
-  | Left err <- asConjunction (stateConf intrpr) = error $ "Coverage checker error: " <> err -- disjunction case
+  | Left _ <- asConjunction (stateConf intrpr) = covered (after intrpr act) trace -- conservative lower bound
   | Right conj <- asConjunction (stateConf intrpr) = let
       aft = after intrpr act
       in case asTransition (alphabet (syntacticAutomaton intrpr)) act of
@@ -145,4 +148,6 @@ fullCoverageTarget intrpr = let
   syn = syntacticAutomaton intrpr
   locs = allLocations syn
   in Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.keys $ transRel syn l) locs
+
+
 
