@@ -301,7 +301,7 @@ allLocations aut = reachable aut `Set.union` Set.fromList (Foldable.toList (init
 validMergeLocs :: (Ord loc1, Foldable m) => String -> AutSyntax m loc1 t tdest -> [loc1] -> Set loc1
 validMergeLocs fnName sts1 mergeLocs
     | null mergeLocs = errorWithoutStackTrace $ fnName ++ ": no locations given to merge at"
-    | not (all (`Set.member` locs1) mergeLocs) = errorWithoutStackTrace $ fnName ++ ": one or more locations are not reachable in the first automaton"
+    | not (all (`Set.member` locs1) mergeLocs) = errorWithoutStackTrace $ fnName ++ ": one or more merging locations are not reachable in the first automaton"
     | otherwise = locs1
     where
     locs1 = allLocations sts1
