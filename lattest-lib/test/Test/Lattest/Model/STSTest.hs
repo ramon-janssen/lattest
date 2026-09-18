@@ -25,6 +25,7 @@ module Test.Lattest.Model.STSTest (
     testPrintSeqCompSTS,
     testSeqComposedSTS,
     testSeqComposedAtSTS,
+    testPrintSeqCompPrunedSTS,
     testSequentiallyAtNonSinkLocation,
     testSequentiallyAtSameAction,
     testPrintSelfSeqComposedSTS,
@@ -61,7 +62,7 @@ import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
-import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
+import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
@@ -1140,14 +1141,40 @@ stsPrelude =
             _ -> Map.empty
     in automaton initConf (Set.fromList [startEmpty, startWithWater, error]) switches
 
+stsCoffeeTree :: IOSTS FreeLattice Integer String String
+stsCoffeeTree =
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
+        someWater = SymInteract (In "someWater") [pvar]
+        grindCoffee = SymInteract (In "grindCoffee") []
+        done = SymInteract (Out "done") []
+        error = SymInteract (Out "error") []
+        waterAssign = assignment [xvar =: x .+ p]
+        waterGuard = p .>= 2 .&& x.== 0
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(someWater, ordReturn (stsTLoc waterGuard waterAssign, 1)),
+                               (grindCoffee, ordReturn (stsTLoc sTrue noAssignment, 2))]
+            1 -> Map.fromList [(done, ordReturn (stsTLoc sTrue noAssignment, 3)),
+                               (error, ordReturn (stsTLoc sTrue noAssignment, 4))]
+            2 -> Map.fromList [(done, ordReturn (stsTLoc sTrue noAssignment, 5))]
+            3 -> Map.empty
+            4 -> Map.empty
+            5 -> Map.empty
+            _ -> Map.empty
+    in automaton initConf (Set.fromList [someWater, done, error, grindCoffee]) switches
+
 stsSeqComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposed = interpretSTS (stsPrelude |> stsExampleFL) stsExampleInitAssign
 
 stsSeqComposedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExampleFL) stsExampleInitAssign
 
-stsSeqComposedAtOne :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-stsSeqComposedAtOne = interpretSTS (sequentiallyAt stsPrelude [1] stsExampleFL) stsExampleInitAssign
+modelCoffeeTree = interpretSTS stsCoffeeTree stsExampleInitAssign
+(stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
+
+stsSeqComposedPrunedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsSeqComposedPrunedAt = interpretSTS stsCoffeeTreeComposed stsExampleInitAssign
 
 getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
 getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
@@ -1199,6 +1226,15 @@ Right 2  ――!"coffee" []⟶  ⊥
 Right 2  ――!"error" []⟶  ⊥
 Right 2  ――!"ok" [p:Int]⟶  ⊥
 |]
+
+testPrintSeqCompPrunedSTS :: Test
+testPrintSeqCompPrunedSTS = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsSeqComposedPrunedAt ++ "\n"
+    expected = [QQ.r|
+current state configuration: (Left 0,{x:=0})
+|] -- TODO Complete once it runs
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test

@@ -579,7 +579,7 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     Returns both the pruned sequentially composed automaton, and a list of all pruned away transitions (if any)
 -}
 sequentiallyAtPruned
-  :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a))
+  :: (Ord loc1, Ord loc2, Show loc1, Show (m loc1), BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a))
   => AutIntrpr m loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act
   -> [loc1]
   -> AutSyntax m loc2 (IOSymInteract i o) STStdest
@@ -632,11 +632,17 @@ sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `s
 
     getTraceTo = reverse . getInvertedTraceTo
     flippedMap1 = Map.fromList $
-      (\xs -> if length xs == length (List.nub $ map fst xs) then xs else error "sts1 is not a tree") $
+      (\xs ->
+          let dests = map fst xs
+              offenders = List.nub $ dests List.\\ List.nub dests
+          in if length xs == length (List.nub dests)
+             then xs
+             --else xs -- NOTE: Tried overriding the error to see the behavior but there were still issues
+             else error $ "sts1 is not a tree; duplicated locations: " <> show offenders
+      ) $
       [ (snd BM.<#> to, (interact', from))
       | from <- Set.toList $ allLocations sts1
       , (interact', to) <- Map.toList $ transRel sts1 from]
     getInvertedTraceTo l = case flippedMap1 Map.!? BM.ordReturn l of
       Nothing -> if BM.ordReturn l == initConf sts1 then [] else error $ "unreachable location: " <> show l
       Just (interact', source) -> interact' : getInvertedTraceTo source
-
