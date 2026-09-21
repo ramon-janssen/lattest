@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -41,13 +42,13 @@ TestController(..),
 makeTester,
 RunTester(..),
 runLTSTester,
-runSMTTester,
+runSTSTester,
 Verdict(..),
 InconclusiveReason(..)
 )
 where
 
-import Lattest.Model.Alphabet(TestChoice)
+import Lattest.Model.Alphabet(TestChoice, IOAct, IOSymInteract)
 import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
@@ -58,6 +59,7 @@ import Control.Exception(catch,evaluate)
 --import Control.DeepSeq(force)
 import Lattest.Streams.Synchronized (Streamed(..))
 import Data.Kind (Constraint, Type)
+import Lattest.Model.StandardAutomata (sanityCheckLTS, sanityCheckSTS)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {
@@ -75,7 +77,7 @@ data ActionController act i r state = ActionController {
 data Verdict = Pass | Fail | Inconclusive InconclusiveReason deriving (Ord, Eq, Show)
 
 -- | In case of an inconclusive verdict, details on why the test is inconclusive
-newtype InconclusiveReason = AutomatonException AutomatonException deriving (Ord, Eq, Show)
+data InconclusiveReason = AutomatonException AutomatonException | OutputNotInOfflineTest deriving (Ord, Eq, Show)
 
 {- |
     The controller of a testing experiment. The tester may return a result at the end of a testing experiment. Note that it does
@@ -92,8 +94,7 @@ data TestController m loc q t tdest act state i r = TestController {
     -}
     selectTest :: (TestChoice i act) => state -> AutIntrpr m loc q t tdest act -> m q -> IO (Either (i, state) r),
     {- |
-        Select a test based on test controller state, the specification (in its current state), an observed action, and previous specification
-        configuration. Either select a new controller state, /or/ stop testing and return a result from the controller.
+        Handle a transition.
     -}
     updateTestController :: state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
     -- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.
@@ -191,7 +192,7 @@ runExperiment controller adapter = do
 class RunTester tdest where
   -- | A constraint synonym for the constraints of 'runTester'.
   --   This allows each instance to have different constraints.
-  type RunnableTester (m :: Type -> Type) loc q t tdest act i :: Constraint
+  type RunnableTester (m :: Type -> Type) loc q t tdest act i o i' :: Constraint
 
   {- |
       Running a tester requires:
@@ -206,25 +207,35 @@ class RunTester tdest where
       result returned by the test controller.
   -}
   runTester
-    :: RunnableTester m loc q t tdest act i
+    :: RunnableTester m loc q t tdest act i o i'
     => AutIntrpr m loc q t tdest act
-    -> TestController m loc q t tdest act state i r
-    -> Adapter act i
+    -> TestController m loc q t tdest act state i' r
+    -> Adapter act i'
     -> IO (Verdict, r)
 
 instance RunTester () where
-  type RunnableTester m loc q t () act i = (After m loc q t () act, TestChoice i act, Ord q, Ord (m q))
-  runTester = runLTSTester
+  type RunnableTester m loc q t () act i o i' = (t ~ IOAct i o, After m loc q t () act, TestChoice i' act, Ord loc, Ord q, Ord (m q), Show i, Show o, Show loc, Show t, Show (m ((),loc)), Foldable m)
+  runTester intrpr
+    | not (sanityCheckLTS intrpr) = error "check failed"
+    | otherwise = runLTSTester intrpr
 
 instance RunTester STStdest where
-  type RunnableTester m loc q t STStdest act i = (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act)
-  runTester = runSMTTester
+  type RunnableTester m loc q t STStdest act i o i' = (t ~ IOSymInteract i o, IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, Show loc, Show i, Show o, Show (m (STStdest, loc)), Ord loc, Foldable m, TestChoice i' act)
+  runTester intrpr
+    | not (sanityCheckSTS intrpr) = error "check failed"
+    | otherwise = runSTSTester intrpr
 
+{- |
+    runTester specialized to LTS models, and without running the sanity checks.
+-}
 runLTSTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
     AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
 runLTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
-runSMTTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
+{- |
+    runTester specialized to STS models, and without running the sanity checks.
+-}
+runSTSTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
     AutIntrpr m loc q t STStdest act -> TestController m loc q t STStdest act state i r -> Adapter act i -> IO (Verdict, r)
-runSMTTester spec testSelection = runExperiment (makeTester spec testSelection)
+runSTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
