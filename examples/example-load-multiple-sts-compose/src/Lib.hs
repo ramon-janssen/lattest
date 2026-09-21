@@ -2,7 +2,7 @@ module Lib
     ( run
     ) where
 
-import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp, prettyPrint)
+import           Lattest.Model.Automaton
 import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
