@@ -1892,3 +1892,27 @@ testPrependOutputChecksConj = TestCase $ do
     _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Some $ CInt 2]) (s (Stable 3) 0)
     _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Some $ CInt 0]) (s (Stable 3) 0)
     return ()
+
+-------
+-- Coverage testing
+-------
+-- It's minimally functional at the moment, so only testing the bare minimum
+-- TODO: write a test that just has a bunch of loops, deterministic output, and we can test that after e.g. 10 iterations all transitions should be covered.
+--
+-- stscovered :: IOSTS FreeLattice Integer String String
+-- stscovered =
+--     let initConf = ordReturn 0
+--         p = sVar pvar :: Expr Integer
+--         out2aGuard = 6 .>= p .&& p .>= 4
+--         out2bGuard = 4 .>= p .&& p .>= 2
+--         out2cGuard = 2 .>= p .&& p .>= 0
+--         switches q = case q of
+--             0 -> Map.fromList [(startGate, ordReturn (stsTLoc sTrue noAssignment, 1)),
+--                             (o2Gate, ordReturn (stsTLoc out2aGuard noAssignment, 2) \/ ordReturn (stsTLoc out2bGuard noAssignment, 2))]
+--             1 -> Map.fromList [(o1Gate, ordReturn (stsTLoc sTrue noAssignment, 2)),
+--                                (o2Gate, ordReturn (stsTLoc out2bGuard noAssignment, 3))]
+--             2 -> Map.fromList [(o2Gate, ordReturn (stsTLoc out2cGuard noAssignment, 3)), (resetGate, ordReturn (stsTLoc sTrue noAssignment, 0))]
+--             3 -> Map.empty
+--             _ -> Map.empty
+--     in automaton initConf (Set.fromList [startGate, o1Gate, o2Gate, resetGate]) switches
+

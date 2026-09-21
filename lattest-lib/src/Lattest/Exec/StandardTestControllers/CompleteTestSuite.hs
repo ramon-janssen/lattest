@@ -12,17 +12,20 @@ import Lattest.Adapter.StandardAdapters(withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver)
+import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended)
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations)
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, TestChoice (..))
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, FiniteMenu, specifiedMenu)
 import Lattest.Model.BoundedMonad(Det(..), BoundedConfiguration (..), asConjunction, FreeLattice)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
-import Control.Monad (forM)
+import Control.Monad (forM, filterM)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import System.Random(StdGen)
+import System.Random(StdGen, RandomGen, initStdGen)
+import Data.Maybe (mapMaybe)
+import Lattest.Util.Utils (takeRandom)
+import Data.Foldable.Extra (anyM)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -149,5 +152,34 @@ fullCoverageTarget intrpr = let
   locs = allLocations syn
   in Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.keys $ transRel syn l) locs
 
+-- The most basic version: randomly pick an uncovered input, if any, and otherwise just random
+randomCoveringTestSelector
+  :: (After FreeLattice loc q t tdest act, FiniteMenu t act, TestChoice i act, Ord act, Ord q, Ord loc, Show t, Show act, TestChoice i t)
+  => AutIntrpr FreeLattice loc q t tdest act
+  -> IO (TestSelector FreeLattice loc q t tdest act (StdGen, Set.Set (loc, t),[act]) i)
+randomCoveringTestSelector intrpr = flip randomCoveringTestSelectorFromGen intrpr <$> initStdGen
 
+randomCoveringTestSelectorFromGen
+  :: (After FreeLattice loc q t tdest act, FiniteMenu t act, TestChoice i act, Ord act, Ord q, Ord loc, Show t, Show act, TestChoice i t)
+  => StdGen
+  -> AutIntrpr FreeLattice loc q t tdest act
+  -> TestSelector FreeLattice loc q t tdest act (StdGen, Set.Set (loc, t), [act]) i
+randomCoveringTestSelectorFromGen g intrpr = selector (g,fullCoverageTarget intrpr, []) select update
+  where
+    select (g', tocover, trace) intrpr' mq =
+      -- copied from randomTestSelectorFromGen
+      let ins = mapMaybe actToChoice (specifiedMenu intrpr')
+      in if null ins
+         then error "randomCoveringTestSelectorFromGen found an empty menu"
+         else case asConjunction mq of
+           -- no disjunction present: we try to cover a new transition
+           Right qs ->
+             let ins'  = filter (\i -> any (\q -> (asLoc q, (\[x] -> x) $ choiceToActs i) `Set.member` tocover) qs) ins
+                 ins'' = if null ins' then ins else ins'
+             in return $ Just $ (\(i,g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins''
+           -- disjunction present: we pick any transition
+           Left _ -> return $ Just $ (\(i, g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins
+
+    update (g', tocover, trace) intrpr' act _ = let newcover = covered intrpr' (trace ++ [act])
+      in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act])
 
