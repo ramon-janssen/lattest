@@ -91,7 +91,7 @@ stsToJSON sid sts guardmap assmap valuation =
         -- , "outputGates" .= -- not needed
         -- , "locationVariables" .= -- not needed
         -- , "guards" .= -- not needed
-        -- , "assignments" .= -- think this is also not needed
+        -- , "assignments" .= -- not needed
         ]
     where
     locs = allLocations sts
@@ -100,19 +100,20 @@ stsToJSON sid sts guardmap assmap valuation =
     switches = Set.toList $ Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.toList $ transRel sts l) locs
     switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getGuard g guardmap, getassignment a)) (locIds Map.!) <#> ml)) switches
     -- ws = buildSwitches locIds sts locs
-    -- getguard :: SymGuard -> [String]
-    -- getguard g
-    --   | Just nm <- guardmap Map.!? g = Debug.Trace.traceShow ("Found ", show g, nm) [nm]
-    --   | And (Set.toList -> gs) <- view g = Debug.Trace.traceShow ("Couldn't find conjunction of: " :: String, gs) $ concatMap (getguard . Expr) gs
-    --   | otherwise = error $ "Guard not found: " <> show g <> ". Looked in: " <> show guardmap
-    getassignment :: VarModel -> String
+
+
+    -- The assignment may be the union of several assignments
+    getassignment :: VarModel -> [String]
     getassignment a
-      | Just nm <- assmap Map.!? a = nm
-      | DMap.null (runVarModel a) = ""
-      | otherwise = error $ "Assignment not found: " <> show a <> ". Looked in: " <> show assmap
+      | Just nm <- assmap Map.!? a = [nm]
+      | otherwise = map lookupOne $ DMap.assocs $ runVarModel a
+      where
+        lookupOne (var :=> expr)
+          | Just nm <- assmap Map.!? VarModel (DMap.singleton var expr) = nm
+          | otherwise = error $ "Assignment not found: " <> show a <> ". Looked in: " <> show assmap
     -- params = Map.fromList $ map (\(Some (Variable nm tp)) -> (nm, Some tp)) $ Set.toList $ Set.unions $ Set.map (\(SymInteract _ vs) -> Set.fromList vs) alph
 
-data Switch = Switch String (SymInteract (IOAct String String)) (FreeLattice (([String], String), String))
+data Switch = Switch String (SymInteract (IOAct String String)) (FreeLattice (([String], [String]), String))
 instance JSON.ToJSON Switch where
   toJSON (Switch loc act guardassignmentloc)
    | isForbidden guardassignmentloc && isOutputInteract act = object []
