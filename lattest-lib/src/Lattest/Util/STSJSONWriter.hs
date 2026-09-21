@@ -101,7 +101,6 @@ stsToJSON sid sts guardmap assmap valuation =
     switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getGuard g guardmap, getassignment a)) (locIds Map.!) <#> ml)) switches
     -- ws = buildSwitches locIds sts locs
 
-
     -- The assignment may be the union of several assignments
     getassignment :: VarModel -> [String]
     getassignment a
