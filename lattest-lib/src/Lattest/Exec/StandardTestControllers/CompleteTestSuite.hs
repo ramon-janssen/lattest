@@ -18,7 +18,7 @@ import Lattest.Model.BoundedMonad(Det(..))
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
 import Control.Monad (forM)
-import qualified Data.Map as Map ((!), (!?))
+import qualified Data.Map as Map ((!?))
 import qualified Data.Set as Set (empty, Set)
 import System.Random(StdGen)
 import qualified Data.Maybe as Maybe

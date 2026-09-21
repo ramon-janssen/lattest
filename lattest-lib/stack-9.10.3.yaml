@@ -1,3 +1,5 @@
 resolver: lts-24.46
 packages:
   - .
+extra-deps:
+- sbv-14.7

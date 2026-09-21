@@ -21,13 +21,15 @@ import Data.ByteString.Lazy(toStrict,snoc)
 import qualified Data.ByteString as BS(splitAt,length)
 import Data.Functor(void)
 import qualified Data.List as List(splitAt)
-import GHC.Conc(atomically, newTVar, readTVar, writeTVar)
+import GHC.Conc(atomically, readTVar, writeTVar)
 import Lattest.Streams.Synchronized (tryReadIO, Streamed(Available), consumeBufferedWith, makeTInputStream)
 import qualified Lattest.Streams.Synchronized as Streams (hasInput,read,map)
 import Lattest.Streams.Synchronized.Attoparsec(parserToInputStream)
 import Test.HUnit
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assertWith, monadicIO, run)
+import Control.Concurrent.STM (newTVarIO)
+import Data.Maybe (isNothing)
 
 data WaitTime = NoWT | ShortWT | LongWT deriving (Eq, Show, Ord)
 
@@ -51,7 +53,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
     let testInput = mapToLast (fmap (fmap (first Just)) testInput') (\x -> x ++ [lastTestInput]) [lastTestInput]
     queue <- run $ do
         queue' <- newTQueueIO :: IO (TQueue [Maybe a])
-        sequence_ $ (atomically . writeTQueue queue' . fmap fst) <$> testInput -- write all lists to the queue, without wait times
+        mapM_ (atomically . writeTQueue queue' . fmap fst) testInput -- write all lists to the queue, without wait times
         return queue'
     -- test the input stream created with consumeBufferedWith: for random lists of inputs, the stream should produce those original inputs, regardless of random waiting times in between reading
     is <- run $ consumeBufferedWith (readTQueue queue) (not <$> isEmptyTQueue queue)
@@ -60,7 +62,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
     hasLast <- run $ atomically $ Streams.hasInput is
     assertWith hasLast "mbt test expected input, received no input at end of test"
     lastInput <- run $ atomically $ Streams.read is
-    assertWith (lastInput == Nothing) ("expected Nothing, received " ++ show lastInput ++ " at end of test")
+    assertWith (isNothing lastInput) ("expected Nothing, received " ++ show lastInput ++ " at end of test")
     where
     assertBufferedIS is es wts = assertBufferedIS' is es wts es
     assertBufferedIS' _ [] [] _ = return ()
@@ -73,7 +75,7 @@ prop_consumeBufferedWith' (testInput', lastWaitTime) = withMaxSuccess 15 $ monad
         assertBufferedIS' is es wts oes
     mapToLast [] _ a = [a]
     mapToLast [lastElem] f _ = [f lastElem]
-    mapToLast (a:as) f _ = (a:mapToLast as f (error "unused"))
+    mapToLast (a:as) f _ = a:mapToLast as f (error "unused")
 
 testConsumeBufferedWith_short :: Test
 testConsumeBufferedWith_short = TestCase $ do
@@ -89,19 +91,19 @@ testConsumeBufferedWith :: Test
 testConsumeBufferedWith = TestCase $ do
     queue <- newTQueueIO :: IO (TQueue [Maybe a])
     is <- consumeBufferedWith (readTQueue queue) (not <$> isEmptyTQueue queue)
-    sequence_ $ (atomically . writeTQueue queue) <$> [[Just "a", Just "b"], [Just "c", Just "d"],[Just "e", Nothing]]
+    mapM_ (atomically . writeTQueue queue) [[Just "a", Just "b"], [Just "c", Just "d"],[Just "e", Nothing]]
     shouldBeA <- atomically $ Streams.read is
-    assertEqual ("testConsumeBufferedWith checking a") (Just "a") shouldBeA
+    assertEqual "testConsumeBufferedWith checking a" (Just "a") shouldBeA
     shouldBeB <- atomically $ Streams.read is
-    assertEqual ("testConsumeBufferedWith checking b") (Just "b") shouldBeB
+    assertEqual "testConsumeBufferedWith checking b" (Just "b") shouldBeB
     shouldBeC <- atomically $ Streams.read is
-    assertEqual ("testConsumeBufferedWith checking c") (Just "c") shouldBeC
+    assertEqual "testConsumeBufferedWith checking c" (Just "c") shouldBeC
     shouldBeD <- atomically $ Streams.read is
-    assertEqual ("testConsumeBufferedWith checking d") (Just "d") shouldBeD
+    assertEqual "testConsumeBufferedWith checking d" (Just "d") shouldBeD
     shouldBeE <- atomically $ Streams.read is
-    assertEqual ("testConsumeBufferedWith checking e") (Just "e") shouldBeE
+    assertEqual "testConsumeBufferedWith checking e" (Just "e") shouldBeE
     shouldBeNothing <- atomically $ Streams.read is
-    assertEqual ("testConsumeBufferedWith checking Nothing") (Nothing) shouldBeNothing
+    assertEqual "testConsumeBufferedWith checking Nothing" Nothing shouldBeNothing
 
 prop_jsonStream :: (FromJSON a, ToJSON a, Show a, Eq a) => [(a,Bool,Bool)] -> Property
 prop_jsonStream testInput = monadicIO $ do
@@ -113,7 +115,7 @@ prop_jsonStream testInput = monadicIO $ do
     is <- run $ makeReader byteData
     actionStream <- run $ parserToInputStream ((Parse.endOfInput >> pure Nothing) <|> (Just <$> (Parse.skipSpace *> jsonNoDup))) is
     actionStream' <- run $ Streams.map (fromResult . fromJSON) actionStream
-    
+
     -- assert that the parsed objects are equal to the original objects, minus the cut-off
     --return Discard
     void $ checkObjs actionStream' typedData
@@ -130,11 +132,12 @@ prop_jsonStream testInput = monadicIO $ do
         assertWith (Available obj == received) ("checkObjs expected " ++ show obj ++ ", received " ++ show received)
         return $ fromAvailable received
     fromAvailable (Available o) = o
+    fromAvailable _ = error "not available"
     createTestData [] = return ([], [])
     createTestData [(a,app,True)] = do
         let b = encode' a
         (h1, h2) <- splitAtRandom b
-        return (if app then [a] else [], h1 : if app then [h2] else [])
+        return ([a | app], h1:[h2 | app])
     createTestData [(a,_,False)] = return ([a],[encode' a])
     createTestData ((a,app,half):rest) = do
         (as,bytes) <- createTestData rest
@@ -152,15 +155,15 @@ prop_jsonStream testInput = monadicIO $ do
                 else b:bytes
         return (a:as,bytes'')
     splitAtRandom :: ByteString -> IO (ByteString,ByteString)
-    splitAtRandom b = 
+    splitAtRandom b =
         if BS.length b > 1
             then do
                 i <- generate $ chooseInt (1, BS.length b - 1)
                 return $ BS.splitAt i b
             else discard
-    encode' = toStrict . (flip snoc $ c2w8 '\n') . encode
+    encode' = toStrict . flip snoc (c2w8 '\n') . encode
     makeReader someData = do
-        tSomeData <- atomically $ newTVar someData
+        tSomeData <- newTVarIO someData
         makeTInputStream (consume tSomeData) (return True)
         where
         consume tSomeData = do

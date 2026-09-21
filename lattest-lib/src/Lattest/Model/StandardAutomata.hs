@@ -74,8 +74,8 @@ interpretSTSQuiescentInputAttemptConcrete,
 where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract)
-import Lattest.Model.Automaton (AutSyntax (..), automaton, interpret, Completable, implicitDestination,IntrpState(..),STStdest, transRel,syntacticAutomaton, AutIntrpr(..), reachable, stsTLoc)
-import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, MeetSemiLattice, BoundedConfiguration)
+import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest, transRel,syntacticAutomaton, reachable, stsTLoc)
+import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, BoundedConfiguration, MeetSemiLattice)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 
@@ -92,7 +92,6 @@ import Lattest.Model.Symbolic.Expr
 import qualified Data.List as List
 import Lattest.Model.Symbolic.SolveSTS (interactsToSpecifiedCondition, interactsToAllowedCondition)
 import System.IO.Unsafe (unsafePerformIO)
-import Lattest.SMT (runSMT)
 import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
 import Data.Either (fromRight)
 
@@ -546,15 +545,11 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     -- Switches starting from stable locations
     switches (Stable loc) = Map.fromList $
         -- keep input switches as-is
-        -- keep input switches as-is
-        
-        -- keep input switches as-is
         [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
         ++
         -- output switches are replaced by a check gate leading to a pending state
-        -- output switches are replaced by a check gate leading to a pending state
         [ (checkGateFor t, BM.ordMap (\(_, target) -> (identityTdest, Pending loc t target)) mval)
-        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t ]
+        | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t, not (BM.isForbidden mval) ]
 
     -- Additional switches starting from `pending` locations
     switches (Pending src t target) = Map.singleton t outcomes
@@ -614,7 +609,7 @@ sequentiallyAtPruned (AutInterpretation initconf1 sts1) mergeLocs sts2 = locs1 `
                                               Left y -> BM.ordMap (second Left) <$> transRel sts1 y
                                               Right _ -> mempty)
       in flip Map.partitionWithKey initTransOf2 $
-          \t _ -> Maybe.isJust $ unsafePerformIO $ runSMT $ (\c -> solveGuard (toList $ freeVars c) c) $
+          \t _ -> Maybe.isJust $ unsafePerformIO $ (\c -> solveGuard (toList $ freeVars c) c) $
              case t of
                SymInteract (In _)  _ -> interactsToSpecifiedCondition (AutInterpretation (fmap Left BM.<#> initconf1) sts1and2) (tr ++ [t])
                SymInteract (Out _) _ -> interactsToAllowedCondition   (AutInterpretation (fmap Left BM.<#> initconf1) sts1and2) (tr ++ [t])
