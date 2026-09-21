@@ -10,7 +10,7 @@ import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 import Lattest.Exec.Testing (Verdict(..))
 import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
 import qualified Data.Map as Map
-import Lattest.Util.STSJSONWriter (stsListToJSONFile)
+import Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
 import Data.Tuple (swap)
 
 run :: IO ()
@@ -47,4 +47,5 @@ run = do
     tests <- offlineTests model controller
     print tests
 
-    stsListToJSONFile "example-written.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
+    stsListToJSONFile "example_single_stss.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
+    stsToJSONFile "example_composed.json" "stscomposed" seqComposed gs as initVal
