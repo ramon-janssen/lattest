@@ -16,6 +16,7 @@ import Lattest.Model.Symbolic.Internal.ExprImpls(substConst)
 import Lattest.SMT(pop,getSolution,addAssertions,addDeclarations,getSolvable,push,SolvableProblem(..),SMT)
 
 import qualified Data.Map as Map
+import qualified Debug.Trace
 
 {-|
     Combine the given guards into one.

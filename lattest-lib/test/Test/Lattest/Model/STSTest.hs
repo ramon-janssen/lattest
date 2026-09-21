@@ -61,7 +61,7 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSMTTester, Verdict(..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton)
+import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton, AutSyntax)
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), SymGuard, IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
@@ -1170,13 +1170,16 @@ stsSeqComposed = interpretSTS (stsPrelude |> stsExampleFL) stsExampleInitAssign
 stsSeqComposedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExampleFL) stsExampleInitAssign
 
+modelCoffeeTree :: STSIntrp FreeLattice Integer (IOAct String String)
 modelCoffeeTree = interpretSTS stsCoffeeTree stsExampleInitAssign
+stsCoffeeTreeComposed :: AutSyntax   FreeLattice   (Either Integer Integer)   (IOSymInteract String String)   STStdest
+prunedTransitions :: [(Integer, IOSymInteract String String, FreeLattice Integer)]
 (stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
 
 stsSeqComposedPrunedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposedPrunedAt = interpretSTS stsCoffeeTreeComposed stsExampleInitAssign
 
-getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
+getSTSIntrpStateEither :: Either Integer Integer -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
 getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ fromConstantsMap $ Map.singleton (Variable "x" IntType) (Cint val)
 
 testPrintSeqCompSTS :: Test
@@ -1231,10 +1234,58 @@ testPrintSeqCompPrunedSTS :: Test
 testPrintSeqCompPrunedSTS = TestCase $ assertBool failureMessage (expected == actual)
     where
     failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp stsSeqComposedPrunedAt ++ "\n"
+    actual = "\n" ++ prettyPrintIntrp stsSeqComposedPrunedAt ++ "\n" ++ show prunedTransitions ++ "\n"
     expected = [QQ.r|
 current state configuration: (Left 0,{x:=0})
-|] -- TODO Complete once it runs
+initial location configuration: Left 0
+locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 1, Right 2, Right 3, Right 4, Right 5
+transitions:
+Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
+Left 0  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Left 1)
+Left 0  ――!"done" []⟶  ⊥
+Left 0  ――!"error" []⟶  ⊥
+Left 1  ――?"grindCoffee" []⟶  ⊤
+Left 1  ――?"someWater" [p:Int]⟶  ⊤
+Left 1  ――!"done" []⟶  (True, {},Left 3)
+Left 1  ――!"error" []⟶  (True, {},Left 4)
+Left 2  ――?"grindCoffee" []⟶  ⊤
+Left 2  ――?"someWater" [p:Int]⟶  ⊤
+Left 2  ――!"done" []⟶  (True, {},Left 5)
+Left 2  ――!"error" []⟶  ⊥
+Left 3  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 3  ――?"someWater" [p:Int]⟶  ⊤
+Left 3  ――!"done" []⟶  ⊥
+Left 3  ――!"error" []⟶  ⊥
+Left 4  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 4  ――?"someWater" [p:Int]⟶  ⊤
+Left 4  ――!"done" []⟶  ⊥
+Left 4  ――!"error" []⟶  ⊥
+Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 5  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Right 1)
+Left 5  ――!"done" []⟶  ⊥
+Left 5  ――!"error" []⟶  ⊥
+Right 1  ――?"grindCoffee" []⟶  ⊤
+Right 1  ――?"someWater" [p:Int]⟶  ⊤
+Right 1  ――!"done" []⟶  (True, {},Right 3)
+Right 1  ――!"error" []⟶  (True, {},Right 4)
+Right 2  ――?"grindCoffee" []⟶  ⊤
+Right 2  ――?"someWater" [p:Int]⟶  ⊤
+Right 2  ――!"done" []⟶  (True, {},Right 5)
+Right 2  ――!"error" []⟶  ⊥
+Right 3  ――?"grindCoffee" []⟶  ⊤
+Right 3  ――?"someWater" [p:Int]⟶  ⊤
+Right 3  ――!"done" []⟶  ⊥
+Right 3  ――!"error" []⟶  ⊥
+Right 4  ――?"grindCoffee" []⟶  ⊤
+Right 4  ――?"someWater" [p:Int]⟶  ⊤
+Right 4  ――!"done" []⟶  ⊥
+Right 4  ――!"error" []⟶  ⊥
+Right 5  ――?"grindCoffee" []⟶  ⊤
+Right 5  ――?"someWater" [p:Int]⟶  ⊤
+Right 5  ――!"done" []⟶  ⊥
+Right 5  ――!"error" []⟶  ⊥
+[(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1),(5,!"done" [],⊥),(5,!"error" [],⊥)]
+|]
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test

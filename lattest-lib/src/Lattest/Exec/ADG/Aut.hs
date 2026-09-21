@@ -172,7 +172,7 @@ addDelta delta (Aut initial' states' _ inputs' outputs') =
                                        then Set.insert (State sid' inp' (Set.insert delta out') (Map.insert delta sid' trans')) set
                                        else Set.insert s set) Set.empty states'
         stateMap = (Map.fromList $ List.map (\s -> (sid s,s)) $ Set.toList newStates)
-    in Aut (stateMap Map.! sid initial') newStates stateMap inputs' (Set.insert delta outputs')
+    in Aut (Maybe.fromJust $ stateMap Map.!? sid initial') newStates stateMap inputs' (Set.insert delta outputs')
 
 
 printCompRel :: (Show a, Eq a) => Set (State a b,State a b) -> String

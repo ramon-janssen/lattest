@@ -18,9 +18,10 @@ import Lattest.Model.BoundedMonad(Det(..))
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
 import Control.Monad (forM)
-import qualified Data.Map as Map ((!))
+import qualified Data.Map as Map ((!), (!?))
 import qualified Data.Set as Set (empty, Set)
 import System.Random(StdGen)
+import qualified Data.Maybe as Maybe
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -32,7 +33,7 @@ accessSeqSelector aut targetState =
             _ -> error "Access sequence: model must be in a specified initial state"
         accSeqs = accessSequences aut initState
     in TestController {
-        testControllerState = (Map.!) accSeqs targetState,
+        testControllerState = Maybe.fromJust $ accSeqs Map.!? targetState,
         selectTest = accSeqSelectTest,
         updateTestController = accSeqUpdateTest,
         handleTestClose = \testState' -> return $ case testState' of [] ->  True; _ -> False

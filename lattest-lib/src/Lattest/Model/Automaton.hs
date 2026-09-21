@@ -1,6 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -447,7 +448,7 @@ instance FiniteMenu (IOAct i o) (SuspendedIF i o) where
 -- STS interpretation --
 --------------------------------
 
-data IntrpState a = IntrpState a Valuation deriving (Eq, Ord)
+data IntrpState a = IntrpState a Valuation deriving (Eq, Ord, Functor)
 
 instance Show a => Show (IntrpState a) where
     show (IntrpState a v) = show (a,v)

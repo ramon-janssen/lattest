@@ -546,8 +546,12 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     -- Switches starting from stable locations
     switches (Stable loc) = Map.fromList $
         -- keep input switches as-is
+        -- keep input switches as-is
+        
+        -- keep input switches as-is
         [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
         ++
+        -- output switches are replaced by a check gate leading to a pending state
         -- output switches are replaced by a check gate leading to a pending state
         [ (checkGateFor t, BM.ordMap (\(_, target) -> (identityTdest, Pending loc t target)) mval)
         | (t, mval) <- Map.toList (transRel sts loc), isOutputInteract t ]
@@ -579,12 +583,12 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     Returns both the pruned sequentially composed automaton, and a list of all pruned away transitions (if any)
 -}
 sequentiallyAtPruned
-  :: (Ord loc1, Ord loc2, Show loc1, Show (m loc1), BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a))
+  :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a))
   => AutIntrpr m loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act
   -> [loc1]
   -> AutSyntax m loc2 (IOSymInteract i o) STStdest
   -> (AutSyntax m (Either loc1 loc2) (IOSymInteract i o) STStdest, [(loc1, IOSymInteract i o, m loc2)])
-sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `seq` (automaton newInitConf newAlphabet switches, pruned)
+sequentiallyAtPruned (AutInterpretation initconf1 sts1) mergeLocs sts2 = locs1 `seq` (automaton newInitConf newAlphabet switches, pruned)
     where
     locs1 = validMergeLocs "sequentiallyAt" sts1 mergeLocs
     locs2 = allLocations sts2
@@ -595,17 +599,27 @@ sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `s
 
     -- transitions out of the initial location(s) of sts2, to be replicated onto every merge location of sts1
     initTransOf2 = Map.fromList
-        [ (t, second Right BM.<#> (initConf sts2 BM.#>> \l2 -> transRel sts2 l2 Map.! t))
+        [ (t, second Right BM.<#> (initConf sts2 BM.#>> \l2 -> fromJust $ transRel sts2 l2 Map.!? t))
         | t <- Set.toList (alphabet sts2) ]
 
     -- the new transitions we actually add to this location, i.e. those of initTransOf2 that are satisfiable
+    -- fst is feasible transitions, snd is unfeasible transitions
+    -- TODO: currently doesn't work
+    -- TODO: this is a conservative check: If the trace satisfies multiple paths, this only checks whether any of those paths is viable.
     newTransOf1 l1 = let tr = getTraceTo l1
+                         sts1and2 = automaton
+                           (Left BM.<#> initConf sts1)
+                           (alphabet sts1 `Set.union` alphabet sts2)
+                           (\x -> if x == Left l1 then initTransOf2 else case x of
+                                              Left y -> BM.ordMap (second Left) <$> transRel sts1 y
+                                              Right _ -> mempty)
       in flip Map.partitionWithKey initTransOf2 $
-          \t _ -> Maybe.isJust $ unsafePerformIO $ runSMT $ solveGuard [] $
+          \t _ -> Maybe.isJust $ unsafePerformIO $ runSMT $ (\c -> solveGuard (toList $ freeVars c) c) $
              case t of
-               SymInteract (In _)  _ -> interactsToSpecifiedCondition (AutInterpretation initconf sts1) (tr ++ [t])
-               SymInteract (Out _) _ -> interactsToAllowedCondition (AutInterpretation initconf sts1) (tr ++ [t])
+               SymInteract (In _)  _ -> interactsToSpecifiedCondition (AutInterpretation (fmap Left BM.<#> initconf1) sts1and2) (tr ++ [t])
+               SymInteract (Out _) _ -> interactsToAllowedCondition   (AutInterpretation (fmap Left BM.<#> initconf1) sts1and2) (tr ++ [t])
 
+    -- the transitions from sts1 to sts2 that we pruned away
     pruned = concatMap (\l1 -> map (\(act, l2) -> (l1, act, (fromRight (error "only Left expected") . snd) BM.<#> l2)) . Map.toList . snd $ newTransOf1 l1) mergeLocs
 
     -- conjunct sts1's own transition with the copied one, but only where both are specified (and not forbiddden)
@@ -635,14 +649,16 @@ sequentiallyAtPruned (AutInterpretation initconf sts1) mergeLocs sts2 = locs1 `s
       (\xs ->
           let dests = map fst xs
               offenders = List.nub $ dests List.\\ List.nub dests
-          in if length xs == length (List.nub dests)
+          in if null offenders
              then xs
              --else xs -- NOTE: Tried overriding the error to see the behavior but there were still issues
              else error $ "sts1 is not a tree; duplicated locations: " <> show offenders
       ) $
-      [ (snd BM.<#> to, (interact', from))
+      [ (snd to, (interact', from))
       | from <- Set.toList $ allLocations sts1
-      , (interact', to) <- Map.toList $ transRel sts1 from]
-    getInvertedTraceTo l = case flippedMap1 Map.!? BM.ordReturn l of
-      Nothing -> if BM.ordReturn l == initConf sts1 then [] else error $ "unreachable location: " <> show l
+      , (interact', to') <- Map.toList $ transRel sts1 from
+      , to <- toList to']
+    getInvertedTraceTo l = case flippedMap1 Map.!? l of
+      Nothing -> if l `elem` toList (initConf sts1) then [] else error $ "unreachable location: " <> show l
       Just (interact', source) -> interact' : getInvertedTraceTo source
+

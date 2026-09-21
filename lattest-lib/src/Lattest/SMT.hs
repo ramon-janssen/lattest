@@ -33,6 +33,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
+import qualified Data.Maybe as Maybe
 
 --------------------
 -- exported types and functions
@@ -62,7 +63,7 @@ getSolution vs =
   where
     getVarValue :: Variable -> SMT (Variable, Constant)
     getVarValue v@(Variable nm tp) = do
-        sval <- gets (Map.! nm)
+        sval <- gets (Maybe.fromJust . (Map.!? nm))
         c <- lift $ svalToConstant tp sval
         return (v, c)
 
@@ -108,7 +109,9 @@ push = lift $ SBV.push 1
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: (Show a, SBV.SymVal a) => ExprView a -> SMT (SBV a)
 exprToSymbolic v = case v of
-  Var (Variable nm _tp) -> gets (SBVI.SBV . (Map.! nm))
+  Var (Variable nm _tp) -> gets (\m -> SBVI.SBV $ case m Map.!? nm of
+                                           Just sbv -> sbv
+                                           Nothing -> error $ "Variable not found: " <> nm <> ". Options in scope: " <> show (Map.keys m))
   Const t -> pure $ literal t
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   EqualInt    l r -> (SBV..==) <$> go l <*> go r
