@@ -43,7 +43,8 @@ module Test.Lattest.Model.STSTest (
     testPrintPrependOutputChecksDisj,
     testPrintPrependOutputChecksConj,
     testPrependOutputChecksDisj,
-    testPrependOutputChecksConj
+    testPrependOutputChecksConj,
+    testCoverageCheckerIsExhaustive
     )
 where
 
@@ -66,7 +67,7 @@ import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runSTSTester, Verdict(..))
+import Lattest.Exec.Testing(runSTSTester, Verdict(..), RunTester (..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
@@ -83,6 +84,7 @@ import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algeb
 import qualified Lattest.SMT as SMT
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
+import Lattest.Exec.StandardTestControllers.CompleteTestSuite (randomCoveringTestSelector)
  -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 
 pvar :: Variable Integer
@@ -1897,22 +1899,36 @@ testPrependOutputChecksConj = TestCase $ do
 -- Coverage testing
 -------
 -- It's minimally functional at the moment, so only testing the bare minimum
--- TODO: write a test that just has a bunch of loops, deterministic output, and we can test that after e.g. 10 iterations all transitions should be covered.
---
--- stscovered :: IOSTS FreeLattice Integer String String
--- stscovered =
---     let initConf = ordReturn 0
---         p = sVar pvar :: Expr Integer
---         out2aGuard = 6 .>= p .&& p .>= 4
---         out2bGuard = 4 .>= p .&& p .>= 2
---         out2cGuard = 2 .>= p .&& p .>= 0
---         switches q = case q of
---             0 -> Map.fromList [(startGate, ordReturn (stsTLoc sTrue noAssignment, 1)),
---                             (o2Gate, ordReturn (stsTLoc out2aGuard noAssignment, 2) \/ ordReturn (stsTLoc out2bGuard noAssignment, 2))]
---             1 -> Map.fromList [(o1Gate, ordReturn (stsTLoc sTrue noAssignment, 2)),
---                                (o2Gate, ordReturn (stsTLoc out2bGuard noAssignment, 3))]
---             2 -> Map.fromList [(o2Gate, ordReturn (stsTLoc out2cGuard noAssignment, 3)), (resetGate, ordReturn (stsTLoc sTrue noAssignment, 0))]
---             3 -> Map.empty
---             _ -> Map.empty
---     in automaton initConf (Set.fromList [startGate, o1Gate, o2Gate, resetGate]) switches
+
+stscovered :: IOSTS FreeLattice Integer String String
+stscovered =
+    let initConf = ordReturn 0
+        switches = \case
+            0 -> Map.fromList [(SymInteract (In "A") [], ordReturn (stsTLoc sTrue noAssignment, 1)),
+                               (SymInteract (In "B") [], ordReturn (stsTLoc sTrue noAssignment, 2)),
+                               (SymInteract (In "C") [], ordReturn (stsTLoc sTrue noAssignment, 3)),
+                               (SymInteract (In "D") [], ordReturn (stsTLoc sTrue noAssignment, 4))]
+            1 -> Map.fromList [(SymInteract (Out "A") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            2 -> Map.fromList [(SymInteract (Out "B") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            3 -> Map.fromList [(SymInteract (Out "C") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            4 -> Map.fromList [(SymInteract (Out "D") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            _ -> Map.empty
+    in automaton initConf (Set.fromList $ concatMap (\y -> [SymInteract (In y) [], SymInteract (Out y) []]) ["A","B","C","D"]) switches
+
+coverimp :: IO (Adapter.Adapter (GateValue (IOAct x x)) (GateValue x))
+coverimp = pureMealyAdapter (const (const ())) (\() (GateValue i _) -> [GateValue (In i) [], GateValue (Out i) []]) ()
+
+testCoverageCheckerIsExhaustive :: Test
+testCoverageCheckerIsExhaustive = TestCase $ do
+  let intrpr = interpretSTS stscovered $ Valuation mempty
+  tester <- randomCoveringTestSelector intrpr
+  imp1 <- coverimp
+  (v1, incompleteTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 7 `observingOnly` traceObserver) imp1
+  imp2 <- coverimp
+  (v2,   completeTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 8 `observingOnly` traceObserver) imp2
+  assertEqual "Should pass 1" Pass v1
+  assertEqual "Should pass 2" Pass v2
+  let complete trace = all (\y -> all (\z -> GateValue z [] `elem` trace) [In [y], Out [y]]) ("ABCD" :: String)
+  assertBool "7 steps is not enough" (not $ complete incompleteTrace)
+  assertBool "8 steps should cover"        (complete   completeTrace)
 

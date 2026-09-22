@@ -1,10 +1,17 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 module Lattest.Exec.StandardTestControllers.CompleteTestSuite (
 accessSeqSelector,
 adgTestSelector,
 nCompleteSingleState,
 runNCompleteTestSuite,
+randomCoveringTestSelector,
+randomCoveringTestSelectorFromGen
 )
 where
 import Lattest.Adapter.Adapter(Adapter,close)
@@ -12,20 +19,17 @@ import Lattest.Adapter.StandardAdapters(withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector)
+import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, TestChoice (..))
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, FiniteMenu, specifiedMenu)
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue)
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, STStdest, IntrpState)
 import Lattest.Model.BoundedMonad(Det(..), BoundedConfiguration (..), asConjunction, FreeLattice)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
 
-import Control.Monad (forM, filterM)
+import Control.Monad (forM, (>=>))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import System.Random(StdGen, RandomGen, initStdGen)
-import Data.Maybe (mapMaybe)
-import Lattest.Util.Utils (takeRandom)
-import Data.Foldable.Extra (anyM)
+import System.Random(StdGen, initStdGen)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -109,8 +113,8 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
             let model = interpretQuiescentConcrete spec
             putStrLn "starting test..."
             putStrLn $ "accessing state: " ++ show targetState
-            selector <- testSelector model seed targetState
-            (verdict,(observed, maybeMq)) <- runTester model selector imp
+            selector' <- testSelector model seed targetState
+            (verdict,(observed, maybeMq)) <- runTester model selector' imp
             close adap
             return (targetState, verdict, (observed, maybeMq))
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
@@ -154,31 +158,57 @@ fullCoverageTarget intrpr = let
 
 -- The most basic version: randomly pick an uncovered input, if any, and otherwise just random
 randomCoveringTestSelector
-  :: (After FreeLattice loc q t tdest act, FiniteMenu t act, TestChoice i act, Ord act, Ord q, Ord loc, Show t, Show act, TestChoice i t)
-  => AutIntrpr FreeLattice loc q t tdest act
-  -> IO (TestSelector FreeLattice loc q t tdest act (StdGen, Set.Set (loc, t),[act]) i)
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+  => AutIntrpr m loc q t tdest act
+  -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act]) i)
 randomCoveringTestSelector intrpr = flip randomCoveringTestSelectorFromGen intrpr <$> initStdGen
 
 randomCoveringTestSelectorFromGen
-  :: (After FreeLattice loc q t tdest act, FiniteMenu t act, TestChoice i act, Ord act, Ord q, Ord loc, Show t, Show act, TestChoice i t)
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => StdGen
-  -> AutIntrpr FreeLattice loc q t tdest act
-  -> TestSelector FreeLattice loc q t tdest act (StdGen, Set.Set (loc, t), [act]) i
+  -> AutIntrpr m loc q t tdest act
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act]) i
 randomCoveringTestSelectorFromGen g intrpr = selector (g,fullCoverageTarget intrpr, []) select update
   where
-    select (g', tocover, trace) intrpr' mq =
-      -- copied from randomTestSelectorFromGen
-      let ins = mapMaybe actToChoice (specifiedMenu intrpr')
-      in if null ins
-         then error "randomCoveringTestSelectorFromGen found an empty menu"
-         else case asConjunction mq of
-           -- no disjunction present: we try to cover a new transition
-           Right qs ->
-             let ins'  = filter (\i -> any (\q -> (asLoc q, (\[x] -> x) $ choiceToActs i) `Set.member` tocover) qs) ins
-                 ins'' = if null ins' then ins else ins'
-             in return $ Just $ (\(i,g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins''
-           -- disjunction present: we pick any transition
-           Left _ -> return $ Just $ (\(i, g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins
+    select (g', tocover, trace) intrpr' mq = do
+      -- as in randomDataTestSelectorFromGen, except we try to take new transitions
+      (maybeGateValue, g'') <- solveRandomInput @FreeLattice g' maybeNewInAct intrpr'
+      case maybeGateValue of
+        Just value -> pure $ Just (value, (g'',tocover,trace))
+        Nothing -> do
+          (maybeGateValue', g''') <- solveRandomInput g'' maybeNewInAct intrpr'
+          return $ case maybeGateValue' of
+            Just value -> Just (value, (g''',tocover,trace))
+            Nothing -> Nothing
+      where
+        maybeFromIOAct (SymInteract io xs) = case io of
+          In i -> Just $ SymInteract i xs
+          Out _ -> Nothing
+        maybeNewInAct = maybeFromIOAct >=> \(SymInteract i xs) -> case asConjunction mq of
+          -- The state has disjunction, so we're not covering any new transitions anyway.
+          -- Just take a random transition.
+          Left _ -> Just $ SymInteract i xs
+          -- The actual filtering:
+          Right qs -> if any (\q -> (asLoc q, SymInteract (In i) xs) `Set.member` tocover) qs
+            then Just $ SymInteract i xs
+            else Nothing
+
+
+      -- let ins = mapMaybe actToChoice (specifiedMenu intrpr')
+      -- in if null ins
+      --    then error "randomCoveringTestSelectorFromGen found an empty menu"
+      --    else case asConjunction mq of
+      --      -- no disjunction present: we try to cover a new transition
+      --      Right qs ->
+      --        let ins'  = filter (\i -> any (\q -> (asLoc q, (\[x] -> x) $ choiceToActs i) `Set.member` tocover) qs) ins
+      --            ins'' = if null ins' then ins else ins'
+      --        in return $ Just $ (\(i,g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins''
+      --      -- disjunction present: we pick any transition
+      --      Left _ -> return $ Just $ (\(i, g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins
 
     update (g', tocover, trace) intrpr' act _ = let newcover = covered intrpr' (trace ++ [act])
       in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act])

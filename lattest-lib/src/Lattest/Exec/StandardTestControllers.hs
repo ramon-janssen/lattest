@@ -34,6 +34,7 @@ randomDataOrWaitForOutputTestSelector,
 randomDataOrWaitForOutputTestSelectorFromSeed,
 randomDataOrWaitForOutputTestSelectorFromGen,
 andThen,
+solveRandomInput,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
