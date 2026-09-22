@@ -197,19 +197,6 @@ randomCoveringTestSelectorFromGen g intrpr = selector (g,fullCoverageTarget intr
             then Just $ SymInteract i xs
             else Nothing
 
-
-      -- let ins = mapMaybe actToChoice (specifiedMenu intrpr')
-      -- in if null ins
-      --    then error "randomCoveringTestSelectorFromGen found an empty menu"
-      --    else case asConjunction mq of
-      --      -- no disjunction present: we try to cover a new transition
-      --      Right qs ->
-      --        let ins'  = filter (\i -> any (\q -> (asLoc q, (\[x] -> x) $ choiceToActs i) `Set.member` tocover) qs) ins
-      --            ins'' = if null ins' then ins else ins'
-      --        in return $ Just $ (\(i,g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins''
-      --      -- disjunction present: we pick any transition
-      --      Left _ -> return $ Just $ (\(i, g'') -> (i,(g'', tocover, trace))) $ takeRandom g' ins
-
     update (g', tocover, trace) intrpr' act _ = let newcover = covered intrpr' (trace ++ [act])
       in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act])
 
