@@ -76,6 +76,9 @@ instance Has JSON.ToJSON Type where
 
 deriving instance (JSON.ToJSON a) => JSON.ToJSON (RCSet a)
 
+isEmptySwitch :: Switch -> Bool
+isEmptySwitch (Switch _ act gal) =
+    (isForbidden gal && isOutputInteract act) || (isUnderspecified gal && isInputInteract act)
 
 -- | Given ID, STS, the names of guards and assignments, and the initial valuation, make a JSON
 stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Valuation -> JSON.Value
@@ -85,7 +88,7 @@ stsToJSON sid sts guardmap assmap valuation =
         , "initial_location" .= initLocationJSON locIds (initConf sts)
         , "initialValuation" .= initValue valuation
         , "locations" .= Map.elems locIds
-        , "switches" .= switches'
+        , "switches" .= switches''
         -- , "parameters" .= params -- already wrote this, but it uses a different representation of structures, so probably better to just reuse the ones from before merging
         -- , "inputGates" .= -- not needed
         -- , "outputGates" .= -- not needed
@@ -99,6 +102,7 @@ stsToJSON sid sts guardmap assmap valuation =
     -- alph = alphabet sts
     switches = Set.toList $ Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.toList $ transRel sts l) locs
     switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getGuard g guardmap, getassignment a)) (locIds Map.!) <#> ml)) switches
+    switches'' = filter (not . isEmptySwitch) switches'
     -- ws = buildSwitches locIds sts locs
 
     -- The assignment may be the union of several assignments
