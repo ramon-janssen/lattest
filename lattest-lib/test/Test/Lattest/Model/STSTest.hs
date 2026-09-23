@@ -1930,5 +1930,5 @@ testCoverageCheckerIsExhaustive = TestCase $ do
   assertEqual "Should pass 2" Pass v2
   let complete trace = all (\y -> all (\z -> GateValue z [] `elem` trace) [In [y], Out [y]]) ("ABCD" :: String)
   assertBool "7 steps is not enough" (not $ complete incompleteTrace)
-  assertBool "8 steps should cover"        (complete   completeTrace)
+  assertBool ("8 steps should cover" <> show completeTrace)        (complete   completeTrace)
 

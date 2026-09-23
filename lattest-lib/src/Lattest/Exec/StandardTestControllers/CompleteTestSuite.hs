@@ -30,6 +30,7 @@ import Control.Monad (forM, (>=>))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import System.Random(StdGen, initStdGen)
+import qualified Debug.Trace
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -197,6 +198,9 @@ randomCoveringTestSelectorFromGen g intrpr = selector (g,fullCoverageTarget intr
             then Just $ SymInteract i xs
             else Nothing
 
-    update (g', tocover, trace) intrpr' act _ = let newcover = covered intrpr' (trace ++ [act])
+    -- Note: computing the 'new cover' by passing the entire trace to the initial intrpr each time is very inefficient,
+    -- but currently 'update' gets an intrpr with the _target_ location of this transition, not the source,
+    -- so it's either this or keep track of the state configuration inside of our own state (i.e. put 'm q' into the triple).
+    update (g', tocover, trace) _ act _ = let newcover = covered intrpr $ trace ++ [act]
       in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act])
 
