@@ -8,6 +8,7 @@ import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
+import Test.Lattest.Util.STSJSONWriterTest
 import Test.System.IO.Streams.Synchronized(prop_consumeBufferedWith, testConsumeBufferedWith,testConsumeBufferedWith_short, prop_jsonStream)
 
 import Test.Tasty
@@ -138,8 +139,9 @@ makeHUnitTests regenerate = do
         testSTSJSONParserAssignmentTypeMismatch,
         testSTSJSONParserGuardTypeMismatch,
         testSTSJSONParserGateIdDup,
-        testLatticeCoffeeSTS,
-        testCoverageCheckerIsExhaustive
+        testCoverageCheckerIsExhaustive,
+        testSTSJSONWriterComposedConjunction,
+        testLatticeCoffeeSTS
         ]
         ++ testLatticeSTS
         ++ testLatticeSTSQuiescence
