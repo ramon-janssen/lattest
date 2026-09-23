@@ -1,0 +1,163 @@
+{
+    "id": "composed",
+    "initialValuation": {
+        "items": [
+            1,
+            2,
+            3
+        ],
+        "pair": [
+            3,
+            "hi"
+        ],
+        "x": 5,
+        "y": true
+    },
+    "initial_location": [
+        "(\"A\",0)",
+        "(\"B\",0)"
+    ],
+    "locations": [
+        "(\"A\",0)",
+        "(\"A\",1)",
+        "(\"A\",2)",
+        "(\"A\",3)",
+        "(\"B\",0)",
+        "(\"B\",1)",
+        "(\"B\",2)",
+        "(\"B\",3)"
+    ],
+    "switches": [
+        {
+            "assignments": [
+                "Pair",
+                "Dup",
+                "Flip"
+            ],
+            "end_loc": "(\"A\",1)",
+            "gate": "?\"step\" [p:Int]",
+            "guard": [
+                "YFalse"
+            ],
+            "init_loc": "(\"A\",0)"
+        },
+        {
+            "assignments": [
+                "Dup"
+            ],
+            "end_loc": "(\"A\",3)",
+            "gate": "?\"stepA\" []",
+            "guard": [
+                "True"
+            ],
+            "init_loc": "(\"A\",0)"
+        },
+        {
+            "assignments": [],
+            "end_loc": "(\"A\",2)",
+            "gate": "!\"outA\" []",
+            "guard": [
+                "True"
+            ],
+            "init_loc": "(\"A\",1)"
+        },
+        [
+            {
+                "assignments": [
+                    "Flip"
+                ],
+                "end_loc": "(\"A\",0)",
+                "gate": "!\"outC\" [p:Int]",
+                "guard": [
+                    "GA"
+                ],
+                "init_loc": "(\"A\",2)"
+            },
+            {
+                "assignments": [
+                    "Flip"
+                ],
+                "end_loc": "(\"B\",0)",
+                "gate": "!\"outC\" [p:Int]",
+                "guard": [
+                    "GA"
+                ],
+                "init_loc": "(\"A\",2)"
+            }
+        ],
+        {
+            "assignments": [],
+            "end_loc": "(\"A\",2)",
+            "gate": "!\"outA\" []",
+            "guard": [
+                "True"
+            ],
+            "init_loc": "(\"A\",3)"
+        },
+        {
+            "assignments": [
+                "Dup",
+                "Flip"
+            ],
+            "end_loc": "(\"B\",1)",
+            "gate": "?\"step\" [p:Int]",
+            "guard": [
+                "YTrue"
+            ],
+            "init_loc": "(\"B\",0)"
+        },
+        {
+            "assignments": [
+                "Dup"
+            ],
+            "end_loc": "(\"B\",3)",
+            "gate": "?\"stepB\" []",
+            "guard": [
+                "True"
+            ],
+            "init_loc": "(\"B\",0)"
+        },
+        {
+            "assignments": [],
+            "end_loc": "(\"B\",2)",
+            "gate": "!\"outA\" []",
+            "guard": [
+                "True"
+            ],
+            "init_loc": "(\"B\",1)"
+        },
+        [
+            {
+                "assignments": [
+                    "Flip"
+                ],
+                "end_loc": "(\"A\",0)",
+                "gate": "!\"outC\" [p:Int]",
+                "guard": [
+                    "GB"
+                ],
+                "init_loc": "(\"B\",2)"
+            },
+            {
+                "assignments": [
+                    "Flip"
+                ],
+                "end_loc": "(\"B\",0)",
+                "gate": "!\"outC\" [p:Int]",
+                "guard": [
+                    "GB"
+                ],
+                "init_loc": "(\"B\",2)"
+            }
+        ],
+        {
+            "assignments": [],
+            "end_loc": "(\"B\",2)",
+            "gate": "!\"outA\" []",
+            "guard": [
+                "True"
+            ],
+            "init_loc": "(\"B\",3)"
+        }
+    ]
+}
