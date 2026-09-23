@@ -29,6 +29,7 @@ module Test.Lattest.Model.STSTest (
     testSeqComposedSTS,
     testSeqComposedAtSTS,
     testPrintSeqCompPrunedSTS,
+    testPrintSeqCompPrunedSTSInit1,
     testSequentiallyAtNonSinkLocation,
     testSequentiallyAtSameAction,
     testPrintSelfSeqComposedSTS,
@@ -1237,10 +1238,16 @@ stsCoffeeTreeComposed :: AutSyntax   FreeLattice   (Either Integer Integer)   (I
 prunedTransitions :: [(Integer, IOSymInteract String String, FreeLattice Integer)]
 (stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
 
+stsExampleInitAssign2 :: Valuation
+stsExampleInitAssign2 = Valuation $ DMap.singleton xvar (Val 1)
+
 stsSeqComposedPrunedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposedPrunedAt = interpretSTS stsCoffeeTreeComposed stsExampleInitAssign
 
-getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
+stsSeqComposedPrunedAtInit1 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+stsSeqComposedPrunedAtInit1 = interpretSTS stsCoffeeTreeComposed stsExampleInitAssign2
+
+getSTSIntrpStateEither :: Either Integer Integer -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
 getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 testPrintSeqCompSTS :: Test
@@ -1347,6 +1354,64 @@ Right 5  ――!"done" []⟶  ⊥
 Right 5  ――!"error" []⟶  ⊥
 [(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1),(5,!"done" [],⊥),(5,!"error" [],⊥)]
 |]
+
+-- Changing the initial value of the STS impacts the composition
+testPrintSeqCompPrunedSTSInit1 :: Test
+testPrintSeqCompPrunedSTSInit1 = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsSeqComposedPrunedAtInit1 ++ "\n" ++ show prunedTransitions ++ "\n"
+    expected = [QQ.r|
+current state configuration: (Left 0,{x:=1})
+initial location configuration: Left 0
+locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 1, Right 2, Right 3, Right 4, Right 5
+transitions:
+Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
+Left 0  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Left 1)
+Left 0  ――!"done" []⟶  ⊥
+Left 0  ――!"error" []⟶  ⊥
+Left 1  ――?"grindCoffee" []⟶  ⊤
+Left 1  ――?"someWater" [p:Int]⟶  ⊤
+Left 1  ――!"done" []⟶  (True, {},Left 3)
+Left 1  ――!"error" []⟶  (True, {},Left 4)
+Left 2  ――?"grindCoffee" []⟶  ⊤
+Left 2  ――?"someWater" [p:Int]⟶  ⊤
+Left 2  ――!"done" []⟶  (True, {},Left 5)
+Left 2  ――!"error" []⟶  ⊥
+Left 3  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 3  ――?"someWater" [p:Int]⟶  ⊤
+Left 3  ――!"done" []⟶  ⊥
+Left 3  ――!"error" []⟶  ⊥
+Left 4  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 4  ――?"someWater" [p:Int]⟶  ⊤
+Left 4  ――!"done" []⟶  ⊥
+Left 4  ――!"error" []⟶  ⊥
+Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 5  ――?"someWater" [p:Int]⟶  ⊤
+Left 5  ――!"done" []⟶  ⊥
+Left 5  ――!"error" []⟶  ⊥
+Right 1  ――?"grindCoffee" []⟶  ⊤
+Right 1  ――?"someWater" [p:Int]⟶  ⊤
+Right 1  ――!"done" []⟶  (True, {},Right 3)
+Right 1  ――!"error" []⟶  (True, {},Right 4)
+Right 2  ――?"grindCoffee" []⟶  ⊤
+Right 2  ――?"someWater" [p:Int]⟶  ⊤
+Right 2  ――!"done" []⟶  (True, {},Right 5)
+Right 2  ――!"error" []⟶  ⊥
+Right 3  ――?"grindCoffee" []⟶  ⊤
+Right 3  ――?"someWater" [p:Int]⟶  ⊤
+Right 3  ――!"done" []⟶  ⊥
+Right 3  ――!"error" []⟶  ⊥
+Right 4  ――?"grindCoffee" []⟶  ⊤
+Right 4  ――?"someWater" [p:Int]⟶  ⊤
+Right 4  ――!"done" []⟶  ⊥
+Right 4  ――!"error" []⟶  ⊥
+Right 5  ――?"grindCoffee" []⟶  ⊤
+Right 5  ――?"someWater" [p:Int]⟶  ⊤
+Right 5  ――!"done" []⟶  ⊥
+Right 5  ――!"error" []⟶  ⊥
+[(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1),(5,!"done" [],⊥),(5,!"error" [],⊥)]
+|] -- TODO: Currently failing, fine-tune when the bug is fixed
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test
