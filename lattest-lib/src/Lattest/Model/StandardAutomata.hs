@@ -16,6 +16,7 @@ automaton,
 sequentiallyAt,
 sequentiallyAtPruned,
 (|>),
+sequentiallyPruned,
 selfSequentiallyAt,
 (|>>),
 prependOutputChecks,
@@ -49,7 +50,6 @@ bot,
 -- ** Transition Functions
 transFromFunc,
 concTransFromFunc,
-
 -- * Automaton Semantics
 -- | Auxiliary functions for creating semantical automata `AutIntrpr`. Note that most of these functions are no more than calls to `interpret`, instantiating
 -- the type of the semantical interpretation.
@@ -70,6 +70,7 @@ SuspSTSIntrp,
 interpretSTSQuiescent,
 SuspInputAttemptSTSIntrp,
 interpretSTSQuiescentInputAttemptConcrete,
+allLocations
 )
 where
 
@@ -657,3 +658,14 @@ sequentiallyAtPruned (AutInterpretation initconf1 sts1) mergeLocs sts2 = locs1 `
       Nothing -> if l `elem` toList (initConf sts1) then [] else error $ "unreachable location: " <> show l
       Just (interact', source) -> interact' : getInvertedTraceTo source
 
+
+infixl 1 `sequentiallyPruned`
+-- | Sequentially compose two automata at all sink locations of the first (with pruning). Throws an error if the first automaton does not have any sink locations.
+sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a))
+  => AutIntrpr m loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act
+  -> AutSyntax m loc2 (IOSymInteract i o) STStdest
+  -> (AutSyntax m (Either loc1 loc2) (IOSymInteract i o) STStdest, [(loc1, IOSymInteract i o, m loc2)])
+sts1 `sequentiallyPruned` sts2 = case Set.toList $ Set.filter (isSinkLocation syn1) (allLocations syn1) of
+    []      -> errorWithoutStackTrace "(sequentiallyPruned): the first automaton has no sink location to sequentially compose at"
+    locList -> sequentiallyAtPruned sts1 locList sts2
+    where syn1 = syntacticAutomaton sts1
