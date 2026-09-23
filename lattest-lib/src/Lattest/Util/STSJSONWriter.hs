@@ -76,6 +76,9 @@ instance Has JSON.ToJSON Type where
 
 deriving instance (JSON.ToJSON a) => JSON.ToJSON (RCSet a)
 
+isEmptySwitch :: Switch -> Bool
+isEmptySwitch (Switch _ act gal) =
+    (isForbidden gal && isOutputInteract act) || (isUnderspecified gal && isInputInteract act)
 
 -- | Given ID, STS, the names of guards and assignments, and the initial valuation, make a JSON
 stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Valuation -> JSON.Value
@@ -85,13 +88,13 @@ stsToJSON sid sts guardmap assmap valuation =
         , "initial_location" .= initLocationJSON locIds (initConf sts)
         , "initialValuation" .= initValue valuation
         , "locations" .= Map.elems locIds
-        , "switches" .= switches'
+        , "switches" .= switches''
         -- , "parameters" .= params -- already wrote this, but it uses a different representation of structures, so probably better to just reuse the ones from before merging
         -- , "inputGates" .= -- not needed
         -- , "outputGates" .= -- not needed
         -- , "locationVariables" .= -- not needed
         -- , "guards" .= -- not needed
-        -- , "assignments" .= -- think this is also not needed
+        -- , "assignments" .= -- not needed
         ]
     where
     locs = allLocations sts
@@ -99,20 +102,21 @@ stsToJSON sid sts guardmap assmap valuation =
     -- alph = alphabet sts
     switches = Set.toList $ Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.toList $ transRel sts l) locs
     switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getGuard g guardmap, getassignment a)) (locIds Map.!) <#> ml)) switches
+    switches'' = filter (not . isEmptySwitch) switches'
     -- ws = buildSwitches locIds sts locs
-    -- getguard :: SymGuard -> [String]
-    -- getguard g
-    --   | Just nm <- guardmap Map.!? g = Debug.Trace.traceShow ("Found ", show g, nm) [nm]
-    --   | And (Set.toList -> gs) <- view g = Debug.Trace.traceShow ("Couldn't find conjunction of: " :: String, gs) $ concatMap (getguard . Expr) gs
-    --   | otherwise = error $ "Guard not found: " <> show g <> ". Looked in: " <> show guardmap
-    getassignment :: VarModel -> String
+
+    -- The assignment may be the union of several assignments
+    getassignment :: VarModel -> [String]
     getassignment a
-      | Just nm <- assmap Map.!? a = nm
-      | DMap.null (runVarModel a) = ""
-      | otherwise = error $ "Assignment not found: " <> show a <> ". Looked in: " <> show assmap
+      | Just nm <- assmap Map.!? a = [nm]
+      | otherwise = map lookupOne $ DMap.assocs $ runVarModel a
+      where
+        lookupOne (var :=> expr)
+          | Just nm <- assmap Map.!? VarModel (DMap.singleton var expr) = nm
+          | otherwise = error $ "Assignment not found: " <> show a <> ". Looked in: " <> show assmap
     -- params = Map.fromList $ map (\(Some (Variable nm tp)) -> (nm, Some tp)) $ Set.toList $ Set.unions $ Set.map (\(SymInteract _ vs) -> Set.fromList vs) alph
 
-data Switch = Switch String (SymInteract (IOAct String String)) (FreeLattice (([String], String), String))
+data Switch = Switch String (SymInteract (IOAct String String)) (FreeLattice (([String], [String]), String))
 instance JSON.ToJSON Switch where
   toJSON (Switch loc act guardassignmentloc)
    | isForbidden guardassignmentloc && isOutputInteract act = object []
