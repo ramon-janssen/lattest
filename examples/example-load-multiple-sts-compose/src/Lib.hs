@@ -45,6 +45,9 @@ run = do
           | otherwise = pure Nothing
         controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
     tests <- offlineTests model controller
+        undefined
     print tests
 
-    stsListToJSONFile "example-written.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
+    -- To write to a file:
+    -- stsListToJSONFile "example-written.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
+
