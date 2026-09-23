@@ -260,7 +260,7 @@ testSTSTestSelection = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, _), _)) <- runSTSTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    let checkObserved = go 0 0 observed
+    let checkObserved = go 0 observed
     let exampleObserved = [
         -- TODO: inp, out seem to be the same as inpL, outL?
           inp "water" [int 1],
@@ -301,24 +301,24 @@ testSTSTestSelection = TestCase $ do
           GateValue δ [],
           GateValue δ []
           ]
-    let checkExample = go 0 0 exampleObserved
-    assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
+    let checkExample = go 0 exampleObserved
+    assertEqual ("expected conformal trace like " <> show exampleObserved <> ",\ngot " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
     inpL g = GateValue (In (InputAttempt (g, True)))
     outL g = GateValue (Out (OutSusp g))
-    go :: Int -> Integer -> [SuspendedIFGateValue String String] -> (Int, Integer)
-    go ds waterlevel [] = (ds, waterlevel)
-    go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
-    go ds waterlevel gv@(GateValue x y:os)
-      | x == In (InputAttempt ("water", True))
-      , [Some (CInt w)] <- y = go ds (waterlevel + w) os
-      | x == Out (OutSusp "ok")
+    go :: Integer -> [SuspendedIFGateValue String String] -> Bool
+    go _aterlevel [] = True
+    go waterlevel (GateValue (Out Quiescence) []:os) = go waterlevel os
+    go waterlevel gv@(GateValue x' y:os)
+      | x' == In (InputAttempt ("water", True))
+      , [Some (CInt w)] <- y = go (waterlevel + w) os
+      | x' == Out (OutSusp "ok")
       , [Some (CInt w)] <- y
-      , w == waterlevel = go ds waterlevel os
-      | x == Out (OutSusp "coffee")
+      , w == waterlevel = go waterlevel os
+      | x' == Out (OutSusp "coffee")
       , [] <- y
-      , waterlevel > 15 = go ds waterlevel os
+      , waterlevel > 15 = go waterlevel os
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
 pvarf :: Variable Double

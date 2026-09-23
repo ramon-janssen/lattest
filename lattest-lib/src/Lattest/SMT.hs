@@ -7,11 +7,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BlockArguments #-}
 module Lattest.SMT (
   SMT,
+  SMTQ,
   SolvableProblem(..),
-
   addAssertions,
+  addAssertionsQ,
   addDeclarations,
   getSolution,
   getSolvable,
@@ -20,7 +22,8 @@ module Lattest.SMT (
   query,
   runSMT,
   Some(..),
-  RCSet(..)
+  RCSet(..),
+  exprToSymbolic
 ) where
 
 import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic)
@@ -73,6 +76,9 @@ type SMT' = State (Map String (Some SBV))
 smt'tosmt :: SMT' a -> SMT a
 smt'tosmt smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
+smt'tosmtq :: SMT' a -> SMTQ a
+smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
+
 runSMT :: SMT a -> IO a
 runSMT = SBV.runSMT . flip evalStateT Map.empty
 
@@ -92,11 +98,27 @@ getSolution vs =
         (Constant _ c) <- lift $ svalToConstant tp sval
         return $ DMap.singleton v (withExprConstraints tp $ Val c)
 
+-- This looks decent, but we have no real way to generate an SBV Bool from an Expr Bool.
+-- The intended way to use allSatResults is by giving it a function rather than declaring variables,
+-- which doesn't lend itself at all to our approach.
+-- Instead, solveGuard now does the 'allSat' logic itself
+-- getRandomValuation :: SBV Bool -> IO (Maybe Valuation)
+-- getRandomValuation a = do
+--   x <- SBV.allSatWith (SBV.z3 {SBVI.allSatMaxModelCount = Just 20}) a
+--   let rs = SBV.allSatResults x
+--   rix <- randomRIO (0, length rs - 1)
+--   pure case rs !! rix of
+--     SBV.Satisfiable _ model -> Just $ sbvModelToValuation model
+--     _ -> Nothing
+
 svalToConstant :: Type a -> SBVI.SVal -> Query (Constant a)
 svalToConstant t s = withExprConstraints t $ Constant t <$> SBV.getValue (SBVI.SBV s)
 
 addAssertions :: [Expr Bool] -> SMT ()
 addAssertions = mapM_ (lift . constrain <=< smt'tosmt . exprToSymbolic . view)
+
+addAssertionsQ :: [Expr Bool] -> SMTQ ()
+addAssertionsQ = mapM_ (lift . constrain <=< smt'tosmtq . exprToSymbolic . view)
 
 -- This is the reason we have the StateT wrapper in SMT:
 -- SBV wants us to keep track of the symbolic variables
