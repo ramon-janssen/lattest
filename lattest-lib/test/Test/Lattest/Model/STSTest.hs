@@ -1921,7 +1921,7 @@ coverimp = pureMealyAdapter (const (const ())) (\() (GateValue i _) -> [GateValu
 testCoverageCheckerIsExhaustive :: Test
 testCoverageCheckerIsExhaustive = TestCase $ do
   let intrpr = interpretSTS stscovered $ Valuation mempty
-  tester <- randomCoveringTestSelector intrpr
+  tester <- randomCoveringTestSelector intrpr Nothing
   imp1 <- coverimp
   (v1, incompleteTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 7 `observingOnly` traceObserver) imp1
   imp2 <- coverimp

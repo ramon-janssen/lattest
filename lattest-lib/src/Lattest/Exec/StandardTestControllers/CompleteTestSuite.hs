@@ -30,7 +30,7 @@ import Control.Monad (forM, (>=>))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import System.Random(StdGen, initStdGen)
-import qualified Debug.Trace
+import Data.Maybe (fromMaybe)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -158,32 +158,36 @@ fullCoverageTarget intrpr = let
   in Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.keys $ transRel syn l) locs
 
 -- The most basic version: randomly pick an uncovered input, if any, and otherwise just random
+-- If a 'to cover' set is not provided, it gets initialized to the set of every transition
+-- Using 'observeControllerState', the set of uncovered transitions can be passed on to the next test.
 randomCoveringTestSelector
   :: forall m loc q t tdest act i' o i.
      (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
-  -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act]) i)
-randomCoveringTestSelector intrpr = flip randomCoveringTestSelectorFromGen intrpr <$> initStdGen
+  -> Maybe (Set.Set (loc, t))
+  -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i)
+randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen intrpr mtocover <$> initStdGen
 
 randomCoveringTestSelectorFromGen
   :: forall m loc q t tdest act i' o i.
      (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
-  => StdGen
-  -> AutIntrpr m loc q t tdest act
-  -> TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act]) i
-randomCoveringTestSelectorFromGen g intrpr = selector (g,fullCoverageTarget intrpr, []) select update
+  => AutIntrpr m loc q t tdest act
+  -> Maybe (Set.Set (loc, t))
+  -> StdGen
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i
+randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (fullCoverageTarget intrpr) mtocover, [], stateConf intrpr) select update
   where
-    select (g', tocover, trace) intrpr' mq = do
+    select (g', tocover, trace, _) intrpr' mq = do
       -- as in randomDataTestSelectorFromGen, except we try to take new transitions
       (maybeGateValue, g'') <- solveRandomInput @FreeLattice g' maybeNewInAct intrpr'
       case maybeGateValue of
-        Just value -> pure $ Just (value, (g'',tocover,trace))
+        Just value -> pure $ Just (value, (g'',tocover,trace, mq))
         Nothing -> do
           (maybeGateValue', g''') <- solveRandomInput g'' maybeNewInAct intrpr'
           return $ case maybeGateValue' of
-            Just value -> Just (value, (g''',tocover,trace))
+            Just value -> Just (value, (g''',tocover,trace, mq))
             Nothing -> Nothing
       where
         maybeFromIOAct (SymInteract io xs) = case io of
@@ -198,9 +202,8 @@ randomCoveringTestSelectorFromGen g intrpr = selector (g,fullCoverageTarget intr
             then Just $ SymInteract i xs
             else Nothing
 
-    -- Note: computing the 'new cover' by passing the entire trace to the initial intrpr each time is very inefficient,
-    -- but currently 'update' gets an intrpr with the _target_ location of this transition, not the source,
-    -- so it's either this or keep track of the state configuration inside of our own state (i.e. put 'm q' into the triple).
-    update (g', tocover, trace) _ act _ = let newcover = covered intrpr $ trace ++ [act]
-      in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act])
+    -- note: the intrpr we get here is _after_ the transition, but we need the `m q` before the transition
+    -- to compute coverage. That's why we keep track of it in the quadruple.
+    update (g', tocover, trace, mq) intrpr' act _ = let newcover = covered (intrpr' {stateConf = mq}) [act]
+      in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act], stateConf intrpr')
 
