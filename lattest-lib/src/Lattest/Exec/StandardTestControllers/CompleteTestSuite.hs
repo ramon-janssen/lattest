@@ -196,7 +196,7 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (fu
       case maybeGateValue of
         Just value -> pure $ Just (value, (g'',tocover,trace, mq))
         Nothing -> do
-          (maybeGateValue', g''') <- solveRandomInput g'' maybeNewInAct intrpr'
+          (maybeGateValue', g''') <- solveRandomInput g'' maybeFromIOAct intrpr'
           return $ case maybeGateValue' of
             Just value -> Just (value, (g''',tocover,trace, mq))
             Nothing -> Nothing
