@@ -2,21 +2,22 @@ module Lib
     ( run
     ) where
 
-import           Lattest.Model.Automaton
-import           Lattest.Model.StandardAutomata
-import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
-import           Lattest.Exec.StandardTestControllers
-import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
-import Lattest.Exec.Testing (Verdict(..))
-import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
-import qualified Data.Map as Map
-import Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
-import Data.Tuple (swap)
+import      Lattest.Model.Automaton
+import      Lattest.Model.StandardAutomata
+import      Lattest.Model.Symbolic.SolveSTS (offlineTests)
+import      Lattest.Exec.StandardTestControllers
+import      Lattest.Util.STSJSONParser (stsListFromJSONFile)
+import      Lattest.Exec.Testing (Verdict(..))
+import      Lattest.Model.BoundedMonad (BoundedConfiguration(..))
+import      qualified Data.Map as Map
+import      Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
+import      Data.Tuple (swap)
 
 run :: IO ()
 run = do
     putStrLn "loading STSs from JSON..."
     result <- stsListFromJSONFile "example.json"
+    -- result <- stsListFromJSONFile "example_coffee_machine.json"
     stss <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
@@ -24,8 +25,10 @@ run = do
     putStrLn $ unlines $ map (\(_,sts,_,_,_) -> prettyPrint sts) stss
     -- Compose all parsed STSs
     let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _, _) <- stss ]
-        conjmodel   = conjunctionAll checked
-        seqComposed = conjmodel |>> conjmodel
+        conjunctedSTS = conjunctionAll checked
+        conjunctModel = interpretSTS conjunctedSTS initVal
+        --seqComposed = conjmodel |>> conjmodel
+        (seqComposed, discardedTransit) = conjunctModel `sequentiallyPruned` conjunctedSTS
         initVal  = case stss of
             [] -> error "no STSs loaded"
             (_, _, _, _, val):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
@@ -34,6 +37,7 @@ run = do
         as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_) -> a) stss
 
     putStrLn $ prettyPrintIntrp model
+    print discardedTransit
 
     putStrLn "computing offline test cases..."
     let nrSteps = 10
@@ -49,4 +53,4 @@ run = do
 
     -- To write to a file:
     -- stsListToJSONFile "example_single_stss.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
-    -- stsToJSONFile "example_composed.json" "stscomposed" seqComposed gs as initVal
+    stsToJSONFile "example_composed2.json" "stscomposed" (seqComposed) gs as initVal
