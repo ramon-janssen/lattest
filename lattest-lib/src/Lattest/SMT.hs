@@ -30,7 +30,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), view, Val (..), withExprConstraints)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -42,9 +42,8 @@ import qualified Data.Set as Set
 import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
-import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV

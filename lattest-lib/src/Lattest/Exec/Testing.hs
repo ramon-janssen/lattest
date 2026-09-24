@@ -49,7 +49,7 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, IOAct, IOSymInteract)
-import Lattest.Model.Automaton(StepSemantics, StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest)
+import Lattest.Model.Automaton ( StepSemantics,StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest, sanityCheckLTS,sanityCheckSTS )
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
@@ -59,7 +59,6 @@ import Control.Exception(catch,evaluate)
 --import Control.DeepSeq(force)
 import Lattest.Streams.Synchronized (Streamed(..))
 import Data.Kind (Constraint, Type)
-import Lattest.Model.StandardAutomata (sanityCheckLTS, sanityCheckSTS)
 
 -- | The controller of an experiment.
 data ActionController act i r state = ActionController {

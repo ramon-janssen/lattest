@@ -117,6 +117,8 @@ makeHUnitTests regenerate = do
         testPrintSelfSeqComposedSTS,
         testSelfSeqComposed,
         testSelfSeqComposedAt,
+        testPrintSeqCompPrunedSTS,
+        testPrintSeqCompPrunedSTSInit1,
         testSelfSeqComposedAtOne,
         testConjunctionGuardedSTS,
         testDisjunctionGuardedSTS,

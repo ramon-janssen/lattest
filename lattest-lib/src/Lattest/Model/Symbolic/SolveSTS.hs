@@ -27,14 +27,14 @@ toTrace
 )
 where
 
-import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
-import Lattest.Model.Automaton(stateConf, IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation (..))
+import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue)
+import Lattest.Model.Automaton ( stateConf,IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation(..),sanityCheckSTS )
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
+import Lattest.SMT ( Some(..) )
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
 import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
-import Lattest.SMT(Some (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 
 import Control.Arrow((&&&))
@@ -55,7 +55,6 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
-import Lattest.Model.StandardAutomata (sanityCheckSTS)
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -205,7 +204,7 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
+offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) (Maybe Verdict)
              -> IO (OfflineTests i o (Maybe Verdict))
@@ -267,7 +266,7 @@ offlineTests intrpr tc
 
 -- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it.
 -- For outputs, it returns both the given output and the starting location.
-toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o))
+toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
         => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
         -> OfflineTests i o r
         -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))]
