@@ -29,7 +29,7 @@ import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, in
 import Control.Monad (forM, (>=>))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import System.Random(StdGen, initStdGen)
+import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
@@ -168,6 +168,17 @@ randomCoveringTestSelector
   -> Maybe (Set.Set (loc, t))
   -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i)
 randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen intrpr mtocover <$> initStdGen
+
+-- | As 'randomCoveringTestSelector', starting with the given random seed.
+randomCoveringTestSelectorFromSeed
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+  => AutIntrpr m loc q t tdest act
+  -> Maybe (Set.Set (loc, t))
+  -> Int
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i
+randomCoveringTestSelectorFromSeed intrpr mtocover seed = randomCoveringTestSelectorFromGen intrpr mtocover (mkStdGen seed)
 
 randomCoveringTestSelectorFromGen
   :: forall m loc q t tdest act i' o i.
