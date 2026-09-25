@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
 module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
@@ -13,13 +14,17 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst)
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, freeVars, Val (..), Expr)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType)
-import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query)
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has(..))
+import System.Random ( randomIO, randomR )
+import System.Random.Stateful ( mkStdGen, StdGen )
+import Data.Dependent.Sum (DSum (..))
+import qualified Data.Set as Set
 
 {-|
     Combine the given guards into one.
@@ -75,17 +80,38 @@ valuationToGateValue (SymInteract g' params) valuation =
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
 solveGuard :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
-solveGuard vars guard = runSMT do
-  addDeclarations vars
-  addAssertions [guard]
-  -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
-  query $ do
-    solveOutcome <- getSolvable
-    case solveOutcome of
-      Sat -> do
-          solution <- getSolution vars
-          return $ Just solution
-      Unsat -> return Nothing
-      Unknown -> return Nothing
-      --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
+solveGuard vars guard = do
+  randomgen <- mkStdGen <$> randomIO
+  runSMT do
+    addDeclarations vars
+    addAssertions [guard]
+    -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
+    -- Since sbv-14.8 (unreleased), addAssertions on higher order functions no longer need registerFunction to work in query.
+    -- This means that we will be able to change back to having our SMT type being what our SMTQ type is now; and having solveGuard return that.
+    query $ do
+      solveOutcome <- getSolvable
+      case solveOutcome of
+        Unsat -> return Nothing
+        Unknown -> return Nothing
+        Sat -> go randomgen 20 []
+  where
+    go :: StdGen -> Int -> [Valuation] -> SMTQ (Maybe Valuation)
+    go g 0 xs = do
+      let (ix,_) = randomR (0, length xs - 1) g
+      pure $ Just $ xs !! ix
+    go g n xs = do
+      addAssertionsQ $ map atleastoneisdifferent xs
+      getSolvable >>= \case
+        Unsat -> go g 0 xs
+        Unknown -> go g 0 xs
+        Sat -> do
+          x <- getSolution vars
+          go g (n-1) (x : xs)
 
+    atleastoneisdifferent :: Valuation -> SymGuard
+    atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
+
+    -- for doubles, enforce a distance of at least 0.1
+    isNot :: DSum Variable Val -> Expr Bool
+    isNot (var@(Variable _ E.FloatType) :=> (Val val)) = E.sVar var E..< E.sConst (val - 0.1) E..|| E.sVar var E..> E.sConst (val + 0.1)
+    isNot (var :=> (Val val)) = E.sNot $ E.sVar var E..== E.sConst val

@@ -43,7 +43,8 @@ module Test.Lattest.Model.STSTest (
     testPrintPrependOutputChecksDisj,
     testPrintPrependOutputChecksConj,
     testPrependOutputChecksDisj,
-    testPrependOutputChecksConj
+    testPrependOutputChecksConj,
+    testCoverageCheckerIsExhaustive
     )
 where
 
@@ -66,7 +67,7 @@ import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runSTSTester, Verdict(..))
+import Lattest.Exec.Testing(runSTSTester, Verdict(..), RunTester (..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
 import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
@@ -83,6 +84,7 @@ import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algeb
 import qualified Lattest.SMT as SMT
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
+import Lattest.Exec.StandardTestControllers.CompleteTestSuite (randomCoveringTestSelector)
  -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 
 pvar :: Variable Integer
@@ -260,7 +262,7 @@ testSTSTestSelection = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, _), _)) <- runSTSTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    let checkObserved = go 0 0 observed
+    let checkObserved = go 0 observed
     let exampleObserved = [
         -- TODO: inp, out seem to be the same as inpL, outL?
           inp "water" [int 1],
@@ -301,24 +303,24 @@ testSTSTestSelection = TestCase $ do
           GateValue δ [],
           GateValue δ []
           ]
-    let checkExample = go 0 0 exampleObserved
-    assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
+    let checkExample = go 0 exampleObserved
+    assertEqual ("expected conformal trace like " <> show exampleObserved <> ",\ngot " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
     inpL g = GateValue (In (InputAttempt (g, True)))
     outL g = GateValue (Out (OutSusp g))
-    go :: Int -> Integer -> [SuspendedIFGateValue String String] -> (Int, Integer)
-    go ds waterlevel [] = (ds, waterlevel)
-    go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
-    go ds waterlevel gv@(GateValue x y:os)
-      | x == In (InputAttempt ("water", True))
-      , [Some (CInt w)] <- y = go ds (waterlevel + w) os
-      | x == Out (OutSusp "ok")
+    go :: Integer -> [SuspendedIFGateValue String String] -> Bool
+    go _aterlevel [] = True
+    go waterlevel (GateValue (Out Quiescence) []:os) = go waterlevel os
+    go waterlevel gv@(GateValue x' y:os)
+      | x' == In (InputAttempt ("water", True))
+      , [Some (CInt w)] <- y = go (waterlevel + w) os
+      | x' == Out (OutSusp "ok")
       , [Some (CInt w)] <- y
-      , w == waterlevel = go ds waterlevel os
-      | x == Out (OutSusp "coffee")
+      , w == waterlevel = go waterlevel os
+      | x' == Out (OutSusp "coffee")
       , [] <- y
-      , waterlevel > 15 = go ds waterlevel os
+      , waterlevel > 15 = go waterlevel os
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
 pvarf :: Variable Double
@@ -1892,3 +1894,41 @@ testPrependOutputChecksConj = TestCase $ do
     _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Some $ CInt 2]) (s (Stable 3) 0)
     _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Some $ CInt 0]) (s (Stable 3) 0)
     return ()
+
+-------
+-- Coverage testing
+-------
+-- It's minimally functional at the moment, so only testing the bare minimum
+
+stscovered :: IOSTS FreeLattice Integer String String
+stscovered =
+    let initConf = ordReturn 0
+        switches = \case
+            0 -> Map.fromList [(SymInteract (In "A") [], ordReturn (stsTLoc sTrue noAssignment, 1)),
+                               (SymInteract (In "B") [], ordReturn (stsTLoc sTrue noAssignment, 2)),
+                               (SymInteract (In "C") [], ordReturn (stsTLoc sTrue noAssignment, 3)),
+                               (SymInteract (In "D") [], ordReturn (stsTLoc sTrue noAssignment, 4))]
+            1 -> Map.fromList [(SymInteract (Out "A") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            2 -> Map.fromList [(SymInteract (Out "B") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            3 -> Map.fromList [(SymInteract (Out "C") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            4 -> Map.fromList [(SymInteract (Out "D") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            _ -> Map.empty
+    in automaton initConf (Set.fromList $ concatMap (\y -> [SymInteract (In y) [], SymInteract (Out y) []]) ["A","B","C","D"]) switches
+
+coverimp :: IO (Adapter.Adapter (GateValue (IOAct x x)) (GateValue x))
+coverimp = pureMealyAdapter (const (const ())) (\() (GateValue i _) -> [GateValue (In i) [], GateValue (Out i) []]) ()
+
+testCoverageCheckerIsExhaustive :: Test
+testCoverageCheckerIsExhaustive = TestCase $ do
+  let intrpr = interpretSTS stscovered $ Valuation mempty
+  tester <- randomCoveringTestSelector intrpr Nothing
+  imp1 <- coverimp
+  (v1, incompleteTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 7 `observingOnly` traceObserver) imp1
+  imp2 <- coverimp
+  (v2,   completeTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 8 `observingOnly` traceObserver) imp2
+  assertEqual "Should pass 1" Pass v1
+  assertEqual "Should pass 2" Pass v2
+  let complete trace = all (\y -> all (\z -> GateValue z [] `elem` trace) [In [y], Out [y]]) ("ABCD" :: String)
+  assertBool "7 steps is not enough" (not $ complete incompleteTrace)
+  assertBool ("8 steps should cover" <> show completeTrace)        (complete   completeTrace)
+

@@ -1,9 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE ConstraintKinds #-}
-
 
 {- |
     A /bounded monad/ is a type constructor which represents the observable perspective on the state of an automaton, also called a
@@ -121,7 +119,7 @@ instance Show a => Show (Det a) where
     show UnderspecDet = "-underspecified-"
 
 {-|
-    Free distributive lattice, or a positive boolean formula, in CNF-format. 
+    Free distributive lattice, or a positive boolean formula, in CNF-format.
 -}
 newtype FreeLattice a = FreeLattice (Set.Set (Set.Set a)) deriving  (Eq, Ord, Foldable)
 
