@@ -107,22 +107,6 @@ solveGuard vars guard = do
         Sat -> do
           x <- getSolution vars
           go g (n-1) (x : xs)
-solveGuard vars guard = runSMT do
-  addDeclarations (Set.toList $ freeVars guard)
-  addDeclarations vars
-  addAssertions [guard]
-  -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
-  -- A recent update to SBV removes the need to registerFunction before the query block, which means that we can
-  -- change solveGuard back to returning our SMT (which contains an SBV Query)
-  query $ do
-    solveOutcome <- getSolvable
-    case solveOutcome of
-      Sat -> do
-          solution <- getSolution vars
-          return $ Just solution
-      Unsat -> return Nothing
-      Unknown -> return Nothing
-      --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
 
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
