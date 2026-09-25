@@ -11,7 +11,13 @@ adgTestSelector,
 nCompleteSingleState,
 runNCompleteTestSuite,
 randomCoveringTestSelector,
-randomCoveringTestSelectorFromGen
+randomCoveringTestSelectorFromSeed,
+randomCoveringTestSelectorFromGen,
+Switch,
+allSwitches,
+isInputSwitch,
+switchesTaken,
+offlineTestsSwitches
 )
 where
 import Lattest.Adapter.Adapter(Adapter,close)
@@ -21,16 +27,19 @@ import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue)
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, STStdest, IntrpState)
-import Lattest.Model.BoundedMonad(Det(..), BoundedConfiguration (..), asConjunction, FreeLattice)
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..))
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
+import Lattest.Model.BoundedMonad(Det(..), BoundedConfiguration (..), asConjunction, FreeLattice, ordBind, ordReturn)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp)
+import Lattest.Model.Symbolic.SolveSTS(OfflineTests(..))
+import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
 
 import Control.Monad (forM, (>=>))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
+import Data.Foldable (toList)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -218,3 +227,42 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (fu
     update (g', tocover, trace, mq) intrpr' act _ = let newcover = covered (intrpr' {stateConf = mq}) [act]
       in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act], stateConf intrpr')
 
+-- | A switch of an STS: source location, interaction (gate and parameters), guard and assignment, and target location.
+type Switch loc i o = (loc, IOSymInteract i o, STStdest, loc)
+
+-- | All switches present in the model.
+allSwitches :: (Ord loc, Ord i, Ord o) => IOSTSIntrp FreeLattice loc i o -> Set.Set (Switch loc i o)
+allSwitches intrpr = let syn = syntacticAutomaton intrpr
+  in Set.fromList [ (l, t, td, l') | l <- Set.toList (allLocations syn), (t, dests) <- Map.toList (transRel syn l), (td, l') <- toList dests ]
+
+isInputSwitch :: Switch loc i o -> Bool
+isInputSwitch (_, SymInteract (In _) _, _, _) = True
+isInputSwitch _ = False
+
+{- |
+    The switches taken by an action from the given state configuration. If the configuration contains a disjunction, it is unknown
+    which switches were taken, so none are reported.
+-}
+switchesTaken :: (Ord loc, Ord i, Ord o)
+  => IOSTSIntrp FreeLattice loc i o -> FreeLattice (IntrpState loc) -> IOGateValue i o -> Set.Set (Switch loc i o)
+switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransition (alphabet syn) gv) of
+  (Right qs, Just t@(SymInteract _ vars)) -> Set.unions
+    [ either (const mempty) id $ asConjunction $ dests `ordBind` \(td@(STSLoc (g, _)), l') ->
+        if evalBool (buildGateValuation vars vals) (substituteInGuard v g)
+          then ordReturn (l, t, td, l')
+          else implicitDestination gv
+    | IntrpState l v <- Set.toList qs
+    , Just dests <- [Map.lookup t (transRel syn l)] ]
+  _ -> mempty
+  where syn = syntacticAutomaton intrpr
+
+-- | The switches taken by the steps of an offline test tree, starting from the given model.
+offlineTestsSwitches :: (Ord loc, Ord i, Ord o, After FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
+  => IOSTSIntrp FreeLattice loc i o -> OfflineTests i o r -> Set.Set (Switch loc i o)
+offlineTestsSwitches intrpr (OfflineTests os ir) = Set.unions (inputStep ++ outputSteps)
+  where
+    step act rest = switchesTaken intrpr (stateConf intrpr) act `Set.union` offlineTestsSwitches (after intrpr act) rest
+    outputSteps = [ step (GateValue (Out o) cs) rest | (o, (cs, _, rest)) <- Map.toList os ]
+    inputStep = case ir of
+      Left (GateValue i vs, rest) -> [step (GateValue (In i) vs) rest]
+      Right _ -> []
