@@ -7,10 +7,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BlockArguments #-}
 module Lattest.SMT (
-  SMT, SolvableProblem(..),
-
+  SMT,
+  SMTQ,
+  SolvableProblem(..),
   addAssertions,
+  addAssertionsQ,
   addDeclarations,
   getSolution,
   getSolvable,
@@ -19,7 +22,8 @@ module Lattest.SMT (
   query,
   runSMT,
   Some(..),
-  RCSet(..)
+  RCSet(..),
+  exprToSymbolic
 ) where
 
 import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic)
@@ -72,6 +76,9 @@ type SMT' = State (Map String (Some SBV))
 smt'tosmt :: SMT' a -> SMT a
 smt'tosmt smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
+smt'tosmtq :: SMT' a -> SMTQ a
+smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
+
 runSMT :: SMT a -> IO a
 runSMT = SBV.runSMT . flip evalStateT Map.empty
 
@@ -91,11 +98,27 @@ getSolution vs =
         (Constant _ c) <- lift $ svalToConstant tp sval
         return $ DMap.singleton v (withExprConstraints tp $ Val c)
 
+-- This looks decent, but we have no real way to generate an SBV Bool from an Expr Bool.
+-- The intended way to use allSatResults is by giving it a function rather than declaring variables,
+-- which doesn't lend itself at all to our approach.
+-- Instead, solveGuard now does the 'allSat' logic itself
+-- getRandomValuation :: SBV Bool -> IO (Maybe Valuation)
+-- getRandomValuation a = do
+--   x <- SBV.allSatWith (SBV.z3 {SBVI.allSatMaxModelCount = Just 20}) a
+--   let rs = SBV.allSatResults x
+--   rix <- randomRIO (0, length rs - 1)
+--   pure case rs !! rix of
+--     SBV.Satisfiable _ model -> Just $ sbvModelToValuation model
+--     _ -> Nothing
+
 svalToConstant :: Type a -> SBVI.SVal -> Query (Constant a)
 svalToConstant t s = withExprConstraints t $ Constant t <$> SBV.getValue (SBVI.SBV s)
 
 addAssertions :: [Expr Bool] -> SMT ()
 addAssertions = mapM_ (lift . constrain <=< smt'tosmt . exprToSymbolic . view)
+
+addAssertionsQ :: [Expr Bool] -> SMTQ ()
+addAssertionsQ = mapM_ (lift . constrain <=< smt'tosmtq . exprToSymbolic . view)
 
 -- This is the reason we have the StateT wrapper in SMT:
 -- SBV wants us to keep track of the symbolic variables
@@ -132,13 +155,30 @@ push = lift $ SBV.push 1
 -- Non-exported functions
 ---------------
 
+-- Whether the type contains a double nested inside a compound type
+nestedFloat :: Type t -> Bool
+nestedFloat = \case
+  ListType t    -> containsFloat t
+  SetType t     -> containsFloat t
+  TupleType a b -> containsFloat a || containsFloat b
+  SumType a b   -> containsFloat a || containsFloat b
+  _             -> False
+  where
+    containsFloat :: Type t -> Bool
+    containsFloat = \case
+      FloatType -> True
+      t         -> nestedFloat t
+
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: ExprConstraints a => ExprView a -> SMT' (SBV a)
 exprToSymbolic v = case v of
   Var (Variable nm _tp) -> gets ((\(Some (SBVI.SBV x)) -> SBVI.SBV x) . (Map.! nm))
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
-  Equal _ l r -> (SBV..==) <$> go l <*> go r
+  -- SBV rejects .== on compound types containing doubles, so use structural equality .===
+  Equal t l r
+    | nestedFloat t -> (SBV..===) <$> go l <*> go r
+    | otherwise     -> (SBV..==)  <$> go l <*> go r
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
   DivideFloat x y -> (/)       <$> go x <*> go y
   Modulo x y -> SBV.sMod  <$> go x <*> go y
