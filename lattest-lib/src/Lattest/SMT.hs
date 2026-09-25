@@ -8,8 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 module Lattest.SMT (
-  SMT,
-  SolvableProblem(..),
+  SMT, SolvableProblem(..),
 
   addAssertions,
   addDeclarations,
