@@ -155,13 +155,30 @@ push = lift $ SBV.push 1
 -- Non-exported functions
 ---------------
 
+-- Whether the type contains a double nested inside a compound type
+nestedFloat :: Type t -> Bool
+nestedFloat = \case
+  ListType t    -> containsFloat t
+  SetType t     -> containsFloat t
+  TupleType a b -> containsFloat a || containsFloat b
+  SumType a b   -> containsFloat a || containsFloat b
+  _             -> False
+  where
+    containsFloat :: Type t -> Bool
+    containsFloat = \case
+      FloatType -> True
+      t         -> nestedFloat t
+
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: ExprConstraints a => ExprView a -> SMT' (SBV a)
 exprToSymbolic v = case v of
   Var (Variable nm _tp) -> gets ((\(Some (SBVI.SBV x)) -> SBVI.SBV x) . (Map.! nm))
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
-  Equal _ l r -> (SBV..==) <$> go l <*> go r
+  -- SBV rejects .== on compound types containing doubles, so use structural equality .===
+  Equal t l r
+    | nestedFloat t -> (SBV..===) <$> go l <*> go r
+    | otherwise     -> (SBV..==)  <$> go l <*> go r
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
   DivideFloat x y -> (/)       <$> go x <*> go y
   Modulo x y -> SBV.sMod  <$> go x <*> go y
