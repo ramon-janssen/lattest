@@ -56,6 +56,8 @@ IntrpState(..),
 Valuation(..),
 STStdest(STSLoc),
 stsTLoc,
+buildGateValuation,
+evalBool,
 -- * Auxiliary Automaton Functions
 reachable,
 reachableFrom,
