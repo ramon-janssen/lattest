@@ -14,7 +14,7 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, freeVars, Val (..), Expr)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType)
 import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ)
 
@@ -24,6 +24,7 @@ import Data.Constraint.Extras (Has(..))
 import System.Random ( randomIO, randomR )
 import System.Random.Stateful ( mkStdGen, StdGen )
 import Data.Dependent.Sum (DSum (..))
+import qualified Data.Set as Set
 
 {-|
     Combine the given guards into one.
@@ -106,6 +107,22 @@ solveGuard vars guard = do
         Sat -> do
           x <- getSolution vars
           go g (n-1) (x : xs)
+solveGuard vars guard = runSMT do
+  addDeclarations (Set.toList $ freeVars guard)
+  addDeclarations vars
+  addAssertions [guard]
+  -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
+  -- A recent update to SBV removes the need to registerFunction before the query block, which means that we can
+  -- change solveGuard back to returning our SMT (which contains an SBV Query)
+  query $ do
+    solveOutcome <- getSolvable
+    case solveOutcome of
+      Sat -> do
+          solution <- getSolution vars
+          return $ Just solution
+      Unsat -> return Nothing
+      Unknown -> return Nothing
+      --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
 
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
