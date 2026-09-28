@@ -199,6 +199,7 @@ exprToSymbolic v = case v of
   ERight xs -> withExprConstraints (typeOf' xs) $ SBV.sRight <$> go xs
   SElem t x xs -> withExprConstraints t $ withExprConstraints (SetType t) $ SBV.member <$> go x <*> go xs
   SInsert x xs -> SBV.insert <$> go x <*> go xs
+  Zip a b xs ys -> withExprConstraints a $ withExprConstraints b $ SBV.zip <$> go xs <*> go ys
 
   -- do-notation makes it easier to massage the functions into the forms that SBV expects
   -- we locally modify the environment to map our placeholder variables to the smtvar we get
