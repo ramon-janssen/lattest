@@ -19,7 +19,7 @@ import Data.Bifunctor (Bifunctor(..))
 import Data.Constraint.Extras (Has(..))
 import Data.Dependent.Sum (DSum(..))
 import Data.Some (Some (..))
-import Lattest.Model.Alphabet (SymInteract (..), SymGuard, IOAct, isOutputInteract, isInputInteract)
+import Lattest.Model.Alphabet (SymInteract (..), IOAct, isOutputInteract, isInputInteract)
 import Lattest.Model.Automaton (Valuation, AutSyntax (..), allLocations, STStdest (..))
 import Lattest.Model.BoundedMonad
 import Lattest.Model.StandardAutomata (IOSTS)
@@ -33,8 +33,6 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Dependent.Map as DMap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Debug.Trace
-import qualified Data.List as List
 
 -- TODO: Do we want to export the STS with the check guards?
 
