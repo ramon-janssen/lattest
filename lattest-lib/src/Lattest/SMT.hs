@@ -7,7 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE BlockArguments #-}
 module Lattest.SMT (
   SMT,
   SMTQ,
@@ -23,7 +22,7 @@ module Lattest.SMT (
   runSMT,
   Some(..),
   RCSet(..),
-  exprToSymbolic
+  sortOfEqual
 ) where
 
 import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic)
@@ -33,7 +32,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), view)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), sConst)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -47,7 +46,7 @@ import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints, Expr (..))
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
@@ -97,19 +96,6 @@ getSolution vs =
             Just (Some (SBVI.SBV x)) -> x)
         (Constant _ c) <- lift $ svalToConstant tp sval
         return $ DMap.singleton v (withExprConstraints tp $ Val c)
-
--- This looks decent, but we have no real way to generate an SBV Bool from an Expr Bool.
--- The intended way to use allSatResults is by giving it a function rather than declaring variables,
--- which doesn't lend itself at all to our approach.
--- Instead, solveGuard now does the 'allSat' logic itself
--- getRandomValuation :: SBV Bool -> IO (Maybe Valuation)
--- getRandomValuation a = do
---   x <- SBV.allSatWith (SBV.z3 {SBVI.allSatMaxModelCount = Just 20}) a
---   let rs = SBV.allSatResults x
---   rix <- randomRIO (0, length rs - 1)
---   pure case rs !! rix of
---     SBV.Satisfiable _ model -> Just $ sbvModelToValuation model
---     _ -> Nothing
 
 svalToConstant :: Type a -> SBVI.SVal -> Query (Constant a)
 svalToConstant t s = withExprConstraints t $ Constant t <$> SBV.getValue (SBVI.SBV s)
@@ -161,7 +147,10 @@ exprToSymbolic v = case v of
   Var (Variable nm _tp) -> gets ((\(Some (SBVI.SBV x)) -> SBVI.SBV x) . (Map.! nm))
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
-  Equal _ l r -> (SBV..==) <$> go l <*> go r
+  Equal _ l r -> case sortOfEqual 0.0001 l r of
+    -- if there are no doubles, use actual equality
+    Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
+    exprview -> go exprview
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
   DivideFloat x y -> (/)       <$> go x <*> go y
   Modulo x y -> SBV.sMod  <$> go x <*> go y
@@ -249,6 +238,32 @@ exprToSymbolic v = case v of
     go :: ExprConstraints a => ExprView a -> SMT' (SBV a)
     go = exprToSymbolic
 
+-- We can't == doubles, and using symbolic equality (===) instead is also not ideal.
+-- We should add more decimal types (fixed point? reals?), rename FloatType,
+-- and add a note that equality on doubles is not exact.
+sortOfEqual :: Double -> ExprView a -> ExprView a -> ExprView Bool
+sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
+  FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
+  TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
+                  Expr (Equal a (First b l) (First b r)) .&& Expr (Equal b (Second a l) (Second a r))
+  SumType a b -> withExprConstraints a $ withExprConstraints b $
+                  let v1 = Variable "eitherEqualityVarL" a
+                      v2 = Variable "eitherEqualityVarL" b
+                      v3 = Variable "eitherEqualityVarR" a
+                      v4 = Variable "eitherEqualityVarR" b
+                  in Either v1 v2
+                      (Either v3 v4 (Equal a (Var v1) (Var v3)) (Const False) r)
+                      (Either v3 v4 (Const False) (Equal b (Var v2) (Var v4)) r)
+                      l
+  ListType tp -> withExprConstraints tp $
+    let v1 = Variable "mapEqualityVar" (TupleType tp tp)
+        v2 = Variable "foldEqualityVar" BoolType
+    in Foldr v1 v2 (Equal tp (First tp $ Var v1) (Second tp $ Var v1)) (Const True) $ Zip tp tp l r
+  -- the version of sets that SBV supports probably just isn't very useful for Lattest,
+  -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
+  SetType _ -> error "TODO"
+  -- For int, bool, char, and unit; just use equality
+  _ -> Equal (typeOf' l) l r
 
 checkSatToSolveProblem :: CheckSatResult -> SolvableProblem
 checkSatToSolveProblem = \case
@@ -300,3 +315,5 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       KTuple [k1, k2] -> kindToType k1 $ \t1 -> kindToType k2 $ \t2 -> k $ TupleType t1 t2
       KTuple [] -> k UnitType
       _ -> error $ "couldn't convert kind " <> show kind
+
+

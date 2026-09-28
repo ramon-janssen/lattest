@@ -15,8 +15,8 @@ import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType)
-import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqual)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
@@ -112,5 +112,5 @@ solveGuard vars guard = do
 
     -- for doubles, enforce a distance of at least 0.1
     isNot :: DSum Variable Val -> Expr Bool
-    isNot (var@(Variable _ E.FloatType) :=> (Val val)) = E.sVar var E..< E.sConst (val - 0.1) E..|| E.sVar var E..> E.sConst (val + 0.1)
-    isNot (var :=> (Val val)) = E.sNot $ E.sVar var E..== E.sConst val
+    isNot (var :=> (Val val)) = E.sNot $ Expr $ sortOfEqual 0.1 (E.Var var) (E.Const val)
+
