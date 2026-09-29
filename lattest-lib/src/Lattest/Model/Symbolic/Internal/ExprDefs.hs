@@ -720,6 +720,7 @@ data ExprView t where
     ERight  :: (ExprConstraints a, ExprConstraints b) => ExprView b -> ExprView (Either a b)
     SElem :: Type a -> ExprView a -> ExprView (RCSet a) -> ExprView Bool
     SInsert :: ExprConstraints a => ExprView a -> ExprView (RCSet a) -> ExprView (RCSet a)
+    Zip :: Type a -> Type b -> ExprView [a] -> ExprView [b] -> ExprView [(a,b)]
     -- Adding Lam and App would make it impossible to implement some typeclasses that SBV wants,
     -- and is also stronger than we need: we don't need lists of functions, top-level functions, etc.
     -- Lam :: Variable t -> ExprView a -> ExprView (a -> t)
@@ -780,6 +781,10 @@ instance Eq (ExprView t) where
   SElem t1 x y == SElem t2 a b
     | Just Refl <- t1 `geq` t2 = x == a && y == b
   SInsert x y == SInsert a b = x == a && y == b
+  Zip ta tb x y == Zip ta' tb' x' y'
+    | Just Refl <- ta `geq` ta'
+    , Just Refl <- tb `geq` tb'
+    = x == x' && y == y'
   Map v1 f xs == Map v2 g ys
     | Just Refl <- geq v1 v2
     = f == g && xs == ys
@@ -885,6 +890,14 @@ instance Ord (ExprView t) where
         GEQ -> case compare x y of
           EQ -> compare xs ys
           c -> c
+      (Zip ta tb a b, Zip tx ty x y) ->
+        case gcompare ta tx of
+          GLT -> LT
+          GGT -> GT
+          GEQ -> case gcompare tb ty of
+            GLT -> LT
+            GGT -> GT
+            GEQ -> compare (a,b) (x,y)
       (Either ta tb a b c, Either tx ty x y z) ->
         case gcompare ta tx of
           GLT -> LT
@@ -950,6 +963,7 @@ instance Ord (ExprView t) where
         SInsert{} -> 33
         Foldr{} -> 34
         Foldl{} -> 35
+        Zip{} -> 36
 
 
 instance Show (ExprView t) where
@@ -994,6 +1008,7 @@ instance Show (ExprView t) where
   show (Second _ x) = "snd " <> show x
   show (Pair x y) = "(" <> show x <> ", " <> show y <> ")"
   show (Either _ _ l r x) = "either (" <> show l <> ") (" <> show r <> ") " <> show x
+  show (Zip _ _ x y) = "zip (" <> show x <> ") (" <> show y <> ")"
   show (Map _ f xs) = "map (" <> show f <> ") " <> show xs
   show (ELeft x) = "Left " <> show x
   show (ERight x) = "Right " <> show x
@@ -1039,6 +1054,7 @@ instance Has ExprType ExprView where
       ListType t -> has @ExprType t k
     Tail x -> case typeOf' x of
       ListType t -> has @ExprType t k
+    Zip x y _ _ -> has @ExprType x $ has @ExprType y k
     Either _ _ x _ _ -> has @ExprType x k
     Map _ x _ -> has @ExprType x k
     ELeft x -> has @ExprType x k
@@ -1105,6 +1121,7 @@ freeVars' (ELeft x) = freeVars' x
 freeVars' (ERight x) = freeVars' x
 freeVars' (SElem _ x xs) = freeVars' x ++ freeVars' xs
 freeVars' (SInsert x xs) = freeVars' x ++ freeVars' xs
+freeVars' (Zip _ _ x y) = freeVars' x ++ freeVars' y
 -- v, vl, and vr are not free
 freeVars' (Map v f xs) = filter (/= Some v) (freeVars' f) ++ freeVars' xs
 freeVars' (Either vl vr l r x) = filter (/= Some vl) (freeVars' l) ++ filter (/= Some vr) (freeVars' r) ++ freeVars' x

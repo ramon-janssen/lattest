@@ -135,7 +135,9 @@ push = lift $ SBV.push 1
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: ExprConstraints a => ExprView a -> SMT' (SBV a)
 exprToSymbolic v = case v of
-  Var (Variable nm _tp) -> gets ((\(Some (SBVI.SBV x)) -> SBVI.SBV x) . (Map.! nm))
+  Var (Variable nm _tp) -> gets (\m -> case m Map.!? nm of
+      Nothing -> error $ "exprToSymbolic: variable " <> show nm <> " is not declared (declared: " <> show (Map.keys m) <> ")"
+      Just (Some (SBVI.SBV x)) -> SBVI.SBV x)
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   Equal _ l r -> (SBV..==) <$> go l <*> go r
@@ -176,6 +178,7 @@ exprToSymbolic v = case v of
   ERight xs -> withExprConstraints (typeOf' xs) $ SBV.sRight <$> go xs
   SElem t x xs -> withExprConstraints t $ withExprConstraints (SetType t) $ SBV.member <$> go x <*> go xs
   SInsert x xs -> SBV.insert <$> go x <*> go xs
+  Zip a b xs ys -> withExprConstraints a $ withExprConstraints b $ SBV.zip <$> go xs <*> go ys
 
   -- do-notation makes it easier to massage the functions into the forms that SBV expects
   -- we locally modify the environment to map our placeholder variables to the smtvar we get
