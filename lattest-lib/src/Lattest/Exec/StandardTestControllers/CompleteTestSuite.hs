@@ -15,8 +15,7 @@ randomCoveringTestSelectorFromGen,
 Switch,
 allSwitches,
 isInputSwitch,
-switchesTaken,
-offlineTestsSwitches
+switchesTaken
 )
 where
 import Lattest.Adapter.Adapter(Adapter,close)
@@ -27,10 +26,9 @@ import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..))
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, asLoc, TransitionMapping (..), allLocations, STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
 import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp)
-import Lattest.Model.Symbolic.SolveSTS(OfflineTests(..))
 import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
 
 import Control.Monad (forM, (>=>))
@@ -231,13 +229,3 @@ switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransi
   _ -> mempty
   where syn = syntacticAutomaton intrpr
 
--- | The switches taken by the steps of an offline test tree, starting from the given model.
-offlineTestsSwitches :: (Ord loc, Ord i, Ord o)
-  => IOSTSIntrp FreeLattice loc i o -> OfflineTests i o r -> Set.Set (Switch loc i o)
-offlineTestsSwitches intrpr (OfflineTests os ir) = Set.unions (inputStep ++ outputSteps)
-  where
-    step act rest = switchesTaken intrpr (stateConf intrpr) act `Set.union` offlineTestsSwitches (after intrpr act) rest
-    outputSteps = [ step (GateValue (Out o) cs) rest | (o, (cs, _, rest)) <- Map.toList os ]
-    inputStep = case ir of
-      Left (GateValue i vs, rest) -> [step (GateValue (In i) vs) rest]
-      Right _ -> []

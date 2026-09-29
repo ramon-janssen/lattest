@@ -6,7 +6,7 @@ import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp,
 import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
-import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(randomCoveringTestSelectorFromSeed, allSwitches, isInputSwitch, offlineTestsSwitches)
+import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(randomCoveringTestSelectorFromSeed, allSwitches, isInputSwitch)
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 import Lattest.Exec.Testing (Verdict(..))
 import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
@@ -15,6 +15,7 @@ import qualified Data.Set as Set
 import Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
 import Data.Tuple (swap)
 import Control.Monad (foldM_)
+import Data.Foldable (toList)
 
 run :: IO ()
 run = do
@@ -53,13 +54,12 @@ run = do
     -- the covered switches are carried from one test case to the next
     let testCase coveredSwitches n = do
           -- target the (location, gate) pairs of input switches not covered yet
-          let toCover    = Set.map (\(l, t, _, _) -> (l, t)) (inputSwitches Set.\\ coveredSwitches)
-              controller = randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
-          tests <- offlineTests model controller
-          print tests
-          -- Given a model and the generated test case, compute the covered switches
-          -- NOTE: We could potentially return this info in offlineTests, but we have to change the interface too much.
-          let coveredSwitches' = coveredSwitches `Set.union` offlineTestsSwitches model tests
+          let toCover    = inputSwitches Set.\\ coveredSwitches
+              controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure
+          tests <- offlineTests model controller $ \st -> (fst st, Just Fail)
+          print $ snd <$> tests
+          -- compute the covered switches
+          let coveredSwitches' = coveredSwitches `Set.union` (Set.unions $ map (\(((_,x,_,_),_),_) -> x) $ toList tests)
           putStrLn $ "after test " ++ show (n + 1) ++ ": switch coverage "
               ++ show (Set.size coveredSwitches') ++ "/" ++ show (Set.size switches)
               ++ ", input switch coverage "
