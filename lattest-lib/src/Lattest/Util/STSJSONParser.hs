@@ -530,15 +530,22 @@ buildTransitionRel switchList loc =
 buildValuation :: Map.Map String (Some Variable) -> Map.Map String JSON.Value -> Either String Valuation
 buildValuation locVarCtx initVal =
     fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, Some var) ->
-        case (varType var, Map.lookup name initVal) of
-            (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CInt (round n)))
-            (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
-            (CharType,   Just (JSON.String (unpack -> [c]))) -> Right (name, insertIntoValuation var (CChar c))
-            (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
-            (ListType CharType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CList (unpack s) CharType))
-            (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
-            (_, Nothing) -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
+        case Map.lookup name initVal of
+            Just v -> case jsonToValue (varType var) v of
+                Just x  -> Right (name, insertIntoValuation var (Constant (varType var) x))
+                Nothing -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show (varType var)
+            Nothing -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
+        -- arrays are given as JSON arrays of their elements
+        jsonToValue :: Type t -> JSON.Value -> Maybe t
+        jsonToValue IntType (JSON.Number n) = Just (round n)
+        jsonToValue BoolType (JSON.Bool b) = Just b
+        jsonToValue CharType (JSON.String (unpack -> [c])) = Just c
+        jsonToValue FloatType (JSON.Number n) = Just (toRealFloat n)
+        jsonToValue (ListType CharType) (JSON.String s) = Just (unpack s)
+        jsonToValue (ListType t) (JSON.Array a) = mapM (jsonToValue t) (toList a)
+        jsonToValue _ _ = Nothing
+
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
         defaultConst :: Type t -> Constant t
