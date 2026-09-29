@@ -136,7 +136,9 @@ push = lift $ SBV.push 1
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: ExprConstraints a => ExprView a -> SMT' (SBV a)
 exprToSymbolic v = case v of
-  Var (Variable nm _tp) -> gets ((\(Some (SBVI.SBV x)) -> SBVI.SBV x) . (Map.! nm))
+  Var (Variable nm _tp) -> gets (\m -> case m Map.!? nm of
+      Nothing -> error $ "exprToSymbolic: variable " <> show nm <> " is not declared (declared: " <> show (Map.keys m) <> ")"
+      Just (Some (SBVI.SBV x)) -> SBVI.SBV x)
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
   Equal _ l r -> (SBV..==) <$> go l <*> go r
