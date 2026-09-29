@@ -83,6 +83,12 @@ instance JSON.FromJSON UntypedExpr where
                           "neg" -> UEOp1 op <$> o JSON..: "rhs"
                           "not" -> UEOp1 op <$> o JSON..: "rhs"
                           "len" -> UEOp1 op <$> o JSON..: "rhs"
+                          "head" -> UEOp1 op <$> o JSON..: "rhs"
+                          "tail" -> UEOp1 op <$> o JSON..: "rhs"
+                          "concat" -> UEOp1 op <$> o JSON..: "rhs"
+                          "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
+                          "first" -> UEOp1 op <$> o JSON..: "rhs"
+                          "second" -> UEOp1 op <$> o JSON..: "rhs"
                           "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
                           "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
                           "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
@@ -146,6 +152,12 @@ toExpr varmap accmap = \case
       BoolType -> case o of
         "not" -> Right $ BoolType :=> sNot x
         _ -> Left $ "unknown op1 @Bool: " <> o
+      IntType -> case o of
+        "neg" -> Right $ IntType :=> sNeg x
+        _ -> Left $ "unknown op1 @Int: " <> o
+      FloatType -> case o of
+        "neg" -> Right $ FloatType :=> sNeg x
+        _ -> Left $ "unknown op1 @Float: " <> o
       ListType t -> withExprConstraints t case o of
         "concat" -> case t of
           ListType t' -> withExprConstraints t' $ Right $ t :=> sConcat x
@@ -153,6 +165,10 @@ toExpr varmap accmap = \case
         "len" -> Right $ IntType :=> sLength x
         "head" -> Right $ t :=> sHead x
         "tail" -> Right $ ListType t :=> sTail x
+        "uniqueElem" -> Right $ BoolType :=> let seen = Variable "uniqueSeen" (ListType t)
+                                                 y = Variable "uniqueIterator" t
+                                                 step = sIfThenElse (sElem (sVar y) (sVar seen)) (sVar seen) (sCons (sVar y) (sVar seen))
+                                             in sLength (sFoldr y seen step sNil x) .== sLength x
         _ -> Left $ "unknown op1 @List: " <> o
       TupleType t1 t2 -> withExprConstraints t1 $ withExprConstraints t2 case o of
         "first" -> Right $ t1 :=> sFirst x
@@ -514,15 +530,22 @@ buildTransitionRel switchList loc =
 buildValuation :: Map.Map String (Some Variable) -> Map.Map String JSON.Value -> Either String Valuation
 buildValuation locVarCtx initVal =
     fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, Some var) ->
-        case (varType var, Map.lookup name initVal) of
-            (IntType,    Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CInt (round n)))
-            (BoolType,   Just (JSON.Bool b))   -> Right (name, insertIntoValuation var (CBool b))
-            (CharType,   Just (JSON.String (unpack -> [c]))) -> Right (name, insertIntoValuation var (CChar c))
-            (FloatType,  Just (JSON.Number n)) -> Right (name, insertIntoValuation var (CFloat (toRealFloat n)))
-            (ListType CharType, Just (JSON.String s)) -> Right (name, insertIntoValuation var (CList (unpack s) CharType))
-            (t, Just _)  -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show t
-            (_, Nothing) -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
+        case Map.lookup name initVal of
+            Just v -> case jsonToValue (varType var) v of
+                Just x  -> Right (name, insertIntoValuation var (Constant (varType var) x))
+                Nothing -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show (varType var)
+            Nothing -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
+        -- arrays are given as JSON arrays of their elements
+        jsonToValue :: Type t -> JSON.Value -> Maybe t
+        jsonToValue IntType (JSON.Number n) = Just (round n)
+        jsonToValue BoolType (JSON.Bool b) = Just b
+        jsonToValue CharType (JSON.String (unpack -> [c])) = Just c
+        jsonToValue FloatType (JSON.Number n) = Just (toRealFloat n)
+        jsonToValue (ListType CharType) (JSON.String s) = Just (unpack s)
+        jsonToValue (ListType t) (JSON.Array a) = mapM (jsonToValue t) (toList a)
+        jsonToValue _ _ = Nothing
+
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
         defaultConst :: Type t -> Constant t
