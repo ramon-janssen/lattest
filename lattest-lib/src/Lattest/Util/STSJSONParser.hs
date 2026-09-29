@@ -83,6 +83,12 @@ instance JSON.FromJSON UntypedExpr where
                           "neg" -> UEOp1 op <$> o JSON..: "rhs"
                           "not" -> UEOp1 op <$> o JSON..: "rhs"
                           "len" -> UEOp1 op <$> o JSON..: "rhs"
+                          "head" -> UEOp1 op <$> o JSON..: "rhs"
+                          "tail" -> UEOp1 op <$> o JSON..: "rhs"
+                          "concat" -> UEOp1 op <$> o JSON..: "rhs"
+                          "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
+                          "first" -> UEOp1 op <$> o JSON..: "rhs"
+                          "second" -> UEOp1 op <$> o JSON..: "rhs"
                           "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
                           "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
                           "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
@@ -146,6 +152,12 @@ toExpr varmap accmap = \case
       BoolType -> case o of
         "not" -> Right $ BoolType :=> sNot x
         _ -> Left $ "unknown op1 @Bool: " <> o
+      IntType -> case o of
+        "neg" -> Right $ IntType :=> sNeg x
+        _ -> Left $ "unknown op1 @Int: " <> o
+      FloatType -> case o of
+        "neg" -> Right $ FloatType :=> sNeg x
+        _ -> Left $ "unknown op1 @Float: " <> o
       ListType t -> withExprConstraints t case o of
         "concat" -> case t of
           ListType t' -> withExprConstraints t' $ Right $ t :=> sConcat x
@@ -153,6 +165,10 @@ toExpr varmap accmap = \case
         "len" -> Right $ IntType :=> sLength x
         "head" -> Right $ t :=> sHead x
         "tail" -> Right $ ListType t :=> sTail x
+        "uniqueElem" -> Right $ BoolType :=> let seen = Variable "uniqueSeen" (ListType t)
+                                                 y = Variable "uniqueIterator" t
+                                                 step = sIfThenElse (sElem (sVar y) (sVar seen)) (sVar seen) (sCons (sVar y) (sVar seen))
+                                             in sLength (sFoldr y seen step sNil x) .== sLength x
         _ -> Left $ "unknown op1 @List: " <> o
       TupleType t1 t2 -> withExprConstraints t1 $ withExprConstraints t2 case o of
         "first" -> Right $ t1 :=> sFirst x
