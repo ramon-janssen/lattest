@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TypeApplications #-}
@@ -29,7 +28,7 @@ import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,u
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..))
 import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), after, After, asLoc, TransitionMapping (..), allLocations, STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
-import Lattest.Model.BoundedMonad(Det(..), BoundedConfiguration (..), asConjunction, FreeLattice, ordBind, ordReturn)
+import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp)
 import Lattest.Model.Symbolic.SolveSTS(OfflineTests(..))
 import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
@@ -40,6 +39,7 @@ import qualified Data.Set as Set
 import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
+import Data.Either (fromRight)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -129,76 +129,45 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
             return (targetState, verdict, (observed, maybeMq))
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
-{- |
-    Compute the set of transitions covered by a trace.
-    Currently hardcoded to m ~ FreeLattice.
-    The m ~ Det case is easier, will probably just need to make a typeclass to support it.
 
-    For disjunctions: currently giving an easy lower bound (Just only count transitions that don't originate from a disjunction).
-    Giving the largest lower bound is hard: Ideally, you want to 'backpropagate' information on which transitions were covered.
-
-    E.g: from A \/ B, take transition 'x' (A->C,B->D) to C \/ D, then take transition 'y' which is forbidden from C but allowed from D
-    We currently don't report any of these as covered, but would report the next transition from D as covered.
-    It should be easy to report [(D, y)], though making this compositional (across arbitrary conjunction of disjunctions) might be annoying.
-    It seems hard but sound to report [(B,x),(D,y)]: the second transition gave information about the first one.
- -}
-covered :: (Ord q, Ord loc, After FreeLattice loc q t tdest act, Ord act, Show t, Show act)
-        => AutIntrpr FreeLattice loc q t tdest act
-        -> [act]
-        -> Set.Set (loc, t)
-covered _ [] = mempty
-covered intrpr (act:trace)
-  | isForbidden (stateConf intrpr) = mempty
-  | isUnderspecified (stateConf intrpr) = mempty
-  | Left _ <- asConjunction (stateConf intrpr) = covered (after intrpr act) trace -- conservative lower bound
-  | Right conj <- asConjunction (stateConf intrpr) = let
-      aft = after intrpr act
-      in case asTransition (alphabet (syntacticAutomaton intrpr)) act of
-        Just t -> Set.union (Set.map ((, t) . asLoc) conj ) $ covered aft trace
-        Nothing -> error $ "asTransition failed in `covered`: act outside of alphabet? Act: " <> show act <> ", alphabet: " <> show (alphabet (syntacticAutomaton intrpr))
-
--- | All transitions syntactically present: for computing the target of coverage checking
-fullCoverageTarget :: (Ord loc, After FreeLattice loc q t tdest act)
-        => AutIntrpr FreeLattice loc q t tdest act
-        -> Set.Set (loc, t)
-fullCoverageTarget intrpr = let
-  syn = syntacticAutomaton intrpr
-  locs = allLocations syn
-  in Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.keys $ transRel syn l) locs
 
 -- The most basic version: randomly pick an uncovered input, if any, and otherwise just random
 -- If a 'to cover' set is not provided, it gets initialized to the set of every transition
 -- Using 'observeControllerState', the set of uncovered transitions can be passed on to the next test.
 randomCoveringTestSelector
   :: forall m loc q t tdest act i' o i.
-     (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
+     (After m loc q t tdest act, Ord i', Ord o, Ord q, Ord loc
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
-  -> Maybe (Set.Set (loc, t))
-  -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i)
+  -> Maybe (Set.Set (Switch loc i' o))
+  -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o), [act], m q) i)
 randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen intrpr mtocover <$> initStdGen
 
 -- | As 'randomCoveringTestSelector', starting with the given random seed.
 randomCoveringTestSelectorFromSeed
   :: forall m loc q t tdest act i' o i.
-     (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
+     (After m loc q t tdest act, Ord i', Ord o, Ord q, Ord loc
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
-  -> Maybe (Set.Set (loc, t))
+  -> Maybe (Set.Set (Switch loc i' o))
   -> Int
-  -> TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o), [act], m q) i
 randomCoveringTestSelectorFromSeed intrpr mtocover seed = randomCoveringTestSelectorFromGen intrpr mtocover (mkStdGen seed)
 
 randomCoveringTestSelectorFromGen
   :: forall m loc q t tdest act i' o i.
-     (After m loc q t tdest act, Ord act, Ord i', Ord o, Ord q, Ord loc, Show t, Show act
-     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+     (After m loc q t tdest act, Ord i', Ord o, Ord loc, Ord q,
+     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
-  -> Maybe (Set.Set (loc, t))
+  -> Maybe (Set.Set (Switch loc i' o))
   -> StdGen
-  -> TestSelector m loc q t tdest act (StdGen, Set.Set (loc, t), [act], m q) i
-randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (fullCoverageTarget intrpr) mtocover, [], stateConf intrpr) select update
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o), [act], m q) i
+randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (allSwitches intrpr) mtocover, [], stateConf intrpr) select update
   where
+    select :: (StdGen, Set.Set (Switch loc i' o), [act], m q)
+           -> AutIntrpr m loc q t tdest act
+           -> m q
+           -> IO (Maybe (i, (StdGen, Set.Set (Switch loc i' o), [act], m q)))
     select (g', tocover, trace, _) intrpr' mq = do
       -- as in randomDataTestSelectorFromGen, except we try to take new transitions
       (maybeGateValue, g'') <- solveRandomInput @FreeLattice g' maybeNewInAct intrpr'
@@ -213,30 +182,36 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (fu
         maybeFromIOAct (SymInteract io xs) = case io of
           In i -> Just $ SymInteract i xs
           Out _ -> Nothing
-        maybeNewInAct = maybeFromIOAct >=> \(SymInteract i xs) -> case asConjunction mq of
+        maybeNewInAct = maybeFromIOAct >=> \(SymInteract i vs) -> case asConjunction mq of
           -- The state has disjunction, so we're not covering any new transitions anyway.
           -- Just take a random transition.
-          Left _ -> Just $ SymInteract i xs
+          Left _ -> Just (SymInteract i vs)
           -- The actual filtering:
-          Right qs -> if any (\q -> (asLoc q, SymInteract (In i) xs) `Set.member` tocover) qs
-            then Just $ SymInteract i xs
+          Right qs -> if any (\q -> any (\(Switch loc act _tdest _dest) -> loc == asLoc q && act == SymInteract (In i) vs) tocover) qs
+            then Just (SymInteract i vs)
             else Nothing
 
     -- note: the intrpr we get here is _after_ the transition, but we need the `m q` before the transition
     -- to compute coverage. That's why we keep track of it in the quadruple.
-    update (g', tocover, trace, mq) intrpr' act _ = let newcover = covered (intrpr' {stateConf = mq}) [act]
+    update :: (a, Set.Set (Switch loc i' o), [IOGateValue i' o], m q)
+           -> AutIntrpr m loc q t tdest act
+           -> IOGateValue i' o
+           -> b
+           -> IO (Maybe (a, Set.Set (Switch loc i' o), [IOGateValue i' o], m q))
+    update (g', tocover, trace, mq) intrpr' act _ =
+      let newcover = switchesTaken intrpr' mq act
       in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act], stateConf intrpr')
 
 -- | A switch of an STS: source location, interaction (gate and parameters), guard and assignment, and target location.
-type Switch loc i o = (loc, IOSymInteract i o, STStdest, loc)
+data Switch loc i o = Switch loc (IOSymInteract i o) STStdest loc deriving (Eq, Ord)
 
 -- | All switches present in the model.
 allSwitches :: (Ord loc, Ord i, Ord o) => IOSTSIntrp FreeLattice loc i o -> Set.Set (Switch loc i o)
 allSwitches intrpr = let syn = syntacticAutomaton intrpr
-  in Set.fromList [ (l, t, td, l') | l <- Set.toList (allLocations syn), (t, dests) <- Map.toList (transRel syn l), (td, l') <- toList dests ]
+  in Set.fromList [ Switch l t td l' | l <- Set.toList (allLocations syn), (t, dests) <- Map.toList (transRel syn l), (td, l') <- toList dests ]
 
 isInputSwitch :: Switch loc i o -> Bool
-isInputSwitch (_, SymInteract (In _) _, _, _) = True
+isInputSwitch (Switch _ (SymInteract (In _) _) _ _) = True
 isInputSwitch _ = False
 
 {- |
@@ -247,9 +222,9 @@ switchesTaken :: (Ord loc, Ord i, Ord o)
   => IOSTSIntrp FreeLattice loc i o -> FreeLattice (IntrpState loc) -> IOGateValue i o -> Set.Set (Switch loc i o)
 switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransition (alphabet syn) gv) of
   (Right qs, Just t@(SymInteract _ vars)) -> Set.unions
-    [ either (const mempty) id $ asConjunction $ dests `ordBind` \(td@(STSLoc (g, _)), l') ->
+    [ fromRight mempty $ asConjunction $ dests `ordBind` \(td@(STSLoc (g, _)), l') ->
         if evalBool (buildGateValuation vars vals) (substituteInGuard v g)
-          then ordReturn (l, t, td, l')
+          then ordReturn $ Switch l t td l'
           else implicitDestination gv
     | IntrpState l v <- Set.toList qs
     , Just dests <- [Map.lookup t (transRel syn l)] ]
@@ -257,7 +232,7 @@ switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransi
   where syn = syntacticAutomaton intrpr
 
 -- | The switches taken by the steps of an offline test tree, starting from the given model.
-offlineTestsSwitches :: (Ord loc, Ord i, Ord o, After FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
+offlineTestsSwitches :: (Ord loc, Ord i, Ord o)
   => IOSTSIntrp FreeLattice loc i o -> OfflineTests i o r -> Set.Set (Switch loc i o)
 offlineTestsSwitches intrpr (OfflineTests os ir) = Set.unions (inputStep ++ outputSteps)
   where
