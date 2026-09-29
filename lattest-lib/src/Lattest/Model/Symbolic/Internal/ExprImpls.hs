@@ -575,6 +575,9 @@ sFoldr va vb (view -> b) (view -> i) (view -> xs) = Expr $ Foldr va vb b i xs
 sFoldl :: (ExprConstraints a) => Variable b -> Variable a -> Expr b -> Expr b -> Expr [a] -> Expr b
 sFoldl vb va (view -> b) (view -> i) (view -> xs) = Expr $ Foldl vb va b i xs
 
+sZip :: (ExprConstraints a, ExprConstraints b) => Expr [a] -> Expr [b] -> Expr [(a,b)]
+sZip (view -> xs) (view -> ys) = Expr $ Zip (typeOf undefined) (typeOf undefined) xs ys
+
 -- | Case-of on Either: If sMap can be thought of as having type `(a -> b) -> List a -> List b`,
 -- SEither should be considered as having type `(a -> c) -> (b -> c) -> Either a b -> c`.
 sEither :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Variable a -> Variable b -> Expr c -> Expr c -> Expr (Either a b) -> Expr c
@@ -754,6 +757,7 @@ subst' ve (ELeft x) = sLeft $ subst' ve x
 subst' ve (ERight x) = sRight $ subst' ve x
 subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
 subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
+subst' ve (Zip a b x y) = withExprConstraints a $ withExprConstraints b $ sZip (subst' ve x) (subst' ve y)
 -- note: we purposely substitute the non-free variables too here. This ensures that any nested higher-order functions (e.g. a Map with an Either in the function)
 -- that have shadowing (i.e. the name of the Map variable is also used by one of the Either variables) continue to work as expected:
 -- each use of the variable refers to the closest (innermost) binder
@@ -812,6 +816,11 @@ reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
 reduce (And (Set.map reduce -> es)) = And es
+reduce (Zip a b (reduce -> x) (reduce -> y))
+  | Const xs <- x
+  , Const ys <- y
+  = withExprConstraints a $ withExprConstraints b $ Const $ zip xs ys
+  | otherwise = Zip a b x y
 reduce (Concat (reduce -> es))
   | Const as <- es = Const $ concat as
 reduce (Concat (reduce -> e)) = Concat e
@@ -934,29 +943,31 @@ mapExpressionVars' f (Sum s)                 = Sum (FMX.mapTerms (SumTerm . mapE
 mapExpressionVars' f (SumFloat s)            = SumFloat (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
 mapExpressionVars' f (Product p)             = Product (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
 mapExpressionVars' f (ProductFloat p)        = ProductFloat (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
-mapExpressionVars' f (Length t vexp)           = Length t (mapExpressionVars' f vexp)
-mapExpressionVars' f (GezInt v)                = GezInt (mapExpressionVars' f v)
-mapExpressionVars' f (GezFloat v)              = GezFloat (mapExpressionVars' f v)
-mapExpressionVars' f (And vexps)               = And (Set.map (mapExpressionVars' f) vexps)
-mapExpressionVars' f (Not vexp)                = Not (mapExpressionVars' f vexp)
-mapExpressionVars' f (Equal t x y)                = Equal t (mapExpressionVars' f x) (mapExpressionVars' f y)
-mapExpressionVars' f (LElem t x y)                = LElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
-mapExpressionVars' f (SElem t x y)                = SElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
-mapExpressionVars' f (Concat x)                = Concat (mapExpressionVars' f x)
-mapExpressionVars' f (Cons x xs)                = Cons (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (Append x xs)                = Append (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (Take x xs)                = Take (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (Drop x xs)                = Drop (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (First t x)                = First t (mapExpressionVars' f x)
-mapExpressionVars' f (Second t x)                = Second t (mapExpressionVars' f x)
-mapExpressionVars' f (Pair x xs)                = Pair (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (SInsert x xs)                = SInsert (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Length t vexp)         = Length t (mapExpressionVars' f vexp)
+mapExpressionVars' f (GezInt v)              = GezInt (mapExpressionVars' f v)
+mapExpressionVars' f (GezFloat v)            = GezFloat (mapExpressionVars' f v)
+mapExpressionVars' f (And vexps)             = And (Set.map (mapExpressionVars' f) vexps)
+mapExpressionVars' f (Not vexp)              = Not (mapExpressionVars' f vexp)
+mapExpressionVars' f (Equal t x y)           = Equal t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (LElem t x y)           = LElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (SElem t x y)           = SElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (Concat x)              = Concat (mapExpressionVars' f x)
+mapExpressionVars' f (Cons x xs)             = Cons (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Append x xs)           = Append (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Take x xs)             = Take (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Drop x xs)             = Drop (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (First t x)             = First t (mapExpressionVars' f x)
+mapExpressionVars' f (Second t x)            = Second t (mapExpressionVars' f x)
+mapExpressionVars' f (Pair x xs)             = Pair (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (SInsert x xs)          = SInsert (mapExpressionVars' f x) (mapExpressionVars' f xs)
 mapExpressionVars' f (Head v)                = Head (mapExpressionVars' f v)
 mapExpressionVars' f (Tail v)                = Tail (mapExpressionVars' f v)
-mapExpressionVars' f (ELeft v)                = ELeft (mapExpressionVars' f v)
-mapExpressionVars' f (ERight v)                = ERight (mapExpressionVars' f v)
-mapExpressionVars' f (Map v x xs)                = Map (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (Filter v x xs)                = Filter (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (Foldr v1 v2 g i xs)                = Foldr (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
-mapExpressionVars' f (Foldl v1 v2 g i xs)                = Foldl (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
-mapExpressionVars' f (Either v1 v2 l r x)   = Either (f v1) (f v2) (mapExpressionVars' f l) (mapExpressionVars' f r) (mapExpressionVars' f x)
+mapExpressionVars' f (ELeft v)               = ELeft (mapExpressionVars' f v)
+mapExpressionVars' f (ERight v)              = ERight (mapExpressionVars' f v)
+mapExpressionVars' f (Zip a b x y)           = Zip a b (mapExpressionVars' f x) (mapExpressionVars' f y)
+mapExpressionVars' f (Map v x xs)            = Map (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Filter v x xs)         = Filter (f v) (mapExpressionVars' f x) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldr v1 v2 g i xs)    = Foldr (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Foldl v1 v2 g i xs)    = Foldl (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
+mapExpressionVars' f (Either v1 v2 l r x)    = Either (f v1) (f v2) (mapExpressionVars' f l) (mapExpressionVars' f r) (mapExpressionVars' f x)
+
