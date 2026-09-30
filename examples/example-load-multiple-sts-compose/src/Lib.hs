@@ -41,8 +41,8 @@ run = do
     putStrLn $ prettyPrintIntrp model
 
     putStrLn "computing offline test cases..."
-    let nrSteps = 30
-        nrTests = 10
+    let nrSteps = 5
+        nrTests = 3
         randomSeed = 456
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
         observeVerdict Nothing _ _ lattice
