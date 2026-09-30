@@ -216,13 +216,14 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
 offlineTests :: forall m loc i o state r
-              . (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
+              . (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
              -> (state -> r)
              -> IO (OfflineTests i o r)
 offlineTests intrpr tc inputforbidden
   | not (sanityCheckSTS intrpr) = error "sanity check failed"
+  | BM.isForbidden (stateConf intrpr) = error "forbidden before offline tests"
   | otherwise = do
   inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
@@ -260,7 +261,19 @@ offlineTests intrpr tc inputforbidden
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
              Right r -> pure $ OfflineTests mempty $ Right r
-             Left (tc', intrpr') -> offlineTests intrpr' tc' inputforbidden)
+             Left (tc', intrpr')
+              | BM.isForbidden (stateConf intrpr') -> error $ show (stateConf intrpr, o, vs, vs', m)
+              -- (
+              --   (
+              --     Left ("sts_005",pending !"Out1" [state_p:[Char]] -> "L3_5"),
+              --     {beans-level:=12,drink:=("",""),max-beans-level:=12,max-water-level:=210,state:="IDLE",water-level:=210}
+              --   ),
+              --   "Out1",
+              --   [Some state_p:[Char]],
+              --   [Some (Constant {constType = [Char], constValue = ""})],
+              --   fromList [state_p:[Char] :=> ""]
+              -- )
+              | otherwise -> offlineTests intrpr' tc' inputforbidden)
   pure $ OfflineTests o i
   where
     handleAction :: IOGateValue i o

@@ -38,7 +38,7 @@ run = do
         gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_) -> g) stss
         as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_) -> a) stss
 
-    -- putStrLn $ prettyPrintIntrp model
+    putStrLn $ prettyPrintIntrp model
 
     putStrLn "computing offline test cases..."
     let nrSteps = 10

@@ -23,6 +23,7 @@ import Data.Dependent.Sum (DSum (..))
 import Lattest.SMT (SolvableProblem(..), SMTQ, sortOfEqual, getSolution, getSolvable, addAssertionsQ, query, addAssertions, addDeclarations, runSMT)
 import qualified Data.Set as Set
 import System.Random.Stateful
+import qualified Debug.Trace
 
 {-|
     Combine the given guards into one.
@@ -82,7 +83,7 @@ solveGuard vars guard = do
   randomgen <- mkStdGen <$> randomIO
   runSMT do
     addDeclarations vars
-    addDeclarations (Set.toList $ freeVars guard)
+    -- addDeclarations (Set.toList $ freeVars guard)
     addAssertions [guard]
     -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
     -- Since sbv-14.8 (unreleased), addAssertions on higher order functions no longer need registerFunction to work in query.
@@ -92,7 +93,7 @@ solveGuard vars guard = do
       case solveOutcome of
         Unsat -> return Nothing
         Unknown -> error $ "unknown: " <> show guard
-        Sat -> go randomgen 20 []
+        Sat -> getSolution vars >>= go randomgen 20 . pure
   where
     go :: StdGen -> Int -> [Valuation] -> SMTQ (Maybe Valuation)
     go g 0 xs = do
