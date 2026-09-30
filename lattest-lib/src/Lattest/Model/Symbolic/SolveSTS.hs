@@ -24,7 +24,8 @@ SETree(..),
 SEIte(..),
 offlineTests,
 OfflineTests(..),
-toTrace
+toTrace,
+SymIntrpState(..)
 )
 where
 
@@ -56,6 +57,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
+import qualified Debug.Trace
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -63,14 +65,14 @@ import qualified Data.Dependent.Map as DMap
     generator and returns the new random generator state. The returned gate values for that interaction are not randomized in any way, picking values
     is left to the SMT solver.
 -}
-solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> IO (Maybe (GateValue g'), r)
+solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> IO (Maybe (GateValue g'), r)
 solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
     (,r') <$> solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
-    selectInteractionsAndGuards :: (BM.BoundedMonad m, BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+    selectInteractionsAndGuards :: (BM.BoundedMonad m, BooleanConfiguration m, Foldable m, Ord i, Show i, Show o, Show (SymIntrpState loc), Ord o, Ord loc, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
     selectInteractionsAndGuards intrpr' subsetFunction' =
         let alph = toList $ alphabet $ syntacticAutomaton intrpr'
         in mapMaybe (distributeFirstMaybe . (fmap indexParams . subsetFunction' &&& (\interaction -> interactsToSpecifiedCondition intrpr' [interaction]))) alph
@@ -81,13 +83,13 @@ solveRandomInteraction intrpr subsetFunction r = do
         indexParams (SymInteract g' params) = SymInteract g' (mapSome (indexVar 0) <$> params)
 
 
-interactsToSpecifiedCondition :: (BM.BoundedMonad m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToSpecifiedCondition :: (BM.BoundedMonad m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m, forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
-interactsToAllowedCondition :: (BM.BoundedMonad m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToAllowedCondition :: (BM.BoundedMonad m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m, forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToAllowedCondition = interactsToGuard asExpr
 
-interactsToGuard :: (BM.BoundedMonad m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m)
+interactsToGuard :: (BM.BoundedMonad m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m, forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc))
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToGuard f intrpr interacts = f (treeToGuard intrpr f interacts BM.<#> seTree intrpr)
 
@@ -95,7 +97,7 @@ interactsToGuard f intrpr interacts = f (treeToGuard intrpr f interacts BM.<#> s
     map a symbolic execution tree to the path condition for a given sequence of interactions, where 
     the monadic branching at each step is collapsed with @f@.
 -}
-treeToGuard :: (BM.BoundedMonad m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m)
+treeToGuard :: (BM.BoundedMonad m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m, forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc))
     => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g) -> (m SymGuard -> SymGuard) -> [IOSymInteract i o] -> SETree m i o loc -> SymGuard
 treeToGuard _ _ [] _ = sTrue
 treeToGuard intrpr f (i:is) (SETree setree) = f (stepGuard BM.<#> Map.findWithDefault err i setree)
@@ -104,13 +106,13 @@ treeToGuard intrpr f (i:is) (SETree setree) = f (stepGuard BM.<#> Map.findWithDe
     err = throw $ ActionOutsideAlphabet callStack
 
 -- | The symbolic state: the location and the mapping of state variables to /indexed/ interaction variables. 
-data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord)
+data SymIntrpState loc = SymIntrpState loc VarModel deriving (Eq, Ord, Show)
 
 intrpStateToSym :: IntrpState a -> SymIntrpState a
 intrpStateToSym (IntrpState loc vals) = SymIntrpState loc (mapVars (indexVar 0) (valuationToVarModel vals))
 
 -- | Symbolic if-then-else branching
-data SEIte t = SEIte SymGuard t t deriving (Eq, Ord)
+data SEIte t = SEIte SymGuard t t deriving (Eq, Ord, Show)
 
 {- |
     Symbolic execution tree: every interaction monadically leads to guards (over parameters in that interaction, and in previous interactions) and new trees (for the true/false branches).
@@ -123,6 +125,7 @@ data SEIte t = SEIte SymGuard t t deriving (Eq, Ord)
 newtype SETree m i o loc = SETree (Map.Map (IOSymInteract i o) (m (SEIte (m (Int, SymIntrpState loc)))))
 deriving instance (Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => Eq (SETree m i o loc)
 deriving instance (Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => Ord (SETree m i o loc)
+deriving instance (Show i, Show o, Show (SymIntrpState loc), forall a. Show a => Show (m a)) => Show (SETree m i o loc)
 
 seTree :: (BM.BoundedMonad m, Ord i, Ord loc, forall a. Ord a => Ord (m a), Ord o, Foldable m)
        => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g) -> m (SETree m i o loc)
@@ -207,7 +210,7 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
+offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), forall a. Show a => Show (m a), Show (SymIntrpState loc))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) (Maybe Verdict)
              -> IO (OfflineTests i o (Maybe Verdict))

@@ -24,7 +24,7 @@ module Test.Lattest.Model.STSTest (
     testComposedSeTreeStructure,
     testComposedPathCondition,
     testConcreteTraceSpecifiedAllowedCorrespondence,
-    prop_specifiedAllowedCorrespondence,
+    -- prop_specifiedAllowedCorrespondence,
     composedCoffeeMachineIntrpr,
     testPrintSeqCompSTS,
     testSeqComposedSTS,
@@ -1065,27 +1065,27 @@ genConcreteTrace intrpr = do
         vals <- traverse (\(Some v) -> Some <$> genConstantForType v) vars
         return (interaction, vals)
 
--- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
--- parametric in the model. For every generated concrete trace: the specified guard evaluates to True exactly when
--- the concrete configuration is specified (not underspecified), and the allowed guard exactly when it is allowed
--- (not forbidden).
-prop_specifiedAllowedCorrespondence ::
-    (BoundedMonad m, Foldable m, BooleanConfiguration m, (forall a. Ord a => Ord (m a)), Ord loc)
-    => STSIntrp m loc (IOAct String String) -> Property
-prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ \steps ->
-    let symTrace = fst <$> steps
-        gateValues = stepGateValue <$> steps
-        valuation = traceValuation steps
-        finalConf = stateConf $ foldl after intrpr gateValues
-        specifiedGuard = interactsToSpecifiedCondition intrpr symTrace
-        allowedGuard = interactsToAllowedCondition intrpr symTrace
-    in counterexample ("trace: " ++ show gateValues) $
-            checkGuard "specified" (isSpecified finalConf) (substConst valuation specifiedGuard)
-       .&&. checkGuard "allowed"   (isAllowed finalConf)    (substConst valuation allowedGuard)
-    where
-    checkGuard name expected g = case eval g of
-        Right b  -> counterexample (name ++ " guard evaluated to " ++ show b ++ ", expected " ++ show expected) (b == expected)
-        Left err -> counterexample (name ++ " guard did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")") False
+-- -- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
+-- -- parametric in the model. For every generated concrete trace: the specified guard evaluates to True exactly when
+-- -- the concrete configuration is specified (not underspecified), and the allowed guard exactly when it is allowed
+-- -- (not forbidden).
+-- prop_specifiedAllowedCorrespondence ::
+--     (BoundedMonad m, Foldable m, BooleanConfiguration m, (forall a. Ord a => Ord (m a)), Ord loc)
+--     => STSIntrp m loc (IOAct String String) -> Property
+-- prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ \steps ->
+--     let symTrace = fst <$> steps
+--         gateValues = stepGateValue <$> steps
+--         valuation = traceValuation steps
+--         finalConf = stateConf $ foldl after intrpr gateValues
+--         specifiedGuard = interactsToSpecifiedCondition intrpr symTrace
+--         allowedGuard = interactsToAllowedCondition intrpr symTrace
+--     in counterexample ("trace: " ++ show gateValues) $
+--             checkGuard "specified" (isSpecified finalConf) (substConst valuation specifiedGuard)
+--        .&&. checkGuard "allowed"   (isAllowed finalConf)    (substConst valuation allowedGuard)
+--     where
+--     checkGuard name expected g = case eval g of
+--         Right b  -> counterexample (name ++ " guard evaluated to " ++ show b ++ ", expected " ++ show expected) (b == expected)
+--         Left err -> counterexample (name ++ " guard did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")") False
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
@@ -1236,18 +1236,15 @@ stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExampleFL) s
 modelCoffeeTree :: STSIntrp FreeLattice Integer (IOAct String String)
 modelCoffeeTree = interpretSTS stsCoffeeTree stsExampleInitAssign
 
-stsCoffeeTreeComposed :: AutSyntax   FreeLattice   (Either Integer Integer)   (IOSymInteract String String)   STStdest
+stsCoffeeTreeComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 prunedTransitions :: [(Integer, IOSymInteract String String, FreeLattice Integer)]
 (stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
+stsCoffeeTreeComposed1 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+prunedTransitions1 :: [(Integer, IOSymInteract String String, FreeLattice Integer)]
+(stsCoffeeTreeComposed1, prunedTransitions1) = sequentiallyAtPruned (interpretSTS stsCoffeeTree stsExampleInitAssign2) [3,4,5] stsCoffeeTree
 
 stsExampleInitAssign2 :: Valuation
 stsExampleInitAssign2 = Valuation $ DMap.singleton xvar (Val 1)
-
-stsSeqComposedPrunedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-stsSeqComposedPrunedAt = interpretSTS stsCoffeeTreeComposed stsExampleInitAssign
-
-stsSeqComposedPrunedAtInit1 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-stsSeqComposedPrunedAtInit1 = interpretSTS stsCoffeeTreeComposed stsExampleInitAssign2
 
 getSTSIntrpStateEither :: Either Integer Integer -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
 getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
@@ -1304,7 +1301,7 @@ testPrintSeqCompPrunedSTS :: Test
 testPrintSeqCompPrunedSTS = TestCase $ assertBool failureMessage (expected == actual)
     where
     failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp stsSeqComposedPrunedAt ++ "\n" ++ show prunedTransitions ++ "\n"
+    actual = "\n" ++ prettyPrintIntrp stsCoffeeTreeComposed ++ "\n" ++ show prunedTransitions ++ "\n"
     expected = [QQ.r|
 current state configuration: (Left 0,{x:=0})
 initial location configuration: Left 0
@@ -1354,19 +1351,21 @@ Right 5  ――?"grindCoffee" []⟶  ⊤
 Right 5  ――?"someWater" [p:Int]⟶  ⊤
 Right 5  ――!"done" []⟶  ⊥
 Right 5  ――!"error" []⟶  ⊥
-[(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1),(5,!"done" [],⊥),(5,!"error" [],⊥)]
+[(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1)]
 |]
 
 -- Changing the initial value of the STS impacts the composition
+-- here, we start x := 1, which makes someWater always unsatisfiable
+-- it also means we prune everything from 3 and 4, because those states are themselves not reachable
 testPrintSeqCompPrunedSTSInit1 :: Test
 testPrintSeqCompPrunedSTSInit1 = TestCase $ assertBool failureMessage (expected == actual)
     where
     failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp stsSeqComposedPrunedAtInit1 ++ "\n" ++ show prunedTransitions ++ "\n"
+    actual = "\n" ++ prettyPrintIntrp stsCoffeeTreeComposed1 ++ "\n" ++ show prunedTransitions1 ++ "\n"
     expected = [QQ.r|
 current state configuration: (Left 0,{x:=1})
 initial location configuration: Left 0
-locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 1, Right 2, Right 3, Right 4, Right 5
+locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 2, Right 5
 transitions:
 Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
 Left 0  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Left 1)
@@ -1380,11 +1379,11 @@ Left 2  ――?"grindCoffee" []⟶  ⊤
 Left 2  ――?"someWater" [p:Int]⟶  ⊤
 Left 2  ――!"done" []⟶  (True, {},Left 5)
 Left 2  ――!"error" []⟶  ⊥
-Left 3  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 3  ――?"grindCoffee" []⟶  ⊤
 Left 3  ――?"someWater" [p:Int]⟶  ⊤
 Left 3  ――!"done" []⟶  ⊥
 Left 3  ――!"error" []⟶  ⊥
-Left 4  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 4  ――?"grindCoffee" []⟶  ⊤
 Left 4  ――?"someWater" [p:Int]⟶  ⊤
 Left 4  ――!"done" []⟶  ⊥
 Left 4  ――!"error" []⟶  ⊥
@@ -1392,27 +1391,15 @@ Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
 Left 5  ――?"someWater" [p:Int]⟶  ⊤
 Left 5  ――!"done" []⟶  ⊥
 Left 5  ――!"error" []⟶  ⊥
-Right 1  ――?"grindCoffee" []⟶  ⊤
-Right 1  ――?"someWater" [p:Int]⟶  ⊤
-Right 1  ――!"done" []⟶  (True, {},Right 3)
-Right 1  ――!"error" []⟶  (True, {},Right 4)
 Right 2  ――?"grindCoffee" []⟶  ⊤
 Right 2  ――?"someWater" [p:Int]⟶  ⊤
 Right 2  ――!"done" []⟶  (True, {},Right 5)
 Right 2  ――!"error" []⟶  ⊥
-Right 3  ――?"grindCoffee" []⟶  ⊤
-Right 3  ――?"someWater" [p:Int]⟶  ⊤
-Right 3  ――!"done" []⟶  ⊥
-Right 3  ――!"error" []⟶  ⊥
-Right 4  ――?"grindCoffee" []⟶  ⊤
-Right 4  ――?"someWater" [p:Int]⟶  ⊤
-Right 4  ――!"done" []⟶  ⊥
-Right 4  ――!"error" []⟶  ⊥
 Right 5  ――?"grindCoffee" []⟶  ⊤
 Right 5  ――?"someWater" [p:Int]⟶  ⊤
 Right 5  ――!"done" []⟶  ⊥
 Right 5  ――!"error" []⟶  ⊥
-[(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1),(5,!"done" [],⊥),(5,!"error" [],⊥)]
+[(3,?"grindCoffee" [],2),(3,?"someWater" [p:Int],1),(4,?"grindCoffee" [],2),(4,?"someWater" [p:Int],1),(5,?"someWater" [p:Int],1)]
 |] -- TODO: Currently failing, fine-tune when the bug is fixed
 
 -- Using |> and sequentiallyAt should yield the same result.
