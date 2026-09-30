@@ -25,7 +25,8 @@ SEIte(..),
 offlineTests,
 OfflineTests(..),
 toTrace,
-SymIntrpState(..)
+SymIntrpState(..),
+indexExpr
 )
 where
 

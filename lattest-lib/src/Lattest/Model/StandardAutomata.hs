@@ -92,11 +92,12 @@ import Data.Set (Set)
 import Data.Bifunctor (Bifunctor(..))
 import Lattest.Model.Symbolic.Expr
 import qualified Data.List as List
-import Lattest.Model.Symbolic.SolveSTS (interactsToSpecifiedCondition, interactsToAllowedCondition, SymIntrpState)
+import Lattest.Model.Symbolic.SolveSTS (interactsToSpecifiedCondition, interactsToAllowedCondition, SymIntrpState, indexExpr)
 import System.IO.Unsafe (unsafePerformIO)
 import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
 import Data.Either (fromRight)
 import qualified Debug.Trace
+import Data.OrdMonad ((<#>))
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -549,10 +550,21 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     switches (Stable loc) = Map.fromList $
         -- keep input switches as-is
         -- keep input switches as-is
+        -- keep input switches as-is
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
         
+        -- keep input switches as-is
+        -- keep input switches as-is
+
         -- keep input switches as-is
         [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
         ++
+        -- output switches are replaced by a check gate leading to a pending state
+        -- output switches are replaced by a check gate leading to a pending state
         -- output switches are replaced by a check gate leading to a pending state
         -- output switches are replaced by a check gate leading to a pending state
         [ (checkGateFor t, BM.ordMap (\(_, target) -> (identityTdest, Pending loc t target)) mval)
@@ -615,14 +627,16 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
     -- only via a different path that doesn't take this transition.
     newTransOf1 l1 =
       let tr = getTraceTo l1
-          testTrace trace f = Maybe.isJust $ unsafePerformIO $ (\c -> solveGuard (toList $ freeVars c) c)
-                          $ f (AutInterpretation newStateConf sts1and2) trace
+          testTrace' trace guard f = Maybe.isJust $ unsafePerformIO $ (\c -> solveGuard (toList $ freeVars c) c)
+                          $ f (AutInterpretation newStateConf sts1and2) trace .&& indexExpr (length trace) guard -- TODO: check for off-by-1 error; I -think- this is right
+          testTrace trace = testTrace' trace sTrue
       in if testTrace tr interactsToSpecifiedCondition && testTrace tr interactsToAllowedCondition
-         then flip Map.partitionWithKey initTransOf2 $ \t _ -> testTrace (tr ++ [t]) interactsToSpecifiedCondition && testTrace (tr ++ [t]) interactsToAllowedCondition
-          -- $ case t of
-          --   SymInteract (In _)  _ -> interactsToSpecifiedCondition
-          --   SymInteract (Out _) _ -> interactsToAllowedCondition
-         else (mempty, initTransOf2) -- the state itself is already not reachable
+         then flip Map.map initTransOf2 $ \m t -> let f = case t of
+                                                            SymInteract (In _)  _ -> interactsToSpecifiedCondition
+                                                            SymInteract (Out _) _ -> interactsToAllowedCondition
+          in (\(tdest,target) -> testTrace' tr ) <#> m
+         -- testTrace (tr ++ [t]) interactsToSpecifiedCondition && testTrace (tr ++ [t]) interactsToAllowedCondition
+         else (mempty, Map.map _ initTransOf2) -- the state itself is already not reachable
 
     -- the transitions from sts1 to sts2 that we pruned away
     pruned = concatMap
