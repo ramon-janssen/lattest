@@ -79,7 +79,7 @@ smt'tosmtq :: SMT' a -> SMTQ a
 smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
 runSMT :: SMT a -> IO a
-runSMT = SBV.runSMT . flip evalStateT Map.empty
+runSMT = SBV.runSMT {- With SBV.z3{SBVI.extraArgs = ["parallel.enable=true"]} -} . flip evalStateT Map.empty
 
 query :: SMTQ a -> SMT a
 query = StateT . (\f m -> SBV.query (f m)) . runStateT
@@ -149,10 +149,11 @@ exprToSymbolic v = case v of
       Just (Some (SBVI.SBV x)) -> SBVI.SBV x)
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
-  Equal _ l r -> case sortOfEqual 0.0001 l r of
-    -- if there are no doubles, use actual equality
-    Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
-    exprview -> go exprview
+  Equal _ l r -> -- withExprConstraints t $ (SBV..==) <$> go l <*> go r
+    case sortOfEqual 0.0001 l r of
+      -- if there are no doubles, use actual equality
+      Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
+      exprview -> go exprview
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
   DivideFloat x y -> (/)       <$> go x <*> go y
   Modulo x y -> SBV.sMod  <$> go x <*> go y
@@ -260,7 +261,9 @@ sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   ListType tp -> withExprConstraints tp $
     let v1 = Variable "mapEqualityVar" (TupleType tp tp)
         v2 = Variable "foldEqualityVar" BoolType
-    in Foldr v1 v2 (Equal tp (First tp $ Var v1) (Second tp $ Var v1)) (Const True) $ Zip tp tp l r
+    in And $ Set.fromList
+      [ Equal IntType (Length tp l) (Length tp r)
+      , Foldr v1 v2 (And $ Set.fromList [Var v2, Equal tp (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r]
   -- the version of sets that SBV supports probably just isn't very useful for Lattest,
   -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
   SetType _ -> error "TODO"

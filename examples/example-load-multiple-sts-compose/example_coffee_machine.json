@@ -1,0 +1,1610 @@
+[
+    {
+        "id": "sts_001",
+        "description": "01: brewing a small Americano",
+        "documentation": "Brews a small Americano and deducts water and beans.",
+        "initial_state": false,
+        "initial_location": "L0_1",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "drink": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state": {
+                "type": "string"
+            },
+            "water-level": {
+                "type": "integer"
+            },
+            "beans-level": {
+                "type": "integer"
+            },
+            "max-water-level": {
+                "type": "integer"
+            },
+            "max-beans-level": {
+                "type": "integer"
+            }
+        },
+        "parameters": {
+            "drink_p": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state_p": {
+                "type": "string"
+            },
+            "water-level_p": {
+                "type": "integer"
+            },
+            "beans-level_p": {
+                "type": "integer"
+            }
+        },
+        "initialValuation": {
+            "state": "IDLE",
+            "water-level": 210,
+            "beans-level": 12,
+            "max-water-level": 210,
+            "max-beans-level": 12
+        },
+        "locations": [
+            "L0_1",
+            "L1_1",
+            "L2_1",
+            "L3_1",
+            "L4_1",
+            "L5_1",
+            "L6_1"
+        ],
+        "inputGates": {
+            "In1": {
+                "text": "the user selects a",
+                "parameters": [
+                    "drink_p"
+                ]
+            },
+            "In2": {
+                "text": "the user clicks Brew",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out1": {
+                "text": "the screen shows",
+                "parameters": [
+                    "state_p"
+                ]
+            },
+            "Out2": {
+                "text": "the machine has a current",
+                "parameters": [
+                    "water-level_p",
+                    "beans-level_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1_STS001": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 105
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 6
+                    }
+                }
+            },
+            "G2_STS001": {
+                "lhs": {
+                    "var": "state"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "IDLE"
+                }
+            },
+            "G3_STS001": {
+                "lhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "type"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Americano"
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "size"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Small"
+                    }
+                }
+            },
+            "G4_STS001": {
+                "boolean": true
+            },
+            "G5_STS001": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "BREWING"
+                }
+            },
+            "G6_STS001": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "DONE"
+                }
+            },
+            "G7_STS001": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "IDLE"
+                }
+            },
+            "G8_STS001": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "lhs": {
+                            "var": "water-level"
+                        },
+                        "op": "-",
+                        "rhs": {
+                            "integer": 105
+                        }
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "lhs": {
+                            "var": "beans-level"
+                        },
+                        "op": "-",
+                        "rhs": {
+                            "integer": 6
+                        }
+                    }
+                }
+            },
+            "G_water-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 210
+                    }
+                }
+            },
+            "G_beans-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 12
+                    }
+                }
+            }
+        },
+        "assignments": {
+            "A1_STS1": {
+                "target": "drink",
+                "expression": {
+                    "var": "drink_p"
+                }
+            },
+            "A2_STS1": {
+                "target": "state",
+                "expression": {
+                    "var": "state_p"
+                }
+            },
+            "A3_STS1": {
+                "target": "water-level",
+                "expression": {
+                    "var": "water-level_p"
+                }
+            },
+            "A4_STS1": {
+                "target": "beans-level",
+                "expression": {
+                    "var": "beans-level_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_1",
+                "gate": "In1",
+                "guard": [
+                    "G1_STS001",
+                    "G2_STS001",
+                    "G3_STS001"
+                ],
+                "assignments": [
+                    "A1_STS1"
+                ],
+                "end_loc": "L1_1"
+            },
+            "r_2": {
+                "init_loc": "L1_1",
+                "gate": "In2",
+                "guard": [
+                    "G4_STS001"
+                ],
+                "assignments": [],
+                "end_loc": "L2_1"
+            },
+            "r_3": {
+                "init_loc": "L2_1",
+                "gate": "Out1",
+                "guard": [
+                    "G5_STS001"
+                ],
+                "assignments": [
+                    "A2_STS1"
+                ],
+                "end_loc": "L3_1"
+            },
+            "r_4": {
+                "init_loc": "L3_1",
+                "gate": "Out1",
+                "guard": [
+                    "G6_STS001"
+                ],
+                "assignments": [
+                    "A2_STS1"
+                ],
+                "end_loc": "L4_1"
+            },
+            "r_5": {
+                "init_loc": "L4_1",
+                "gate": "Out1",
+                "guard": [
+                    "G7_STS001"
+                ],
+                "assignments": [
+                    "A2_STS1"
+                ],
+                "end_loc": "L5_1"
+            },
+            "r_6": {
+                "init_loc": "L5_1",
+                "gate": "Out2",
+                "guard": [
+                    "G8_STS001",
+                    "G_water-level",
+                    "G_beans-level"
+                ],
+                "assignments": [
+                    "A3_STS1",
+                    "A4_STS1"
+                ],
+                "end_loc": "L6_1"
+            }
+        }
+    },
+    {
+        "id": "sts_002",
+        "description": "02: brewing a large Americano",
+        "documentation": "Brews a large Americano and deducts water and beans.",
+        "initial_state": false,
+        "initial_location": "L0_2",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "drink": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state": {
+                "type": "string"
+            },
+            "water-level": {
+                "type": "integer"
+            },
+            "beans-level": {
+                "type": "integer"
+            },
+            "max-water-level": {
+                "type": "integer"
+            },
+            "max-beans-level": {
+                "type": "integer"
+            }
+        },
+        "parameters": {
+            "drink_p": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state_p": {
+                "type": "string"
+            },
+            "water-level_p": {
+                "type": "integer"
+            },
+            "beans-level_p": {
+                "type": "integer"
+            }
+        },
+        "initialValuation": {
+            "state": "IDLE",
+            "water-level": 210,
+            "beans-level": 12,
+            "max-water-level": 210,
+            "max-beans-level": 12
+        },
+        "locations": [
+            "L0_2",
+            "L1_2",
+            "L2_2",
+            "L3_2",
+            "L4_2",
+            "L5_2",
+            "L6_2"
+        ],
+        "inputGates": {
+            "In1": {
+                "text": "the user selects a",
+                "parameters": [
+                    "drink_p"
+                ]
+            },
+            "In2": {
+                "text": "the user clicks Brew",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out1": {
+                "text": "the screen shows",
+                "parameters": [
+                    "state_p"
+                ]
+            },
+            "Out2": {
+                "text": "the machine has a current",
+                "parameters": [
+                    "water-level_p",
+                    "beans-level_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1_STS002": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 210
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 12
+                    }
+                }
+            },
+            "G2_STS002": {
+                "lhs": {
+                    "var": "state"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "IDLE"
+                }
+            },
+            "G3_STS002": {
+                "lhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "type"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Americano"
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "size"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Large"
+                    }
+                }
+            },
+            "G4_STS002": {
+                "boolean": true
+            },
+            "G5_STS002": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "BREWING"
+                }
+            },
+            "G6_STS002": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "DONE"
+                }
+            },
+            "G7_STS002": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "IDLE"
+                }
+            },
+            "G8_STS002": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "lhs": {
+                            "var": "water-level"
+                        },
+                        "op": "-",
+                        "rhs": {
+                            "integer": 210
+                        }
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "lhs": {
+                            "var": "beans-level"
+                        },
+                        "op": "-",
+                        "rhs": {
+                            "integer": 12
+                        }
+                    }
+                }
+            },
+            "G_water-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 210
+                    }
+                }
+            },
+            "G_beans-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 12
+                    }
+                }
+            }
+        },
+        "assignments": {
+            "A1_STS2": {
+                "target": "drink",
+                "expression": {
+                    "var": "drink_p"
+                }
+            },
+            "A2_STS2": {
+                "target": "state",
+                "expression": {
+                    "var": "state_p"
+                }
+            },
+            "A3_STS2": {
+                "target": "water-level",
+                "expression": {
+                    "var": "water-level_p"
+                }
+            },
+            "A4_STS2": {
+                "target": "beans-level",
+                "expression": {
+                    "var": "beans-level_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_2",
+                "gate": "In1",
+                "guard": [
+                    "G1_STS002",
+                    "G2_STS002",
+                    "G3_STS002"
+                ],
+                "assignments": [
+                    "A1_STS2"
+                ],
+                "end_loc": "L1_2"
+            },
+            "r_2": {
+                "init_loc": "L1_2",
+                "gate": "In2",
+                "guard": [
+                    "G4_STS002"
+                ],
+                "assignments": [],
+                "end_loc": "L2_2"
+            },
+            "r_3": {
+                "init_loc": "L2_2",
+                "gate": "Out1",
+                "guard": [
+                    "G5_STS002"
+                ],
+                "assignments": [
+                    "A2_STS2"
+                ],
+                "end_loc": "L3_2"
+            },
+            "r_4": {
+                "init_loc": "L3_2",
+                "gate": "Out1",
+                "guard": [
+                    "G6_STS002"
+                ],
+                "assignments": [
+                    "A2_STS2"
+                ],
+                "end_loc": "L4_2"
+            },
+            "r_5": {
+                "init_loc": "L4_2",
+                "gate": "Out1",
+                "guard": [
+                    "G7_STS002"
+                ],
+                "assignments": [
+                    "A2_STS2"
+                ],
+                "end_loc": "L5_2"
+            },
+            "r_6": {
+                "init_loc": "L5_2",
+                "gate": "Out2",
+                "guard": [
+                    "G8_STS002",
+                    "G_water-level",
+                    "G_beans-level"
+                ],
+                "assignments": [
+                    "A3_STS2",
+                    "A4_STS2"
+                ],
+                "end_loc": "L6_2"
+            }
+        }
+    },
+    {
+        "id": "sts_003",
+        "description": "03: ordering is rejected when there are no beans",
+        "documentation": "Rejects a brew order when the beans level is zero.",
+        "initial_state": false,
+        "initial_location": "L0_3",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "drink": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state": {
+                "type": "string"
+            },
+            "water-level": {
+                "type": "integer"
+            },
+            "beans-level": {
+                "type": "integer"
+            },
+            "max-water-level": {
+                "type": "integer"
+            },
+            "max-beans-level": {
+                "type": "integer"
+            }
+        },
+        "parameters": {
+            "drink_p": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state_p": {
+                "type": "string"
+            },
+            "water-level_p": {
+                "type": "integer"
+            },
+            "beans-level_p": {
+                "type": "integer"
+            }
+        },
+        "initialValuation": {
+            "state": "IDLE",
+            "water-level": 210,
+            "beans-level": 12,
+            "max-water-level": 210,
+            "max-beans-level": 12
+        },
+        "locations": [
+            "L0_3",
+            "L1_3",
+            "L2_3",
+            "L3_3",
+            "L4_3"
+        ],
+        "inputGates": {
+            "In1": {
+                "text": "the user selects a",
+                "parameters": [
+                    "drink_p"
+                ]
+            },
+            "In2": {
+                "text": "the user clicks Brew",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out3": {
+                "text": "the screen shows an error banner indicating no beans",
+                "parameters": []
+            },
+            "Out1": {
+                "text": "the screen shows",
+                "parameters": [
+                    "state_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1_STS003": {
+                "lhs": {
+                    "var": "beans-level"
+                },
+                "op": "==",
+                "rhs": {
+                    "integer": 0
+                }
+            },
+            "G2_STS003": {
+                "boolean": true
+            },
+            "G_drink.type": {
+                "lhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "type"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Espresso"
+                    }
+                },
+                "op": "||",
+                "rhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "type"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Americano"
+                    }
+                }
+            },
+            "G_drink.size": {
+                "lhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "size"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Small"
+                    }
+                },
+                "op": "||",
+                "rhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "size"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Large"
+                    }
+                }
+            },
+            "G3_STS003": {
+                "boolean": true
+            },
+            "G4_STS003": {
+                "boolean": true
+            },
+            "G5_STS003": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "OUT OF STOCK"
+                }
+            }
+        },
+        "assignments": {
+            "A1_STS3": {
+                "target": "drink",
+                "expression": {
+                    "var": "drink_p"
+                }
+            },
+            "A2_STS3": {
+                "target": "state",
+                "expression": {
+                    "var": "state_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_3",
+                "gate": "In1",
+                "guard": [
+                    "G1_STS003",
+                    "G2_STS003",
+                    "G_drink.type",
+                    "G_drink.size"
+                ],
+                "assignments": [
+                    "A1_STS3"
+                ],
+                "end_loc": "L1_3"
+            },
+            "r_2": {
+                "init_loc": "L1_3",
+                "gate": "In2",
+                "guard": [
+                    "G3_STS003"
+                ],
+                "assignments": [],
+                "end_loc": "L2_3"
+            },
+            "r_3": {
+                "init_loc": "L2_3",
+                "gate": "Out3",
+                "guard": [
+                    "G4_STS003"
+                ],
+                "assignments": [],
+                "end_loc": "L3_3"
+            },
+            "r_4": {
+                "init_loc": "L3_3",
+                "gate": "Out1",
+                "guard": [
+                    "G5_STS003"
+                ],
+                "assignments": [
+                    "A2_STS3"
+                ],
+                "end_loc": "L4_3"
+            }
+        }
+    },
+    {
+        "id": "sts_004",
+        "description": "04: ordering is rejected when there is no water",
+        "documentation": "Rejects a brew order when the water level is zero.",
+        "initial_state": false,
+        "initial_location": "L0_4",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "drink": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state": {
+                "type": "string"
+            },
+            "water-level": {
+                "type": "integer"
+            },
+            "beans-level": {
+                "type": "integer"
+            },
+            "max-water-level": {
+                "type": "integer"
+            },
+            "max-beans-level": {
+                "type": "integer"
+            }
+        },
+        "parameters": {
+            "drink_p": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state_p": {
+                "type": "string"
+            },
+            "water-level_p": {
+                "type": "integer"
+            },
+            "beans-level_p": {
+                "type": "integer"
+            }
+        },
+        "initialValuation": {
+            "state": "IDLE",
+            "water-level": 210,
+            "beans-level": 12,
+            "max-water-level": 210,
+            "max-beans-level": 12
+        },
+        "locations": [
+            "L0_4",
+            "L1_4",
+            "L2_4",
+            "L3_4",
+            "L4_4"
+        ],
+        "inputGates": {
+            "In1": {
+                "text": "the user selects a",
+                "parameters": [
+                    "drink_p"
+                ]
+            },
+            "In2": {
+                "text": "the user clicks Brew",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out4": {
+                "text": "the screen shows an error banner indicating no water",
+                "parameters": []
+            },
+            "Out1": {
+                "text": "the screen shows",
+                "parameters": [
+                    "state_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1_STS004": {
+                "lhs": {
+                    "var": "water-level"
+                },
+                "op": "==",
+                "rhs": {
+                    "integer": 0
+                }
+            },
+            "G2_STS004": {
+                "boolean": true
+            },
+            "G_drink.type": {
+                "lhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "type"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Espresso"
+                    }
+                },
+                "op": "||",
+                "rhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "type"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Americano"
+                    }
+                }
+            },
+            "G_drink.size": {
+                "lhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "size"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Small"
+                    }
+                },
+                "op": "||",
+                "rhs": {
+                    "lhs": {
+                        "lhs": {
+                            "var": "drink_p"
+                        },
+                        "op": "project",
+                        "rhs": {
+                            "var": "size"
+                        }
+                    },
+                    "op": "==",
+                    "rhs": {
+                        "string": "Large"
+                    }
+                }
+            },
+            "G3_STS004": {
+                "boolean": true
+            },
+            "G4_STS004": {
+                "boolean": true
+            },
+            "G5_STS004": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "OUT OF STOCK"
+                }
+            }
+        },
+        "assignments": {
+            "A1_STS4": {
+                "target": "drink",
+                "expression": {
+                    "var": "drink_p"
+                }
+            },
+            "A2_STS4": {
+                "target": "state",
+                "expression": {
+                    "var": "state_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_4",
+                "gate": "In1",
+                "guard": [
+                    "G1_STS004",
+                    "G2_STS004",
+                    "G_drink.type",
+                    "G_drink.size"
+                ],
+                "assignments": [
+                    "A1_STS4"
+                ],
+                "end_loc": "L1_4"
+            },
+            "r_2": {
+                "init_loc": "L1_4",
+                "gate": "In2",
+                "guard": [
+                    "G3_STS004"
+                ],
+                "assignments": [],
+                "end_loc": "L2_4"
+            },
+            "r_3": {
+                "init_loc": "L2_4",
+                "gate": "Out4",
+                "guard": [
+                    "G4_STS004"
+                ],
+                "assignments": [],
+                "end_loc": "L3_4"
+            },
+            "r_4": {
+                "init_loc": "L3_4",
+                "gate": "Out1",
+                "guard": [
+                    "G5_STS004"
+                ],
+                "assignments": [
+                    "A2_STS4"
+                ],
+                "end_loc": "L4_4"
+            }
+        }
+    },
+    {
+        "id": "sts_005",
+        "description": "05: the user refills coffee beans",
+        "documentation": "Refills the beans level to its maximum.",
+        "initial_state": false,
+        "initial_location": "L0_5",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "drink": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state": {
+                "type": "string"
+            },
+            "water-level": {
+                "type": "integer"
+            },
+            "beans-level": {
+                "type": "integer"
+            },
+            "max-water-level": {
+                "type": "integer"
+            },
+            "max-beans-level": {
+                "type": "integer"
+            }
+        },
+        "parameters": {
+            "drink_p": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state_p": {
+                "type": "string"
+            },
+            "water-level_p": {
+                "type": "integer"
+            },
+            "beans-level_p": {
+                "type": "integer"
+            }
+        },
+        "initialValuation": {
+            "state": "IDLE",
+            "water-level": 210,
+            "beans-level": 12,
+            "max-water-level": 210,
+            "max-beans-level": 12
+        },
+        "locations": [
+            "L0_5",
+            "L1_5",
+            "L2_5",
+            "L3_5"
+        ],
+        "inputGates": {
+            "In3": {
+                "text": "the user clicks on beans refill",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out5": {
+                "text": "the machine has a current",
+                "parameters": [
+                    "beans-level_p"
+                ]
+            },
+            "Out1": {
+                "text": "the screen shows",
+                "parameters": [
+                    "state_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1_STS005": {
+                "boolean": true
+            },
+            "G2_STS005": {
+                "lhs": {
+                    "var": "beans-level_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "var": "max-beans-level"
+                }
+            },
+            "G_beans-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "beans-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 12
+                    }
+                }
+            },
+            "G3_STS005": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "IDLE"
+                }
+            }
+        },
+        "assignments": {
+            "A1_STS5": {
+                "target": "beans-level",
+                "expression": {
+                    "var": "beans-level_p"
+                }
+            },
+            "A2_STS5": {
+                "target": "state",
+                "expression": {
+                    "var": "state_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_5",
+                "gate": "In3",
+                "guard": [
+                    "G1_STS005"
+                ],
+                "assignments": [],
+                "end_loc": "L1_5"
+            },
+            "r_2": {
+                "init_loc": "L1_5",
+                "gate": "Out5",
+                "guard": [
+                    "G2_STS005",
+                    "G_beans-level"
+                ],
+                "assignments": [
+                    "A1_STS5"
+                ],
+                "end_loc": "L2_5"
+            },
+            "r_3": {
+                "init_loc": "L2_5",
+                "gate": "Out1",
+                "guard": [
+                    "G3_STS005"
+                ],
+                "assignments": [
+                    "A2_STS5"
+                ],
+                "end_loc": "L3_5"
+            }
+        }
+    },
+    {
+        "id": "sts_006",
+        "description": "06: the user refills water level",
+        "documentation": "Refills the water level to its maximum.",
+        "initial_state": false,
+        "initial_location": "L0_6",
+        "gate_id_type": "string",
+        "location_id_type": "string",
+        "locationVariables": {
+            "drink": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state": {
+                "type": "string"
+            },
+            "water-level": {
+                "type": "integer"
+            },
+            "beans-level": {
+                "type": "integer"
+            },
+            "max-water-level": {
+                "type": "integer"
+            },
+            "max-beans-level": {
+                "type": "integer"
+            }
+        },
+        "parameters": {
+            "drink_p": {
+                "type": "structure",
+                "attributes": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "string"
+                    }
+                }
+            },
+            "state_p": {
+                "type": "string"
+            },
+            "water-level_p": {
+                "type": "integer"
+            },
+            "beans-level_p": {
+                "type": "integer"
+            }
+        },
+        "initialValuation": {
+            "state": "IDLE",
+            "water-level": 210,
+            "beans-level": 12,
+            "max-water-level": 210,
+            "max-beans-level": 12
+        },
+        "locations": [
+            "L0_6",
+            "L1_6",
+            "L2_6",
+            "L3_6"
+        ],
+        "inputGates": {
+            "In4": {
+                "text": "the user refills the water tank",
+                "parameters": []
+            }
+        },
+        "outputGates": {
+            "Out6": {
+                "text": "the machine has a current",
+                "parameters": [
+                    "water-level_p"
+                ]
+            },
+            "Out1": {
+                "text": "the screen shows",
+                "parameters": [
+                    "state_p"
+                ]
+            }
+        },
+        "guards": {
+            "G1_STS006": {
+                "boolean": true
+            },
+            "G2_STS006": {
+                "lhs": {
+                    "var": "water-level_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "var": "max-water-level"
+                }
+            },
+            "G_water-level": {
+                "lhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": ">=",
+                    "rhs": {
+                        "integer": 0
+                    }
+                },
+                "op": "&&",
+                "rhs": {
+                    "lhs": {
+                        "var": "water-level_p"
+                    },
+                    "op": "<=",
+                    "rhs": {
+                        "integer": 210
+                    }
+                }
+            },
+            "G3_STS006": {
+                "lhs": {
+                    "var": "state_p"
+                },
+                "op": "==",
+                "rhs": {
+                    "string": "IDLE"
+                }
+            }
+        },
+        "assignments": {
+            "A1_STS6": {
+                "target": "water-level",
+                "expression": {
+                    "var": "water-level_p"
+                }
+            },
+            "A2_STS6": {
+                "target": "state",
+                "expression": {
+                    "var": "state_p"
+                }
+            }
+        },
+        "switches": {
+            "r_1": {
+                "init_loc": "L0_6",
+                "gate": "In4",
+                "guard": [
+                    "G1_STS006"
+                ],
+                "assignments": [],
+                "end_loc": "L1_6"
+            },
+            "r_2": {
+                "init_loc": "L1_6",
+                "gate": "Out6",
+                "guard": [
+                    "G2_STS006",
+                    "G_water-level"
+                ],
+                "assignments": [
+                    "A1_STS6"
+                ],
+                "end_loc": "L2_6"
+            },
+            "r_3": {
+                "init_loc": "L2_6",
+                "gate": "Out1",
+                "guard": [
+                    "G3_STS006"
+                ],
+                "assignments": [
+                    "A2_STS6"
+                ],
+                "end_loc": "L3_6"
+            }
+        }
+    }
+]

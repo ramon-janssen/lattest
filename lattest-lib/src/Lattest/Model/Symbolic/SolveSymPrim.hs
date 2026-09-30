@@ -14,16 +14,16 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
-import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqual)
-
+import Lattest.Model.Symbolic.Expr (Valuation(..), Val (..), Variable (..), ExprType, substConst, eval, freeVars)
+import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has(..))
-import System.Random ( randomIO, randomR )
-import System.Random.Stateful ( mkStdGen, StdGen )
 import Data.Dependent.Sum (DSum (..))
+import Lattest.SMT (SolvableProblem(..), SMTQ, sortOfEqual, getSolution, getSolvable, addAssertionsQ, query, addAssertions, addDeclarations, runSMT)
+import qualified Data.Set as Set
+import System.Random.Stateful
+import qualified Debug.Trace
 
 {-|
     Combine the given guards into one.
@@ -83,6 +83,7 @@ solveGuard vars guard = do
   randomgen <- mkStdGen <$> randomIO
   runSMT do
     addDeclarations vars
+    -- addDeclarations (Set.toList $ freeVars guard)
     addAssertions [guard]
     -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
     -- Since sbv-14.8 (unreleased), addAssertions on higher order functions no longer need registerFunction to work in query.
@@ -91,8 +92,8 @@ solveGuard vars guard = do
       solveOutcome <- getSolvable
       case solveOutcome of
         Unsat -> return Nothing
-        Unknown -> return Nothing
-        Sat -> go randomgen 20 []
+        Unknown -> error $ "unknown: " <> show guard
+        Sat -> getSolution vars >>= go randomgen 20 . pure
   where
     go :: StdGen -> Int -> [Valuation] -> SMTQ (Maybe Valuation)
     go g 0 xs = do
@@ -102,7 +103,7 @@ solveGuard vars guard = do
       addAssertionsQ $ map atleastoneisdifferent xs
       getSolvable >>= \case
         Unsat -> go g 0 xs
-        Unknown -> go g 0 xs
+        Unknown -> error $ "unknown: " <> show guard
         Sat -> do
           x <- getSolution vars
           go g (n-1) (x : xs)
