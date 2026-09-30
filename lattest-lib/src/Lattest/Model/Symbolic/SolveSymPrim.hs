@@ -86,6 +86,5 @@ solveGuard vars guard = runSMT do
           solution <- getSolution vars
           return $ Just solution
       Unsat -> return Nothing
-      Unknown -> return Nothing
-      --_ -> return $ error $ "error solving guard " ++ show guard ++ " [" ++ show vars ++ "]"
+      Unknown -> error $ "Unable to solve nor prove unsolvable: " <> show guard
 

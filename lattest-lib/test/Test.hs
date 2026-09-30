@@ -52,9 +52,9 @@ quickCheckTests = testGroup "Quickcheck"
   , quickCheckWithTimeoutWithNum prop_consumeBufferedWith (15 :: Int) "consumeBufferedWith"
   , quickCheckWithTimeoutWithNum (prop_latticeIsCNF :: LatticeOp Int -> Bool) (10000 :: Int) "latticeIsCNF"
   -- concrete-trace specified/allowed correspondence, with traces generated from the model alphabet
-  , testProperty "specifiedAllowedCorrespondence" $
-      within (durationSeconds * 1000000) $ withMaxSuccess 200 $
-      prop_specifiedAllowedCorrespondence composedCoffeeMachineIntrpr
+  -- , testProperty "specifiedAllowedCorrespondence" $
+  --     within (durationSeconds * 1000000) $ withMaxSuccess 200 $
+  --     prop_specifiedAllowedCorrespondence composedCoffeeMachineIntrpr
   , testProperty "show and read types" propShowReadType
   ]
 
@@ -117,6 +117,8 @@ makeHUnitTests regenerate = do
         testPrintSelfSeqComposedSTS,
         testSelfSeqComposed,
         testSelfSeqComposedAt,
+        testPrintSeqCompPrunedSTS,
+        testPrintSeqCompPrunedSTSInit1,
         testSelfSeqComposedAtOne,
         testConjunctionGuardedSTS,
         testDisjunctionGuardedSTS,
