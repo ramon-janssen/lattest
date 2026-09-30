@@ -389,7 +389,8 @@ stsExample2 =
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.fromList [(water, atom (stsTLoc waterGuard1 waterAssign, 3))]
             3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
-    in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
+    in ( automaton initConf  (Set.fromList [water,ok,coffee]) switches
+       , automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
 
 stsExampleIntrpr2a :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
@@ -403,7 +404,7 @@ getSTSValuation val = Valuation $ DMap.singleton (Variable "x" IntType) (Val val
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
 
--- NOTE: Automaton a conjuncts the switches that start from the initial location, while automaton b 
+-- NOTE: Automaton a conjuncts the switches that start from the initial location, while automaton b
 -- conjuncts the initial states.
 testLatticeCoffeeSTS :: Test
 testLatticeCoffeeSTS = TestCase $ do
