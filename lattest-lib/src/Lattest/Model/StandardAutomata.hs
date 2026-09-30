@@ -583,6 +583,8 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     This version prunes merge transitions that aren't satisfiable away, but requires sts1 to be a tree (no loops).
     This version takes an AutIntrpr for sts1, because we need an initial valuation to compute reachability.
     Returns both the pruned sequentially composed automaton, and a list of all pruned away transitions (if any)
+
+    TODO: want to do pruning for internal edges in sts1 too.
 -}
 sequentiallyAtPruned
   :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a), Show i, Show o, forall a. Show a => Show (m a), Show loc2)
@@ -611,12 +613,16 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
     -- TODO: this is a conservative check: We only test whether the trace that would correspond to taking this
     -- transition is viable overall; in the presence of disjunction it's possible that the trace is viable but
     -- only via a different path that doesn't take this transition.
-    newTransOf1 l1 = let tr = getTraceTo l1
-      in flip Map.partitionWithKey initTransOf2 $
-          \t _ -> Maybe.isJust $ unsafePerformIO $ (\c -> solveGuard (toList $ freeVars c) c) $
-             case t of
-               SymInteract (In _)  _ -> interactsToSpecifiedCondition (AutInterpretation newStateConf sts1and2) (tr ++ [t])
-               SymInteract (Out _) _ -> interactsToAllowedCondition   (AutInterpretation newStateConf sts1and2) (tr ++ [t])
+    newTransOf1 l1 =
+      let tr = getTraceTo l1
+          testTrace trace f = Maybe.isJust $ unsafePerformIO $ (\c -> solveGuard (toList $ freeVars c) c)
+                          $ f (AutInterpretation newStateConf sts1and2) trace
+      in if testTrace tr interactsToSpecifiedCondition && testTrace tr interactsToAllowedCondition
+         then flip Map.partitionWithKey initTransOf2 $ \t _ -> testTrace (tr ++ [t]) interactsToSpecifiedCondition && testTrace (tr ++ [t]) interactsToAllowedCondition
+          -- $ case t of
+          --   SymInteract (In _)  _ -> interactsToSpecifiedCondition
+          --   SymInteract (Out _) _ -> interactsToAllowedCondition
+         else (mempty, initTransOf2) -- the state itself is already not reachable
 
     -- the transitions from sts1 to sts2 that we pruned away
     pruned = concatMap

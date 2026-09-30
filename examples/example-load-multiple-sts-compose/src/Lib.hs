@@ -32,11 +32,10 @@ run = do
         initVal  = case stss of
             [] -> error "no STSs loaded"
             (_, _, _, _, val):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
-        model    = interpretSTS seqComposed initVal
         gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_) -> g) stss
         as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_) -> a) stss
 
-    putStrLn $ prettyPrintIntrp model
+    putStrLn $ prettyPrintIntrp seqComposed
     print discardedTransit
 
     putStrLn "computing offline test cases..."
@@ -48,9 +47,8 @@ run = do
           | isUnderspecified lattice = pure $ Just Pass
           | otherwise = pure Nothing
         controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
-    tests <- offlineTests model controller
+    tests <- offlineTests seqComposed controller
     print tests
 
     -- To write to a file:
-    -- stsListToJSONFile "example_single_stss.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
-    stsToJSONFile "example_composed2.json" "stscomposed" (seqComposed) gs as initVal
+    stsToJSONFile "example_composed2.json" "stscomposed" (syntacticAutomaton seqComposed) gs as initVal
