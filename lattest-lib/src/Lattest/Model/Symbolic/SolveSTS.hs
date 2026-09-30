@@ -18,6 +18,7 @@ solveRandomInteraction,
 interactsToSpecifiedCondition,
 interactsToAllowedCondition,
 seTree,
+seTree',
 treeToGuard,
 SETree(..),
 SEIte(..),
@@ -71,7 +72,7 @@ solveRandomInteraction intrpr subsetFunction r = do
     (,r') <$> solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
-    selectInteractionsAndGuards :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
+    selectInteractionsAndGuards :: (BM.BoundedMonad m, BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
     selectInteractionsAndGuards intrpr' subsetFunction' =
         let alph = toList $ alphabet $ syntacticAutomaton intrpr'
         in mapMaybe (distributeFirstMaybe . (fmap indexParams . subsetFunction' &&& (\interaction -> interactsToSpecifiedCondition intrpr' [interaction]))) alph
@@ -82,26 +83,26 @@ solveRandomInteraction intrpr subsetFunction r = do
         indexParams (SymInteract g' params) = SymInteract g' (mapSome (indexVar 0) <$> params)
 
 
-interactsToSpecifiedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToSpecifiedCondition :: (BM.BoundedMonad m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToSpecifiedCondition = interactsToGuard asDualExpr
 
-interactsToAllowedCondition :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
+interactsToAllowedCondition :: (BM.BoundedMonad m, BooleanConfiguration m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
 interactsToAllowedCondition = interactsToGuard asExpr
 
-interactsToGuard :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
+interactsToGuard :: (BM.BoundedMonad m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m)
     => (m SymGuard -> SymGuard) -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> [IOSymInteract i o] -> SymGuard
-interactsToGuard f intrpr interacts = f (treeToGuard f interacts BM.<#> seTree intrpr)
+interactsToGuard f intrpr interacts = f (treeToGuard intrpr f interacts BM.<#> seTree intrpr)
 
 {- |
     map a symbolic execution tree to the path condition for a given sequence of interactions, where 
     the monadic branching at each step is collapsed with @f@.
 -}
-treeToGuard :: (BM.BoundedMonad m, Ord i)
-    => (m SymGuard -> SymGuard) -> [i] -> SETree m i -> SymGuard
-treeToGuard _ [] _ = sTrue
-treeToGuard f (i:is) (SETree setree) = f (stepGuard BM.<#> Map.findWithDefault err i setree)
+treeToGuard :: (BM.BoundedMonad m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a), Foldable m)
+    => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g) -> (m SymGuard -> SymGuard) -> [IOSymInteract i o] -> SETree m i o loc -> SymGuard
+treeToGuard _ _ [] _ = sTrue
+treeToGuard intrpr f (i:is) (SETree setree) = f (stepGuard BM.<#> Map.findWithDefault err i setree)
     where
-    stepGuard (SEIte g tTree fTree) = (g .&& f (treeToGuard f is BM.<#> tTree)) .|| (sNot g .&& f (treeToGuard f is BM.<#> fTree))
+    stepGuard (SEIte g tTree fTree) = (g .&& f ((treeToGuard intrpr f is . seTree' intrpr) BM.<#> tTree)) .|| (sNot g .&& f ((treeToGuard intrpr f is . seTree' intrpr) BM.<#> fTree))
     err = throw $ ActionOutsideAlphabet callStack
 
 -- | The symbolic state: the location and the mapping of state variables to /indexed/ interaction variables. 
@@ -118,34 +119,36 @@ data SEIte t = SEIte SymGuard t t deriving (Eq, Ord)
 
     Note: the if-then-else @SEIte@ type allows quite general forms of monadic branching, but currently, the use in @seTree@ is quite limited: the
     then-branch is always singular (ordReturn) and the else-branch is always underspecified or forbidden.
+    Each branch is represented as a (Int, AutIntrpr), which can be passed to seTree' to obtain the nested nodes.
+    This defunctionalisation represents a lazy, possibly infinite tree that can still be properly inserted into a Set.
 -}
-newtype SETree m i = SETree (Map.Map i (m (SEIte (m (SETree m i)))))
-deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Eq (SETree m i)
-deriving instance (Ord i, forall a. Ord a => Ord (m a)) => Ord (SETree m i)
+newtype SETree m i o loc = SETree (Map.Map (IOSymInteract i o) (m (SEIte (m (Int, SymIntrpState loc)))))
+deriving instance (Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => Eq (SETree m i o loc)
+deriving instance (Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => Ord (SETree m i o loc)
 
-seTree :: (BM.BoundedMonad m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a))
-    => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g') -> m (SETree m (IOSymInteract i o))
+seTree :: (BM.BoundedMonad m, Ord i, Ord loc, forall a. Ord a => Ord (m a), Ord o, Foldable m)
+       => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g) -> m (SETree m i o loc)
 seTree intrpr =
-    let smlocs = intrpStateToSym BM.<#> stateConf intrpr
-    in seTree' 0 BM.<#> smlocs
+  let smlocs = intrpStateToSym BM.<#> stateConf intrpr
+  in (seTree' intrpr . (0,)) BM.<#> smlocs
+seTree' :: forall m i o loc g
+         . (BM.BoundedMonad m, Ord loc, forall a. Ord a => Ord (m a), Foldable m)
+        => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g) -> (Int, SymIntrpState loc) -> SETree m i o loc
+seTree' intrpr (n, SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (BM.ordMap . seStep') (t ploc)
     where
-    --t :: loc -> Map.Map (IOSymInteract i o) (m (SymGuard, VarModel, loc))
+    t :: loc -> Map.Map (IOSymInteract i o) (m (SymGuard, VarModel, loc))
     t loc = Map.map (BM.ordMap completeSTSLoc) (transRel (syntacticAutomaton intrpr) loc)
-    --seTree' :: Int -> SymIntrpState loc -> SETree m i
-    -- the LHS pvar contains the indexed vars of the previous step, RHS contains only interaction variables
-    seTree' n (SymIntrpState ploc pvar) = SETree $ Map.mapWithKey (BM.ordMap . seStep') (t ploc)
-        where
-        --seStep' :: (SymGuard, VarModel, loc) -> SEBranch (SETree m i)
-        seStep' i (tguard, completedAssign, tloc) =
-            let indexedGuard = subst pvar (indexExpr n tguard)
-                pvar' = substVarModel pvar (indexLeft (n+1) $ indexRight n completedAssign)
-                nextSeTree = BM.ordReturn $ seTree' (n+1) (SymIntrpState tloc pvar')
-                negNextSeTree = ioInteractToImpliticLocation i
-            in SEIte indexedGuard nextSeTree negNextSeTree
-        indexLeft :: Int -> VarModel -> VarModel
-        indexLeft k = mapVars $ indexVar k
-        indexRight :: Int -> VarModel -> VarModel
-        indexRight k = mapVarExprs $ indexVar k
+    seStep' :: IOSymInteract i o -> (SymGuard, VarModel, loc) -> SEIte (m (Int, SymIntrpState loc))
+    seStep' i (tguard, completedAssign, tloc) =
+        let indexedGuard = subst pvar (indexExpr n tguard)
+            pvar' = substVarModel pvar (indexLeft (n+1) $ indexRight n completedAssign)
+            nextSeTree = BM.ordReturn (n+1, SymIntrpState tloc pvar')
+            negNextSeTree = ioInteractToImpliticLocation i
+        in SEIte indexedGuard nextSeTree negNextSeTree
+    indexLeft :: Int -> VarModel -> VarModel
+    indexLeft k = mapVars $ indexVar k
+    indexRight :: Int -> VarModel -> VarModel
+    indexRight k = mapVarExprs $ indexVar k
     completeSTSLoc :: (STStdest, loc) -> (SymGuard, VarModel, loc)
     completeSTSLoc (STSLoc (tguard, tassign), tloc) =
         let completedAssign = tassign `varUnion` identityVarModel locVarSet

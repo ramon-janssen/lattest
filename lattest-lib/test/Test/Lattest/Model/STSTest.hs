@@ -4,6 +4,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Test.Lattest.Model.STSTest (
@@ -75,7 +76,7 @@ import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\),
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
 import Algebra.Lattice.Free(Free(..))
 import Algebra.Lattice.Levitated(Levitated(..))
-import Lattest.Model.Symbolic.SolveSTS(interactsToSpecifiedCondition, interactsToAllowedCondition)
+import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
 import qualified Data.Map as Map
@@ -262,7 +263,7 @@ testSTSTestSelection = TestCase $ do
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, _), _)) <- runSTSTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
-    let checkObserved = go 0 0 observed
+    let checkObserved = go 0 observed
     let exampleObserved = [
         -- TODO: inp, out seem to be the same as inpL, outL?
           inp "water" [int 1],
@@ -303,24 +304,24 @@ testSTSTestSelection = TestCase $ do
           GateValue δ [],
           GateValue δ []
           ]
-    let checkExample = go 0 0 exampleObserved
-    assertEqual ("expected conformal trace like " <> show exampleObserved <> ", got " <> show observed) checkObserved checkExample
+    let checkExample = go 0 exampleObserved
+    assertEqual ("expected conformal trace like " <> show exampleObserved <> ",\ngot " <> show observed) checkObserved checkExample
     assertEqual "expected pass " Pass verdict
     where
     inpL g = GateValue (In (InputAttempt (g, True)))
     outL g = GateValue (Out (OutSusp g))
-    go :: Int -> Integer -> [SuspendedIFGateValue String String] -> (Int, Integer)
-    go ds waterlevel [] = (ds, waterlevel)
-    go ds waterlevel (GateValue (Out Quiescence) []:os) = go (ds+1) waterlevel os
-    go ds waterlevel gv@(GateValue x y:os)
-      | x == In (InputAttempt ("water", True))
-      , [Some (CInt w)] <- y = go ds (waterlevel + w) os
-      | x == Out (OutSusp "ok")
+    go :: Integer -> [SuspendedIFGateValue String String] -> Bool
+    go _aterlevel [] = True
+    go waterlevel (GateValue (Out Quiescence) []:os) = go waterlevel os
+    go waterlevel gv@(GateValue x' y:os)
+      | x' == In (InputAttempt ("water", True))
+      , [Some (CInt w)] <- y = go (waterlevel + w) os
+      | x' == Out (OutSusp "ok")
       , [Some (CInt w)] <- y
-      , w == waterlevel = go ds waterlevel os
-      | x == Out (OutSusp "coffee")
+      , w == waterlevel = go waterlevel os
+      | x' == Out (OutSusp "coffee")
       , [] <- y
-      , waterlevel > 15 = go ds waterlevel os
+      , waterlevel > 15 = go waterlevel os
       | otherwise = error $ "wrong gatevalue: " <> show gv
 
 pvarf :: Variable Double
@@ -909,24 +910,25 @@ composedCoffeeMachineIntrpr = interpretSTS composedCoffeeMachine composedCoffeeM
 -- Pretty-print the entire current intermediate symbolic-execution tree (`Solve.seTree`), up to a given depth. The
 -- configuration monad is fixed to `FreeLatticeSlow` so that we can render its ∧/∨/⊤/⊥ structure directly (no
 -- normalization or deduplication), interleaved with the step / if-then-else structure of the tree.
-prettySeTree :: Int
-             -> FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))
+prettySeTree :: forall loc g
+              . (Ord loc)
+             => Int
+             -> FreeLatticeSlow (Solve.SETree FreeLatticeSlow String String loc)
+             -> AutIntrpr FreeLatticeSlow loc (IntrpState loc) (IOSymInteract String String) STStdest (GateValue g)
              -> String
-prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t0)
+prettySeTree depth t0 intrpr = unlines ("configuration:" : goConf "  " (goTree depth) t0)
     where
-    goTree :: Int -> String -> Solve.SETree FreeLatticeSlow (IOSymInteract String String) -> [String]
+    goTree :: Int -> String -> Solve.SETree FreeLatticeSlow String String loc -> [String]
     goTree d ind (Solve.SETree cs)
         | d <= 0    = [ind ++ "… (depth limit)"]
         | otherwise = concatMap (goEntry d ind) (Map.toList cs)
-    goEntry :: Int -> String -> (IOSymInteract String String, FreeLatticeSlow (Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))))) -> [String]
     goEntry d ind (i, medge) =
         (ind ++ "step " ++ show i ++ ", branches:") : goConf (ind ++ "  ") (goIte (d-1)) medge
-    goIte :: Int -> String -> Solve.SEIte (FreeLatticeSlow (Solve.SETree FreeLatticeSlow (IOSymInteract String String))) -> [String]
     goIte d ind (Solve.SEIte g thn els) =
            [ind ++ "if " ++ show g ++ " then"]
-        ++ goConf (ind ++ "    ") (goTree d) thn
+        ++ goConf (ind ++ "    ") (goTree d) (seTree' intrpr <#> thn)
         ++ [ind ++ "else:"]
-        ++ goConf (ind ++ "    ") (goTree d) els
+        ++ goConf (ind ++ "    ") (goTree d) (seTree' intrpr <#> els)
     -- render a FreeLatticeSlow layer, recursing into each atom via `sub`. Chains of the same operator are flattened
     -- into an n-ary ∧/∨, but no merging of equal subtrees happens.
     goConf :: String -> (String -> x -> [String]) -> FreeLatticeSlow x -> [String]
@@ -957,7 +959,7 @@ prettySeTree depth t0 = unlines ("configuration:" : goConf "  " (goTree depth) t
 testComposedSeTreeStructure :: Bool -> Test
 testComposedSeTreeStructure regenerate = TestCase $ goldenAssert
     [ goldenCheck regenerate "composed:seTree" (goldenDir </> "composed.setree.txt")
-        ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr))
+        ("\n" ++ prettySeTree 3 (Solve.seTree composedCoffeeMachineIntrpr) composedCoffeeMachineIntrpr)
     ]
 
 -- Snapshot the accumulated symbolic path condition (the actual formula, with SSA-indexed parameters) that
