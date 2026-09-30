@@ -229,7 +229,7 @@ offlineTests intrpr tc inputforbidden
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
         Right r -> pure $ Right r
         Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
-          Right r -> pure $ Right r
+          Right r -> pure $ Left (i', OfflineTests mempty $ Right r)
           Left (tc', intrpr') -> do
             case BM.specifiedness (stateConf intrpr') of
               Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"

@@ -79,7 +79,7 @@ smt'tosmtq :: SMT' a -> SMTQ a
 smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
 runSMT :: SMT a -> IO a
-runSMT = SBV.runSMT . flip evalStateT Map.empty
+runSMT = SBV.runSMT {- With SBV.z3{SBVI.extraArgs = ["parallel.enable=true"]} -} . flip evalStateT Map.empty
 
 query :: SMTQ a -> SMT a
 query = StateT . (\f m -> SBV.query (f m)) . runStateT

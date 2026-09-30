@@ -41,7 +41,7 @@ run = do
     putStrLn $ prettyPrintIntrp model
 
     putStrLn "computing offline test cases..."
-    let nrSteps = 10
+    let nrSteps = 30
         nrTests = 10
         randomSeed = 456
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
@@ -52,20 +52,20 @@ run = do
         switches      = allSwitches model
         inputSwitches = Set.filter isInputSwitch switches
     -- the covered switches are carried from one test case to the next
-    let testCase coveredSwitches n = do
+    let testCase toCover n = do
           -- target the (location, gate) pairs of input switches not covered yet
-          let toCover    = inputSwitches Set.\\ coveredSwitches
-              controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure
+          let controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure
           tests <- offlineTests model controller $ \st -> (fst st, Just Fail)
           print $ snd <$> tests
           -- compute the covered switches
-          let coveredSwitches' = coveredSwitches `Set.union` (Set.unions $ map (\(((_,x,_,_),_),_) -> x) $ toList tests)
+          -- print $ map (\(((_,x,_,_),_),_) -> x) $ toList tests
+          let toCover' = foldr (Set.intersection . (\(((_,x,_,_),_),_) -> x)) switches (toList tests)
           putStrLn $ "after test " ++ show (n + 1) ++ ": switch coverage "
-              ++ show (Set.size coveredSwitches') ++ "/" ++ show (Set.size switches)
+              ++ show (Set.size switches - Set.size toCover') ++ "/" ++ show (Set.size switches)
               ++ ", input switch coverage "
-              ++ show (Set.size (Set.filter isInputSwitch coveredSwitches')) ++ "/" ++ show (Set.size inputSwitches)
-          pure coveredSwitches'
-    foldM_ testCase Set.empty [0 .. nrTests - 1]
+              ++ show (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) ++ "/" ++ show (Set.size inputSwitches)
+          pure toCover'
+    foldM_ testCase switches [0 .. nrTests - 1]
 
     -- To write to a file:
     -- stsListToJSONFile "example_single_stss.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as

@@ -201,7 +201,7 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
       in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act], stateConf intrpr')
 
 -- | A switch of an STS: source location, interaction (gate and parameters), guard and assignment, and target location.
-data Switch loc i o = Switch loc (IOSymInteract i o) STStdest loc deriving (Eq, Ord)
+data Switch loc i o = Switch loc (IOSymInteract i o) STStdest loc deriving (Eq, Ord, Show)
 
 -- | All switches present in the model.
 allSwitches :: (Ord loc, Ord i, Ord o) => IOSTSIntrp FreeLattice loc i o -> Set.Set (Switch loc i o)
