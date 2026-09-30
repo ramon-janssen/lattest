@@ -14,7 +14,7 @@ solveGuard
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr, freeVars)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
 import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqual)
 
@@ -24,6 +24,7 @@ import Data.Constraint.Extras (Has(..))
 import System.Random ( randomIO, randomR )
 import System.Random.Stateful ( mkStdGen, StdGen )
 import Data.Dependent.Sum (DSum (..))
+import qualified Data.Set as Set
 
 {-|
     Combine the given guards into one.

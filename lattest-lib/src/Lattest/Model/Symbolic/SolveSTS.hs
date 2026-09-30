@@ -57,6 +57,7 @@ import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.StandardAutomata (sanityCheckSTS)
+import Data.Bifunctor (Bifunctor(..))
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -170,9 +171,6 @@ indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with prime
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
--- TODO: unsure whether this should hold arbitrary 'r's, or Verdicts, or both.
--- If 'r's: it would be good to have a test controller combinator that makes a test controller return a Verdict
--- If 'Verdict's: See the final couple lines of this file: I'm not sure how to disambiguate them. Should I just pass the interaction to the automaton and look at the state?
 data OfflineTests i o r
   = OfflineTests
       (Map.Map o             -- Map each output to:
@@ -180,6 +178,15 @@ data OfflineTests i o r
         , OnlyOrInconclusive -- Whether that is the only allowed valuation, or other valuations should be marked as 'inconclusive';
         , OfflineTests i o r)) -- And the rest of the test.
       (Either (GateValue i, OfflineTests i o r) r) -- Either the chosen input from this state, and the rest of the test following it, or the result if there's no more outputs at this point
+
+instance Functor (OfflineTests i o) where
+  fmap f (OfflineTests o i) = OfflineTests (Map.map (\(a,b,c) -> (a, b, f <$> c)) o) (either (Left . second (fmap f)) (Right . f) i)
+
+instance Foldable (OfflineTests i o) where
+  foldMap f (OfflineTests o i) = foldMap (\(_,_,x) -> foldMap f x) o <> case i of
+    Left (_,x) -> foldMap f x
+    Right x -> f x
+
 
 data OnlyOrInconclusive = Only | Inconclusiv deriving Show
 
@@ -208,11 +215,13 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
+offlineTests :: forall m loc i o state r
+              . (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
-             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) (Maybe Verdict)
-             -> IO (OfflineTests i o (Maybe Verdict))
-offlineTests intrpr tc
+             -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
+             -> (state -> r)
+             -> IO (OfflineTests i o r)
+offlineTests intrpr tc inputforbidden
   | not (sanityCheckSTS intrpr) = error "sanity check failed"
   | otherwise = do
   inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
@@ -223,9 +232,9 @@ offlineTests intrpr tc
           Left (tc', intrpr') -> do
             case BM.specifiedness (stateConf intrpr') of
               Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"
-              Forbidden -> pure $ Left (i', OfflineTests mempty $ Right $ Just Fail)
+              Forbidden -> pure $ Left (i', OfflineTests mempty $ Right $ inputforbidden (testControllerState tc'))
               Indefinite -> do
-                ot <- offlineTests intrpr' tc'
+                ot <- offlineTests intrpr' tc' inputforbidden
                 pure $ Left (i', ot)
   o <- Map.fromList . catMaybes <$> do
     let os = mapMaybe (\case
@@ -251,7 +260,7 @@ offlineTests intrpr tc
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
              Right r -> pure $ OfflineTests mempty $ Right r
-             Left (tc', intrpr') -> offlineTests intrpr' tc')
+             Left (tc', intrpr') -> offlineTests intrpr' tc' inputforbidden)
   pure $ OfflineTests o i
   where
     handleAction :: IOGateValue i o
@@ -263,9 +272,6 @@ offlineTests intrpr tc
                     r)
     handleAction x t i = updateTestController t (testControllerState t) i x (stateConf i) >>= \case
       Right r -> pure $ Right r
-      -- $ case x of
-        -- GateValue (In  _) _ -> Pass -- TODO: testcontrollers with a fixed number of steps do trigger this. Need a way to also deal with them in in the output case! -- error "this should never happen, I think: the testcontroller choosing to stop rather than update based on an input it chose itself"
-        -- GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail? Not necessarily, what if it's just a stopcondition?
       Left st -> pure $ Left (t {testControllerState = st}, after i x)
 
 -- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it.

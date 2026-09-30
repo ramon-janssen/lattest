@@ -7,14 +7,14 @@
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
-    
+
     'TestController's have multiple duties during testing:
-    
+
     * selecting test inputs,
     * deciding whether to continue testing,
     * returning testing results (other than 'Pass' or 'Fail'), and
     * potentially performing side effects during testing.
-    
+
     The building blocks in this module allow composing 'TestController's in a modular way, by combining various choices for these responsibilities.
     Every building block carries its own state. For example, to stop testing after a fixed number of steps, a state in the form of a counter is
     needed, whereas returning the observed trace as test result requires recording the observed trace as state.
@@ -34,6 +34,7 @@ randomDataOrWaitForOutputTestSelector,
 randomDataOrWaitForOutputTestSelectorFromSeed,
 randomDataOrWaitForOutputTestSelectorFromGen,
 andThen,
+solveRandomInput,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
@@ -48,6 +49,7 @@ observingOnly,
 traceObserver,
 stateObserver,
 inconclusiveStateObserver,
+observeControllerState,
 -- * Test Side Effects
 TestSideEffect,
 withSideEffect,
@@ -385,9 +387,19 @@ stateObserver :: TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) return
 
 {- |
+    Transform a controller to return its final internal state.
+-}
+observeControllerState :: TestController m loc q t tdest act state i r -> TestController m loc q t tdest act state i state
+observeControllerState tc = TestController
+  { testControllerState = testControllerState tc
+  , selectTest = \st intrpr mq -> fmap (const st) <$> selectTest tc st intrpr mq
+  , updateTestController = \st intrpr act mq -> fmap (const st) <$> updateTestController tc st intrpr act mq
+  , handleTestClose = \st -> st <$ handleTestClose tc st
+  }
+
+{- |
     A 'TestObserver' that returns the last inconclusive state configuration of the specification model. For example, during a failing test,
     this observer returns the last state before the failure.
-    
 -}
 inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return
