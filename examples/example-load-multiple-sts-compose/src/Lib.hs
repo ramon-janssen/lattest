@@ -41,8 +41,8 @@ run = do
     putStrLn "computing offline test cases..."
     let nrSteps = 10
         randomSeed = 456
-        observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
-        observeVerdict Nothing _ _ lattice
+        -- observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
+        observeVerdict _ _ _ lattice
           | isForbidden lattice = pure $ Just Fail
           | isUnderspecified lattice = pure $ Just Pass
           | otherwise = pure Nothing
