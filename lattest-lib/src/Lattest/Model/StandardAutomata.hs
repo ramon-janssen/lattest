@@ -1,7 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# LANGUAGE TypeOperators #-}
 
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
@@ -77,7 +79,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, BoundedConfiguration, MeetSemiLattice)
-import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest, transRel,syntacticAutomaton, reachable, stsTLoc)
+import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest (..), transRel,syntacticAutomaton, reachable, stsTLoc)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 
@@ -97,7 +99,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
 import Data.Either (fromRight)
 import qualified Debug.Trace
-import Data.OrdMonad ((<#>))
+import Data.OrdMonad ((<#>), ordJoin)
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -599,7 +601,8 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
     TODO: want to do pruning for internal edges in sts1 too.
 -}
 sequentiallyAtPruned
-  :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a), Show i, Show o, forall a. Show a => Show (m a), Show loc2)
+  :: forall loc1 loc2 m i o act
+   . (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a), Show i, Show o, forall a. Show a => Show (m a), Show loc2, m ~ FreeLattice)
   => AutIntrpr m loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act
   -> [loc1]
   -> AutSyntax m loc2 (IOSymInteract i o) STStdest
@@ -621,31 +624,38 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
         | t <- Set.toList (alphabet sts2) ]
 
     -- the new transitions we actually add to this location, i.e. those of initTransOf2 that are satisfiable
-    -- fst is feasible transitions, snd is unfeasible transitions
+    -- keep=true for feasible, keep=false for unfeasible transitions
     -- TODO: this is a conservative check: We only test whether the trace that would correspond to taking this
     -- transition is viable overall; in the presence of disjunction it's possible that the trace is viable but
     -- only via a different path that doesn't take this transition.
-    newTransOf1 l1 =
+    newTransOf1 :: loc1 -> Bool -> Map.Map (IOSymInteract i o) (FreeLattice (STStdest, Either loc1 loc2))
+    newTransOf1 l1 keep =
       let tr = getTraceTo l1
           testTrace' trace guard f = Maybe.isJust $ unsafePerformIO $ (\c -> solveGuard (toList $ freeVars c) c)
-                          $ f (AutInterpretation newStateConf sts1and2) trace .&& indexExpr (length trace) guard -- TODO: check for off-by-1 error; I -think- this is right
+                          $ f (AutInterpretation newStateConf sts1and2) trace .&& indexExpr (length trace) guard .&& _ -- TODO: it's missing the identity guard (from previous state to this state). -- TODO: check for off-by-1 error; I -think- this is right
           testTrace trace = testTrace' trace sTrue
       in if testTrace tr interactsToSpecifiedCondition && testTrace tr interactsToAllowedCondition
-         then flip Map.map initTransOf2 $ \m t -> let f = case t of
-                                                            SymInteract (In _)  _ -> interactsToSpecifiedCondition
-                                                            SymInteract (Out _) _ -> interactsToAllowedCondition
-          in (\(tdest,target) -> testTrace' tr ) <#> m
+         then flip Map.mapWithKey initTransOf2 $ \t m ->
+          let (f, onInfeasible) = case t of
+                    SymInteract (In _)  _ -> (interactsToSpecifiedCondition, top)
+                    SymInteract (Out _) _ -> (interactsToAllowedCondition, bot)
+          in ordJoin $ (\(STSLoc (guard, model) ,target) ->
+            if testTrace' tr guard f == keep
+              then atom (STSLoc (guard,model), target)
+              else onInfeasible) <#> m
          -- testTrace (tr ++ [t]) interactsToSpecifiedCondition && testTrace (tr ++ [t]) interactsToAllowedCondition
-         else (mempty, Map.map _ initTransOf2) -- the state itself is already not reachable
+         else if keep then mempty else initTransOf2 -- the state itself is already not reachable. TODO: is 'mempty' enough, or do we need to add in->top & out->bot?
 
     -- the transitions from sts1 to sts2 that we pruned away
-    pruned = concatMap
-      ( filter (\(_l1,_act,ml2) -> not $ BM.isForbidden ml2)
+    pruned = let onInfeasible act = case act of
+                    SymInteract (In _)  _ -> top
+                    SymInteract (Out _) _ -> bot
+             in concatMap
+      ( filter (\(_l1, act, ml2) -> onInfeasible act /= ml2)
       . (\l1 -> map
                   (\(act, l2) -> (l1, act, (fromRight (error "only Left expected") . snd) BM.<#> l2))
                 . Map.toList
-                . snd
-                $ newTransOf1 l1))
+                $ newTransOf1 l1 False))
       mergeLocs
 
     -- conjunct sts1's own transition with the copied one, but only where both are specified (and not forbiddden)
@@ -661,7 +671,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
         | otherwise                                    = other
 
     transOf1 l1
-        | l1 `Set.member` mergeLocSet = Map.unionWith pick ownTrans $ fst $ newTransOf1 l1
+        | l1 `Set.member` mergeLocSet = Map.unionWith pick ownTrans $ newTransOf1 l1 True
         | otherwise                   = ownTrans
         where
         ownTrans = Map.map (second Left BM.<#>) (transRel sts1 l1)
@@ -695,7 +705,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
 
 infixl 1 `sequentiallyPruned`
 -- | Sequentially compose two automata at all sink locations of the first (with pruning). Throws an error if the first automaton does not have any sink locations.
-sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a), Show i, Show o, forall a. Show a => Show (m a), Show (SymIntrpState (Either loc1 loc2)), Show (loc2))
+sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, BoundedMonad m, Foldable m, MeetSemiLattice (m (STStdest, Either loc1 loc2)), BM.BooleanConfiguration m, Ord i, Ord o, forall a. Ord a => Ord (m a), Show i, Show o, forall a. Show a => Show (m a), Show (SymIntrpState (Either loc1 loc2)), Show (loc2), m ~ FreeLattice)
   => AutIntrpr m loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act
   -> AutSyntax m loc2 (IOSymInteract i o) STStdest
   -> (AutIntrpr m (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [(loc1, IOSymInteract i o, m loc2)])
