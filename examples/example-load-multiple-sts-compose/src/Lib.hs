@@ -5,6 +5,7 @@ module Lib
 import      Lattest.Model.Automaton
 import      Lattest.Model.StandardAutomata
 import      Lattest.Model.Symbolic.SolveSTS (offlineTests)
+import      Lattest.Model.Symbolic.Expr (getVariables)
 import      Lattest.Exec.StandardTestControllers
 import      Lattest.Util.STSJSONParser (stsListFromJSONFile)
 import      Lattest.Exec.Testing (Verdict(..))
@@ -28,7 +29,8 @@ run = do
         conjunctedSTS = conjunctionAll checked
         conjunctModel = interpretSTS conjunctedSTS initVal
         --seqComposed = conjmodel |>> conjmodel
-        (seqComposed, discardedTransit) = conjunctModel `sequentiallyPruned` conjunctedSTS
+        (seqSelfComposed, discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
+        (seqComposed, discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
         initVal  = case stss of
             [] -> error "no STSs loaded"
             (_, _, _, _, val):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system

@@ -31,6 +31,8 @@ module Test.Lattest.Model.STSTest (
     testSeqComposedAtSTS,
     testPrintSeqCompPrunedSTS,
     testPrintSeqCompPrunedSTSInit1,
+    testSeqCompPrunedRules,
+    testSelfSeqCompPrunedRules,
     testSequentiallyAtNonSinkLocation,
     testSequentiallyAtSameAction,
     testPrintSelfSeqComposedSTS,
@@ -58,6 +60,7 @@ import Test.HUnit
 import Data.Dependent.Sum
 import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
 import Data.Maybe(isJust, catMaybes)
+import Data.Foldable(toList)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -70,8 +73,8 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSTSTester, Verdict(..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,AutSyntax)
-import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned)
+import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,AutSyntax,transRel,reachable)
+import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, Pruned(..))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
@@ -859,19 +862,19 @@ testBranchingPathCondition = TestCase $ do
 -- A minimal STS for asserting the tree structures directly (rather than via the SMT solver):
 --   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
 -- One input gate keeps the symbolic-execution tree narrow enough to read.
-inGate :: SymInteract (IOAct String String)
-inGate = SymInteract (In "a") [Some pvar]
-outGate :: SymInteract (IOAct String String)
-outGate = SymInteract (Out "x") [Some pvar]
+inGate :: String -> SymInteract (IOAct String String)
+inGate name = SymInteract (In name) [Some pvar]
+outGate :: String -> SymInteract (IOAct String String)
+outGate name = SymInteract (Out name) [Some pvar]
 
 treeSTS :: IOSTS FreeLattice Integer String String
 treeSTS =
     let switches loc = case loc of
-            0 -> Map.fromList [(inGate, ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
-            1 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
-            2 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
+            0 -> Map.fromList [(inGate "a", ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
+            1 -> Map.fromList [(outGate "x", ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
+            2 -> Map.fromList [(outGate "x", ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
             _ -> Map.empty
-    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate, outGate]) switches
+    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate "a", outGate "x"]) switches
 
 milkvar :: Variable Bool
 milkvar = (Variable "milk" BoolType)
@@ -1145,11 +1148,11 @@ testSTSPathCondition = TestCase $ do
 stsConjOfDifferentVals :: IOSTS FreeLattice Integer String String
 stsConjOfDifferentVals =
     let switches loc = case loc of
-            0 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment [xvar =: (1 :: Expr Integer)]), 1) /\ ordReturn (stsTLoc sTrue (assignment [xvar =: (2 :: Expr Integer)]), 2))]
-            1 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 1))]
-            2 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 2))]
+            0 -> Map.fromList [(outGate "x", ordReturn (stsTLoc sTrue (assignment [xvar =: (1 :: Expr Integer)]), 1) /\ ordReturn (stsTLoc sTrue (assignment [xvar =: (2 :: Expr Integer)]), 2))]
+            1 -> Map.fromList [(outGate "x", ordReturn (stsTLoc sTrue (assignment []), 1))]
+            2 -> Map.fromList [(outGate "x", ordReturn (stsTLoc sTrue (assignment []), 2))]
             _ -> Map.empty
-    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate]) switches
+    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate "x"]) switches
 
 getSTSIntrpState' :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
@@ -1238,10 +1241,10 @@ modelCoffeeTree :: STSIntrp FreeLattice Integer (IOAct String String)
 modelCoffeeTree = interpretSTS stsCoffeeTree stsExampleInitAssign
 
 stsCoffeeTreeComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-prunedTransitions :: [(Integer, IOSymInteract String String, FreeLattice Integer)]
+prunedTransitions :: [Pruned Integer Integer (IOSymInteract String String)]
 (stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
 stsCoffeeTreeComposed1 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-prunedTransitions1 :: [(Integer, IOSymInteract String String, FreeLattice Integer)]
+prunedTransitions1 :: [Pruned Integer Integer (IOSymInteract String String)]
 (stsCoffeeTreeComposed1, prunedTransitions1) = sequentiallyAtPruned (interpretSTS stsCoffeeTree stsExampleInitAssign2) [3,4,5] stsCoffeeTree
 
 stsExampleInitAssign2 :: Valuation
@@ -1352,12 +1355,12 @@ Right 5  ――?"grindCoffee" []⟶  ⊤
 Right 5  ――?"someWater" [p:Int]⟶  ⊤
 Right 5  ――!"done" []⟶  ⊥
 Right 5  ――!"error" []⟶  ⊥
-[(3,?"someWater" [p:Int],1),(4,?"someWater" [p:Int],1)]
+[PrunedSwitch 3 ?"someWater" [p:Int] 1,PrunedSwitch 4 ?"someWater" [p:Int] 1]
 |]
 
 -- Changing the initial value of the STS impacts the composition
 -- here, we start x := 1, which makes someWater always unsatisfiable
--- it also means we prune everything from 3 and 4, because those states are themselves not reachable
+-- it also means locations 1, 3 and 4 are removed, because those are themselves not reachable
 testPrintSeqCompPrunedSTSInit1 :: Test
 testPrintSeqCompPrunedSTSInit1 = TestCase $ assertBool failureMessage (expected == actual)
     where
@@ -1366,28 +1369,16 @@ testPrintSeqCompPrunedSTSInit1 = TestCase $ assertBool failureMessage (expected 
     expected = [QQ.r|
 current state configuration: (Left 0,{x:=1})
 initial location configuration: Left 0
-locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 2, Right 5
+locations: Left 0, Left 2, Left 5, Right 2, Right 5
 transitions:
 Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
-Left 0  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Left 1)
+Left 0  ――?"someWater" [p:Int]⟶  ⊤
 Left 0  ――!"done" []⟶  ⊥
 Left 0  ――!"error" []⟶  ⊥
-Left 1  ――?"grindCoffee" []⟶  ⊤
-Left 1  ――?"someWater" [p:Int]⟶  ⊤
-Left 1  ――!"done" []⟶  (True, {},Left 3)
-Left 1  ――!"error" []⟶  (True, {},Left 4)
 Left 2  ――?"grindCoffee" []⟶  ⊤
 Left 2  ――?"someWater" [p:Int]⟶  ⊤
 Left 2  ――!"done" []⟶  (True, {},Left 5)
 Left 2  ――!"error" []⟶  ⊥
-Left 3  ――?"grindCoffee" []⟶  ⊤
-Left 3  ――?"someWater" [p:Int]⟶  ⊤
-Left 3  ――!"done" []⟶  ⊥
-Left 3  ――!"error" []⟶  ⊥
-Left 4  ――?"grindCoffee" []⟶  ⊤
-Left 4  ――?"someWater" [p:Int]⟶  ⊤
-Left 4  ――!"done" []⟶  ⊥
-Left 4  ――!"error" []⟶  ⊥
 Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
 Left 5  ――?"someWater" [p:Int]⟶  ⊤
 Left 5  ――!"done" []⟶  ⊥
@@ -1400,8 +1391,258 @@ Right 5  ――?"grindCoffee" []⟶  ⊤
 Right 5  ――?"someWater" [p:Int]⟶  ⊤
 Right 5  ――!"done" []⟶  ⊥
 Right 5  ――!"error" []⟶  ⊥
-[(3,?"grindCoffee" [],2),(3,?"someWater" [p:Int],1),(4,?"grindCoffee" [],2),(4,?"someWater" [p:Int],1),(5,?"someWater" [p:Int],1)]
-|] -- TODO: Currently failing, fine-tune when the bug is fixed
+[PrunedLocation 1,PrunedLocation 3,PrunedLocation 4,PrunedSwitch 5 ?"someWater" [p:Int] 1]
+|]
+
+{- |
+    A tree with a branch for every rule of `sequentiallyAtPruned`. Starting from x := 0, the guard x = 1 is unsatisfiable:
+
+    0 ―a?⟶ 1 ―b? [x = 1]⟶ 2 ―c!⟶ 3  --> The whole branch should be removed
+    0 ―d?⟶ 4 ―e!⟶ 5 ―f? [x = 1]⟶ 6  --> Remove up until 5, but don't compose there
+    0 ―g?⟶ 7 ―h! [x = 1]⟶ 8 ―i?⟶ 9  --> Keep branch until 9, but don't compose there
+    0 ―j?⟶ 10  --> Keep branch
+-}
+stsPruningTree :: IOSTS FreeLattice Integer String String
+stsPruningTree =
+    let x = sVar xvar :: Expr Integer
+        unsat = x .== 1
+        dest guard loc = ordReturn (stsTLoc guard noAssignment, loc)
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(inGate "a", dest sTrue 1),
+                               (inGate "d", dest sTrue 4),
+                               (inGate "g", dest sTrue 7),
+                               (inGate "j", dest sTrue 10)]
+            1 -> Map.fromList [(inGate "b", dest unsat 2)]
+            2 -> Map.fromList [(outGate "c", dest sTrue 3)]
+            4 -> Map.fromList [(outGate "e", dest sTrue 5)]
+            5 -> Map.fromList [(inGate "f", dest unsat 6)]
+            7 -> Map.fromList [(outGate "h", dest unsat 8)]
+            8 -> Map.fromList [(inGate "i", dest sTrue 9)]
+            _ -> Map.empty
+        gates = (inGate <$> ["a", "b", "d", "f", "g", "i", "j"]) ++ (outGate <$> ["c", "e", "h"])
+    in automaton initConf (Set.fromList gates) switches
+
+-- 0 ―k?⟶ 1, to be merged into stsPruningTree
+stsPruningSuffix :: IOSTS FreeLattice Integer String String
+stsPruningSuffix =
+    let k = inGate "k"
+        switches q = case q of
+            0 -> Map.fromList [(k, ordReturn (stsTLoc sTrue noAssignment, 1))]
+            _ -> Map.empty
+    in automaton (ordReturn 0) (Set.singleton k) switches
+
+{- |
+    Which locations of stsPruningTree are kept, when merging at 3, 6, 9 and 10 (sink locations):
+
+    * 2, 3:  removed, after the unsatisfiable input b? (that 3 is a merge location doesn't matter)
+    * 1:     removed, nothing after it is left and the switch into it is the input a?
+    * 6:     removed, after the unsatisfiable input f?
+    * 5:     kept but not merged, nothing after it is left but the switch into it is the output e!
+    * 4:     kept, 5 after it is kept
+    * 8, 9:  kept as-is but not merged, after the unsatisfiable output h!
+    * 7:     kept, 8 after it is kept
+    * 10:    kept and merged, a reachable merge location
+    * 0:     kept, 4, 7 and 10 after it are kept
+-}
+stsPruningTreeComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+prunedPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
+(stsPruningTreeComposed, prunedPruningTree) = sequentiallyAtPruned (interpretSTS stsPruningTree stsExampleInitAssign) [3, 6, 9, 10] stsPruningSuffix
+
+testSeqCompPrunedRules :: Test
+testSeqCompPrunedRules = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsPruningTreeComposed ++ "\n" ++ show prunedPruningTree ++ "\n"
+    expected = [QQ.r|
+current state configuration: (Left 0,{x:=0})
+initial location configuration: Left 0
+locations: Left 0, Left 4, Left 5, Left 7, Left 8, Left 9, Left 10, Right 1
+transitions:
+Left 0  ――?"a" [p:Int]⟶  ⊤
+Left 0  ――?"b" [p:Int]⟶  ⊤
+Left 0  ――?"d" [p:Int]⟶  (True, {},Left 4)
+Left 0  ――?"f" [p:Int]⟶  ⊤
+Left 0  ――?"g" [p:Int]⟶  (True, {},Left 7)
+Left 0  ――?"i" [p:Int]⟶  ⊤
+Left 0  ――?"j" [p:Int]⟶  (True, {},Left 10)
+Left 0  ――?"k" [p:Int]⟶  ⊤
+Left 0  ――!"c" [p:Int]⟶  ⊥
+Left 0  ――!"e" [p:Int]⟶  ⊥
+Left 0  ――!"h" [p:Int]⟶  ⊥
+Left 4  ――?"a" [p:Int]⟶  ⊤
+Left 4  ――?"b" [p:Int]⟶  ⊤
+Left 4  ――?"d" [p:Int]⟶  ⊤
+Left 4  ――?"f" [p:Int]⟶  ⊤
+Left 4  ――?"g" [p:Int]⟶  ⊤
+Left 4  ――?"i" [p:Int]⟶  ⊤
+Left 4  ――?"j" [p:Int]⟶  ⊤
+Left 4  ――?"k" [p:Int]⟶  ⊤
+Left 4  ――!"c" [p:Int]⟶  ⊥
+Left 4  ――!"e" [p:Int]⟶  (True, {},Left 5)
+Left 4  ――!"h" [p:Int]⟶  ⊥
+Left 5  ――?"a" [p:Int]⟶  ⊤
+Left 5  ――?"b" [p:Int]⟶  ⊤
+Left 5  ――?"d" [p:Int]⟶  ⊤
+Left 5  ――?"f" [p:Int]⟶  ⊤
+Left 5  ――?"g" [p:Int]⟶  ⊤
+Left 5  ――?"i" [p:Int]⟶  ⊤
+Left 5  ――?"j" [p:Int]⟶  ⊤
+Left 5  ――?"k" [p:Int]⟶  ⊤
+Left 5  ――!"c" [p:Int]⟶  ⊥
+Left 5  ――!"e" [p:Int]⟶  ⊥
+Left 5  ――!"h" [p:Int]⟶  ⊥
+Left 7  ――?"a" [p:Int]⟶  ⊤
+Left 7  ――?"b" [p:Int]⟶  ⊤
+Left 7  ――?"d" [p:Int]⟶  ⊤
+Left 7  ――?"f" [p:Int]⟶  ⊤
+Left 7  ――?"g" [p:Int]⟶  ⊤
+Left 7  ――?"i" [p:Int]⟶  ⊤
+Left 7  ――?"j" [p:Int]⟶  ⊤
+Left 7  ――?"k" [p:Int]⟶  ⊤
+Left 7  ――!"c" [p:Int]⟶  ⊥
+Left 7  ――!"e" [p:Int]⟶  ⊥
+Left 7  ――!"h" [p:Int]⟶  ((x) = (1), {},Left 8)
+Left 8  ――?"a" [p:Int]⟶  ⊤
+Left 8  ――?"b" [p:Int]⟶  ⊤
+Left 8  ――?"d" [p:Int]⟶  ⊤
+Left 8  ――?"f" [p:Int]⟶  ⊤
+Left 8  ――?"g" [p:Int]⟶  ⊤
+Left 8  ――?"i" [p:Int]⟶  (True, {},Left 9)
+Left 8  ――?"j" [p:Int]⟶  ⊤
+Left 8  ――?"k" [p:Int]⟶  ⊤
+Left 8  ――!"c" [p:Int]⟶  ⊥
+Left 8  ――!"e" [p:Int]⟶  ⊥
+Left 8  ――!"h" [p:Int]⟶  ⊥
+Left 9  ――?"a" [p:Int]⟶  ⊤
+Left 9  ――?"b" [p:Int]⟶  ⊤
+Left 9  ――?"d" [p:Int]⟶  ⊤
+Left 9  ――?"f" [p:Int]⟶  ⊤
+Left 9  ――?"g" [p:Int]⟶  ⊤
+Left 9  ――?"i" [p:Int]⟶  ⊤
+Left 9  ――?"j" [p:Int]⟶  ⊤
+Left 9  ――?"k" [p:Int]⟶  ⊤
+Left 9  ――!"c" [p:Int]⟶  ⊥
+Left 9  ――!"e" [p:Int]⟶  ⊥
+Left 9  ――!"h" [p:Int]⟶  ⊥
+Left 10  ――?"a" [p:Int]⟶  ⊤
+Left 10  ――?"b" [p:Int]⟶  ⊤
+Left 10  ――?"d" [p:Int]⟶  ⊤
+Left 10  ――?"f" [p:Int]⟶  ⊤
+Left 10  ――?"g" [p:Int]⟶  ⊤
+Left 10  ――?"i" [p:Int]⟶  ⊤
+Left 10  ――?"j" [p:Int]⟶  ⊤
+Left 10  ――?"k" [p:Int]⟶  (True, {},Right 1)
+Left 10  ――!"c" [p:Int]⟶  ⊥
+Left 10  ――!"e" [p:Int]⟶  ⊥
+Left 10  ――!"h" [p:Int]⟶  ⊥
+Right 1  ――?"a" [p:Int]⟶  ⊤
+Right 1  ――?"b" [p:Int]⟶  ⊤
+Right 1  ――?"d" [p:Int]⟶  ⊤
+Right 1  ――?"f" [p:Int]⟶  ⊤
+Right 1  ――?"g" [p:Int]⟶  ⊤
+Right 1  ――?"i" [p:Int]⟶  ⊤
+Right 1  ――?"j" [p:Int]⟶  ⊤
+Right 1  ――?"k" [p:Int]⟶  ⊤
+Right 1  ――!"c" [p:Int]⟶  ⊥
+Right 1  ――!"e" [p:Int]⟶  ⊥
+Right 1  ――!"h" [p:Int]⟶  ⊥
+[PrunedLocation 1,PrunedLocation 2,PrunedLocation 3,PrunedLocation 6,UnsatisfiableOutput 7 !"h" [p:Int] [9]]
+|]
+
+{- |
+    A tree with a branch for every rule of `selfSequentiallyAtPruned`. There is no initial valuation, so x starts with an arbitrary
+    value and the guards of the initial switches a? and b? are satisfiable in location 0:
+
+    0 ―a? [x = 1]⟶ 1 ―c!⟶ 2
+    0 ―b? [x = 2]⟶ 3 ―d! {x := 1}⟶ 4
+                    3 ―e! [x = 1]⟶ 5
+    0 ―g?⟶ 6
+-}
+stsSelfPruningTree :: IOSTS FreeLattice Integer String String
+stsSelfPruningTree =
+    let x = sVar xvar :: Expr Integer
+        dest guard assign loc = ordReturn (stsTLoc guard assign, loc)
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(inGate "a", dest (x .== 1) noAssignment 1),
+                               (inGate "b", dest (x .== 2) noAssignment 3),
+                               (inGate "g", dest sTrue noAssignment 6)]
+            1 -> Map.fromList [(outGate "c", dest sTrue noAssignment 2)]
+            3 -> Map.fromList [(outGate "d", dest sTrue (assignment [xvar =: 1]) 4),
+                               (outGate "e", dest (x .== 1) noAssignment 5)]
+            _ -> Map.empty
+        gates = (inGate <$> ["a", "b", "g"]) ++ (outGate <$> ["c", "d", "e"])
+    in automaton initConf (Set.fromList gates) switches
+
+{- |
+    Which of the initial switches a?, b? and g? are copied, when merging at 2, 4, 5 and 6:
+
+    * 2:  x = 1 on the path to it, so a? and g? are copied and b? is pruned
+    * 4:  x = 2 on the path to it, but then x := 1, so a? and g? are copied and b? is pruned
+    * 5:  not reachable, since x = 2 and x = 1 on the path to it, so a?, b? and g? are all pruned
+    * 6:  no guards on the path to it, so a?, b? and g? are all copied
+
+    The locations and switches of the tree itself are left as-is, including the unsatisfiable e! and location 5 after it.
+-}
+stsSelfPruningTreeComposed :: IOSTS FreeLattice Integer String String
+prunedSelfPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
+(stsSelfPruningTreeComposed, prunedSelfPruningTree) = selfSequentiallyAtPruned (getVariables stsExampleInitAssign) stsSelfPruningTree [2, 4, 5, 6]
+
+testSelfSeqCompPrunedRules :: Test
+testSelfSeqCompPrunedRules = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp (interpretSTS stsSelfPruningTreeComposed stsExampleInitAssign) ++ "\n" ++ show prunedSelfPruningTree ++ "\n"
+    expected = [QQ.r|
+current state configuration: (0,{x:=0})
+initial location configuration: 0
+locations: 0, 1, 2, 3, 4, 5, 6
+transitions:
+0  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
+0  ――?"b" [p:Int]⟶  ((x) = (2), {},3)
+0  ――?"g" [p:Int]⟶  (True, {},6)
+0  ――!"c" [p:Int]⟶  ⊥
+0  ――!"d" [p:Int]⟶  ⊥
+0  ――!"e" [p:Int]⟶  ⊥
+1  ――?"a" [p:Int]⟶  ⊤
+1  ――?"b" [p:Int]⟶  ⊤
+1  ――?"g" [p:Int]⟶  ⊤
+1  ――!"c" [p:Int]⟶  (True, {},2)
+1  ――!"d" [p:Int]⟶  ⊥
+1  ――!"e" [p:Int]⟶  ⊥
+2  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
+2  ――?"b" [p:Int]⟶  ⊤
+2  ――?"g" [p:Int]⟶  (True, {},6)
+2  ――!"c" [p:Int]⟶  ⊥
+2  ――!"d" [p:Int]⟶  ⊥
+2  ――!"e" [p:Int]⟶  ⊥
+3  ――?"a" [p:Int]⟶  ⊤
+3  ――?"b" [p:Int]⟶  ⊤
+3  ――?"g" [p:Int]⟶  ⊤
+3  ――!"c" [p:Int]⟶  ⊥
+3  ――!"d" [p:Int]⟶  (True, {x:=1},4)
+3  ――!"e" [p:Int]⟶  ((x) = (1), {},5)
+4  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
+4  ――?"b" [p:Int]⟶  ⊤
+4  ――?"g" [p:Int]⟶  (True, {},6)
+4  ――!"c" [p:Int]⟶  ⊥
+4  ――!"d" [p:Int]⟶  ⊥
+4  ――!"e" [p:Int]⟶  ⊥
+5  ――?"a" [p:Int]⟶  ⊤
+5  ――?"b" [p:Int]⟶  ⊤
+5  ――?"g" [p:Int]⟶  ⊤
+5  ――!"c" [p:Int]⟶  ⊥
+5  ――!"d" [p:Int]⟶  ⊥
+5  ――!"e" [p:Int]⟶  ⊥
+6  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
+6  ――?"b" [p:Int]⟶  ((x) = (2), {},3)
+6  ――?"g" [p:Int]⟶  (True, {},6)
+6  ――!"c" [p:Int]⟶  ⊥
+6  ――!"d" [p:Int]⟶  ⊥
+6  ――!"e" [p:Int]⟶  ⊥
+[PrunedSwitch 2 ?"b" [p:Int] 3,PrunedSwitch 4 ?"b" [p:Int] 3,PrunedSwitch 5 ?"a" [p:Int] 1,PrunedSwitch 5 ?"b" [p:Int] 3,PrunedSwitch 5 ?"g" [p:Int] 6]
+|]
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test

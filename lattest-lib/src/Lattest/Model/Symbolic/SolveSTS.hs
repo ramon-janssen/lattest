@@ -26,7 +26,8 @@ offlineTests,
 OfflineTests(..),
 toTrace,
 SymIntrpState(..),
-indexExpr
+indexExpr,
+indexVar
 )
 where
 
