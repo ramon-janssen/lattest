@@ -70,6 +70,7 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.IntType -> E.int value
                   E.UnitType -> E.unit
                   E.FloatType -> E.float value
+                  E.RationalType -> E.rational value
                   E.BoolType -> E.bool value
                   E.CharType -> E.char value
                   E.ListType t -> has @ExprType t E.list value

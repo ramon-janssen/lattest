@@ -97,63 +97,63 @@ instance Num (Expr Double) where
 
 -- | Apply unary operator Minus on the provided value expression.
 -- Preconditions are /not/ checked.
-sNeg :: ExprNum t => Expr t -> Expr t
-sNeg v = sSum (fromOccurListT [(v,-1)])
+sNeg :: Num t => Expr t -> Expr t
+sNeg v = withExprConstraints v $ sSum (fromOccurListT [(v,-1)])
 
 -- | Apply operator Add on the provided value expressions.
 -- Preconditions are /not/ checked.
-(.+) :: ExprNum t => Expr t -> Expr t -> Expr t
-(.+) a b = sSum (fromListT [a,b])
+(.+) :: Num t => Expr t -> Expr t -> Expr t
+(.+) a b = withExprConstraints a $ sSum (fromListT [a,b])
 
 infixl 6 .+
 
 -- | Apply operator Minus on the provided value expressions.
 -- Preconditions are /not/ checked.
-(.-) :: ExprNum t => Expr t -> Expr t -> Expr t
-(.-) a b = sSum (fromOccurListT [(a,1),(b,-1)])
+(.-) :: Num t => Expr t -> Expr t -> Expr t
+(.-) a b = withExprConstraints a $ sSum (fromOccurListT [(a,1),(b,-1)])
 
 infixl 6 .-
 
 -- | Apply operator Times on the provided value expressions.
 -- Preconditions are /not/ checked.
-(.*) :: ExprNum t => Expr t -> Expr t -> Expr t
-(.*) a b = sProduct (fromListT [a,b])
+(.*) :: Num t => Expr t -> Expr t -> Expr t
+(.*) a b = withExprConstraints a $ sProduct (fromListT [a,b])
 
 infixl 7 .*
 
 -- | Apply operator Absolute value (abs) on the provided value expression.
 -- Preconditions are /not/ checked.
-sAbs :: ExprNum t => Expr t -> Expr t
+sAbs :: Num t => Expr t -> Expr t
 sAbs a = sIfThenElse (sIsNonNegative a) a (sNeg a)
 
 -- | Apply operator LT (<) on the provided value expression.
 -- Preconditions are /not/ checked.
-(.<) :: ExprNum t => Expr t -> Expr t -> Expr Bool
+(.<) :: Num t => Expr t -> Expr t -> Expr Bool
 -- a < b <==> a - b < 0 <==> Not ( a - b >= 0 )
-ve1 .< ve2 = sNot $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,1),(ve2,-1)]
+ve1 .< ve2 = withExprConstraints ve1 $ sNot $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,1),(ve2,-1)]
 
 infix 4 .<
 
 -- | Apply operator GT (>) on the provided value expression.
 -- Preconditions are /not/ checked.
-(.>) :: ExprNum t => Expr t -> Expr t -> Expr Bool
+(.>) :: Num t => Expr t -> Expr t -> Expr Bool
 -- a > b <==> 0 > b - a <==> Not ( 0 <= b - a )
-ve1 .> ve2 = sNot $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,-1),(ve2,1)]
+ve1 .> ve2 = withExprConstraints ve1 $ sNot $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,-1),(ve2,1)]
 
 infix 4 .>
 
 -- | Apply operator LE (<=) on the provided value expression.
 -- Preconditions are /not/ checked.
-(.<=) :: ExprNum t => Expr t -> Expr t -> Expr Bool
+(.<=) :: Num t => Expr t -> Expr t -> Expr Bool
 -- a <= b <==> 0 <= b - a
-ve1 .<= ve2 = sIsNonNegative $ sSum $ fromOccurListT [(ve1,-1),(ve2,1)]
+ve1 .<= ve2 = withExprConstraints ve1 $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,-1),(ve2,1)]
 
 infix 4 .<=
 
 -- | Apply operator GE (>=) on the provided value expression.
 -- Preconditions are /not/ checked.
-(.>=) :: ExprNum t => Expr t -> Expr t -> Expr Bool
+(.>=) :: Num t => Expr t -> Expr t -> Expr Bool
 -- a >= b <==> a - b >= 0
-ve1 .>= ve2 = sIsNonNegative $ sSum $ fromOccurListT [(ve1,1),(ve2,-1)]
+ve1 .>= ve2 = withExprConstraints ve1 $ sIsNonNegative $ sSum $ fromOccurListT [(ve1,1),(ve2,-1)]
 
 infix 4 .>=
