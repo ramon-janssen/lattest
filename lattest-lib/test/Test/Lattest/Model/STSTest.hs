@@ -33,6 +33,7 @@ module Test.Lattest.Model.STSTest (
     testPrintSeqCompPrunedSTSInit1,
     testSeqCompPrunedRules,
     testSelfSeqCompPrunedRules,
+    testSeqCompPrunedLoadedSTS,
     testSequentiallyAtNonSinkLocation,
     testSequentiallyAtSameAction,
     testPrintSelfSeqComposedSTS,
@@ -74,7 +75,7 @@ import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSTSTester, Verdict(..))
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,AutSyntax,transRel,reachable)
-import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, Pruned(..))
+import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, sequentiallyPruned, selfSequentiallyPruned, Pruned(..))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
@@ -83,6 +84,9 @@ import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
+import Lattest.Util.STSJSONParser(stsListFromJSONFile)
+import Test.Lattest.Util.STSJSONWriterTest(assertWrittenJSONMatches)
+import Data.Tuple(swap)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
@@ -1450,105 +1454,36 @@ prunedPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
 (stsPruningTreeComposed, prunedPruningTree) = sequentiallyAtPruned (interpretSTS stsPruningTree stsExampleInitAssign) [3, 6, 9, 10] stsPruningSuffix
 
 testSeqCompPrunedRules :: Test
-testSeqCompPrunedRules = TestCase $ assertBool failureMessage (expected == actual)
+testSeqCompPrunedRules = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf stsPruningTreeComposed)
+    assertEqual "\nlocations " expectedLocations (reachable $ syntacticAutomaton stsPruningTreeComposed)
+    assertEqual "\npruned " expectedPruned prunedPruningTree
+    _ <- assertAfter "after c: " stsPruningTreeComposed (GateValue (Out "c") [Some $ CInt 0]) forbidden
+    -- branch a? b? c!: removed entirely
+    _ <- assertAfter "after a: " stsPruningTreeComposed (GateValue (In "a") [Some $ CInt 0]) underspecified
+    -- branch d? e! f?: kept until 5, which is not a merge location
+    intrpD <- assertAfter "after d: " stsPruningTreeComposed (GateValue (In "d") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 4) 0)
+    intrpE <- assertAfter "after d e: " intrpD (GateValue (Out "e") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 5) 0)
+    _ <- assertAfter "after d e f: " intrpE (GateValue (In "f") [Some $ CInt 0]) underspecified
+    _ <- assertAfter "after d e k: " intrpE (GateValue (In "k") [Some $ CInt 0]) underspecified
+    -- branch g? h! i?: kept, but the unsatisfiable output h! is still forbidden
+    intrpG <- assertAfter "after g: " stsPruningTreeComposed (GateValue (In "g") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 7) 0)
+    _ <- assertAfter "after g h: " intrpG (GateValue (Out "h") [Some $ CInt 0]) forbidden
+    -- branch j?: kept and merged at 10, so behavior transitions to stsPruningSuffix
+    intrpJ <- assertAfter "after j: " stsPruningTreeComposed (GateValue (In "j") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 10) 0)
+    intrpK <- assertAfter "after j k: " intrpJ (GateValue (In "k") [Some $ CInt 0]) (getSTSIntrpStateEither (Right 1) 0)
+    _ <- assertAfter "after j k k: " intrpK (GateValue (In "k") [Some $ CInt 0]) underspecified
+    return ()
     where
-    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp stsPruningTreeComposed ++ "\n" ++ show prunedPruningTree ++ "\n"
-    expected = [QQ.r|
-current state configuration: (Left 0,{x:=0})
-initial location configuration: Left 0
-locations: Left 0, Left 4, Left 5, Left 7, Left 8, Left 9, Left 10, Right 1
-transitions:
-Left 0  ――?"a" [p:Int]⟶  ⊤
-Left 0  ――?"b" [p:Int]⟶  ⊤
-Left 0  ――?"d" [p:Int]⟶  (True, {},Left 4)
-Left 0  ――?"f" [p:Int]⟶  ⊤
-Left 0  ――?"g" [p:Int]⟶  (True, {},Left 7)
-Left 0  ――?"i" [p:Int]⟶  ⊤
-Left 0  ――?"j" [p:Int]⟶  (True, {},Left 10)
-Left 0  ――?"k" [p:Int]⟶  ⊤
-Left 0  ――!"c" [p:Int]⟶  ⊥
-Left 0  ――!"e" [p:Int]⟶  ⊥
-Left 0  ――!"h" [p:Int]⟶  ⊥
-Left 4  ――?"a" [p:Int]⟶  ⊤
-Left 4  ――?"b" [p:Int]⟶  ⊤
-Left 4  ――?"d" [p:Int]⟶  ⊤
-Left 4  ――?"f" [p:Int]⟶  ⊤
-Left 4  ――?"g" [p:Int]⟶  ⊤
-Left 4  ――?"i" [p:Int]⟶  ⊤
-Left 4  ――?"j" [p:Int]⟶  ⊤
-Left 4  ――?"k" [p:Int]⟶  ⊤
-Left 4  ――!"c" [p:Int]⟶  ⊥
-Left 4  ――!"e" [p:Int]⟶  (True, {},Left 5)
-Left 4  ――!"h" [p:Int]⟶  ⊥
-Left 5  ――?"a" [p:Int]⟶  ⊤
-Left 5  ――?"b" [p:Int]⟶  ⊤
-Left 5  ――?"d" [p:Int]⟶  ⊤
-Left 5  ――?"f" [p:Int]⟶  ⊤
-Left 5  ――?"g" [p:Int]⟶  ⊤
-Left 5  ――?"i" [p:Int]⟶  ⊤
-Left 5  ――?"j" [p:Int]⟶  ⊤
-Left 5  ――?"k" [p:Int]⟶  ⊤
-Left 5  ――!"c" [p:Int]⟶  ⊥
-Left 5  ――!"e" [p:Int]⟶  ⊥
-Left 5  ――!"h" [p:Int]⟶  ⊥
-Left 7  ――?"a" [p:Int]⟶  ⊤
-Left 7  ――?"b" [p:Int]⟶  ⊤
-Left 7  ――?"d" [p:Int]⟶  ⊤
-Left 7  ――?"f" [p:Int]⟶  ⊤
-Left 7  ――?"g" [p:Int]⟶  ⊤
-Left 7  ――?"i" [p:Int]⟶  ⊤
-Left 7  ――?"j" [p:Int]⟶  ⊤
-Left 7  ――?"k" [p:Int]⟶  ⊤
-Left 7  ――!"c" [p:Int]⟶  ⊥
-Left 7  ――!"e" [p:Int]⟶  ⊥
-Left 7  ――!"h" [p:Int]⟶  ((x) = (1), {},Left 8)
-Left 8  ――?"a" [p:Int]⟶  ⊤
-Left 8  ――?"b" [p:Int]⟶  ⊤
-Left 8  ――?"d" [p:Int]⟶  ⊤
-Left 8  ――?"f" [p:Int]⟶  ⊤
-Left 8  ――?"g" [p:Int]⟶  ⊤
-Left 8  ――?"i" [p:Int]⟶  (True, {},Left 9)
-Left 8  ――?"j" [p:Int]⟶  ⊤
-Left 8  ――?"k" [p:Int]⟶  ⊤
-Left 8  ――!"c" [p:Int]⟶  ⊥
-Left 8  ――!"e" [p:Int]⟶  ⊥
-Left 8  ――!"h" [p:Int]⟶  ⊥
-Left 9  ――?"a" [p:Int]⟶  ⊤
-Left 9  ――?"b" [p:Int]⟶  ⊤
-Left 9  ――?"d" [p:Int]⟶  ⊤
-Left 9  ――?"f" [p:Int]⟶  ⊤
-Left 9  ――?"g" [p:Int]⟶  ⊤
-Left 9  ――?"i" [p:Int]⟶  ⊤
-Left 9  ――?"j" [p:Int]⟶  ⊤
-Left 9  ――?"k" [p:Int]⟶  ⊤
-Left 9  ――!"c" [p:Int]⟶  ⊥
-Left 9  ――!"e" [p:Int]⟶  ⊥
-Left 9  ――!"h" [p:Int]⟶  ⊥
-Left 10  ――?"a" [p:Int]⟶  ⊤
-Left 10  ――?"b" [p:Int]⟶  ⊤
-Left 10  ――?"d" [p:Int]⟶  ⊤
-Left 10  ――?"f" [p:Int]⟶  ⊤
-Left 10  ――?"g" [p:Int]⟶  ⊤
-Left 10  ――?"i" [p:Int]⟶  ⊤
-Left 10  ――?"j" [p:Int]⟶  ⊤
-Left 10  ――?"k" [p:Int]⟶  (True, {},Right 1)
-Left 10  ――!"c" [p:Int]⟶  ⊥
-Left 10  ――!"e" [p:Int]⟶  ⊥
-Left 10  ――!"h" [p:Int]⟶  ⊥
-Right 1  ――?"a" [p:Int]⟶  ⊤
-Right 1  ――?"b" [p:Int]⟶  ⊤
-Right 1  ――?"d" [p:Int]⟶  ⊤
-Right 1  ――?"f" [p:Int]⟶  ⊤
-Right 1  ――?"g" [p:Int]⟶  ⊤
-Right 1  ――?"i" [p:Int]⟶  ⊤
-Right 1  ――?"j" [p:Int]⟶  ⊤
-Right 1  ――?"k" [p:Int]⟶  ⊤
-Right 1  ――!"c" [p:Int]⟶  ⊥
-Right 1  ――!"e" [p:Int]⟶  ⊥
-Right 1  ――!"h" [p:Int]⟶  ⊥
-[PrunedLocation 1,PrunedLocation 2,PrunedLocation 3,PrunedLocation 6,UnsatisfiableOutput 7 !"h" [p:Int] [9]]
-|]
+    -- the locations after the initial location; 8 and 9 are kept, although they are only reachable via the unsatisfiable output h!
+    expectedLocations = Set.fromList $ (Left <$> [4, 5, 7, 8, 9, 10]) ++ [Right 1]
+    expectedPruned =
+        [ PrunedLocation 1
+        , PrunedLocation 2
+        , PrunedLocation 3
+        , PrunedLocation 6
+        , UnsatisfiableOutput 7 (outGate "h") [9]
+        ]
 
 {- |
     A tree with a branch for every rule of `selfSequentiallyAtPruned`. There is no initial valuation, so x starts with an arbitrary
@@ -1556,7 +1491,7 @@ Right 1  ――!"h" [p:Int]⟶  ⊥
 
     0 ―a? [x = 1]⟶ 1 ―c!⟶ 2
     0 ―b? [x = 2]⟶ 3 ―d! {x := 1}⟶ 4
-                    3 ―e! [x = 1]⟶ 5
+                   3 ―e! [x = 1]⟶ 5
     0 ―g?⟶ 6
 -}
 stsSelfPruningTree :: IOSTS FreeLattice Integer String String
@@ -1578,11 +1513,6 @@ stsSelfPruningTree =
 {- |
     Which of the initial switches a?, b? and g? are copied, when merging at 2, 4, 5 and 6:
 
-    * 2:  x = 1 on the path to it, so a? and g? are copied and b? is pruned
-    * 4:  x = 2 on the path to it, but then x := 1, so a? and g? are copied and b? is pruned
-    * 5:  not reachable, since x = 2 and x = 1 on the path to it, so a?, b? and g? are all pruned
-    * 6:  no guards on the path to it, so a?, b? and g? are all copied
-
     The locations and switches of the tree itself are left as-is, including the unsatisfiable e! and location 5 after it.
 -}
 stsSelfPruningTreeComposed :: IOSTS FreeLattice Integer String String
@@ -1590,59 +1520,35 @@ prunedSelfPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
 (stsSelfPruningTreeComposed, prunedSelfPruningTree) = selfSequentiallyAtPruned (getVariables stsExampleInitAssign) stsSelfPruningTree [2, 4, 5, 6]
 
 testSelfSeqCompPrunedRules :: Test
-testSelfSeqCompPrunedRules = TestCase $ assertBool failureMessage (expected == actual)
-    where
-    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
-    actual = "\n" ++ prettyPrintIntrp (interpretSTS stsSelfPruningTreeComposed stsExampleInitAssign) ++ "\n" ++ show prunedSelfPruningTree ++ "\n"
-    expected = [QQ.r|
-current state configuration: (0,{x:=0})
-initial location configuration: 0
-locations: 0, 1, 2, 3, 4, 5, 6
-transitions:
-0  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
-0  ――?"b" [p:Int]⟶  ((x) = (2), {},3)
-0  ――?"g" [p:Int]⟶  (True, {},6)
-0  ――!"c" [p:Int]⟶  ⊥
-0  ――!"d" [p:Int]⟶  ⊥
-0  ――!"e" [p:Int]⟶  ⊥
-1  ――?"a" [p:Int]⟶  ⊤
-1  ――?"b" [p:Int]⟶  ⊤
-1  ――?"g" [p:Int]⟶  ⊤
-1  ――!"c" [p:Int]⟶  (True, {},2)
-1  ――!"d" [p:Int]⟶  ⊥
-1  ――!"e" [p:Int]⟶  ⊥
-2  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
-2  ――?"b" [p:Int]⟶  ⊤
-2  ――?"g" [p:Int]⟶  (True, {},6)
-2  ――!"c" [p:Int]⟶  ⊥
-2  ――!"d" [p:Int]⟶  ⊥
-2  ――!"e" [p:Int]⟶  ⊥
-3  ――?"a" [p:Int]⟶  ⊤
-3  ――?"b" [p:Int]⟶  ⊤
-3  ――?"g" [p:Int]⟶  ⊤
-3  ――!"c" [p:Int]⟶  ⊥
-3  ――!"d" [p:Int]⟶  (True, {x:=1},4)
-3  ――!"e" [p:Int]⟶  ((x) = (1), {},5)
-4  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
-4  ――?"b" [p:Int]⟶  ⊤
-4  ――?"g" [p:Int]⟶  (True, {},6)
-4  ――!"c" [p:Int]⟶  ⊥
-4  ――!"d" [p:Int]⟶  ⊥
-4  ――!"e" [p:Int]⟶  ⊥
-5  ――?"a" [p:Int]⟶  ⊤
-5  ――?"b" [p:Int]⟶  ⊤
-5  ――?"g" [p:Int]⟶  ⊤
-5  ――!"c" [p:Int]⟶  ⊥
-5  ――!"d" [p:Int]⟶  ⊥
-5  ――!"e" [p:Int]⟶  ⊥
-6  ――?"a" [p:Int]⟶  ((x) = (1), {},1)
-6  ――?"b" [p:Int]⟶  ((x) = (2), {},3)
-6  ――?"g" [p:Int]⟶  (True, {},6)
-6  ――!"c" [p:Int]⟶  ⊥
-6  ――!"d" [p:Int]⟶  ⊥
-6  ――!"e" [p:Int]⟶  ⊥
-[PrunedSwitch 2 ?"b" [p:Int] 3,PrunedSwitch 4 ?"b" [p:Int] 3,PrunedSwitch 5 ?"a" [p:Int] 1,PrunedSwitch 5 ?"b" [p:Int] 3,PrunedSwitch 5 ?"g" [p:Int] 6]
-|]
+testSelfSeqCompPrunedRules = TestCase $ do
+    assertEqual "\npruned " expectedPruned prunedSelfPruningTree
+    expectedPruned =
+        [ PrunedSwitch 2 (inGate "b") (ordReturn 3)     -- The only possible path to 2 is a? c!. a? requires x == 1 so b? is unfeasible
+        , PrunedSwitch 4 (inGate "b") (ordReturn 3)     -- The path to 4 is b? d!. d! assigns x := 1 so b? is unfeasible
+        -- The path to 5 is b? e!. e was already unfeasible but we keep it as it is an output. However, the subsequent switches are removed.
+        , PrunedSwitch 5 (inGate "a") (ordReturn 1)
+        , PrunedSwitch 5 (inGate "b") (ordReturn 3)
+        , PrunedSwitch 5 (inGate "g") (ordReturn 6)
+        -- No switches from 6 are pruned since its path g? has no guard.
+        ]
+
+{- |
+    Load the four STSs of examples/example-load-multiple-sts-compose and compose them as meant for Pickles.
+-}
+testSeqCompPrunedLoadedSTS :: Test
+testSeqCompPrunedLoadedSTS = TestCase $ do
+    result <- stsListFromJSONFile "./test/Test/Lattest/Util/STSJSONExamples/example_load_multiple_sts_compose.json"
+    stss <- either (\err -> assertFailure ("expected successful parse, got: " ++ err)) return result
+    let initVal = case stss of
+            [] -> error "no STSs loaded"
+            (_, _, _, _, val) : _ -> val
+        checked = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _, _) <- stss ]
+        conjunctedSTS = conjunctionAll checked
+        (seqSelfComposed, _) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
+        (seqComposed, _) = interpretSTS conjunctedSTS initVal `sequentiallyPruned` seqSelfComposed
+        guardNames = Map.fromList $ map swap $ Map.toList $ Map.unions [ gs | (_, _, gs, _, _) <- stss ]
+        assignmentNames = Map.fromList $ map swap $ Map.toList $ Map.unions [ as | (_, _, _, as, _) <- stss ]
+    assertWrittenJSONMatches "seq_comp_pruned_loaded_expected.json" "stscomposed" (syntacticAutomaton seqComposed) guardNames assignmentNames initVal
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test
