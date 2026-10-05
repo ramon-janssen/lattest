@@ -22,6 +22,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 {- HLINT ignore "Use typeRep" -}
 
 module Lattest.Model.Symbolic.Internal.ExprDefs
@@ -29,7 +30,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , Expr(..)       -- for local usage only!
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CFloat, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
+, Constant(Constant, CInt, CFloat, CRational, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
 , constType
 , constValue
 , ConstType(..)
@@ -41,9 +42,11 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , freeVars'
 , ExprConstraints
 , withExprConstraints
+, withExprNumConstraint
 , int
 , unit
 , float
+, rational
 , bool
 , char
 , string
@@ -76,7 +79,7 @@ import Data.Some (Some(..))
 import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
-import Data.SBV (SymVal(..), RCSet (..))
+import Data.SBV (SymVal(..), RCSet (..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&))
 import Data.EqP (EqP (..))
 import Data.Maybe (isJust, maybeToList)
 import Data.Constraint.Extras (Has (..))
@@ -92,6 +95,7 @@ import Data.List (stripPrefix)
 data Type a where
   IntType :: Type Integer
   FloatType :: Type Double
+  RationalType :: Type Rational
   BoolType :: Type Bool
   CharType :: Type Char
   UnitType :: Type ()
@@ -107,6 +111,7 @@ instance EqP Type where
 instance GEq Type where
   geq IntType IntType = Just Refl
   geq FloatType FloatType = Just Refl
+  geq RationalType RationalType = Just Refl
   geq BoolType BoolType = Just Refl
   geq CharType CharType = Just Refl
   geq UnitType UnitType = Just Refl
@@ -157,6 +162,7 @@ instance GCompare Type where
       typeTag (SetType _)    = 6
       typeTag (TupleType _ _) = 7
       typeTag (SumType _ _)   = 8
+      typeTag RationalType = 9
 
 instance Show (Type a) where
     show IntType = "Int"
@@ -164,6 +170,7 @@ instance Show (Type a) where
     show BoolType = "Bool"
     show CharType = "Char"
     show FloatType = "Float"
+    show RationalType = "Rational"
     show (ListType t) = "[" ++ show t ++ "]"
     show (SetType t) = "{" ++ show t ++ "}"
     show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
@@ -190,6 +197,9 @@ instance GRead Type where
          ]
       ++ [ (Church.mkSome FloatType, rest)
          | rest <- mylex "Float" s
+         ]
+      ++ [ (Church.mkSome RationalType, rest)
+         | rest <- mylex "Rational" s
          ]
       ++ [ (Church.mkSome BoolType, rest)
          | rest <- mylex "Bool" s
@@ -277,6 +287,7 @@ inhabitants :: forall e. Type e -> Maybe Int
 inhabitants = \case
   IntType -> Nothing
   FloatType -> Nothing
+  RationalType -> Nothing
   BoolType -> Just 2
   CharType -> Nothing -- maxBound - minBound + 1 = 1114112, I think we'd have overflow issues (in e.g. sums/products of chars) more often than that we'd have such large complement sets
   ListType _ -> Nothing
@@ -303,12 +314,20 @@ readSet ('{':s) = go [] s
 readSet _ = []
 
 withExprConstraints :: Has ExprType f => f a -> (ExprConstraints a => r) -> r
-withExprConstraints f k = let t = has @ExprType f (typeOf' f) in has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t k
+withExprConstraints f k = let t = has @ExprType f (typeOf' f) in has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t $ hasOrdSymbolic t k
+
+withExprNumConstraint :: (Has ExprType f, Num a) => f a -> (Num (SBV a) => r) -> r
+withExprNumConstraint f k = case has @ExprType f (typeOf' f) of
+  IntType -> k
+  FloatType -> k
+  RationalType -> k
+  _ -> error "impossible Num instance"
 
 instance Has ExprType Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -322,6 +341,7 @@ instance Has Eq Type where
     IntType -> k
     UnitType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Eq t' k
@@ -334,6 +354,7 @@ instance Has Ord Type where
     IntType -> k
     UnitType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Ord t' k
@@ -341,10 +362,28 @@ instance Has Ord Type where
     TupleType a b -> has @Ord a $ has @Ord b k
     SumType a b -> has @Ord a $ has @Ord b k
 
+hasOrdSymbolic :: Type a -> (OrdSymbolic (SBV a) => r) -> r
+hasOrdSymbolic t k = case t of
+  IntType -> k
+  FloatType -> k
+  RationalType -> k
+  CharType -> k
+  UnitType -> k
+  BoolType -> k
+  ListType t' -> has @SymVal t' k
+  SetType _ -> error "TODO: implement ordsymbolic for sets (or delete RCSets)"
+  TupleType a b -> has @SymVal a $ has @SymVal b k
+  SumType a b -> has @SymVal a $ has @SymVal b $ hasOrdSymbolic a $ hasOrdSymbolic b k
+instance OrdSymbolic (SBV ()) where
+  (.<) _ _ = sFalse
+instance OrdSymbolic SBool where
+  x .< y = y .&& sNot x
+
 instance Has Show Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -357,6 +396,7 @@ instance Has SymVal Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -369,6 +409,7 @@ instance Has Read Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     UnitType -> k
     BoolType -> k
     CharType -> k
@@ -382,6 +423,7 @@ instance Has Data Type where
     IntType -> k
     UnitType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Data t' k
@@ -402,6 +444,9 @@ instance ExprType Bool where
 instance ExprType Double where
     typeOf _ = FloatType
     typeOf' _ = FloatType
+instance ExprType Rational where
+    typeOf _ = RationalType
+    typeOf' _ = RationalType
 instance ExprType Char where
     typeOf _ = CharType
     typeOf' _ = CharType
@@ -444,8 +489,6 @@ instance Has (ComposeC Show Expr) Variable where
   has _ k = k
 instance Has ExprType Variable where
   has v = has @ExprType (varType v)
--- instance Has ExprType Expr where
---   has e = has @ExprType (view e) -- TODO: Unclear during merge
 
 instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
@@ -457,7 +500,7 @@ deriving instance Ord a => Ord (Constant a)
 deriving instance Show a => Show (Constant a)
 deriving instance (Read a, ExprType a) => Read (Constant a)
 
-{-# COMPLETE CBool, CUnit, CInt, CFloat, CChar, CList, CTuple, CSet, CSum #-}
+{-# COMPLETE CBool, CUnit, CInt, CFloat, CRational, CChar, CList, CTuple, CSet, CSum #-}
 pattern CBool :: () => (a ~ Bool) => a -> Constant a
 pattern CBool b = Constant BoolType b
 pattern CUnit :: () => (a ~ ()) => Constant a
@@ -466,6 +509,8 @@ pattern CInt :: () => (a ~ Integer) => a -> Constant a
 pattern CInt i = Constant IntType i
 pattern CFloat :: () => (a ~ Double) => a -> Constant a
 pattern CFloat f = Constant FloatType f
+pattern CRational :: () => (a ~ Rational) => a -> Constant a
+pattern CRational f = Constant RationalType f
 pattern CChar :: () => (a ~ Char) => a -> Constant a
 pattern CChar c = Constant CharType c
 pattern CString :: () => (a ~ String) => a -> Constant a
@@ -487,6 +532,8 @@ bool :: Bool -> Some Constant
 bool b = Some (CBool b)
 float :: Double -> Some Constant
 float f = Some (CFloat f)
+rational :: Rational -> Some Constant
+rational f = Some (CRational f)
 char :: Char -> Some Constant
 char c = Some (CChar c)
 string :: String -> Some Constant
@@ -536,6 +583,7 @@ instance JSON.FromJSON (Some Constant) where
             Some BoolType -> parseBool $ lkup "value" m
             Some IntType -> parseInt $ lkup "value" m
             Some FloatType -> parseFloat $ lkup "value" m
+            Some RationalType -> parseRational $ lkup "value" m
             Some UnitType -> parseUnit $ lkup "value" m
             Some CharType -> parseChar $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
@@ -547,6 +595,7 @@ instance JSON.FromJSON (Some Constant) where
           "char" -> pure $ Some CharType
           "int" -> pure $ Some IntType
           "float" -> pure $ Some FloatType
+          "rational" -> pure $ Some RationalType
           "bool" -> pure $ Some BoolType
           "()" -> pure $ Some UnitType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
@@ -583,7 +632,9 @@ instance JSON.FromJSON (Some Constant) where
          = return $ char c
         parseChar _ = fail "type indicates char, but value is not of type char"
         parseFloat (JSON.Number (DS.toRealFloat -> f)) = return $ float f
-        parseFloat _ = fail "type indicates float, but value is not of type float"
+        parseFloat _ = fail "type indicates float, but value is not a number"
+        parseRational (JSON.Number f) = return $ rational $ toRational f
+        parseRational _ = fail "type indicates rational, but value is not a number"
         parseList t (JSON.Array xs) = has @ExprType t list <$> mapM (unSome t <=< JSON.parseJSON @(Some Constant)) (Vec.toList xs)
           where
             unSome :: Type a -> Some Constant -> JSON.Parser a
@@ -642,6 +693,7 @@ instance JSON.ToJSON (Some Constant) where
       CUnit -> JSON.Object $ JSON.insert "type" "()" $ JSON.insert "value" (JSON.String $ Text.pack "()") JSON.empty
       CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
       CFloat f -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
+      CRational f -> JSON.Object $ JSON.insert "type" "rational" $ JSON.insert "value" (JSON.Number $ fst $ DS.fromRationalRepetendUnlimited f) JSON.empty
       CChar c -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack [c]) JSON.empty
       CList xs t -> JSON.Object
         $ JSON.insert "type" (fromString . show $ ListType t)
@@ -678,6 +730,7 @@ instance Has ConstType Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k
@@ -696,13 +749,10 @@ data ExprView t where
     Equal :: ExprConstraints t => {eqType :: Type t, left :: ExprView t, right :: ExprView t} -> ExprView Bool
     Divide :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
     Modulo :: {dividend2 :: ExprView Integer, divisor2 :: ExprView Integer} -> ExprView Integer
-    DivideFloat :: {dividendF :: ExprView Double, divisorF :: ExprView Double} -> ExprView Double
-    Sum :: FreeSum (ExprView Integer) -> ExprView Integer
-    SumFloat :: FreeSum (ExprView Double) -> ExprView Double
-    Product :: FreeProduct (ExprView Integer) -> ExprView Integer
-    ProductFloat :: FreeProduct (ExprView Double) -> ExprView Double
-    GezInt :: ExprView Integer -> ExprView Bool
-    GezFloat :: ExprView Double -> ExprView Bool
+    DivideFloat :: Fractional a => {dividendF :: ExprView a, divisorF :: ExprView a} -> ExprView a
+    Sum :: Num a => Type a -> FreeSum (ExprView a) -> ExprView a
+    Product :: Num a => Type a -> FreeProduct (ExprView a) -> ExprView a
+    Gez :: Num a => ExprView a -> ExprView Bool
     Not :: ExprView Bool -> ExprView Bool
     And :: Set (ExprView Bool) -> ExprView Bool
     Concat :: ExprConstraints a => ExprView [[a]] -> ExprView [a]
@@ -738,7 +788,10 @@ data ExprView t where
     Either :: (ExprConstraints a, ExprConstraints b, ExprConstraints x) => Variable a -> Variable b -> ExprView x -> ExprView x -> ExprView (Either a b) -> ExprView x
     -- NOTE: when adding more fields, check the Eq instance
 
-type ExprConstraints t = (Data t, Eq t, Ord t, Show t, ExprType t, SymVal t, Eq t, ConstType t, Read t)
+type ExprConstraints t = (Data t, Eq t, Ord t, OrdSymbolic (SBV t), Show t, ExprType t, SymVal t, Eq t, ConstType t, Read t)
+
+viewType :: ExprView a -> Type a
+viewType v = withExprConstraints v $ typeOf' v
 
 instance Eq (ExprView t) where
   Var x == Var y = x == y
@@ -749,12 +802,10 @@ instance Eq (ExprView t) where
   Divide a b == Divide x y = a == x && b == y
   Modulo a b == Modulo x y = a == x && b == y
   DivideFloat a b == DivideFloat x y = a == x && b == y
-  Sum x == Sum y = x == y
-  SumFloat x == SumFloat y = x == y
-  Product x == Product y = x == y
-  ProductFloat x == ProductFloat y = x == y
-  GezInt x == GezInt y = x == y
-  GezFloat x == GezFloat y = x == y
+  Sum _ x == Sum _ y = x == y
+  Product _ x == Product _ y = x == y
+  Gez x == Gez y
+    | Just Refl <- viewType x `geq` viewType y = x == y
   Not x == Not y = x == y
   And x == And y = x == y
   Concat x == Concat y = x == y
@@ -820,18 +871,15 @@ instance Ord (ExprView t) where
         compare (a, b) (x, y)
       (DivideFloat a b, DivideFloat x y) ->
         compare (a, b) (x, y)
-      (Sum a, Sum b) ->
-        compare a b
-      (SumFloat a, SumFloat b) ->
-        compare a b
-      (Product a, Product b) ->
-        compare a b
-      (ProductFloat a, ProductFloat b) ->
-        compare a b
-      (GezInt a, GezInt b) ->
-        compare a b
-      (GezFloat a, GezFloat b) ->
-        compare a b
+      (Sum _ x, Sum _ y) ->
+        compare x y
+      (Product _ x, Product _ y) ->
+        compare x y
+      (Gez a, Gez b) ->
+        case gcompare (viewType a) (viewType b) of
+          GLT -> LT
+          GGT -> GT
+          GEQ -> compare a b
       (Not a, Not b) ->
         compare a b
       (And a, And b) ->
@@ -937,7 +985,7 @@ instance Ord (ExprView t) where
         Sum{}     -> 6
         Product{} -> 7
         Length{}  -> 8
-        GezInt{}  -> 9
+        Gez{}     -> 9
         Not{}     -> 10
         And{}     -> 11
         Concat{}  -> 12
@@ -947,9 +995,6 @@ instance Ord (ExprView t) where
         Take{}    -> 16
         Drop{}    -> 17
         DivideFloat{} -> 18
-        SumFloat{} -> 19
-        ProductFloat{} -> 20
-        GezFloat{} -> 21
         Filter{} -> 22
         ELeft{} -> 23
         ERight{} -> 24
@@ -974,26 +1019,17 @@ instance Show (ExprView t) where
   show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
   show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
   show (DivideFloat e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
-  show (Sum es) | es == mempty = "∑∅"
-  show (Sum es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
+  show (Sum _ es) | es == mempty = "∑∅"
+  show (Sum _ es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
       where
       showSumTerm (-1)     t = "-" ++ t
       showSumTerm 1 t = t
       showSumTerm n t = show n ++ "⋅" ++ t
-  show (Product es) | es == mempty = "∏∅"
-  show (Product es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
-  show (SumFloat es) | es == mempty = "∑∅"
-  show (SumFloat es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
-      where
-      showSumTerm (-1)     t = "-" ++ t
-      showSumTerm 1 t = t
-      showSumTerm n t = show n ++ "⋅" ++ t
-  show (ProductFloat es) | es == mempty = "∏∅"
-  show (ProductFloat es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es
+  show (Product _ es) | es == mempty = "∏∅"
+  show (Product _ es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
   show (Length _ e) = "length(" ++ show e ++ ")"
   show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-  show (GezInt e) = "(" ++ show e ++ ") ≥ 0"
-  show (GezFloat e) = "(" ++ show e ++ ") ≥ 0"
+  show (Gez e) = "(" ++ show e ++ ") ≥ 0"
   show (Not e) = "¬(" ++ show e ++ ")"
   show (And (Set.toList -> [])) = "⋀∅"
   show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
@@ -1029,15 +1065,12 @@ instance Has ExprType ExprView where
     Ite _ x _ -> has @ExprType x k
     Equal t _ _ -> has @ExprType t k
     Divide _ _ -> k
-    DivideFloat _ _ -> k
+    DivideFloat x _ -> has @ExprType x k
     Modulo _ _ -> k
-    Sum _ -> k
-    SumFloat _ -> k
-    Product _ -> k
-    ProductFloat _ -> k
+    Sum t _ -> has @ExprType t k
+    Product t _ -> has @ExprType t k
     Length t _ -> has @ExprType t k
-    GezInt _ -> k
-    GezFloat _ -> k
+    Gez _ -> k
     Not _ -> k
     And _ -> k
     Concat _ -> k
@@ -1097,14 +1130,11 @@ freeVars' (Ite cond e1 e2) = freeVars' cond ++ freeVars' e1 ++ freeVars' e2
 freeVars' (Divide e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (Modulo e1 e2) = freeVars' e1 ++ freeVars' e2
 freeVars' (DivideFloat e1 e2) = freeVars' e1 ++ freeVars' e2
-freeVars' (Sum (distinctTermsT -> es)) = concatMap freeVars' es
-freeVars' (SumFloat (distinctTermsT -> es)) = concatMap freeVars' es
-freeVars' (Product (distinctTermsT -> es)) = concatMap freeVars' es
-freeVars' (ProductFloat (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (Sum _ (distinctTermsT -> es)) = concatMap freeVars' es
+freeVars' (Product _ (distinctTermsT -> es)) = concatMap freeVars' es
 freeVars' (Length _ e) = freeVars' e
 freeVars' (Equal _ e1 e2) = freeVars' e1 ++ freeVars' e2
-freeVars' (GezInt e) = freeVars' e
-freeVars' (GezFloat e) = freeVars' e
+freeVars' (Gez e) = freeVars' e
 freeVars' (Not e) = freeVars' e
 freeVars' (And (Set.toList -> es)) = concatMap freeVars' es
 freeVars' (Concat es) = freeVars' es

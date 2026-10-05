@@ -45,7 +45,7 @@ import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprConstraints, withExprNumConstraint)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
@@ -121,6 +121,7 @@ addDeclaration (Variable nm ty) = do
     mkvar = \case
       IntType -> SBV.sInteger
       FloatType -> SBV.sDouble
+      RationalType -> SBV.sRational
       BoolType -> SBV.sBool
       UnitType -> SBV.sTuple
       CharType -> SBV.sChar
@@ -153,15 +154,15 @@ exprToSymbolic v = case v of
     Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
     exprview -> go exprview
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
-  DivideFloat x y -> (/)       <$> go x <*> go y
+  DivideFloat x y -> case typeOf' x of -- need to split because of overlapping instances in SBV
+    RationalType -> (/) <$> go x <*> go y
+    FloatType    -> (/) <$> go x <*> go y
+    _ -> error "impossible type"
   Modulo x y -> SBV.sMod  <$> go x <*> go y
-  Sum      s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i               + sY) <$> go x <*> symY) (pure $ literal 0) s
-  SumFloat s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
-  Product      p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
-  ProductFloat p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
+  Sum t s -> withExprNumConstraint t $ foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
+  Product t p -> withExprNumConstraint t $ foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   Length t x -> withExprConstraints t $ SBV.length <$> go x
-  GezInt   i -> (SBV..>= literal 0) <$> go i
-  GezFloat f -> (SBV..>= literal 0) <$> go f
+  Gez i -> withExprConstraints i $ (SBV..>= literal 0) <$> go i
   Not b -> SBV.sNot <$> go b
   And xs -> foldr (\b bs -> (SBV..&&) <$> go b <*> bs) (pure $ literal True) (Set.toList xs)
    -- The below version errors because SBV doesn't properly declare some variable
@@ -252,9 +253,10 @@ exprToSymbolic v = case v of
 -- We can't == doubles, and using symbolic equality (===) instead is also not ideal.
 -- We should add more decimal types (fixed point? reals?), rename FloatType,
 -- and add a note that equality on doubles is not exact.
-sortOfEqual :: Double -> ExprView a -> ExprView a -> ExprView Bool
+sortOfEqual :: (Fractional a => a) -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
+  RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
                   Expr (Equal a (First b l) (First b r)) .&& Expr (Equal b (Second a l) (Second a r))
   SumType a b -> withExprConstraints a $ withExprConstraints b $

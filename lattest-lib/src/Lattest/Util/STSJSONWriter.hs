@@ -64,6 +64,7 @@ instance Has JSON.ToJSON Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k

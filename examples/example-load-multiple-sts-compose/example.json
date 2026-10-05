@@ -26,7 +26,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -35,10 +35,10 @@
                 "type": "integer"
             },
             "critical-section-start": {
-                "type": "float"
+                "type": "rational"
             },
             "critical-section-end": {
-                "type": "float"
+                "type": "rational"
             }
         },
         "parameters": {
@@ -60,7 +60,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -233,7 +233,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "float": 1.0
+                            "rational": 1.0
                         }
                     },
                     "op": "&&",
@@ -249,7 +249,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "float": 3.0
+                            "rational": 3.0
                         }
                     }
                 }
@@ -361,7 +361,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -370,10 +370,10 @@
                 "type": "integer"
             },
             "critical-section-start": {
-                "type": "float"
+                "type": "rational"
             },
             "critical-section-end": {
-                "type": "float"
+                "type": "rational"
             }
         },
         "parameters": {
@@ -395,7 +395,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -570,7 +570,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "float": 1.0
+                            "rational": 1.0
                         }
                     },
                     "op": "&&",
@@ -586,7 +586,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "float": 3.0
+                            "rational": 3.0
                         }
                     }
                 }
@@ -698,7 +698,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -707,10 +707,10 @@
                 "type": "integer"
             },
             "critical-section-start": {
-                "type": "float"
+                "type": "rational"
             },
             "critical-section-end": {
-                "type": "float"
+                "type": "rational"
             }
         },
         "parameters": {
@@ -732,7 +732,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -907,7 +907,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "float": 1.0
+                            "rational": 1.0
                         }
                     },
                     "op": "&&",
@@ -923,7 +923,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "float": 3.0
+                            "rational": 3.0
                         }
                     }
                 }
@@ -1035,7 +1035,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
@@ -1044,10 +1044,10 @@
                 "type": "integer"
             },
             "critical-section-start": {
-                "type": "float"
+                "type": "rational"
             },
             "critical-section-end": {
-                "type": "float"
+                "type": "rational"
             }
         },
         "parameters": {
@@ -1069,7 +1069,7 @@
                             "type": "integer"
                         },
                         "length-position": {
-                            "type": "float"
+                            "type": "rational"
                         }
                     }
                 }
