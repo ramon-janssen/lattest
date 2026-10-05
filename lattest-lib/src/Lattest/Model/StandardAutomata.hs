@@ -100,6 +100,7 @@ import qualified Data.List as List
 import Lattest.Model.Symbolic.SolveSTS (SymIntrpState, indexExpr, indexVar)
 import Lattest.SMT (Some)
 import System.IO.Unsafe (unsafePerformIO)
+import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
 import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
 import qualified Debug.Trace
 
@@ -628,9 +629,21 @@ symStep locVars n pvar (STSLoc (tguard, tassign)) = (indexedGuard, pvar')
 atomsOf :: (Foldable m, Ord a) => m a -> [a]
 atomsOf = Set.toList . Set.fromList . toList
 
--- | Whether a guard is satisfiable, according to the SMT solver.
+-- | Whether a guard is satisfiable, according to the SMT solver. The outcome is cached per guard, so that a guard is only solved once.
 satisfiable :: SymGuard -> Bool
-satisfiable guard = Maybe.isJust $ unsafePerformIO $ solveGuard (toList $ freeVars guard) guard
+satisfiable guard = unsafePerformIO $ do
+    cache <- readIORef satisfiableCache
+    case Map.lookup guard cache of
+        Just isSat -> return isSat
+        Nothing -> do
+            isSat <- Maybe.isJust <$> solveGuard (toList $ freeVars guard) guard
+            atomicModifyIORef' satisfiableCache $ \c -> (Map.insert guard isSat c, ())
+            return isSat
+
+-- the guards solved so far by `satisfiable`, with their outcome
+satisfiableCache :: IORef (Map SymGuard Bool)
+satisfiableCache = unsafePerformIO $ newIORef Map.empty
+{-# NOINLINE satisfiableCache #-}
 
 -- | Check that the automaton is a tree: every location has at most one incoming switch, and the initial locations have none.
 -- Returns the given locations of the automaton, or throws an error mentioning the given function name.
