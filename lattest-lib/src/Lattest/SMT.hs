@@ -43,7 +43,7 @@ import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars')
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
@@ -182,38 +182,48 @@ exprToSymbolic v = case v of
 
   -- do-notation makes it easier to massage the functions into the forms that SBV expects
   -- we locally modify the environment to map our placeholder variables to the smtvar we get
-  Map (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
+  -- SBV requires the functions passed to map/filter/fold to be closed, so the free variables of
+  -- the function body are passed explicitly
+  Map v@(Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
     xs <- go x
     m <- get
-    let f' smtvar = flip evalState m $ do
-          modify $ Map.insert nm $ Some smtvar
-          go f
-    pure $ SBV.map f' xs
-  Filter (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
+    let f' env smtvar = evalState (go f) $ Map.insert nm (Some smtvar) env
+    pure $ case closureEnvFor m $ filter (/= Some v) (freeVars' f) of
+      Nothing -> SBV.map (f' m) xs
+      Just (ClosureEnv env inject) -> SBV.map (SBV.Closure env $ \e -> f' (inject e m)) xs
+  Filter v@(Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
     xs <- go x
     m <- get
-    let f' smtvar = flip evalState m $ do
-          modify $ Map.insert nm $ Some smtvar
-          go f
-    pure $ SBV.filter f' xs
-  Foldr (Variable na (ta :: Type a)) (Variable nb (_ :: Type b)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
-    xs <- go x
-    i' <- go i
-    m <- get
-    let f' :: SBV a -> SBV b -> SBV b
-        f' smtvara smtvarb = flip evalState m $ do
-          modify $ Map.insert na (Some smtvara) . Map.insert nb (Some smtvarb)
-          go f
-    pure $ SBV.foldr f' i' xs
-  Foldl (Variable nb (_ :: Type b)) (Variable na (ta :: Type a)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
+    let f' env smtvar = evalState (go f) $ Map.insert nm (Some smtvar) env
+    pure $ case closureEnvFor m $ filter (/= Some v) (freeVars' f) of
+      Nothing -> SBV.filter (f' m) xs
+      Just (ClosureEnv env inject) -> SBV.filter (SBV.Closure env $ \e -> f' (inject e m)) xs
+  -- SBV's own closure instances for foldr/foldl still capture the environment in the generated
+  -- function body, so for folds the environment is paired with every list element instead
+  Foldr va@(Variable na (ta :: Type a)) vb@(Variable nb (_ :: Type b)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
     xs <- go x
     i' <- go i
     m <- get
-    let f' :: SBV b -> SBV a -> SBV b
-        f' smtvara smtvarb = flip evalState m $ do
-          modify $ Map.insert na (Some smtvara) . Map.insert nb (Some smtvarb)
-          go f
-    pure $ SBV.foldl f' i' xs
+    let f' :: Map String (Some SBV) -> SBV a -> SBV b -> SBV b
+        f' env smtvara smtvarb = evalState (go f) $ Map.insert na (Some smtvara) $ Map.insert nb (Some smtvarb) env
+    pure $ case closureEnvFor m $ filter (`notElem` [Some va, Some vb]) (freeVars' f) of
+      Nothing -> SBV.foldr (f' m) i' xs
+      Just (ClosureEnv (env :: SBV env) inject) ->
+        let f'' :: SBV (env, a) -> SBV b -> SBV b
+            f'' ea = let (e, a) = SBV.untuple ea in f' (inject e m) a
+        in SBV.foldr f'' i' $ withClosureEnv env xs
+  Foldl vb@(Variable nb (_ :: Type b)) va@(Variable na (ta :: Type a)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
+    xs <- go x
+    i' <- go i
+    m <- get
+    let f' :: Map String (Some SBV) -> SBV b -> SBV a -> SBV b
+        f' env smtvarb smtvara = evalState (go f) $ Map.insert na (Some smtvara) $ Map.insert nb (Some smtvarb) env
+    pure $ case closureEnvFor m $ filter (`notElem` [Some va, Some vb]) (freeVars' f) of
+      Nothing -> SBV.foldl (f' m) i' xs
+      Just (ClosureEnv (env :: SBV env) inject) ->
+        let f'' :: SBV b -> SBV (env, a) -> SBV b
+            f'' b ea = let (e, a) = SBV.untuple ea in f' (inject e m) b a
+        in SBV.foldl f'' i' $ withClosureEnv env xs
   Either (Variable nml tl) (Variable nmr tr) l r e -> withExprConstraints tl $ withExprConstraints tr $ withExprConstraints e $ do
     ei <- go e
     m <- get
@@ -228,6 +238,35 @@ exprToSymbolic v = case v of
     go :: ExprConstraints a => ExprView a -> SMT' (SBV a)
     go = exprToSymbolic
 
+
+-- The free variables of a function body, packed into a single symbolic value, together with 
+-- a function that unpacks such a value back into the variable environment.
+data ClosureEnv where
+  ClosureEnv :: SymVal env => SBV env -> (SBV env -> Map String (Some SBV) -> Map String (Some SBV)) -> ClosureEnv
+
+-- Return Nothing if there are no free variables, in which case the function is already closed.
+-- The variables are sorted, so that the same function body always gets the same environment layout.
+closureEnvFor :: Map String (Some SBV) -> [Some Variable] -> Maybe ClosureEnv
+closureEnvFor m = pack . Set.toAscList . Set.fromList
+  where
+    pack :: [Some Variable] -> Maybe ClosureEnv
+    pack [] = Nothing
+    pack [Some v@(Variable nm ty)] = withExprConstraints ty $
+      Just $ ClosureEnv (lookupVar v) (\e -> Map.insert nm (Some e))
+    pack (Some v@(Variable nm (ty :: Type t)) : vs) = case pack vs of
+      Nothing -> pack [Some v]
+      Just (ClosureEnv (rest :: SBV r) inject) -> withExprConstraints ty $
+        Just $ ClosureEnv (SBV.tuple (lookupVar v, rest)) $ \e ->
+          let (x, r) = SBV.untuple e :: (SBV t, SBV r)
+          in Map.insert nm (Some x) . inject r
+    lookupVar :: Variable t -> SBV t
+    lookupVar (Variable nm _) = case m Map.!? nm of
+      Nothing -> error $ "closureEnvFor: variable " <> show nm <> " is not declared (declared: " <> show (Map.keys m) <> ")"
+      Just (Some (SBVI.SBV x)) -> SBVI.SBV x
+
+-- pair every element of a list with the closure environment
+withClosureEnv :: forall env a. (SymVal env, SymVal a) => SBV env -> SBV [a] -> SBV [(env, a)]
+withClosureEnv env = SBV.map $ SBV.Closure env (\e (x :: SBV a) -> SBV.tuple (e, x))
 
 checkSatToSolveProblem :: CheckSatResult -> SolvableProblem
 checkSatToSolveProblem = \case

@@ -38,6 +38,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , typeOf'
 , isConst
 , freeVars
+, freeVars'
 , ExprConstraints
 , withExprConstraints
 , int
