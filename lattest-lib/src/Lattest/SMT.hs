@@ -20,6 +20,8 @@ module Lattest.SMT (
   push,
   query,
   runSMT,
+  runSMTWith,
+  Solver(..),
   Some(..),
   RCSet(..),
   sortOfEqual
@@ -37,6 +39,8 @@ import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
 import Control.Monad((<=<))
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import System.Environment (lookupEnv)
 import Control.Monad.State (StateT (..), evalStateT, lift, modify, gets, MonadState (..), runState, State, evalState)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -77,8 +81,30 @@ smt'tosmt smt = StateT $ (\f x -> pure $ f x) $ runState smt
 smt'tosmtq :: SMT' a -> SMTQ a
 smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
+-- | The SMT solvers that can be used. The solver must be available on the PATH.
+data Solver = Z3 | CVC5
+     deriving (Eq,Ord,Read,Show)
+
 runSMT :: SMT a -> IO a
-runSMT = SBV.runSMT . flip evalStateT Map.empty
+runSMT = runSMTWith Z3
+
+-- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
+-- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
+runSMTWith :: Solver -> SMT a -> IO a
+runSMTWith solver smt = lookupEnv "LATTEST_SMT_DUMP" >>= \case
+    Nothing -> run config
+    Just file -> do
+      start <- getCurrentTime
+      appendFile file $ "** SMT call started at " <> show start <> "\n"
+      result <- run config { SBV.verbose = True, SBV.redirectVerbose = Just file }
+      end <- getCurrentTime
+      appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
+      return result
+  where
+    run cfg = SBV.runSMTWith cfg $ evalStateT smt Map.empty
+    config = case solver of
+      Z3 -> SBV.z3
+      CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound"] }
 
 query :: SMTQ a -> SMT a
 query = StateT . (\f m -> SBV.query (f m)) . runStateT
@@ -255,6 +281,8 @@ exprToSymbolic v = case v of
 -- and add a note that equality on doubles is not exact.
 sortOfEqual :: (Fractional a => a) -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
+  -- without any decimals inside, use actual equality
+  t | not (hasDecimals t) -> Equal t l r
   FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
@@ -277,6 +305,17 @@ sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   SetType _ -> error "TODO"
   -- For int, bool, char, and unit; just use equality
   _ -> Equal (typeOf' l) l r
+
+-- Whether values of the type contain floats or rationals, for which equality is approximated.
+hasDecimals :: Type a -> Bool
+hasDecimals = \case
+  FloatType -> True
+  RationalType -> True
+  ListType t -> hasDecimals t
+  SetType t -> hasDecimals t
+  TupleType a b -> hasDecimals a || hasDecimals b
+  SumType a b -> hasDecimals a || hasDecimals b
+  _ -> False
 
 -- The free variables of a function body, packed into a single symbolic value, together with 
 -- a function that unpacks such a value back into the variable environment.
@@ -357,5 +396,4 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       KTuple [k1, k2] -> kindToType k1 $ \t1 -> kindToType k2 $ \t2 -> k $ TupleType t1 t2
       KTuple [] -> k UnitType
       _ -> error $ "couldn't convert kind " <> show kind
-
 
