@@ -58,7 +58,9 @@ initValue valuation = JSON.toJSON m
     m = Map.fromList $ map (\(var :=> val) -> (varName var, JSON.toJSON val)) $ DMap.assocs $ runValuation valuation
 
 instance JSON.ToJSON (Val a) where
-  toJSON (Val a) = has @JSON.ToJSON (typeOf a) $ JSON.toJSON a
+  toJSON (Val a) = case typeOf a of
+    RationalType -> JSON.toJSON $ fromRational @Double a
+    _ -> has @JSON.ToJSON (typeOf a) $ JSON.toJSON a
 
 instance Has JSON.ToJSON Type where
   has t k = case t of
