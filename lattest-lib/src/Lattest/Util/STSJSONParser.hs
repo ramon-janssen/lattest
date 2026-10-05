@@ -44,6 +44,7 @@ import qualified Debug.Trace
 data UntypedExpr
     = UEBool Bool
     | UEFloat Double
+    | UERational Rational
     | UEInt  Integer
     | UEStr  String
     | UEVar  String  -- Variable reference, e.g. { "var": "name" }
@@ -71,34 +72,38 @@ instance JSON.FromJSON UntypedExpr where
             case mfloat of
               Just f -> pure (UEFloat f)
               Nothing -> do
-                mbool <- o JSON..:? "boolean"
-                case mbool of
-                  Just b -> pure (UEBool b)
+                mrat <- o JSON..:? "rational"
+                case mrat of
+                  Just r -> pure (UERational r)
                   Nothing -> do
-                    mstr <- o JSON..:? "string"
-                    case mstr of
-                      Just s -> pure (UEStr s)
+                    mbool <- o JSON..:? "boolean"
+                    case mbool of
+                      Just b -> pure (UEBool b)
                       Nothing -> do
-                        (op :: String) <- o JSON..: "op"
-                        case op of
-                          "neg" -> UEOp1 op <$> o JSON..: "rhs"
-                          "not" -> UEOp1 op <$> o JSON..: "rhs"
-                          "len" -> UEOp1 op <$> o JSON..: "rhs"
-                          "head" -> UEOp1 op <$> o JSON..: "rhs"
-                          "tail" -> UEOp1 op <$> o JSON..: "rhs"
-                          "concat" -> UEOp1 op <$> o JSON..: "rhs"
-                          "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
-                          "first" -> UEOp1 op <$> o JSON..: "rhs"
-                          "second" -> UEOp1 op <$> o JSON..: "rhs"
-                          "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                          "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                          "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
-                          "exists" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
-                          "cardinality" -> UEOp5 op <$> o JSON..: "lambda"  <*> o JSON..: "quantifier" <*> o JSON..: "expression"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
-                          "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                          "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                          "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
-                          _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+                        mstr <- o JSON..:? "string"
+                        case mstr of
+                          Just s -> pure (UEStr s)
+                          Nothing -> do
+                            (op :: String) <- o JSON..: "op"
+                            case op of
+                              "neg" -> UEOp1 op <$> o JSON..: "rhs"
+                              "not" -> UEOp1 op <$> o JSON..: "rhs"
+                              "len" -> UEOp1 op <$> o JSON..: "rhs"
+                              "head" -> UEOp1 op <$> o JSON..: "rhs"
+                              "tail" -> UEOp1 op <$> o JSON..: "rhs"
+                              "concat" -> UEOp1 op <$> o JSON..: "rhs"
+                              "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
+                              "first" -> UEOp1 op <$> o JSON..: "rhs"
+                              "second" -> UEOp1 op <$> o JSON..: "rhs"
+                              "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                              "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                              "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
+                              "exists" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
+                              "cardinality" -> UEOp5 op <$> o JSON..: "lambda"  <*> o JSON..: "quantifier" <*> o JSON..: "expression"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
+                              "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                              "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                              "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
+                              _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
   parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
@@ -159,6 +164,9 @@ toExpr varmap accmap = \case
       FloatType -> case o of
         "neg" -> Right $ FloatType :=> sNeg x
         _ -> Left $ "unknown op1 @Float: " <> o
+      RationalType -> case o of
+        "neg" -> Right $ RationalType :=> sNeg x
+        _ -> Left $ "unknown op1 @Rational: " <> o
       ListType t -> withExprConstraints t case o of
         "concat" -> case t of
           ListType t' -> withExprConstraints t' $ Right $ t :=> sConcat x
@@ -198,6 +206,16 @@ toExpr varmap accmap = \case
         ">=" -> Right $ BoolType :=> x .>= y
         _ -> op2 o (t :=> x) (t :=> y)
       FloatType -> case o of
+        "/" -> Right $ t :=> x ./ y
+        "+" -> Right $ t :=> x .+ y
+        "-" -> Right $ t :=> x .- y
+        "*" -> Right $ t :=> x .* y
+        "<" -> Right $ BoolType :=> x .< y
+        "<=" -> Right $ BoolType :=> x .<= y
+        ">" -> Right $ BoolType :=> x .> y
+        ">=" -> Right $ BoolType :=> x .>= y
+        _ -> op2 o (t :=> x) (t :=> y)
+      RationalType -> case o of
         "/" -> Right $ t :=> x ./ y
         "+" -> Right $ t :=> x .+ y
         "-" -> Right $ t :=> x .- y
@@ -334,6 +352,7 @@ instance JSON.FromJSON VarDefJson where
           "char"    -> k $ Some CharType
           "()"      -> k $ Some UnitType
           "float"   -> k $ Some FloatType
+          "rational"-> k $ Some RationalType
           "array"   -> do
             o' <- o JSON..: "elements"
             (Some t, a) <- go o'
@@ -543,6 +562,7 @@ buildValuation locVarCtx initVal =
         jsonToValue BoolType (JSON.Bool b) = Just b
         jsonToValue CharType (JSON.String (unpack -> [c])) = Just c
         jsonToValue FloatType (JSON.Number n) = Just (toRealFloat n)
+        jsonToValue RationalType (JSON.Number n) = Just (toRational n)
         jsonToValue (ListType CharType) (JSON.String s) = Just (unpack s)
         jsonToValue (ListType t) (JSON.Array a) = mapM (jsonToValue t) (toList a)
         jsonToValue _ _ = Nothing
