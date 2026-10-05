@@ -1522,7 +1522,8 @@ prunedSelfPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
 testSelfSeqCompPrunedRules :: Test
 testSelfSeqCompPrunedRules = TestCase $ do
     assertEqual "\npruned " expectedPruned prunedSelfPruningTree
-    expectedPruned =
+    where 
+    expectedPruned = 
         [ PrunedSwitch 2 (inGate "b") (ordReturn 3)     -- The only possible path to 2 is a? c!. a? requires x == 1 so b? is unfeasible
         , PrunedSwitch 4 (inGate "b") (ordReturn 3)     -- The path to 4 is b? d!. d! assigns x := 1 so b? is unfeasible
         -- The path to 5 is b? e!. e was already unfeasible but we keep it as it is an output. However, the subsequent switches are removed.
