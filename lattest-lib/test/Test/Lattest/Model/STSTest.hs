@@ -250,7 +250,7 @@ data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 -- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
 tExampleCorrect :: (Ord i, Ord o, IsString i, IsString o) => (ImpExampleLoc, Integer) -> Map.Map (GateValue (IOAct i o)) (ImpExampleLoc, Integer)
 tExampleCorrect (L0, x) = Map.fromList $
-    [(GateValue (In "water") [int p], (L1, x+p)) | p <- [1..10]] ++ [(GateValue (Out "coffee") [], (L2, 0)) | x > 15]
+    [(GateValue (In "water") [int p], (L1, x+p)) | p <- [1..10]] ++ [(GateValue (Out "coffee") [], (L2, 0)) | x >= 15]
 tExampleCorrect (L1, x) = Map.fromList  [(GateValue (Out "ok") [int x], (L0, x))]
 tExampleCorrect (L2, _) = mempty
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
