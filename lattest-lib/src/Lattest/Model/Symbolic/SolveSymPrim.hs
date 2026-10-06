@@ -8,7 +8,8 @@ combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
-solveGuard
+solveGuard,
+isGuardSatisfiable
 ) where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
@@ -78,6 +79,18 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
                   E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
+
+{-|
+    Check whether the given guard is satisfiable, without obtaining a valuation.
+-}
+isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
+isGuardSatisfiable vars guard = runSMT do
+    addDeclarations vars
+    addAssertions [guard]
+    query $ getSolvable >>= \case
+      Sat -> return True
+      Unsat -> return False
+      Unknown -> error $ "isGuardSatisfiable: SMT solver returned unknown for guard " <> show guard -- TODO warning?
 
 solveGuard :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
 solveGuard vars guard = do

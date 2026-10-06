@@ -100,8 +100,8 @@ import qualified Data.List as List
 import Lattest.Model.Symbolic.SolveSTS (SymIntrpState, indexExpr, indexVar)
 import Lattest.SMT (Some)
 import System.IO.Unsafe (unsafePerformIO)
+import Lattest.Model.Symbolic.SolveSymPrim (isGuardSatisfiable)
 import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
-import Lattest.Model.Symbolic.SolveSymPrim (solveGuard)
 import qualified Debug.Trace
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
@@ -636,7 +636,7 @@ satisfiable guard = unsafePerformIO $ do
     case Map.lookup guard cache of
         Just isSat -> return isSat
         Nothing -> do
-            isSat <- Maybe.isJust <$> solveGuard (toList $ freeVars guard) guard
+            isSat <- isGuardSatisfiable (toList $ freeVars guard) guard
             atomicModifyIORef' satisfiableCache $ \c -> (Map.insert guard isSat c, ())
             return isSat
 
