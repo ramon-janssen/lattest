@@ -281,8 +281,6 @@ exprToSymbolic v = case v of
 -- and add a note that equality on doubles is not exact.
 sortOfEqual :: (Fractional a => a) -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
-  -- without any decimals inside, use actual equality
-  t | not (hasDecimals t) -> Equal t l r
   FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
@@ -299,23 +297,14 @@ sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   ListType tp -> withExprConstraints tp $
     let v1 = Variable "mapEqualityVar" (TupleType tp tp)
         v2 = Variable "foldEqualityVar" BoolType
-    in Foldr v1 v2 (Equal tp (First tp $ Var v1) (Second tp $ Var v1)) (Const True) $ Zip tp tp l r
+    in And $ Set.fromList
+      [ Foldr v1 v2 (And $ Set.fromList [Var v2, Equal tp (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
+      , Equal IntType (Length tp l) (Length tp r)]
   -- the version of sets that SBV supports probably just isn't very useful for Lattest,
   -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
   SetType _ -> error "TODO"
   -- For int, bool, char, and unit; just use equality
-  _ -> Equal (typeOf' l) l r
-
--- Whether values of the type contain floats or rationals, for which equality is approximated.
-hasDecimals :: Type a -> Bool
-hasDecimals = \case
-  FloatType -> True
-  RationalType -> True
-  ListType t -> hasDecimals t
-  SetType t -> hasDecimals t
-  TupleType a b -> hasDecimals a || hasDecimals b
-  SumType a b -> hasDecimals a || hasDecimals b
-  _ -> False
+  tp -> Equal tp l r
 
 -- The free variables of a function body, packed into a single symbolic value, together with 
 -- a function that unpacks such a value back into the variable environment.
