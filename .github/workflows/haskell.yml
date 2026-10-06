@@ -35,9 +35,9 @@ jobs:
         cache-name: cache1
       with:
         path: lattest-lib/.stack-work
-        key: stackwork-${{ matrix.ghcversion }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        key: stackwork-${{ matrix.ghcversion }}-${{ hashFiles('**/stack.yaml') }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          stackwork-${{ matrix.ghcversion }}-{{ env.cache-name }}-
+          stackwork-${{ matrix.ghcversion }}-${{ hashFiles('**/stack.yaml') }}
     - name: Restore cached stackdir
       id: cache2
       uses: actions/cache/restore@v4
@@ -45,9 +45,9 @@ jobs:
         cache-name: cache2
       with:
         path: ~/.stack
-        key: stack-${{ matrix.ghcversion }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}-${{ hashFiles('**/stack.yaml') }}
+        key: stack-${{ matrix.ghcversion }}-${{ hashFiles('**/stack.yaml') }}-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          stack-${{ matrix.ghcversion }}-${{ env.cache-name }}-
+          stack-${{ matrix.ghcversion }}-${{ hashFiles('**/stack.yaml') }}
 
     - name: Install dependencies
       run: |
