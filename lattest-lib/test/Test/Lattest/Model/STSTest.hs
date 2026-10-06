@@ -44,7 +44,16 @@ module Test.Lattest.Model.STSTest (
     testPrintPrependOutputChecksDisj,
     testPrintPrependOutputChecksConj,
     testPrependOutputChecksDisj,
-    testPrependOutputChecksConj
+    testPrependOutputChecksConj,
+    testCompleteMCDC,
+    testCompleteMCDCConjunction,
+    testCompleteMCDCDependentAtoms,
+    testCompleteMCDCExclusiveAtoms,
+    testCompleteMCDCTuple,
+    testCompleteMCDCList,
+    testCompleteMCDCListLengths,
+    testCompleteMCDCErrors,
+    testCompleteMCDCListErrors
     )
 where
 
@@ -56,6 +65,7 @@ import Test.HUnit
 import Data.Dependent.Sum
 import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
 import Data.Maybe(isJust, catMaybes)
+import Data.List(isInfixOf)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -78,6 +88,7 @@ import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
+import Lattest.Model.Symbolic.MCDCSTS(completeMCDC)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
@@ -1894,3 +1905,233 @@ testPrependOutputChecksConj = TestCase $ do
     _ <- assertAfter "after o2 (meets both guards): " intrp4 (GateValue (Out "o2") [Some $ CInt 2]) (s (Stable 3) 0)
     _ <- assertAfter "after o2 (meets only guard c): " intrp4 (GateValue (Out "o2") [Some $ CInt 0]) (s (Stable 3) 0)
     return ()
+
+-- | STS with one switch per given guard on its input gate, the n-th of them leading to location n.
+stsExampleMCDC :: [Expr Bool] -> IOSTS FreeLattice Integer String String
+stsExampleMCDC guards =
+    let water = SymInteract (In "water") [Some pvar, Some qvar]
+        ok = SymInteract (Out "ok") []
+        switches = \case
+            0 -> Map.fromList [(water, foldr1 (/\) [atom (stsTLoc guard noAssignment, loc) | (guard, loc) <- zip guards [1..]])]
+            _ -> Map.empty
+    in automaton (atom 0) (Set.fromList [water, ok]) switches
+
+pairVar :: Variable (Integer, Integer)
+pairVar = Variable "pair" (TupleType IntType IntType)
+
+stsExampleMCDC2 :: IOSTS FreeLattice Integer String String
+stsExampleMCDC2 =
+    let pair = sVar pairVar
+        water = SymInteract (In "water") [Some pairVar]
+        ok = SymInteract (Out "ok") []
+        guardOr = sFirst pair .== 0 .|| sSecond pair .< 0 .|| sSecond pair .> 2
+        guardNand = sNot (sFirst pair .== 0) .&& (sSecond pair .>= 0) .&& (sSecond pair .<= 2)
+        switches = \case
+            0 -> Map.fromList [(water, atom (stsTLoc guardOr noAssignment, 1) /\ atom (stsTLoc guardNand noAssignment, 2))]
+            1 -> Map.fromList [(ok, atom (stsTLoc sTrue noAssignment, 3))]
+            _ -> Map.empty
+    in automaton (atom 0) (Set.fromList [water, ok]) switches
+
+listVar :: Variable [(Integer, Integer)]
+listVar = Variable "listOfPair" (ListType (TupleType IntType IntType))
+
+-- | Stands for the element of 'listVar' that a condition is evaluated on.
+elemVar :: Variable (Integer, Integer)
+elemVar = Variable "a" (TupleType IntType IntType)
+
+-- | A list of pairs is ok if none of its elements match, an error if all of them do, and a warning otherwise. The
+-- given condition on the length of the list holds for all three of them.
+stsExampleMCDC3 :: (Expr Integer -> Expr Bool) -> IOSTS FreeLattice Integer String String
+stsExampleMCDC3 lengthCond =
+    let list = sVar listVar
+        a = sVar elemVar
+        -- there are no quantifiers, so conditions on all elements are expressed by counting the elements that satisfy them
+        count cond = sLength (sFilter elemVar cond list)
+        matches = sNot (sFirst a .== 0) .&& (sSecond a .>= 0) .&& (sSecond a .<= 2)
+        validLength = lengthCond (sLength list)
+        water = SymInteract (In "water") [Some listVar]
+        ok = SymInteract (Out "ok") []
+        guardOk = validLength .&& count matches .== 0
+        guardWarn = validLength .&& count matches .>= 1 .&& count matches .<= sLength list - 1
+        guardError = validLength .&& count matches .== sLength list
+        guardOtherLength = sNot validLength
+        switches = \case
+            0 -> Map.fromList [(water, atom (stsTLoc guardOk noAssignment, 1) /\ atom (stsTLoc guardWarn noAssignment, 2)
+                                    /\ atom (stsTLoc guardError noAssignment, 3) /\ atom (stsTLoc guardOtherLength noAssignment, 4))]
+            1 -> Map.fromList [(ok, atom (stsTLoc sTrue noAssignment, 5))]
+            _ -> Map.empty
+    in automaton (atom 0) (Set.fromList [water, ok]) switches
+
+testCompleteMCDC :: Test
+testCompleteMCDC = TestCase $ do
+    let p = sVar pvar .> 1
+        q = sVar qvar .> 1
+        sts = stsExampleMCDC [p .|| q, sNot p .&& sNot q]
+        water vals = GateValue (In "water") (map (Some . CInt) vals)
+    completedSTS <- completeMCDC sts ["water"]
+    let completed = interpretSTS completedSTS stsExampleInitAssign
+    _ <- assertAfter "after water 2 0: " completed (water [2, 0]) (getSTSIntrpState2 1 0)
+    _ <- assertAfter "after water 0 2: " completed (water [0, 2]) (getSTSIntrpState2 1 0)
+    _ <- assertAfter "after water 0 0: " completed (water [0, 0]) (getSTSIntrpState2 2 0)
+    _ <- assertAfter "after water 2 2: " completed (water [2, 2]) underspecified -- not an MC/DC row of p || q
+    nonCompletedSTS <- completeMCDC sts [] -- gate not listed, so not completed
+    let nonCompleted = interpretSTS nonCompletedSTS stsExampleInitAssign
+    _ <- assertAfter "nonCompleted after water 2 2: " nonCompleted (water [2, 2]) (getSTSIntrpState2 1 0)
+    return ()
+
+testCompleteMCDCConjunction :: Test
+testCompleteMCDCConjunction = TestCase $ do
+    let p = sVar pvar .> 1
+        q = sVar qvar .> 1
+        sts = stsExampleMCDC [p .&& q, sNot p .|| sNot q] -- the second switch covers both false rows of p && q
+        water vals = GateValue (In "water") (map (Some . CInt) vals)
+    completedSTS <- completeMCDC sts ["water"]
+    let completed = interpretSTS completedSTS stsExampleInitAssign
+    _ <- assertAfter "after water 2 2: " completed (water [2, 2]) (getSTSIntrpState2 1 0)
+    _ <- assertAfter "after water 0 2: " completed (water [0, 2]) (getSTSIntrpState2 2 0)
+    _ <- assertAfter "after water 2 0: " completed (water [2, 0]) (getSTSIntrpState2 2 0)
+    _ <- assertAfter "after water 0 0: " completed (water [0, 0]) underspecified -- not an MC/DC row of p && q
+    return ()
+
+-- The atoms of the guards are not independent: the row not (p > 5) && p > 10 has no solution. This is a warning, not an
+-- error, and the other rows are split as usual.
+testCompleteMCDCDependentAtoms :: Test
+testCompleteMCDCDependentAtoms = TestCase $ do
+    let p5 = sVar pvar .> 5
+        p10 = sVar pvar .> 10
+        sts = stsExampleMCDC [p5 .&& p10, sNot p5 .|| sNot p10]
+        water vals = GateValue (In "water") (map (Some . CInt) vals)
+    completedSTS <- completeMCDC sts ["water"]
+    let completed = interpretSTS completedSTS stsExampleInitAssign
+    _ <- assertAfter "after water 11 0: " completed (water [11, 0]) (getSTSIntrpState2 1 0)
+    _ <- assertAfter "after water 7 0: " completed (water [7, 0]) (getSTSIntrpState2 2 0)
+    _ <- assertAfter "after water 0 0: " completed (water [0, 0]) underspecified -- not an MC/DC row of not p5 || not p10
+    return ()
+
+-- The atoms of the guards are not independent: at most one of p == 1, p < 0 and p > 5 can hold. No MC/DC row has two
+-- of them, so each row has a solution and no value is underspecified.
+testCompleteMCDCExclusiveAtoms :: Test
+testCompleteMCDCExclusiveAtoms = TestCase $ do
+    let p = sVar pvar
+        sts = stsExampleMCDC [p .== 1 .|| p .< 0 .|| p .> 5, sNot (p .== 1) .&& p .>= 0 .&& p .<= 5]
+        water vals = GateValue (In "water") (map (Some . CInt) vals)
+    completedSTS <- completeMCDC sts ["water"]
+    let completed = interpretSTS completedSTS stsExampleInitAssign
+    _ <- assertAfter "after water 1 0: " completed (water [1, 0]) (getSTSIntrpState2 1 0) -- only p == 1 holds
+    _ <- assertAfter "after water -1 0: " completed (water [-1, 0]) (getSTSIntrpState2 1 0) -- only p < 0 holds
+    _ <- assertAfter "after water 6 0: " completed (water [6, 0]) (getSTSIntrpState2 1 0) -- only p > 5 holds
+    _ <- assertAfter "after water 3 0: " completed (water [3, 0]) (getSTSIntrpState2 2 0) -- none of them hold
+    return ()
+
+testCompleteMCDCTuple :: Test
+testCompleteMCDCTuple = TestCase $ do
+    let water a b = GateValue (In "water") [Some $ CTuple a b IntType IntType]
+        noValuation = Valuation DMap.empty
+        atLoc loc = atom (IntrpState loc noValuation)
+    completedSTS <- completeMCDC stsExampleMCDC2 ["water"]
+    let completed = interpretSTS completedSTS noValuation
+    _ <- assertAfter "after water (1,5): " completed (water 1 5) (atLoc 1) -- only snd > 2 holds
+    _ <- assertAfter "after water (1,-1): " completed (water 1 (-1)) (atLoc 1) -- only snd < 0 holds
+    _ <- assertAfter "after water (0,1): " completed (water 0 1) (atLoc 1) -- only fst == 0 holds
+    _ <- assertAfter "after water (0,5): " completed (water 0 5) underspecified -- two conditions hold, not an MC/DC row
+    _ <- assertAfter "nonCompleted after water (0,5): " (interpretSTS stsExampleMCDC2 noValuation) (water 0 5) (atLoc 1)
+    let actual = "\n" ++ prettyPrintIntrp completed ++ "\n" -- newlines before and after to match those of the "expected" below.
+    assertBool ("print of completed STS does not match, expected:" ++ expected ++ "but received:" ++ actual) (expected == actual)
+    where
+    expected = [QQ.r|
+current state configuration: (0,{})
+initial location configuration: 0
+locations: 0, 1, 2, 3
+transitions:
+0  ――?"water" [pair:(Int, Int)]⟶  (((fst pair) = (0))∧(((2+-snd pair)) ≥ 0)∧((snd pair) ≥ 0), {},1) ∧ ((((2+-snd pair)) ≥ 0)∧((snd pair) ≥ 0)∧(¬((fst pair) = (0))), {},2) ∧ ((((2+-snd pair)) ≥ 0)∧(¬((fst pair) = (0)))∧(¬((snd pair) ≥ 0)), {},1) ∧ (((snd pair) ≥ 0)∧(¬((fst pair) = (0)))∧(¬(((2+-snd pair)) ≥ 0)), {},1)
+0  ――!"ok" []⟶  ⊥
+1  ――?"water" [pair:(Int, Int)]⟶  ⊤
+1  ――!"ok" []⟶  (True, {},3)
+2  ――?"water" [pair:(Int, Int)]⟶  ⊤
+2  ――!"ok" []⟶  ⊥
+3  ――?"water" [pair:(Int, Int)]⟶  ⊤
+3  ――!"ok" []⟶  ⊥
+|]
+
+-- | Assert the location reached by the given list of pairs, or that the list is underspecified, in the completion of
+-- 'stsExampleMCDC3' with the given length condition.
+assertMCDCLists :: (Expr Integer -> Expr Bool) -> [([(Integer, Integer)], Maybe Integer)] -> IO ()
+assertMCDCLists lengthCond expectations = do
+    let water pairs = GateValue (In "water") [Some $ CList pairs (TupleType IntType IntType)]
+        noValuation = Valuation DMap.empty
+        expected = maybe underspecified (\loc -> atom (IntrpState loc noValuation))
+    completedSTS <- completeMCDC (stsExampleMCDC3 lengthCond) ["water"]
+    let completed = interpretSTS completedSTS noValuation
+    sequence_ [assertAfter ("after water " ++ show pairs ++ ": ") completed (water pairs) (expected loc) | (pairs, loc) <- expectations]
+
+-- The condition on the elements has the MC/DC rows (1,1) (matches), and (0,1), (1,-1) and (1,5) (one condition fails).
+testCompleteMCDCList :: Test
+testCompleteMCDCList = TestCase $ assertMCDCLists (.== 2)
+    [ ([(0,1), (0,1)], Just 1) -- no element matches, all for the same reason
+    , ([(1,-1), (1,-1)], Just 1)
+    , ([(1,5), (1,5)], Just 1)
+    , ([(0,1), (1,5)], Nothing) -- the elements are on different rows
+    , ([(0,5), (0,5)], Nothing) -- two conditions fail, not an MC/DC row
+    , ([(1,1), (0,1)], Just 2) -- one element matches
+    , ([(1,1), (1,-1)], Just 2)
+    , ([(1,1), (1,5)], Just 2)
+    , ([(1,5), (1,1)], Just 2) -- regardless of its position
+    , ([(1,1), (0,5)], Nothing)
+    , ([(1,1), (1,1)], Just 3) -- all elements match
+    , ([(1,1)], Just 4) -- other lengths are not split
+    , ([(0,5), (1,1), (0,1)], Just 4)
+    ]
+
+testCompleteMCDCListLengths :: Test
+testCompleteMCDCListLengths = TestCase $ assertMCDCLists (\len -> len .>= 1 .&& len .<= 3)
+    [ ([(0,1)], Just 1)
+    , ([(1,5), (1,5), (1,5)], Just 1)
+    , ([(1,5), (1,5), (0,1)], Nothing)
+    , ([(1,1), (1,-1)], Just 2)
+    , ([(1,1), (0,1), (0,1)], Just 2) -- one element matches
+    , ([(1,1), (0,1), (1,1)], Just 2) -- two elements match
+    , ([(1,1), (0,1), (1,5)], Nothing)
+    , ([(1,1)], Just 3)
+    , ([(1,1), (1,1), (1,1)], Just 3)
+    , ([], Just 4)
+    , ([(1,1), (1,1), (1,1), (1,1)], Just 4)
+    ]
+
+testCompleteMCDCErrors :: Test
+testCompleteMCDCErrors = TestCase $ do
+    let p = sVar pvar .> 1
+        q = sVar qvar .> 1
+        assertError expectedError guards = do
+            result <- Exception.try $ completeMCDC (stsExampleMCDC guards) ["water"]
+            case result of
+                Left (Exception.ErrorCall actualError) -> assertBool actualError (expectedError `isInfixOf` actualError)
+                Right _ -> assertFailure $ "expected error: " ++ expectedError
+    assertError "is not covered by any other switch" [p .&& q]
+    assertError "is not covered by any other switch" [p .|| q]
+    assertError "is not covered by any other switch" [p .&& q, sNot p] -- covers only one of the two false rows
+    assertError "are not disjoint" [p, sVar pvar .> 0]
+    assertError "is a tautology" [sVar qvar .== 1 .|| sVar pvar .> 0 .|| sVar pvar .< 5] -- not (p > 0) && not (p < 5) has no solution
+
+testCompleteMCDCListErrors :: Test
+testCompleteMCDCListErrors = TestCase $ do
+    let list = sVar listVar
+        a = sVar elemVar
+        count cond = sLength (sFilter elemVar cond list)
+        p = sFirst a .== 0
+        q = sSecond a .>= 0
+        length2 = sLength list .== 2
+        water = SymInteract (In "water") [Some listVar]
+        sts guards = automaton (atom 0) (Set.singleton water) $ \case
+            0 -> Map.fromList [(water, foldr1 (/\) [atom (stsTLoc guard noAssignment, loc) | (guard, loc) <- zip guards [1..]])]
+            _ -> Map.empty
+        assertError expectedError guards = do
+            result <- Exception.try $ completeMCDC (sts guards :: IOSTS FreeLattice Integer String String) ["water"]
+            case result of
+                Left (Exception.ErrorCall actualError) -> assertBool actualError (expectedError `isInfixOf` actualError)
+                Right _ -> assertFailure $ "expected error: " ++ expectedError
+    -- the condition on the elements has to be singular as well
+    assertError "not a singular Boolean expression" [length2 .&& count (p .&& (q .|| p)) .== 0]
+    assertError "is not covered by any other switch" [length2 .&& count p .== 0] -- lists of another length
+    assertError "is not covered by any other switch" [length2 .&& count p .== 0, sNot length2] -- lists with an element satisfying p
+    -- on the empty list, no element satisfying p is the same as all of them
+    assertError "are not disjoint" [sLength list .<= 2 .&& count p .== 0, sLength list .<= 2 .&& count p .== sLength list]
