@@ -72,7 +72,7 @@ import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanCon
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate, isInputInteract, isInput)
-import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential)
+import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential, isGuardSatisfiable)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 
 import Control.Exception(throw,Exception)
@@ -95,6 +95,7 @@ import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Constraint.Extras (Has(..))
+import Control.Monad.Extra (anyM)
 
 ------------
 -- syntax --
@@ -546,8 +547,7 @@ hasSymbolicQuiescence :: (BoundedMonad m, BooleanConfiguration m) => Valuation -
 hasSymbolicQuiescence stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
-    -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> solveAnySequential outputsAndCombinedGuards
+    anyM (\(SymInteract _ vars, guard) -> isGuardSatisfiable vars guard) outputsAndCombinedGuards
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 

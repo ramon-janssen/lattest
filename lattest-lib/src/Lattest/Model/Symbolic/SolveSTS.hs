@@ -36,7 +36,7 @@ import Lattest.Model.Automaton ( stateConf,IntrpState(..), transRel, AutomatonEx
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.SMT ( Some(..) )
-import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard)
+import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard, isGuardSatisfiable)
 import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
@@ -250,9 +250,7 @@ offlineTests intrpr tc
                            $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
                                     Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
                                     Nothing -> error "internal type mismatch") vs vs')
-                solveGuard vs guard' >>= \case
-                  Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
-                  Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
+                isGuardSatisfiable vs guard' >>= \issat -> pure $ if issat then Only else Inconclusiv
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
              Right r -> pure $ OfflineTests mempty $ Right r
              Left (tc', intrpr') -> offlineTests intrpr' tc')
