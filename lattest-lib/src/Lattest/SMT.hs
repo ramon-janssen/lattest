@@ -279,29 +279,30 @@ exprToSymbolic v = case v of
 -- We can't == doubles, and using symbolic equality (===) instead is also not ideal.
 -- We should add more decimal types (fixed point? reals?), rename FloatType,
 -- and add a note that equality on doubles is not exact.
-sortOfEqual :: (Fractional a => a) -> ExprView a -> ExprView a -> ExprView Bool
+sortOfEqual :: Double -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   -- Our hand-rolled equality check is slower, probably because the solver doesn't understand it,
   -- so we only use it when there are FloatTypes or RationalTypes present.
   tp | not (hasDecimals tp) -> Equal tp l r
   FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
-  RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
-  TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
-                  Expr (Equal a (First b l) (First b r)) .&& Expr (Equal b (Second a l) (Second a r))
+  RationalType -> view $ Expr l - Expr r .< sConst (toRational range) .&& Expr r - Expr l .< sConst (toRational range)
+  TupleType a b -> withExprConstraints a $ withExprConstraints b $
+                  And $ Set.fromList [ sortOfEqual range (First b l) (First b r)
+                                     , sortOfEqual range (Second a l) (Second a r)]
   SumType a b -> withExprConstraints a $ withExprConstraints b $
                   let v1 = Variable "eitherEqualityVarL" a
                       v2 = Variable "eitherEqualityVarL" b
                       v3 = Variable "eitherEqualityVarR" a
                       v4 = Variable "eitherEqualityVarR" b
                   in Either v1 v2
-                      (Either v3 v4 (Equal a (Var v1) (Var v3)) (Const False) r)
-                      (Either v3 v4 (Const False) (Equal b (Var v2) (Var v4)) r)
+                      (Either v3 v4 (sortOfEqual range (Var v1) (Var v3)) (Const False) r)
+                      (Either v3 v4 (Const False) (sortOfEqual range (Var v2) (Var v4)) r)
                       l
   ListType tp -> withExprConstraints tp $
     let v1 = Variable "mapEqualityVar" (TupleType tp tp)
         v2 = Variable "foldEqualityVar" BoolType
     in And $ Set.fromList
-      [ Foldr v1 v2 (And $ Set.fromList [Var v2, Equal tp (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
+      [ Foldr v1 v2 (And $ Set.fromList [Var v2, sortOfEqual range (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
       , Equal IntType (Length tp l) (Length tp r)]
   -- the version of sets that SBV supports probably just isn't very useful for Lattest,
   -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.

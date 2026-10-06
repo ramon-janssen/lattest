@@ -309,7 +309,7 @@ testSTSTestSelection = TestCase $ do
           ]
     let checkExample = go 0 exampleObserved
     assertEqual ("expected conformal trace like " <> show exampleObserved <> ",\ngot " <> show observed) checkObserved checkExample
-    assertEqual "expected pass " Pass verdict
+    assertEqual ("expected pass. Trace: " <> show observed) Pass verdict -- this test is unexpectedly flaky, printing the trace for when it fails again
     where
     inpL g = GateValue (In (InputAttempt (g, True)))
     outL g = GateValue (Out (OutSusp g))
