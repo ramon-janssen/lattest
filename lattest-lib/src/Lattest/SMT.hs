@@ -281,6 +281,9 @@ exprToSymbolic v = case v of
 -- and add a note that equality on doubles is not exact.
 sortOfEqual :: (Fractional a => a) -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
+  -- Our hand-rolled equality check is slower, probably because the solver doesn't understand it,
+  -- so we only use it when there are FloatTypes or RationalTypes present.
+  tp | not (hasDecimals tp) -> Equal tp l r
   FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
   TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
@@ -305,6 +308,17 @@ sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   SetType _ -> error "TODO"
   -- For int, bool, char, and unit; just use equality
   tp -> Equal tp l r
+
+-- Whether values of the type contain floats or rationals, for which equality is approximated.
+hasDecimals :: Type a -> Bool
+hasDecimals = \case
+  FloatType -> True
+  RationalType -> True
+  ListType t -> hasDecimals t
+  SetType t -> hasDecimals t
+  TupleType a b -> hasDecimals a || hasDecimals b
+  SumType a b -> hasDecimals a || hasDecimals b
+  _ -> False
 
 -- The free variables of a function body, packed into a single symbolic value, together with 
 -- a function that unpacks such a value back into the variable environment.
