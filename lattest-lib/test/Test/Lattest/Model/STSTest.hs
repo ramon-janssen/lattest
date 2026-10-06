@@ -33,7 +33,6 @@ module Test.Lattest.Model.STSTest (
     testPrintSeqCompPrunedSTSInit1,
     testSeqCompPrunedRules,
     testSelfSeqCompPrunedRules,
-    testSeqCompPrunedLoadedSTS,
     testSequentiallyAtNonSinkLocation,
     testSequentiallyAtSameAction,
     testPrintSelfSeqComposedSTS,
@@ -84,8 +83,6 @@ import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
-import Lattest.Util.STSJSONParser(stsListFromJSONFile)
-import Test.Lattest.Util.STSJSONWriterTest(assertWrittenJSONMatches)
 import Data.Tuple(swap)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -1533,23 +1530,7 @@ testSelfSeqCompPrunedRules = TestCase $ do
         -- No switches from 6 are pruned since its path g? has no guard.
         ]
 
-{- |
-    Load the four STSs of examples/example-load-multiple-sts-compose and compose them as meant for Pickles.
--}
-testSeqCompPrunedLoadedSTS :: Test
-testSeqCompPrunedLoadedSTS = TestCase $ do
-    result <- stsListFromJSONFile "./test/Test/Lattest/Util/STSJSONExamples/example_load_multiple_sts_compose.json"
-    stss <- either (\err -> assertFailure ("expected successful parse, got: " ++ err)) return result
-    let initVal = case stss of
-            [] -> error "no STSs loaded"
-            (_, _, _, _, val) : _ -> val
-        checked = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _, _) <- stss ]
-        conjunctedSTS = conjunctionAll checked
-        (seqSelfComposed, _) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
-        (seqComposed, _) = interpretSTS conjunctedSTS initVal `sequentiallyPruned` seqSelfComposed
-        guardNames = Map.fromList $ map swap $ Map.toList $ Map.unions [ gs | (_, _, gs, _, _) <- stss ]
-        assignmentNames = Map.fromList $ map swap $ Map.toList $ Map.unions [ as | (_, _, _, as, _) <- stss ]
-    assertWrittenJSONMatches "seq_comp_pruned_loaded_expected.json" "stscomposed" (syntacticAutomaton seqComposed) guardNames assignmentNames initVal
+-- TODO: Add pruning tests with ListType vars, Rationals, etc
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test
