@@ -4,6 +4,9 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GADTs #-}
 module Lattest.Exec.StandardTestControllers.CompleteTestSuite (
 accessSeqSelector,
 adgTestSelector,
@@ -23,9 +26,9 @@ import Lattest.Adapter.StandardAdapters(withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput)
+import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput, TestObserver, observer)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..))
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..), SymGuard)
 import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, asLoc, TransitionMapping (..), allLocations, STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
 import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp)
@@ -33,11 +36,18 @@ import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
 
 import Control.Monad (forM, (>=>))
 import qualified Data.Map as Map
+import Data.Dependent.Sum (DSum (..))
 import qualified Data.Set as Set
 import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
+import Lattest.Model.Symbolic.Expr (Variable (..), Val, Constant (..))
+import Data.Dependent.Map (DMap)
+import Data.Some (Some(..))
+import Data.Type.Equality ((:~:)(..))
+import Data.GADT.Compare (GEq(..))
+import qualified Data.Dependent.Map as DMap
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -229,3 +239,37 @@ switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransi
   _ -> mempty
   where syn = syntacticAutomaton intrpr
 
+data InputCoverageKey i tp = ICK i SymGuard (Variable tp)
+newtype InputCoverageValue tp = ICV (Set.Set (Val tp))
+type InputCoverageReport i = DMap (InputCoverageKey i) InputCoverageValue
+observeInputCoverage :: {- IOSTSIntrp m loc i o -> -} TestObserver m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
+observeInputCoverage = observer mempty update pure
+  where
+    update icr _ (GateValue (Out _) _) _ = pure icr
+    update icr intrpr (GateValue (In gate) vals) _ = pure $ foldr (\(v :=> c) icr' -> DMap.insertWith _ (ICK gate v) (ICV $ Set.singleton $ _ c) icr') icr taggedvals
+      where
+        taggedvals = zipWith
+          (\(Some c@(Constant tp1 _)) (Some v@(Variable _ tp2)) -> case geq tp1 tp2 of
+              Nothing -> error "type mismatch"
+              Just Refl -> c :=> v)
+          vals
+          foo
+        alph = alphabet $ syntacticAutomaton intrpr
+        foo = case Set.toList $ flip Set.filter alph \case
+          SymInteract (Out _) _ -> False
+          SymInteract (In i) _ -> i == gate of
+            [SymInteract _ vs] -> vs
+            _ -> error $ "zero or more than one inputs in the alphabet match " <> show gate
+
+-- {- |
+--     Create a 'TestObserver'.
+-- -}
+-- observer :: s -> (s -> AutIntrpr m loc q t tdest act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tdest act s r
+-- observer state upd finish = TestController {
+--     testControllerState = state,
+--     selectTest = \s _ _ -> return $ Left ((), s), -- no state change, continue testing
+--     updateTestController = \s aut act q -> Left <$> upd s aut act q,
+--     handleTestClose = finish
+--     }
+--
+-- type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
