@@ -17,15 +17,15 @@ import      Data.Tuple (swap)
 run :: IO ()
 run = do
     putStrLn "loading STSs from JSON..."
-    result <- stsListFromJSONFile "example.json"
-    -- result <- stsListFromJSONFile "example_coffee_machine.json"
+    -- result <- stsListFromJSONFile "example.json"
+    result <- stsListFromJSONFile "example_coffee_machine.json"
     stss <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
 
-    --putStrLn $ unlines $ map (\(_,sts,_,_,_) -> prettyPrint sts) stss
+    putStrLn $ unlines $ map (\(_,sts,_,_,_,_) -> prettyPrint sts) stss
     -- Compose all parsed STSs
-    let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _, _) <- stss ]
+    let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _,_, _) <- stss ]
         conjunctedSTS = conjunctionAll checked
         conjunctModel = interpretSTS conjunctedSTS initVal
         --seqComposed = conjmodel |>> conjmodel
@@ -33,12 +33,12 @@ run = do
         (seqComposed, discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
         initVal  = case stss of
             [] -> error "no STSs loaded"
-            (_, _, _, _, val):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
-        gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_) -> g) stss
-        as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_) -> a) stss
+            (_, _, _, _, val,_):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
+        gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_,_) -> g) stss
+        as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_,_) -> a) stss
 
-    --putStrLn $ prettyPrintIntrp seqComposed
-    --print discardedTransit
+    putStrLn $ prettyPrintIntrp seqComposed
+    print discardedTransit
 
     -- putStrLn "computing offline test cases..."
     -- let nrSteps = 2
