@@ -7,6 +7,8 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Lattest.Exec.StandardTestControllers.CompleteTestSuite (
 accessSeqSelector,
 adgTestSelector,
@@ -18,7 +20,9 @@ randomCoveringTestSelectorFromGen,
 Switch,
 allSwitches,
 isInputSwitch,
-switchesTaken
+switchesTaken,
+observeInputCoverage,
+InputCoverageReport, InputCoverageKey, InputCoverageValue
 )
 where
 import Lattest.Adapter.Adapter(Adapter,close)
@@ -42,12 +46,15 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val, Constant (..))
+import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..))
 import Data.Type.Equality ((:~:)(..))
-import Data.GADT.Compare (GEq(..))
+import Data.GADT.Compare (GEq(..), GCompare (..), GOrdering (..))
 import qualified Data.Dependent.Map as DMap
+import Data.GADT.Show (GShow (..), defaultGshowsPrec)
+import Data.Constraint.Extras (Has (..))
+import Data.Constraint.Compose (ComposeC)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -239,37 +246,49 @@ switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransi
   _ -> mempty
   where syn = syntacticAutomaton intrpr
 
-data InputCoverageKey i tp = ICK i SymGuard (Variable tp)
-newtype InputCoverageValue tp = ICV (Set.Set (Val tp))
+data InputCoverageKey i tp = ICK i SymGuard (Variable tp) deriving Show
+data InputCoverageValue tp = ICV (Type tp) (Set.Set (Val tp)) deriving Show
 type InputCoverageReport i = DMap (InputCoverageKey i) InputCoverageValue
-observeInputCoverage :: {- IOSTSIntrp m loc i o -> -} TestObserver m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
+instance GEq (InputCoverageKey i) where
+  geq (ICK _ _ v) (ICK _ _ v') = geq v v'
+instance Ord i => GCompare (InputCoverageKey i) where
+  gcompare (ICK i g v) (ICK i' g' v') = case compare i i' of
+    GT -> GGT
+    LT -> GLT
+    EQ -> case compare g g' of
+      GT -> GGT
+      LT -> GLT
+      EQ -> gcompare v v'
+instance Show i => GShow (InputCoverageKey i) where
+  gshowsPrec = defaultGshowsPrec
+instance Has a Type => Has a InputCoverageValue where
+  has (ICV t _) = has @a t
+instance Has (ComposeC Show InputCoverageValue) (InputCoverageKey i) where
+  has (ICK _ _ v) = withExprConstraints v
+
+observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
 observeInputCoverage = observer mempty update pure
   where
     update icr _ (GateValue (Out _) _) _ = pure icr
-    update icr intrpr (GateValue (In gate) vals) _ = pure $ foldr (\(v :=> c) icr' -> DMap.insertWith _ (ICK gate v) (ICV $ Set.singleton $ _ c) icr') icr taggedvals
+    update icr intrpr (GateValue (In gate') consts) _ = pure $ foldr (\(guard, c :=> v) icr' -> DMap.insertWith (\(ICV t a) (ICV _ b) -> ICV t $ Set.union a b) (ICK gate' guard v) (ICV (constType c) $ Set.singleton $ withExprConstraints c Val $ constValue c) icr') icr $ cartesian guards taggedvals
       where
+        guards
+          | Right qs <- asConjunction (stateConf intrpr) = concatMap (\(IntrpState loc _) -> case asConjunction $ transRel (syntacticAutomaton intrpr) loc Map.! SymInteract (In gate') vars of
+                Right tdests -> map (\(STSLoc x,_) -> fst x) $ Set.toList tdests
+                Left _ -> error "TODO: compute input coverage ofr disjunctions") $ Set.toList qs
+          | otherwise = error "TODO: compute input coverage for disjunctions" -- mempty
+        taggedvals :: [DSum Constant Variable]
         taggedvals = zipWith
           (\(Some c@(Constant tp1 _)) (Some v@(Variable _ tp2)) -> case geq tp1 tp2 of
               Nothing -> error "type mismatch"
               Just Refl -> c :=> v)
-          vals
-          foo
+          consts
+          vars
         alph = alphabet $ syntacticAutomaton intrpr
-        foo = case Set.toList $ flip Set.filter alph \case
+        vars = case Set.toList $ flip Set.filter alph \case
           SymInteract (Out _) _ -> False
-          SymInteract (In i) _ -> i == gate of
+          SymInteract (In i) _ -> i == gate' of
             [SymInteract _ vs] -> vs
-            _ -> error $ "zero or more than one inputs in the alphabet match " <> show gate
+            _ -> error $ "zero or more than one inputs in the alphabet match " <> show gate'
+        cartesian as bs = [(a,b) | a <- as, b <- bs]
 
--- {- |
---     Create a 'TestObserver'.
--- -}
--- observer :: s -> (s -> AutIntrpr m loc q t tdest act -> act -> m q -> IO s) -> (s -> IO r) -> TestObserver m loc q t tdest act s r
--- observer state upd finish = TestController {
---     testControllerState = state,
---     selectTest = \s _ _ -> return $ Left ((), s), -- no state change, continue testing
---     updateTestController = \s aut act q -> Left <$> upd s aut act q,
---     handleTestClose = finish
---     }
---
--- type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)

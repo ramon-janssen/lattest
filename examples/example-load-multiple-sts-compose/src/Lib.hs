@@ -6,7 +6,7 @@ import           Lattest.Model.Automaton (prependOutputChecks, prettyPrintIntrp,
 import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Exec.StandardTestControllers
-import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(randomCoveringTestSelectorFromSeed, allSwitches, isInputSwitch)
+import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(randomCoveringTestSelectorFromSeed, allSwitches, isInputSwitch, observeInputCoverage)
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 import Lattest.Exec.Testing (Verdict(..))
 import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
@@ -54,12 +54,12 @@ run = do
     -- the covered switches are carried from one test case to the next
     let testCase toCover n = do
           -- target the (location, gate) pairs of input switches not covered yet
-          let controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure
-          tests <- offlineTests model controller $ \st -> (fst st, Just Fail)
+          let controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` observeInputCoverage
+          tests <- offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)
           print $ snd <$> tests
           -- compute the covered switches
           -- print $ map (\(((_,x,_,_),_),_) -> x) $ toList tests
-          let toCover' = foldr (Set.intersection . (\(((_,x,_,_),_),_) -> x)) switches (toList tests)
+          let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) switches (toList tests)
           putStrLn $ "after test " ++ show (n + 1) ++ ": switch coverage "
               ++ show (Set.size switches - Set.size toCover') ++ "/" ++ show (Set.size switches)
               ++ ", input switch coverage "
