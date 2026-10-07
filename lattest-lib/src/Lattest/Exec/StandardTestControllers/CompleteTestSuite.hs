@@ -50,7 +50,8 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type)
+import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||))
+import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..))
 import Data.Type.Equality ((:~:)(..))
@@ -153,8 +154,6 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
             return (targetState, verdict, (observed, maybeMq))
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
 
-
-
 -- The most basic version: randomly pick an uncovered input, if any, and otherwise just random
 -- If a 'to cover' set is not provided, it gets initialized to the set of every transition
 -- Using 'observeControllerState', the set of uncovered transitions can be passed on to the next test.
@@ -194,7 +193,7 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
            -> IO (Maybe (i, (StdGen, Set.Set (Switch loc i' o), [act], m q)))
     select (g', tocover, trace, _) intrpr' mq = do
       -- as in randomDataTestSelectorFromGen, except we try to take new transitions
-      (maybeGateValue, g'') <- solveRandomInput @FreeLattice g' maybeNewInAct intrpr'
+      (maybeGateValue, g'') <- solveRandomInteractionWith intrpr' maybeNewInAct g'
       case maybeGateValue of
         Just value -> pure $ Just (value, (g'',tocover,trace, mq))
         Nothing -> do
@@ -209,22 +208,22 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
         maybeNewInAct = maybeFromIOAct >=> \(SymInteract i vs) -> case asConjunction mq of
           -- The state has disjunction, so we're not covering any new transitions anyway.
           -- Just take a random transition.
-          Left _ -> Just (SymInteract i vs)
-          -- The actual filtering:
-          Right qs -> if any (\q -> any (\(Switch loc act _tdest _dest) -> loc == asLoc q && act == SymInteract (In i) vs) tocover) qs
-            then Just (SymInteract i vs)
-            else Nothing
+          Left _ -> Just (SymInteract i vs, sTrue)
+          -- The actual filtering: besides picking a gate with an uncovered switch, require the guard of some uncovered switch
+          -- to hold. Otherwise the solver is free to keep picking values for the already covered switches of that gate.
+          Right qs -> case [ substituteInGuard v g | IntrpState l v <- Set.toList qs, Switch loc act (STSLoc (g, _)) _dest <- Set.toList tocover, loc == l, act == SymInteract (In i) vs ] of
+            [] -> Nothing
+            gs -> Just (SymInteract i vs, foldr1 (.||) gs)
 
-    -- note: the intrpr we get here is _after_ the transition, but we need the `m q` before the transition
-    -- to compute coverage. That's why we keep track of it in the quadruple.
+    -- note: coverage is computed from the `m q` before the transition, which is passed in as the last argument.
     update :: (a, Set.Set (Switch loc i' o), [IOGateValue i' o], m q)
            -> AutIntrpr m loc q t tdest act
            -> IOGateValue i' o
-           -> b
+           -> m q
            -> IO (Maybe (a, Set.Set (Switch loc i' o), [IOGateValue i' o], m q))
-    update (g', tocover, trace, mq) intrpr' act _ =
+    update (g', tocover, trace, _) intrpr' act mq =
       let newcover = switchesTaken intrpr' mq act
-      in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act], stateConf intrpr')
+      in pure $ Just (g', tocover Set.\\ newcover, trace ++ [act], mq)
 
 -- | A switch of an STS: source location, interaction (gate and parameters), guard and assignment, and target location.
 data Switch loc i o = Switch loc (IOSymInteract i o) STStdest loc deriving (Eq, Ord, Show)
