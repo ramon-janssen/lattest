@@ -547,7 +547,7 @@ hasSymbolicQuiescence :: (BoundedMonad m, BooleanConfiguration m) => Valuation -
 hasSymbolicQuiescence stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
-    anyM (\(SymInteract _ vars, guard) -> isGuardSatisfiable vars guard) outputsAndCombinedGuards
+    not <$> anyM (\(SymInteract _ vars, guard) -> isGuardSatisfiable vars guard) outputsAndCombinedGuards
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 

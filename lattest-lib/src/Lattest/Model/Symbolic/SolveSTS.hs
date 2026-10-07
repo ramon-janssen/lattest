@@ -250,7 +250,7 @@ offlineTests intrpr tc
                            $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
                                     Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
                                     Nothing -> error "internal type mismatch") vs vs')
-                isGuardSatisfiable vs guard' >>= \issat -> pure $ if issat then Only else Inconclusiv
+                isGuardSatisfiable vs guard' >>= \issat -> pure $ if issat then Inconclusiv else Only
           <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
              Right r -> pure $ OfflineTests mempty $ Right r
              Left (tc', intrpr') -> offlineTests intrpr' tc')
