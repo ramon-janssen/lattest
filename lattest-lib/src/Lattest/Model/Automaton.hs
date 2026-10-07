@@ -107,6 +107,8 @@ import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Constraint.Extras (Has(..))
+import System.Random (randomIO, mkStdGen)
+import Control.Monad.State (evalStateT)
 
 ------------
 -- syntax --
@@ -559,7 +561,10 @@ hasSymbolicQuiescence stateVal m = do
     let syntacticallySpecifiedOutputs = filter (isOutputInteract . fst &&& not . isForbidden . snd) (Map.toList m)
         outputsAndCombinedGuards = second (combineGuards . BM.ordMap (substituteInGuard stateVal . tdestlocToGuard)) <$> syntacticallySpecifiedOutputs
     -- FIXME this should not solve sequentially, flattening the full list to a single guard is potentially more efficient (e.g. when the last guard in the list is trivially true)
-    Maybe.isNothing <$> solveAnySequential outputsAndCombinedGuards
+    -- TODO: in a branch that'll soon be merged, the below is changed to only check for satisfiability, which doesn't require any randomgen.
+    -- Until we merge that, making a new randomgen here is fine, because we don't care about the exact results
+    g <- mkStdGen <$> randomIO
+    Maybe.isNothing <$> evalStateT (solveAnySequential outputsAndCombinedGuards) g
     where
     tdestlocToGuard (STSLoc (guard, _), _) = guard
 

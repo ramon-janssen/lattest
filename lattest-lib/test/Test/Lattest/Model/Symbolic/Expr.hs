@@ -166,7 +166,7 @@ symbolicEval = rightToMaybe . eval
 
 prop_solveSymbolic :: Expr Bool -> Property
 prop_solveSymbolic guard = monadicIO $ do
-    mValuation <- run $ solveGuard (Set.toList $ freeVars guard) guard
+    mValuation <- run $ solveGuardIO (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->
@@ -351,7 +351,7 @@ testEvalEmptyProduct = testEvalExpression (sProduct @Integer []) "empty product 
 
 testSolveExpression :: Expr Bool -> Test
 testSolveExpression guard = TestCase $ do
-    mValuation <- solveGuard (Set.toList $ freeVars guard) guard
+    mValuation <- solveGuardIO (Set.toList $ freeVars guard) guard
     case mValuation of
         Nothing -> return ()
         Just valuation ->

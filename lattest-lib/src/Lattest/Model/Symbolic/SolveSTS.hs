@@ -57,6 +57,7 @@ import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.StandardAutomata (sanityCheckSTS)
+import Control.Monad.State (StateT (..), MonadTrans (..))
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -68,7 +69,7 @@ solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m
 solveRandomInteraction intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
-    (,r') <$> solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
+    runStateT (solveAnySequential interactionsWithGuards') r'
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
     selectInteractionsAndGuards :: (BM.BoundedMonad m, BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, forall a. Ord a => Ord (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> [(SymInteract g', SymGuard)]
@@ -208,17 +209,17 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state. (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
+offlineTests :: forall g m loc i o state. (RandomGen g, forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) (Maybe Verdict)
-             -> IO (OfflineTests i o (Maybe Verdict))
+             -> StateT g IO (OfflineTests i o (Maybe Verdict))
 offlineTests intrpr tc
   | not (sanityCheckSTS intrpr) = error "sanity check failed"
   | otherwise = do
-  inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
+  inputselect <- lift $ selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
         Right r -> pure $ Right r
-        Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
+        Left (i', st) -> lift (handleAction (In <$> i') (tc {testControllerState = st}) intrpr) >>= \case
           Right r -> pure $ Right r
           Left (tc', intrpr') -> do
             case BM.specifiedness (stateConf intrpr') of
@@ -249,7 +250,7 @@ offlineTests intrpr tc
                 solveGuard vs guard' >>= \case
                   Nothing -> pure Only -- Nothing matches the new guard, so we had the only valuation
                   Just{}  -> pure Inconclusiv -- At least one new valuation is possible, so if the SUT emits other values than expected here we cannot fail it
-          <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
+          <*> (lift (handleAction (GateValue (Out o) vs') tc intrpr) >>= \case
              Right r -> pure $ OfflineTests mempty $ Right r
              Left (tc', intrpr') -> offlineTests intrpr' tc')
   pure $ OfflineTests o i

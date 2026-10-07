@@ -51,6 +51,7 @@ import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
+import System.Random (RandomGen, genWord32)
 
 
 --------------------
@@ -78,8 +79,8 @@ smt'tosmt smt = StateT $ (\f x -> pure $ f x) $ runState smt
 smt'tosmtq :: SMT' a -> SMTQ a
 smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
-runSMT :: SMT a -> IO a
-runSMT = SBV.runSMT . flip evalStateT Map.empty
+runSMT :: RandomGen g => g -> SMT a -> (IO a, g)
+runSMT g smt = let (seed, g') = genWord32 g in (SBV.runSMT . (SBV.setOption (SBV.RandomSeed $ toInteger seed) >>) . flip evalStateT Map.empty $ smt, g')
 
 query :: SMTQ a -> SMT a
 query = StateT . (\f m -> SBV.query (f m)) . runStateT
