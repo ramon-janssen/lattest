@@ -83,7 +83,7 @@ import Algebra.Lattice.Free(Free(..))
 import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
-import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
+import Lattest.Model.Symbolic.SolveSymPrim(solveGuardIO)
 import Data.Tuple(swap)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
@@ -822,7 +822,7 @@ testBranchingPathCondition :: Test
 testBranchingPathCondition = TestCase $ do
     let disj = (\/) :: Branch
         conj = (/\) :: Branch
-        isSat guard = isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        isSat guard = isJust <$> solveGuardIO (Set.toList $ freeVars guard) guard
         assertSat lbl g = isSat g >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl g = isSat g >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
         assertNotTautology lbl g = isSat (sNot g) >>= assertBool (lbl ++ " should not be a tautology")
@@ -1127,7 +1127,7 @@ goldenAssert checks = do
 testSTSPathCondition :: Test
 testSTSPathCondition = TestCase $ do
     let -- is the given guard satisfiable, according to the SMT solver?
-        isSat guard = isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        isSat guard = isJust <$> solveGuardIO (Set.toList $ freeVars guard) guard
         pathCond = interactsToSpecifiedCondition stsExampleIntrpr
         assertSat lbl prefix = isSat (pathCond prefix) >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl prefix = isSat (pathCond prefix) >>= (assertBool (lbl ++ " should be unsatisfiable") . not)

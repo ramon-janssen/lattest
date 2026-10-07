@@ -54,6 +54,7 @@ import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
+import System.Random (RandomGen, genWord32)
 
 
 --------------------
@@ -85,23 +86,26 @@ smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 data Solver = Z3 | CVC5
      deriving (Eq,Ord,Read,Show)
 
-runSMT :: SMT a -> IO a
+runSMT :: RandomGen g => g -> SMT a -> (IO a, g)
 runSMT = runSMTWith Z3
 
--- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
--- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
-runSMTWith :: Solver -> SMT a -> IO a
-runSMTWith solver smt = lookupEnv "LATTEST_SMT_DUMP" >>= \case
-    Nothing -> run config
-    Just file -> do
-      start <- getCurrentTime
-      appendFile file $ "** SMT call started at " <> show start <> "\n"
-      result <- run config { SBV.verbose = True, SBV.redirectVerbose = Just file }
-      end <- getCurrentTime
-      appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
-      return result
+-- | Run an SMT problem with the given solver, seeded from the given random generator. If the environment variable
+-- LATTEST_SMT_DUMP is set to a file path, the interaction with the solver is appended to that file, with a timestamp
+-- at the start and the end of every call.
+runSMTWith :: RandomGen g => Solver -> g -> SMT a -> (IO a, g)
+runSMTWith solver g smt = (io, g')
   where
-    run cfg = SBV.runSMTWith cfg $ evalStateT smt Map.empty
+    (seed, g') = genWord32 g
+    io = lookupEnv "LATTEST_SMT_DUMP" >>= \case
+      Nothing -> run config
+      Just file -> do
+        start <- getCurrentTime
+        appendFile file $ "** SMT call started at " <> show start <> "\n"
+        result <- run config { SBV.verbose = True, SBV.redirectVerbose = Just file }
+        end <- getCurrentTime
+        appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
+        return result
+    run cfg = SBV.runSMTWith cfg . (SBV.setOption (SBV.RandomSeed $ toInteger seed) >>) $ evalStateT smt Map.empty
     config = case solver of
       Z3 -> SBV.z3
       CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound"] }

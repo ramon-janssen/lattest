@@ -62,6 +62,7 @@ import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
 import Data.Bifunctor (Bifunctor(..))
 import qualified Debug.Trace
+import Control.Monad.State (StateT (..), MonadTrans (..))
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
@@ -81,7 +82,7 @@ solveRandomInteractionWith :: (BM.BoundedMonad m, Foldable m, BooleanConfigurati
 solveRandomInteractionWith intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
-    (,r') <$> solveAnySequential interactionsWithGuards' -- prepend the new random state to the solved result
+    runStateT (solveAnySequential interactionsWithGuards') r'
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
     selectInteractionsAndGuards :: (BM.BoundedMonad m, BooleanConfiguration m, Foldable m, Ord i, Show i, Show o, Show (SymIntrpState loc), Ord o, Ord loc, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g', SymGuard)) -> [(SymInteract g', SymGuard)]
@@ -228,20 +229,20 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Only -> Right Fail
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
-offlineTests :: forall m loc i o state r
-              . (forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)))
+offlineTests :: forall g m loc i o state r
+              . (RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
              -> (state -> r)
-             -> IO (OfflineTests i o r)
+             -> StateT g IO (OfflineTests i o r)
 offlineTests intrpr tc inputforbidden
   | not (sanityCheckSTS intrpr) = error "sanity check failed"
   | BM.isForbidden (stateConf intrpr) = error "forbidden before offline tests"
   | otherwise = do
-  inputselect <- selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
+  inputselect <- lift $ selectTest tc (testControllerState tc) intrpr (stateConf intrpr)
   i <- case inputselect of -- this is the only reason we need a TestController for offline testing: the choice of input. The alternative is just randomly picking gates, solving guards.
         Right r -> pure $ Right r
-        Left (i', st) -> handleAction (In <$> i') (tc {testControllerState = st}) intrpr >>= \case
+        Left (i', st) -> lift (handleAction (In <$> i') (tc {testControllerState = st}) intrpr) >>= \case
           Right r -> pure $ Left (i', OfflineTests mempty $ Right r)
           Left (tc', intrpr') -> do
             case BM.specifiedness (stateConf intrpr') of
@@ -269,8 +270,8 @@ offlineTests intrpr tc inputforbidden
                            $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
                                     Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
                                     Nothing -> error "internal type mismatch") vs vs')
-                isGuardSatisfiable vs guard' >>= \issat -> pure $ if issat then Inconclusiv else Only
-          <*> (handleAction (GateValue (Out o) vs') tc intrpr >>= \case
+                lift (isGuardSatisfiable vs guard') >>= \issat -> pure $ if issat then Inconclusiv else Only
+          <*> (lift (handleAction (GateValue (Out o) vs') tc intrpr) >>= \case
              Right r -> pure $ OfflineTests mempty $ Right r
              Left (tc', intrpr')
               | BM.isForbidden (stateConf intrpr') -> error $ show (stateConf intrpr, o, vs, vs', m)

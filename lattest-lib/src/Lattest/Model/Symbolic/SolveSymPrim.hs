@@ -8,7 +8,7 @@ combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
-solveGuard,
+solveGuard, solveGuardIO,
 isGuardSatisfiable
 ) where
 
@@ -25,6 +25,7 @@ import Lattest.SMT (SolvableProblem(..), SMTQ, sortOfEqual, getSolution, getSolv
 import qualified Data.Set as Set
 import System.Random.Stateful
 import qualified Debug.Trace
+import Control.Monad.State (StateT (..), evalStateT)
 
 {-|
     Combine the given guards into one.
@@ -51,7 +52,7 @@ evaluateGuard guard = case eval guard of
     For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
     any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
 -}
-solveAnySequential :: [(SymInteract g,SymGuard)] -> IO (Maybe (GateValue g))
+solveAnySequential :: RandomGen randomgen => [(SymInteract g,SymGuard)] -> StateT randomgen IO (Maybe (GateValue g))
 solveAnySequential [] = return Nothing
 solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
     maybeSolved <- solveGuard vars guard
@@ -84,7 +85,7 @@ valuationToGateValue (SymInteract g' params) valuation =
     Check whether the given guard is satisfiable, without obtaining a valuation.
 -}
 isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
-isGuardSatisfiable vars guard = runSMT do
+isGuardSatisfiable vars guard = fst $ runSMT (mkStdGen 0) do -- satisfiability does not depend on the seed, so a fixed one suffices
     addDeclarations vars
     addAssertions [guard]
     query $ getSolvable >>= \case
@@ -92,10 +93,14 @@ isGuardSatisfiable vars guard = runSMT do
       Unsat -> return False
       Unknown -> error $ "isGuardSatisfiable: SMT solver returned unknown for guard " <> show guard -- TODO warning?
 
-solveGuard :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
-solveGuard vars guard = do
-  randomgen <- mkStdGen <$> randomIO
-  runSMT do
+solveGuardIO :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
+solveGuardIO vars guard = do
+  g <- mkStdGen <$> randomIO
+  evalStateT (solveGuard vars guard) g
+
+solveGuard :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
+solveGuard vars guard = StateT $ \randomgen ->
+  fst $ runSMT randomgen do
     addDeclarations vars
     -- addDeclarations (Set.toList $ freeVars guard)
     addAssertions [guard]
@@ -105,14 +110,14 @@ solveGuard vars guard = do
     query $ do
       solveOutcome <- getSolvable
       case solveOutcome of
-        Unsat -> return Nothing
+        Unsat -> return (Nothing, randomgen)
         Unknown -> error $ "unknown: " <> show guard
         Sat -> getSolution vars >>= go randomgen 20 . pure
   where
-    go :: StdGen -> Int -> [Valuation] -> SMTQ (Maybe Valuation)
+    go :: RandomGen g => g -> Int -> [Valuation] -> SMTQ (Maybe Valuation, g)
     go g 0 xs = do
-      let (ix,_) = randomR (0, length xs - 1) g
-      pure $ Just $ xs !! ix
+      let (ix, g') = randomR (0, length xs - 1) g
+      pure (Just $ xs !! ix, g')
     go g n xs = do
       addAssertionsQ $ map atleastoneisdifferent xs
       getSolvable >>= \case
