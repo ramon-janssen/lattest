@@ -127,7 +127,7 @@ initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
 "0"  ――?"register" [label_p:[Char]]⟶  ⊤
-"0"  ――?"update" [counter_p:Float]⟶  (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1") ∧ (((counter+-5.5)) ≥ 0, {active:=False},"2")
+"0"  ――?"update" [counter_p:Float]⟶  (((counter+-5.5)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Float]⟶  ⊥
 "1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0")

@@ -17,6 +17,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Lattest.Model.Symbolic.Internal.ExprImpls
 ( -- * Constructors to create Value Expressions
@@ -38,8 +39,6 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sNot
   -- *** And
 , sAnd
-  -- ** Numeric Operators to create Value Expressions
-, ExprNum
   -- *** Sum
 , sSum
   -- *** Product
@@ -281,11 +280,11 @@ sAnd' s =
 
 -- * Sum
 isSum :: ExprView Integer -> Bool
-isSum (Sum _) = True
+isSum (Sum IntType _) = True
 isSum _ = False
 
 getSum :: ExprView Integer -> FreeSum (ExprView Integer)
-getSum (Sum s) = s
+getSum (Sum IntType s) = s
 getSum _ = error "ExprImpls.hs - getSum - Unexpected Expr "
 
 sSumInt :: FreeSum (Expr Integer) -> Expr Integer
@@ -318,19 +317,27 @@ cstrSum' ms =
         case FMX.toOccurList retMS of
             []         -> Const 0 -- sum of nothing equal zero
             [(term,1)] -> summand term
-            _          -> Sum retMS
+            _          -> Sum IntType retMS
 
 getConst :: ExprView e -> e
 getConst (Const c) = c
 getConst _ = error "Not Const"
 
 isSumF :: ExprView Double -> Bool
-isSumF (SumFloat _) = True
+isSumF (Sum FloatType _) = True
 isSumF _ = False
 
 getSumF :: ExprView Double -> FreeSum (ExprView Double)
-getSumF (SumFloat s) = s
+getSumF (Sum FloatType s) = s
 getSumF _ = error "ExprImpls.hs - getSumF - Unexpected Expr "
+
+isSumR :: ExprView Rational -> Bool
+isSumR (Sum RationalType _) = True
+isSumR _ = False
+
+getSumR :: ExprView Rational -> FreeSum (ExprView Rational)
+getSumR (Sum RationalType s) = s
+getSumR _ = error "ExprImpls.hs - getSumF - Unexpected Expr "
 
 sSumFloat :: FreeSum (Expr Double) -> Expr Double
 sSumFloat = Expr . cstrSumF . FMX.mapTerms (SumTerm . view . summand)
@@ -355,17 +362,42 @@ cstrSumF' ms =
         case FMX.toOccurList retMS of
             []         -> Const 0.0 -- sum of nothing equals zero
             [(term,1)] -> summand term
-            _          -> SumFloat retMS
+            _          -> Sum FloatType retMS
+
+sSumRational :: FreeSum (Expr Rational) -> Expr Rational
+sSumRational = Expr . cstrSumR . FMX.mapTerms (SumTerm . view . summand)
+
+-- | Apply operator sum on the provided sum of floating-point values.
+cstrSumR :: FreeSum (ExprView Rational) -> ExprView Rational
+cstrSumR ms = cstrSumR' $ nonadds <> FMX.flatten sumOfAdds
+    where
+      (adds, nonadds) = FMX.partitionT isSumR ms
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView Rational)))
+      sumOfAdds = FMX.mapTerms (getSumR . summand) adds
+
+cstrSumR' :: FreeSum (ExprView Rational) -> ExprView Rational
+cstrSumR' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
+        sumVals = summand $ FMX.foldFMX valueSum
+        retMS = case sumVals of
+                    0.0 -> nonvals                                   -- 0.0 + x == x
+                    _   -> Sum.add (Const sumVals) nonvals
+    in
+        case FMX.toOccurList retMS of
+            []         -> Const 0.0 -- sum of nothing equals zero
+            [(term,1)] -> summand term
+            _          -> Sum RationalType retMS
 
 -- Product
 
 -- | Is Expr a Product Expression?
 isProduct :: ExprView Integer -> Bool
-isProduct (Product _) = True
+isProduct (Product IntType _) = True
 isProduct _ = False
 
 getProduct :: ExprView Integer -> FreeProduct (ExprView Integer)
-getProduct (Product p) = p
+getProduct (Product IntType p) = p
 getProduct _ = error "ExprImpls.hs - getProduct - Unexpected Expr "
 
 sProductInt :: FreeProduct (Expr Integer) -> Expr Integer
@@ -401,7 +433,7 @@ cstrPrd' ms =
                         case FMX.toDistinctAscOccurListT nonvals of
                             []          ->  Const productVals
                             [(term, 1)] ->  cstrSum (FMX.fromOccurList [(SumTerm term, productVals)])                           -- term can be Sum -> rewrite needed
-                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (Product nonvals), productVals)])  -- productVals can be 1 -> rewrite possible
+                            _           ->  cstrSum (FMX.fromOccurList [(SumTerm (Product IntType nonvals), productVals)])  -- productVals can be 1 -> rewrite possible
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
                             0   ->  Const 0      -- 0 * x == 0
@@ -413,12 +445,21 @@ cstrPrd' ms =
 
 -- Product of floating-point values
 isProductF :: ExprView Double -> Bool
-isProductF (ProductFloat _) = True
+isProductF (Product FloatType _) = True
 isProductF _ = False
 
 getProductF :: ExprView Double -> FreeProduct (ExprView Double)
-getProductF (ProductFloat p) = p
+getProductF (Product FloatType p) = p
 getProductF _ = error "ExprImpls.hs - getProductF - Unexpected Expr "
+
+-- Product of floating-point values
+isProductR :: ExprView Rational -> Bool
+isProductR (Product RationalType _) = True
+isProductR _ = False
+
+getProductR :: ExprView Rational -> FreeProduct (ExprView Rational)
+getProductR (Product RationalType p) = p
+getProductR _ = error "ExprImpls.hs - getProductF - Unexpected Expr "
 
 sProductFloat :: FreeProduct (Expr Double) -> Expr Double
 sProductFloat = Expr . cstrPrdF . FMX.mapTerms (ProductTerm . view . factor)
@@ -448,7 +489,7 @@ cstrPrdF' ms =
                         case FMX.toDistinctAscOccurListT withConst of
                             []          ->  Const productVals
                             [(term, 1)] ->  term
-                            _           ->  ProductFloat withConst
+                            _           ->  Product FloatType withConst
             _   ->  let (_, n) = Product.fraction zeros in
                         case FMX.nrofDistinctTerms n of
                             0   ->  Const 0.0      -- 0.0 * x == 0.0
@@ -457,6 +498,44 @@ cstrPrdF' ms =
         isZeroF :: ExprView Double -> Bool
         isZeroF (Const 0.0) = True
         isZeroF _           = False
+
+sProductRational :: FreeProduct (Expr Rational) -> Expr Rational
+sProductRational = Expr . cstrPrdR . FMX.mapTerms (ProductTerm . view . factor)
+
+-- | Apply operator product on the provided product of floating-point values.
+cstrPrdR :: FreeProduct (ExprView Rational) -> ExprView Rational
+cstrPrdR ms =
+    cstrPrdR' $ noprods <> FMX.flatten prodOfProds
+    where
+      (prods, noprods) = FMX.partitionT isProductR ms
+      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView Rational)))
+      prodOfProds = FMX.mapTerms (getProductR . factor) prods
+
+-- Product doesn't contain elements of type ProductFloat
+cstrPrdR' :: FreeProduct (ExprView Rational) -> ExprView Rational
+cstrPrdR' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        (zeros, _) = FMX.partitionT isZeroR vals
+    in
+        case FMX.nrofDistinctTerms zeros of
+            0   ->  let floatProducts = FMX.mapTerms (getConst <$>) vals
+                        productVals = factor (FMX.foldFMX floatProducts)
+                        withConst = if productVals == 1.0           -- 1.0 * x == x
+                                        then nonvals
+                                        else Product.multiply (Const productVals) nonvals
+                    in
+                        case FMX.toDistinctAscOccurListT withConst of
+                            []          ->  Const productVals
+                            [(term, 1)] ->  term
+                            _           ->  Product RationalType withConst
+            _   ->  let (_, n) = Product.fraction zeros in
+                        case FMX.nrofDistinctTerms n of
+                            0   ->  Const 0.0      -- 0.0 * x == 0.0
+                            _   ->  error "Error in model: Division by Zero in Product (via negative power)"
+    where
+        isZeroR :: ExprView Rational -> Bool
+        isZeroR (Const 0.0) = True
+        isZeroR _           = False
 
 -- Divide
 
@@ -471,6 +550,12 @@ divideInt (view -> vet)         (view -> ven) = Expr (Divide vet ven)
 divideFloat :: Expr Double -> Expr Double -> Expr Double
 divideFloat (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t / n) -- leave error case (division by zero) unevaluated
 divideFloat (view -> vet)         (view -> ven) = Expr (DivideFloat vet ven)
+
+-- | Apply operator Divide on the provided floating-point value expressions.
+-- Preconditions are /not/ checked.
+divideRational :: Expr Rational -> Expr Rational -> Expr Rational
+divideRational (view ->  Const t) (view -> Const n) | n /= 0 = sConst (t / n) -- leave error case (division by zero) unevaluated
+divideRational (view -> vet)         (view -> ven) = Expr (DivideFloat vet ven)
 
 -- Modulo
 
@@ -488,33 +573,41 @@ sIsNonNegativeInt :: Expr Integer -> Expr Bool
 -- Simplification Values
 sIsNonNegativeInt (view -> Const v) = sConst (0 <= v)
 sIsNonNegativeInt (view -> Length _ _)   = sConst True        -- length of list is always Greater or equal to zero
-sIsNonNegativeInt (view -> ve)         = Expr (GezInt ve)
+sIsNonNegativeInt (view -> ve)         = Expr (Gez ve)
 
 -- | Apply operator GEZ (Greater Equal Zero) on the provided floating-point value expression.
 -- Preconditions are /not/ checked.
-sIsNonNegativeFloat :: Expr Double -> Expr Bool
+sIsNonNegativeFloat :: Num a => Expr a -> Expr Bool
 sIsNonNegativeFloat (view -> Const v) = sConst (0 <= v)
-sIsNonNegativeFloat (view -> ve)      = Expr (GezFloat ve)
+sIsNonNegativeFloat (view -> ve)      = Expr (Gez ve)
 
-class Ord t => ExprNum t where
-    sSum :: FreeSum (Expr t) -> Expr t
-    sProduct :: FreeProduct (Expr t) -> Expr t
-    sIsNonNegative :: Expr t -> Expr Bool
-    (./) :: Expr t -> Expr t -> Expr t
+sSum :: forall a. (Num a, ExprType a) => FreeSum (Expr a) -> Expr a
+sSum = case typeOf' (undefined :: Expr a) of
+  IntType -> sSumInt
+  FloatType -> sSumFloat
+  RationalType -> sSumRational
+  _ -> error "impossible Num instance"
+
+sProduct :: forall a. (Num a, ExprType a) => FreeProduct (Expr a) -> Expr a
+sProduct = case typeOf' (undefined :: Expr a) of
+  IntType -> sProductInt
+  FloatType -> sProductFloat
+  RationalType -> sProductRational
+  _ -> error "impossible Num instance"
+sIsNonNegative :: Num a => Expr a -> Expr Bool
+sIsNonNegative a = case withExprConstraints a $ typeOf' a of
+  IntType -> sIsNonNegativeInt a
+  FloatType -> sIsNonNegativeFloat a
+  RationalType -> sIsNonNegativeFloat a
+  _ -> error "impossible Num instance"
 
 infixl 7 ./
-
-instance ExprNum Integer where
-    sSum = sSumInt
-    sProduct = sProductInt
-    sIsNonNegative = sIsNonNegativeInt
-    (./) = divideInt
-
-instance ExprNum Double where
-    sSum = sSumFloat
-    sProduct = sProductFloat
-    sIsNonNegative = sIsNonNegativeFloat
-    (./) = divideFloat
+(./) :: Num a => Expr a -> Expr a -> Expr a
+(./) x y = withExprConstraints x $ case typeOf' x of
+  IntType -> divideInt x y
+  FloatType -> divideFloat x y
+  RationalType -> divideRational x y
+  _ -> error "impossible Num instance"
 
 sConcat :: ExprConstraints a => Expr [[a]] -> Expr [a]
 sConcat = Expr . Concat . view
@@ -732,14 +825,11 @@ subst' ve (Ite cond vexp1 vexp2)  = sIfThenElse (subst' ve cond) (subst' ve vexp
 subst' ve (Divide t n)            = (./) (subst' ve t) (subst' ve n)
 subst' ve (Modulo t n)            = (.%) (subst' ve t) (subst' ve n)
 subst' ve (DivideFloat t n)       = (./) (subst' ve t) (subst' ve n)
-subst' ve (Sum s)                 = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
-subst' ve (SumFloat s)            = sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
-subst' ve (Product p)             = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
-subst' ve (ProductFloat p)        = sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
+subst' ve (Sum t s)               = withExprConstraints t $ sSum $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT s
+subst' ve (Product t p)           = withExprConstraints t $ sProduct $ FMX.fromOccurListT $ map (first (subst' ve)) $ FMX.toDistinctAscOccurListT p
 subst' ve (Length _ vexp) = sLength $ subst' ve vexp
-subst' ve (GezInt v)                = sIsNonNegative (subst' ve v)
+subst' ve (Gez v)                = sIsNonNegative (subst' ve v)
 subst' ve (Equal _ vexp1 vexp2)    = (.==) (subst' ve vexp1) (subst' ve vexp2)
-subst' ve (GezFloat v)              = sIsNonNegative (subst' ve v)
 subst' ve (And vexps)               = sAnd $ Set.map (subst' ve) vexps
 subst' ve (Not vexp)                = sNot (subst' ve vexp)
 subst' ve (Concat vexps)                = sConcat $ subst' ve vexps
@@ -787,14 +877,10 @@ reduce (Var v) = Var v
 reduce (Const v) = Const v
 reduce (Ite (reduce -> Const b) (reduce -> e1) (reduce -> e2)) = if b then e1 else e2
 reduce (Ite (reduce -> c) (reduce -> e1) (reduce -> e2)) = Ite c e1 e2
-reduce (Sum (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
-reduce (Sum (mapFreeMonoidX reduce -> es)) = Sum es
-reduce (SumFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
-reduce (SumFloat (mapFreeMonoidX reduce -> es)) = SumFloat es
-reduce (Product (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
-reduce (Product (mapFreeMonoidX reduce -> es)) = Product es
-reduce (ProductFloat (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = Const $ FMX.fold $ mapFreeMonoidX constant es
-reduce (ProductFloat (mapFreeMonoidX reduce -> es)) = ProductFloat es
+reduce (Sum t (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = withExprConstraints t $ Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Sum t (mapFreeMonoidX reduce -> es)) = Sum t es
+reduce (Product t (mapFreeMonoidX reduce -> es)) | allFreeMonoidX isConst es = withExprConstraints t $ Const $ FMX.fold $ mapFreeMonoidX constant es
+reduce (Product t (mapFreeMonoidX reduce -> es)) = Product t es
 reduce (Modulo (reduce -> e1) (reduce -> e2@(Const 0))) = Modulo e1 e2 -- leave divisions by zero as expressions
 reduce (Modulo (reduce -> (Const x)) (reduce -> (Const y))) = Const $ x `mod` y
 reduce (Modulo (reduce -> e1) (reduce -> e2)) = Modulo e1 e2
@@ -808,10 +894,8 @@ reduce (Length _ (reduce -> Const xs)) = Const $ fromIntegral $ length xs
 reduce (Length t (reduce -> e)) = Length t e
 reduce (Equal _ (reduce -> Const e1) (reduce -> Const e2)) = Const (e1 == e2)
 reduce (Equal t (reduce -> e1) (reduce -> e2)) = Equal t e1 e2
-reduce (GezInt (reduce -> (Const x))) = Const $ x >= 0
-reduce (GezInt (reduce -> e)) = GezInt e
-reduce (GezFloat (reduce -> (Const x))) = Const $ x >= 0
-reduce (GezFloat (reduce -> e)) = GezFloat e
+reduce (Gez (reduce -> (Const x))) = Const $ x >= 0
+reduce (Gez (reduce -> e)) = Gez e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
 reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
@@ -939,13 +1023,10 @@ mapExpressionVars' f (Ite cond vexp1 vexp2)  = Ite (mapExpressionVars' f cond) (
 mapExpressionVars' f (Divide t n)            = Divide (mapExpressionVars' f t) (mapExpressionVars' f n)
 mapExpressionVars' f (Modulo t n)            = Modulo (mapExpressionVars' f t) (mapExpressionVars' f n)
 mapExpressionVars' f (DivideFloat t n)       = DivideFloat (mapExpressionVars' f t) (mapExpressionVars' f n)
-mapExpressionVars' f (Sum s)                 = Sum (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
-mapExpressionVars' f (SumFloat s)            = SumFloat (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
-mapExpressionVars' f (Product p)             = Product (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
-mapExpressionVars' f (ProductFloat p)        = ProductFloat (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
+mapExpressionVars' f (Sum t s)               = Sum t (FMX.mapTerms (SumTerm . mapExpressionVars' f . summand) s)
+mapExpressionVars' f (Product t p)           = Product t (FMX.mapTerms (ProductTerm . mapExpressionVars' f . factor) p)
 mapExpressionVars' f (Length t vexp)         = Length t (mapExpressionVars' f vexp)
-mapExpressionVars' f (GezInt v)              = GezInt (mapExpressionVars' f v)
-mapExpressionVars' f (GezFloat v)            = GezFloat (mapExpressionVars' f v)
+mapExpressionVars' f (Gez v)                 = Gez (mapExpressionVars' f v)
 mapExpressionVars' f (And vexps)             = And (Set.map (mapExpressionVars' f) vexps)
 mapExpressionVars' f (Not vexp)              = Not (mapExpressionVars' f vexp)
 mapExpressionVars' f (Equal t x y)           = Equal t (mapExpressionVars' f x) (mapExpressionVars' f y)
