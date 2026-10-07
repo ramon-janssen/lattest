@@ -24,6 +24,7 @@ SETree(..),
 SEIte(..),
 offlineTests,
 OfflineTests(..),
+OnlyOrInconclusive(..),
 toTrace,
 SymIntrpState(..),
 indexExpr,
@@ -41,7 +42,7 @@ import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVa
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&))
+import Control.Arrow((&&&), first)
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
@@ -270,14 +271,13 @@ offlineTests intrpr tc
         -- GateValue (Out _) _ -> Fail -- If the test controller refuses to accept an output, it's a fail? Not necessarily, what if it's just a stopcondition?
       Left st -> pure $ Left (t {testControllerState = st}, after i x)
 
--- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it.
+-- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it together with its verdict.
 -- For outputs, it returns both the given output and the starting location.
 toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
         => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
         -> OfflineTests i o r
-        -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))]
-toTrace _ (OfflineTests (Map.toList -> []) (Right _)) = Just []
-toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
-toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
+        -> Maybe ([IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))], r)
+toTrace _ (OfflineTests (Map.toList -> []) (Right r)) = Just ([], r)
+toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = first (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
+toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = first (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
 toTrace _ _ = Nothing -- either multiple outputs, or input and output
-
