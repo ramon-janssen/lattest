@@ -13,6 +13,9 @@ import      Lattest.Model.BoundedMonad (BoundedConfiguration(..))
 import      qualified Data.Map as Map
 import      Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
 import      Data.Tuple (swap)
+import      Control.Monad (forM_)
+import      Control.Monad.State (evalStateT)
+import      System.Random (mkStdGen)
 
 run :: IO ()
 run = do
@@ -43,18 +46,15 @@ run = do
 
     putStrLn "computing offline test cases..."
     let nrSteps = 10
-        randomSeed = 56
-        -- observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
+        n = 5
+        randomSeed = 456
         observeVerdict _ _ _ lattice
           | isForbidden lattice = pure $ Just Fail
           | isUnderspecified lattice = pure $ Just Pass
           | otherwise = pure Nothing
         controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
-    tests <- offlineTests seqComposed controller
+    tests <- evalStateT (offlineTests seqComposed controller) (mkStdGen (randomSeed + n))
     print tests
-    print "Done"
-
-    print es
 
     print "Composition finished, writing result to file..."
     -- To write to a file:
