@@ -36,22 +36,26 @@ run = do
             (_, _, _, _, val,_):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
         gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_,_) -> g) stss
         as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_,_) -> a) stss
+        es =                                        Map.unions $ map (\(_,_,_,_,_,e) -> e) stss
 
     putStrLn $ prettyPrintIntrp seqComposed
     print discardedTransit
 
-    -- putStrLn "computing offline test cases..."
-    -- let nrSteps = 2
-    --     randomSeed = 456
-    --     -- observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
-    --     observeVerdict _ _ _ lattice
-    --       | isForbidden lattice = pure $ Just Fail
-    --       | isUnderspecified lattice = pure $ Just Pass
-    --       | otherwise = pure Nothing
-    --     controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
-    -- tests <- offlineTests seqComposed controller
-    -- print "Done"
+    putStrLn "computing offline test cases..."
+    let nrSteps = 10
+        randomSeed = 56
+        -- observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
+        observeVerdict _ _ _ lattice
+          | isForbidden lattice = pure $ Just Fail
+          | isUnderspecified lattice = pure $ Just Pass
+          | otherwise = pure Nothing
+        controller = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
+    tests <- offlineTests seqComposed controller
+    print tests
+    print "Done"
+
+    print es
 
     print "Composition finished, writing result to file..."
     -- To write to a file:
-    stsToJSONFile "example_composed2.json" "stscomposed" (syntacticAutomaton seqComposed) gs as initVal
+    stsToJSONFile "example_composed2.json" "stscomposed" (syntacticAutomaton seqComposed) gs as es initVal

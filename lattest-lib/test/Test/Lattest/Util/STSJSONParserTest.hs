@@ -50,7 +50,7 @@ testSTSJSONParserNominal = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_all_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (id, sts, gs, as, valuation) -> do
+        Right (id, sts, gs, as, valuation, enums) -> do
             assertEqual "STS id" "STS1" id
             assertEqual "initial valuation"
                 (Valuation $
@@ -78,10 +78,10 @@ initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
 "0"  ――?"register" [label_p:[Char]]⟶  ⊤
-"0"  ――?"update" [counter_p:Int]⟶  (((counter+-4)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5)) ≥ 0), {counter:=(counter+counter_p)},"1")
+"0"  ――?"update" [counter_p:Int]⟶  (counter+-4 ≥ 0, {active:=False},"2") ∧ (¬(counter+-5 ≥ 0), {counter:=counter+counter_p},"1")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Int]⟶  ⊥
-"1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1)},"0")
+"1"  ――?"register" [label_p:[Char]]⟶  (active = True, {label:=label_p},"0") ∧ (label = label_p, {active:=True, counter:=counter+1},"0")
 "1"  ――?"update" [counter_p:Int]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Int]⟶  ⊥
@@ -99,7 +99,7 @@ testSTSJSONParserNominalFloat = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_float_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (id, sts, gs, as, valuation) -> do
+        Right (id, sts, gs, as, valuation, enums) -> do
             assertEqual "STS id" "" id  -- no ID defined
             assertEqual "initial valuation"
                 (Valuation $
@@ -127,10 +127,10 @@ initial location configuration: "0"
 locations: "0", "1", "2"
 transitions:
 "0"  ――?"register" [label_p:[Char]]⟶  ⊤
-"0"  ――?"update" [counter_p:Float]⟶  (((counter+-5.5)) ≥ 0, {active:=False},"2") ∧ (¬(((counter+-5.5)) ≥ 0), {counter:=(counter+counter_p)},"1")
+"0"  ――?"update" [counter_p:Float]⟶  (counter+-5.5 ≥ 0, {active:=False},"2") ∧ (¬(counter+-5.5 ≥ 0), {counter:=counter+counter_p},"1")
 "0"  ――!"O1" []⟶  ⊥
 "0"  ――!"confirm" [counter_p:Float]⟶  ⊥
-"1"  ――?"register" [label_p:[Char]]⟶  ((active) = (True), {label:=label_p},"0") ∧ ((label) = (label_p), {active:=True, counter:=(counter+1.0)},"0")
+"1"  ――?"register" [label_p:[Char]]⟶  (active = True, {label:=label_p},"0") ∧ (label = label_p, {active:=True, counter:=counter+1.0},"0")
 "1"  ――?"update" [counter_p:Float]⟶  ⊤
 "1"  ――!"O1" []⟶  ⊥
 "1"  ――!"confirm" [counter_p:Float]⟶  ⊥

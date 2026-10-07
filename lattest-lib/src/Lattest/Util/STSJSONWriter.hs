@@ -82,14 +82,15 @@ isEmptySwitch (Switch _ act gal) =
     (isForbidden gal && isOutputInteract act) || (isUnderspecified gal && isInputInteract act)
 
 -- | Given ID, STS, the names of guards and assignments, and the initial valuation, make a JSON
-stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Valuation -> JSON.Value
-stsToJSON sid sts guardmap assmap valuation =
+stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Map.Map String (Some Expr) -> Valuation -> JSON.Value
+stsToJSON sid sts guardmap assmap enums valuation =
     object
         [ "id" .= sid
         , "initial_location" .= initLocationJSON locIds (initConf sts)
         , "initialValuation" .= initValue valuation
         , "locations" .= Map.elems locIds
         , "switches" .= switches''
+        , "enum_translation" .= Map.toList (Map.map (\(Some e) -> show e) enums)
         -- , "parameters" .= params -- already wrote this, but it uses a different representation of structures, so probably better to just reuse the ones from before merging
         -- , "inputGates" .= -- not needed
         -- , "outputGates" .= -- not needed
@@ -177,9 +178,10 @@ stsToJSONFile :: (Ord loc, Show loc)
               -> IOSTS FreeLattice loc String String
               -> Map.Map (Expr Bool) String
               -> Map.Map VarModel String
+              -> Map.Map String (Some Expr)
               -> Valuation
               -> IO ()
-stsToJSONFile path sid sts gs as valuation = BSL.writeFile path (JSON.encode (stsToJSON sid sts gs as valuation))
+stsToJSONFile path sid sts gs as enums valuation = BSL.writeFile path (JSON.encode (stsToJSON sid sts gs as enums valuation))
 
 -- | Write a list of STSs to a single file containing a JSON array.
 stsListToJSONFile :: (Ord loc, Show loc)
@@ -187,5 +189,6 @@ stsListToJSONFile :: (Ord loc, Show loc)
                   -> [(String, IOSTS FreeLattice loc String String, Valuation)]
                   -> Map.Map (Expr Bool) String
                   -> Map.Map VarModel String
+                  -> Map.Map String (Some Expr)
                   -> IO ()
-stsListToJSONFile path stss gs as = BSL.writeFile path (JSON.encode [ stsToJSON sid sts gs as valuation | (sid, sts, valuation) <- stss ])
+stsListToJSONFile path stss gs as enums = BSL.writeFile path (JSON.encode [ stsToJSON sid sts gs as enums valuation | (sid, sts, valuation) <- stss ])

@@ -1013,47 +1013,50 @@ instance Ord (ExprView t) where
 
 
 instance Show (ExprView t) where
-  show (Var v) = varName v
-  show (Const c) = show c
-  show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
-  show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
-  show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
-  show (DivideFloat e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
-  show (Sum _ es) | es == mempty = "∑∅"
-  show (Sum _ es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
+  show = \case
+    (Var v) -> varName v
+    (Const c) -> show c
+    (Ite cond e1 e2) -> "if " ++ bshow cond ++ " then " ++ bshow e1 ++ " else " ++ bshow e2
+    (Divide e1 e2) -> bshow e1 ++ " / " ++ bshow e2
+    (Modulo e1 e2) -> bshow e1 ++ " % " ++ bshow e2
+    (DivideFloat e1 e2) -> bshow e1 ++ " / " ++ bshow e2
+    (Sum _ es) | es == mempty -> "∑∅"
+    (Sum _ es) -> showFreeMonoid "+" bshowSumTerm es
       where
-      showSumTerm (-1)     t = "-" ++ t
-      showSumTerm 1 t = t
-      showSumTerm n t = show n ++ "⋅" ++ t
-  show (Product _ es) | es == mempty = "∏∅"
-  show (Product _ es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
-  show (Length _ e) = "length(" ++ show e ++ ")"
-  show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-  show (Gez e) = "(" ++ show e ++ ") ≥ 0"
-  show (Not e) = "¬(" ++ show e ++ ")"
-  show (And (Set.toList -> [])) = "⋀∅"
-  show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
-  show (Concat es) = "concat " <> show es
-  show (Cons x xs) = show x ++ ":" ++ show xs
-  show (Append xs ys) = show xs ++ "++" ++ show ys
-  show (LElem _ x xs) = show x ++ "`elem`" ++ show xs
-  show (Take i xs) = "take " ++ show i ++ " " ++ show xs
-  show (Drop i xs) = "drop " ++ show i ++ " " ++ show xs
-  show (Head x) = "head " <> show x
-  show (Tail x) = "tail " <> show x
-  show (First _ x) = "fst " <> show x
-  show (Second _ x) = "snd " <> show x
-  show (Pair x y) = "(" <> show x <> ", " <> show y <> ")"
-  show (Either _ _ l r x) = "either (" <> show l <> ") (" <> show r <> ") " <> show x
-  show (Zip _ _ x y) = "zip (" <> show x <> ") (" <> show y <> ")"
-  show (Map _ f xs) = "map (" <> show f <> ") " <> show xs
-  show (ELeft x) = "Left " <> show x
-  show (ERight x) = "Right " <> show x
-  show (SElem _ x xs) = show x <> "`Set.elem`" <> show xs
-  show (SInsert x xs) = "Set.insert " <> show x <> " " <> show xs
-  show (Filter _ f xs) = "filter (" <> show f <> ") " <> show xs
-  show (Foldr _ _ f i xs) = "foldr (" <> show f <> ") (" <> show i <> ") " <> show xs
-  show (Foldl _ _ f i xs) = "foldl (" <> show f <> ") (" <> show i <> ") " <> show xs
+      bshowSumTerm (-1)     t = "-" ++ t
+      bshowSumTerm 1 t = t
+      bshowSumTerm n t = bshow n ++ "⋅" ++ t
+    (Product _ es) | es == mempty -> "∏∅"
+    (Product _ es) -> showFreeMonoid "⋅" (\n t -> bshow n ++ "^" ++ t) es -- "(" ++ bshow e2 ++ ")" --FreeProduct Expr
+    (Length _ e) -> "length " ++ bshow e
+    (Equal _ e1 e2) -> bshow e1 ++ " = " ++ bshow e2
+    (Gez e) -> bshow e ++ " ≥ 0"
+    (Not e) -> "¬" ++ bshow e
+    (And (Set.toList -> [])) -> "⋀∅"
+    (And (Set.toList -> es)) -> List.intercalate "∧" $ bshow <$> es
+    (Concat es) -> "concat " <> bshow es
+    (Cons x xs) -> bshow x ++ ":" ++ bshow xs
+    (Append xs ys) -> bshow xs ++ "++" ++ bshow ys
+    (LElem _ x xs) -> bshow x ++ "`elem`" ++ bshow xs
+    (Take i xs) -> "take " ++ bshow i ++ " " ++ bshow xs
+    (Drop i xs) -> "drop " ++ bshow i ++ " " ++ bshow xs
+    (Head x) -> "head " <> bshow x
+    (Tail x) -> "tail " <> bshow x
+    (First _ x) -> "fst " <> bshow x
+    (Second _ x) -> "snd " <> bshow x
+    (Pair x y) -> "(" <> show x <> ", " <> show y <> ")"
+    (Either _ _ l r x) -> "either " <> bshow l <> " " <> bshow r <> " " <> bshow x
+    (Zip _ _ x y) -> "zip " <> bshow x <> " " <> bshow y
+    (Map v f xs) -> "map (\\" <> show v <> " -> " <> show f <> ") " <> bshow xs
+    (ELeft x) -> "Left " <> bshow x
+    (ERight x) -> "Right " <> bshow x
+    (SElem _ x xs) -> bshow x <> "`Set.elem`" <> bshow xs
+    (SInsert x xs) -> "Set.insert " <> bshow x <> " " <> bshow xs
+    (Filter _ f xs) -> "filter " <> bshow f <> " " <> bshow xs
+    (Foldr _ _ f i xs) -> "foldr " <> bshow f <> " " <> bshow i <> " " <> bshow xs
+    (Foldl _ _ f i xs) -> "foldl " <> bshow f <> " " <> bshow i <> " " <> bshow xs
+    where
+      bshow x = let y = show x in if isJust (List.elemIndex ' ' y) then '(' : y <> ")" else y
 
 instance Has ExprType Expr where
   has (Expr v) = has @ExprType v
@@ -1112,7 +1115,22 @@ newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
 -- so I've been assuming that any representable ExprView is fair game
 
 instance Show (Expr t) where
-    show = show . view
+  show = show . view
+
+instance GShow Expr where
+  gshowsPrec = defaultGshowsPrec
+
+instance GEq Expr where
+  geq x y = withExprConstraints x $ withExprConstraints y $ geq (typeOf' x) (typeOf' y)
+
+instance GCompare Expr where
+  gcompare x y = withExprConstraints x $ withExprConstraints y $ case gcompare (typeOf' x) (typeOf' y) of
+    GLT -> GLT
+    GGT -> GGT
+    GEQ -> case compare x y of
+      GT -> GGT
+      LT -> GLT
+      EQ -> GEQ
 
 
 isConst :: ExprView v -> Bool
