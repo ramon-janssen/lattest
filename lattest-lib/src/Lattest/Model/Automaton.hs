@@ -95,6 +95,8 @@ import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Constraint.Extras (Has(..))
+import System.Random (randomIO, mkStdGen)
+import Control.Monad.State (evalStateT)
 import Control.Monad.Extra (anyM)
 
 ------------
