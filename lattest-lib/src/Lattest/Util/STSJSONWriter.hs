@@ -33,6 +33,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Dependent.Map as DMap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.SBV (AlgReal)
 
 -- TODO: Do we want to export the STS with the check guards?
 
@@ -67,6 +68,7 @@ instance Has JSON.ToJSON Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k
@@ -74,6 +76,9 @@ instance Has JSON.ToJSON Type where
     SetType tp -> has @JSON.ToJSON tp k
     SumType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
     TupleType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
+
+instance JSON.ToJSON AlgReal where
+  toJSON = JSON.toJSON @Double . fromRational . toRational
 
 deriving instance (JSON.ToJSON a) => JSON.ToJSON (RCSet a)
 

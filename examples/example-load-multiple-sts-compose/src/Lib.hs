@@ -20,8 +20,8 @@ import      System.Random (mkStdGen)
 run :: IO ()
 run = do
     putStrLn "loading STSs from JSON..."
-    -- result <- stsListFromJSONFile "example.json"
-    result <- stsListFromJSONFile "example_coffee_machine.json"
+    result <- stsListFromJSONFile "example.json"
+    -- result <- stsListFromJSONFile "example_coffee_machine.json"
     stss <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r

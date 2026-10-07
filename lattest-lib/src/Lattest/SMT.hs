@@ -51,7 +51,7 @@ import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprConstraints, withExprNumConstraint)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprNumConstraint)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
@@ -152,6 +152,7 @@ addDeclaration (Variable nm ty) = do
       IntType -> SBV.sInteger
       FloatType -> SBV.sDouble
       RationalType -> SBV.sRational
+      RealType -> SBV.sReal
       BoolType -> SBV.sBool
       UnitType -> SBV.sTuple
       CharType -> SBV.sChar
@@ -173,7 +174,7 @@ push = lift $ SBV.push 1
 
 -- The main translation between our Exprs and SBV's Symbolic
 exprToSymbolic :: ExprConstraints a => ExprView a -> SMT' (SBV a)
-exprToSymbolic v = case v of
+exprToSymbolic = \case
   Var (Variable nm _tp) -> gets (\m -> case m Map.!? nm of
       Nothing -> error $ "exprToSymbolic: variable " <> show nm <> " is not declared (declared: " <> show (Map.keys m) <> ")"
       Just (Some (SBVI.SBV x)) -> SBVI.SBV x)
@@ -187,6 +188,7 @@ exprToSymbolic v = case v of
   DivideFloat x y -> case typeOf' x of -- need to split because of overlapping instances in SBV
     RationalType -> (/) <$> go x <*> go y
     FloatType    -> (/) <$> go x <*> go y
+    RealType    -> (/) <$> go x <*> go y
     _ -> error "impossible type"
   Modulo x y -> SBV.sMod  <$> go x <*> go y
   Sum t s -> withExprNumConstraint t $ foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
@@ -338,7 +340,7 @@ closureEnvFor m = pack . Set.toAscList . Set.fromList
     pack :: [Some Variable] -> Maybe ClosureEnv
     pack [] = Nothing
     pack [Some v@(Variable nm ty)] = withExprConstraints ty $
-      Just $ ClosureEnv (lookupVar v) (\e -> Map.insert nm (Some e))
+      Just $ ClosureEnv (lookupVar v) (Map.insert nm . Some)
     pack (Some v@(Variable nm (ty :: Type t)) : vs) = case pack vs of
       Nothing -> pack [Some v]
       Just (ClosureEnv (rest :: SBV r) inject) -> withExprConstraints ty $

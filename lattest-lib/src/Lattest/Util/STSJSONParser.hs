@@ -33,10 +33,9 @@ import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Constant (..), ExprConstraints, Expr (..))
-import Data.SBV (RCSet (..))
+import Data.SBV (RCSet (..), AlgReal)
 import qualified Data.Aeson.Types as JSON
 import qualified Data.Aeson.KeyMap as JSON
-import Data.Bifunctor (Bifunctor(..))
 import Data.Aeson.Key (toString)
 import qualified Debug.Trace
 
@@ -47,6 +46,7 @@ data UntypedExpr
     = UEBool Bool
     | UEFloat Double
     | UERational Rational
+    | UEReal AlgReal
     | UEInt  Integer
     | UEStr  String
     | UEVar  String -- Variable reference, e.g. { "var": "name" }
@@ -80,38 +80,42 @@ instance JSON.FromJSON UntypedExpr where
                 case mrat of
                   Just r -> pure (UERational r)
                   Nothing -> do
-                    mbool <- o JSON..:? "boolean"
-                    case mbool of
-                      Just b -> pure (UEBool b)
+                    mreal <- o JSON..:? "real"
+                    case mreal of
+                      Just r -> pure (UEReal r)
                       Nothing -> do
-                        mstr <- o JSON..:? "string"
-                        case mstr of
-                          Just s -> pure (UEStr s)
+                        mbool <- o JSON..:? "boolean"
+                        case mbool of
+                          Just b -> pure (UEBool b)
                           Nothing -> do
-                            menum <- o JSON..:? "enum"
-                            case menum of
-                              Just e -> pure (UEEnum e)
+                            mstr <- o JSON..:? "string"
+                            case mstr of
+                              Just s -> pure (UEStr s)
                               Nothing -> do
-                                (op :: String) <- o JSON..: "op"
-                                case op of
-                                  "neg" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "not" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "len" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "head" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "tail" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "concat" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "first" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "second" -> UEOp1 op <$> o JSON..: "rhs"
-                                  "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                                  "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                                  "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
-                                  "exists" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
-                                  "cardinality" -> UEOp5 op <$> o JSON..: "lambda"  <*> o JSON..: "quantifier" <*> o JSON..: "expression"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
-                                  "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                                  "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                                  "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
-                                  _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+                                menum <- o JSON..:? "enum"
+                                case menum of
+                                  Just e -> pure (UEEnum e)
+                                  Nothing -> do
+                                    (op :: String) <- o JSON..: "op"
+                                    case op of
+                                      "neg" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "not" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "len" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "head" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "tail" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "concat" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "first" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "second" -> UEOp1 op <$> o JSON..: "rhs"
+                                      "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                                      "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
+                                      "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
+                                      "exists" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
+                                      "cardinality" -> UEOp5 op <$> o JSON..: "lambda"  <*> o JSON..: "quantifier" <*> o JSON..: "expression"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
+                                      "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                                      "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+                                      "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
+                                      _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
   parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
@@ -136,6 +140,7 @@ toExpr varmap accmap enummap = \case
   UEInt   i -> Right $ IntType   :=> sConst i
   UEFloat f -> Right $ FloatType :=> sConst f
   UERational f -> Right $ RationalType :=> sConst f
+  UEReal     f -> Right $ RealType     :=> sConst f
   UEStr   s -> Right $ ListType CharType :=> sConst s
   UEOp1 o e -> go e >>= op1 o
   UEOp2 "project" e (UEVar f) -> -- need to handle this here, because for all other Op2's we check the types (and field accessors do not have a type here)
@@ -182,6 +187,9 @@ toExpr varmap accmap enummap = \case
       RationalType -> case o of
         "neg" -> Right $ RationalType :=> sNeg x
         _ -> Left $ "unknown op1 @Rational: " <> o
+      RealType -> case o of
+        "neg" -> Right $ RealType :=> sNeg x
+        _ -> Left $ "unknown op1 @Real: " <> o
       ListType t -> withExprConstraints t case o of
         "concat" -> case t of
           ListType t' -> withExprConstraints t' $ Right $ t :=> sConcat x
@@ -231,6 +239,16 @@ toExpr varmap accmap enummap = \case
         ">=" -> Right $ BoolType :=> x .>= y
         _ -> op2 o (t :=> x) (t :=> y)
       RationalType -> case o of
+        "/" -> Right $ t :=> x ./ y
+        "+" -> Right $ t :=> x .+ y
+        "-" -> Right $ t :=> x .- y
+        "*" -> Right $ t :=> x .* y
+        "<" -> Right $ BoolType :=> x .< y
+        "<=" -> Right $ BoolType :=> x .<= y
+        ">" -> Right $ BoolType :=> x .> y
+        ">=" -> Right $ BoolType :=> x .>= y
+        _ -> op2 o (t :=> x) (t :=> y)
+      RealType -> case o of
         "/" -> Right $ t :=> x ./ y
         "+" -> Right $ t :=> x .+ y
         "-" -> Right $ t :=> x .- y
@@ -356,7 +374,7 @@ data VarDefJson = VarDefJson { varDefJsonType :: Some Type
 newtype MkEnumResult tp = MER (Map.Map String (Expr tp))
 
 instance JSON.FromJSON VarDefJson where
-  parseJSON = JSON.withObject "VarDefJson" $ go
+  parseJSON = JSON.withObject "VarDefJson" go
     where
       go :: JSON.Object -> JSON.Parser VarDefJson -- (Some Type, [(String, Some Expr -> Some Expr)])
       go o = do
@@ -371,6 +389,7 @@ instance JSON.FromJSON VarDefJson where
           "()"      -> k $ Some UnitType
           "float"   -> k $ Some FloatType
           "rational"-> k $ Some RationalType
+          "real"    -> k $ Some RealType
           "array"   -> do
             o' <- o JSON..: "elements"
             VarDefJson (Some t) a b <- go o'
@@ -618,6 +637,7 @@ buildValuation locVarCtx initVal enums =
         jsonToValue CharType (JSON.String (unpack -> [c])) = Just c
         jsonToValue FloatType (JSON.Number n) = Just (toRealFloat n)
         jsonToValue RationalType (JSON.Number n) = Just (toRational n)
+        jsonToValue RealType (JSON.Number n) = Just (fromRational $ toRational n)
         jsonToValue (ListType CharType) (JSON.String s) =  Just (unpack s)
         jsonToValue (ListType t) (JSON.Array a) = mapM (jsonToValue t) (toList a)
         jsonToValue t (JSON.String s) = case enums Map.!? unpack s of
@@ -636,6 +656,7 @@ buildValuation locVarCtx initVal enums =
         defaultConst UnitType = CUnit
         defaultConst FloatType  = CFloat 0.0
         defaultConst RationalType = CRational 0.0
+        defaultConst RealType = CReal 0.0
         defaultConst BoolType   = CBool False
         defaultConst CharType = CChar 'a'
         defaultConst (ListType t) = CList [] t
@@ -690,3 +711,5 @@ stsListFromJSONFile path = do
         Left  err      -> Left $ "JSON decode error: " ++ err
         Right stsJsons -> forM stsJsons convertSTSJson
 
+instance JSON.FromJSON AlgReal where
+  parseJSON x = fromRational . toRational <$> JSON.parseJSON @Double x

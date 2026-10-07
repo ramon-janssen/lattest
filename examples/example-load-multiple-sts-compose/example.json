@@ -41,7 +41,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -59,13 +59,13 @@
                 ]
             },
             "critical-section-start": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     1.5
                 ]
             },
             "critical-section-end": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     2.5
                 ]
@@ -105,7 +105,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -290,7 +290,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "float": 1.0
+                            "real": 1.0
                         }
                     },
                     "op": "&&",
@@ -306,7 +306,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "float": 3.0
+                            "real": 3.0
                         }
                     }
                 }
@@ -434,7 +434,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -452,13 +452,13 @@
                 ]
             },
             "critical-section-start": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     1.5
                 ]
             },
             "critical-section-end": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     2.5
                 ]
@@ -498,7 +498,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -685,7 +685,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "float": 1.0
+                            "real": 1.0
                         }
                     },
                     "op": "&&",
@@ -701,7 +701,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "float": 3.0
+                            "real": 3.0
                         }
                     }
                 }
@@ -829,7 +829,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -847,13 +847,13 @@
                 ]
             },
             "critical-section-start": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     1.5
                 ]
             },
             "critical-section-end": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     2.5
                 ]
@@ -893,7 +893,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -1080,7 +1080,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "float": 1.0
+                            "real": 1.0
                         }
                     },
                     "op": "&&",
@@ -1096,7 +1096,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "float": 3.0
+                            "real": 3.0
                         }
                     }
                 }
@@ -1224,7 +1224,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,
@@ -1242,13 +1242,13 @@
                 ]
             },
             "critical-section-start": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     1.5
                 ]
             },
             "critical-section-end": {
-                "type": "float",
+                "type": "real",
                 "range": [
                     2.5
                 ]
@@ -1288,7 +1288,7 @@
                             }
                         },
                         "length-position": {
-                            "type": "float",
+                            "type": "real",
                             "range": {
                                 "min": 1.0,
                                 "max": 3.0,

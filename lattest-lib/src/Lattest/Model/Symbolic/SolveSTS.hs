@@ -59,9 +59,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
-import Lattest.Model.Automaton (sanityCheckSTS)
 import Control.Monad.State (StateT (..), MonadTrans (..))
-import qualified Debug.Trace
 
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the

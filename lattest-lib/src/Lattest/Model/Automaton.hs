@@ -72,7 +72,7 @@ import Lattest.Model.BoundedMonad(BoundedMonad, BoundedConfiguration, BooleanCon
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Alphabet(IOAct(In,Out),isOutput,IOSuspAct,Suspended(Quiescence),IFAct,InputAttempt(..),fromSuspended,asSuspended,fromInputAttempt,asInputAttempt,SuspendedIF,asSuspendedInputAttempt,fromSuspendedInputAttempt,
     SymInteract(..),IOSymInteract,GateValue(..), IOGateValue, IOSuspGateValue, IFGateValue, SuspendedIFGateValue, SymGuard, isOutputInteract, interactionGate, isInputInteract, isInput)
-import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, solveAnySequential, isGuardSatisfiable)
+import Lattest.Model.Symbolic.SolveSymPrim(combineGuards, substituteInGuard, evaluateGuard, isGuardSatisfiable)
 import Lattest.Util.Utils((&&&), takeArbitrary)
 
 import Control.Exception(throw,Exception)
@@ -84,7 +84,6 @@ import Data.Functor.Identity(Identity(Identity), runIdentity)
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -95,8 +94,6 @@ import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Constraint.Extras (Has(..))
-import System.Random (randomIO, mkStdGen)
-import Control.Monad.State (evalStateT)
 import Control.Monad.Extra (anyM)
 
 ------------

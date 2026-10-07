@@ -30,7 +30,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , Expr(..)       -- for local usage only!
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CFloat, CRational, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
+, Constant(Constant, CInt, CFloat, CRational, CReal, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
 , constType
 , constValue
 , ConstType(..)
@@ -47,6 +47,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , unit
 , float
 , rational
+, real
 , bool
 , char
 , string
@@ -79,7 +80,7 @@ import Data.Some (Some(..))
 import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
-import Data.SBV (SymVal(..), RCSet (..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&))
+import Data.SBV (SymVal(..), RCSet (..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&), AlgReal)
 import Data.EqP (EqP (..))
 import Data.Maybe (isJust, maybeToList)
 import Data.Constraint.Extras (Has (..))
@@ -96,6 +97,7 @@ data Type a where
   IntType :: Type Integer
   FloatType :: Type Double
   RationalType :: Type Rational
+  RealType :: Type AlgReal
   BoolType :: Type Bool
   CharType :: Type Char
   UnitType :: Type ()
@@ -112,6 +114,7 @@ instance GEq Type where
   geq IntType IntType = Just Refl
   geq FloatType FloatType = Just Refl
   geq RationalType RationalType = Just Refl
+  geq RealType RealType = Just Refl
   geq BoolType BoolType = Just Refl
   geq CharType CharType = Just Refl
   geq UnitType UnitType = Just Refl
@@ -163,6 +166,7 @@ instance GCompare Type where
       typeTag (TupleType _ _) = 7
       typeTag (SumType _ _)   = 8
       typeTag RationalType = 9
+      typeTag RealType = 10
 
 instance Show (Type a) where
     show IntType = "Int"
@@ -171,6 +175,7 @@ instance Show (Type a) where
     show CharType = "Char"
     show FloatType = "Float"
     show RationalType = "Rational"
+    show RealType = "Real"
     show (ListType t) = "[" ++ show t ++ "]"
     show (SetType t) = "{" ++ show t ++ "}"
     show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
@@ -200,6 +205,9 @@ instance GRead Type where
          ]
       ++ [ (Church.mkSome RationalType, rest)
          | rest <- mylex "Rational" s
+         ]
+      ++ [ (Church.mkSome RealType, rest)
+         | rest <- mylex "Real" s
          ]
       ++ [ (Church.mkSome BoolType, rest)
          | rest <- mylex "Bool" s
@@ -288,6 +296,7 @@ inhabitants = \case
   IntType -> Nothing
   FloatType -> Nothing
   RationalType -> Nothing
+  RealType -> Nothing
   BoolType -> Just 2
   CharType -> Nothing -- maxBound - minBound + 1 = 1114112, I think we'd have overflow issues (in e.g. sums/products of chars) more often than that we'd have such large complement sets
   ListType _ -> Nothing
@@ -321,6 +330,7 @@ withExprNumConstraint f k = case has @ExprType f (typeOf' f) of
   IntType -> k
   FloatType -> k
   RationalType -> k
+  RealType -> k
   _ -> error "impossible Num instance"
 
 instance Has ExprType Type where
@@ -328,6 +338,7 @@ instance Has ExprType Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -342,6 +353,7 @@ instance Has Eq Type where
     UnitType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Eq t' k
@@ -355,6 +367,7 @@ instance Has Ord Type where
     UnitType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Ord t' k
@@ -367,6 +380,7 @@ hasOrdSymbolic t k = case t of
   IntType -> k
   FloatType -> k
   RationalType -> k
+  RealType -> k
   CharType -> k
   UnitType -> k
   BoolType -> k
@@ -384,6 +398,7 @@ instance Has Show Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -397,6 +412,7 @@ instance Has SymVal Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -410,6 +426,7 @@ instance Has Read Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     UnitType -> k
     BoolType -> k
     CharType -> k
@@ -418,12 +435,16 @@ instance Has Read Type where
     TupleType a b -> has @Read a $ has @Read b k
     SumType a b -> has @Read a $ has @Read b k
 
+instance Read AlgReal where
+  readsPrec = error "TODO"
+
 instance Has Data Type where
   has t k = case t of
     IntType -> k
     UnitType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Data t' k
@@ -447,6 +468,9 @@ instance ExprType Double where
 instance ExprType Rational where
     typeOf _ = RationalType
     typeOf' _ = RationalType
+instance ExprType AlgReal where
+    typeOf _ = RealType
+    typeOf' _ = RealType
 instance ExprType Char where
     typeOf _ = CharType
     typeOf' _ = CharType
@@ -500,7 +524,7 @@ deriving instance Ord a => Ord (Constant a)
 deriving instance Show a => Show (Constant a)
 deriving instance (Read a, ExprType a) => Read (Constant a)
 
-{-# COMPLETE CBool, CUnit, CInt, CFloat, CRational, CChar, CList, CTuple, CSet, CSum #-}
+{-# COMPLETE CBool, CUnit, CInt, CFloat, CRational, CReal, CChar, CList, CTuple, CSet, CSum #-}
 pattern CBool :: () => (a ~ Bool) => a -> Constant a
 pattern CBool b = Constant BoolType b
 pattern CUnit :: () => (a ~ ()) => Constant a
@@ -511,6 +535,8 @@ pattern CFloat :: () => (a ~ Double) => a -> Constant a
 pattern CFloat f = Constant FloatType f
 pattern CRational :: () => (a ~ Rational) => a -> Constant a
 pattern CRational f = Constant RationalType f
+pattern CReal :: () => (a ~ AlgReal) => a -> Constant a
+pattern CReal f = Constant RealType f
 pattern CChar :: () => (a ~ Char) => a -> Constant a
 pattern CChar c = Constant CharType c
 pattern CString :: () => (a ~ String) => a -> Constant a
@@ -534,6 +560,8 @@ float :: Double -> Some Constant
 float f = Some (CFloat f)
 rational :: Rational -> Some Constant
 rational f = Some (CRational f)
+real :: AlgReal -> Some Constant
+real f = Some (CReal f)
 char :: Char -> Some Constant
 char c = Some (CChar c)
 string :: String -> Some Constant
@@ -584,6 +612,7 @@ instance JSON.FromJSON (Some Constant) where
             Some IntType -> parseInt $ lkup "value" m
             Some FloatType -> parseFloat $ lkup "value" m
             Some RationalType -> parseRational $ lkup "value" m
+            Some RealType -> parseReal $ lkup "value" m
             Some UnitType -> parseUnit $ lkup "value" m
             Some CharType -> parseChar $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
@@ -596,6 +625,7 @@ instance JSON.FromJSON (Some Constant) where
           "int" -> pure $ Some IntType
           "float" -> pure $ Some FloatType
           "rational" -> pure $ Some RationalType
+          "real" -> pure $ Some RealType
           "bool" -> pure $ Some BoolType
           "()" -> pure $ Some UnitType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
@@ -635,6 +665,8 @@ instance JSON.FromJSON (Some Constant) where
         parseFloat _ = fail "type indicates float, but value is not a number"
         parseRational (JSON.Number f) = return $ rational $ toRational f
         parseRational _ = fail "type indicates rational, but value is not a number"
+        parseReal (JSON.Number f) = return $ real $ fromRational $ toRational f
+        parseReal _ = fail "type indicates rational, but value is not a number"
         parseList t (JSON.Array xs) = has @ExprType t list <$> mapM (unSome t <=< JSON.parseJSON @(Some Constant)) (Vec.toList xs)
           where
             unSome :: Type a -> Some Constant -> JSON.Parser a
@@ -694,6 +726,7 @@ instance JSON.ToJSON (Some Constant) where
       CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
       CFloat f -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
       CRational f -> JSON.Object $ JSON.insert "type" "rational" $ JSON.insert "value" (JSON.Number $ fst $ DS.fromRationalRepetendUnlimited f) JSON.empty
+      CReal f -> JSON.Object $ JSON.insert "type" "real" $ JSON.insert "value" (JSON.Number $ fromRational $ toRational f) JSON.empty
       CChar c -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack [c]) JSON.empty
       CList xs t -> JSON.Object
         $ JSON.insert "type" (fromString . show $ ListType t)
@@ -731,6 +764,7 @@ instance Has ConstType Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k
