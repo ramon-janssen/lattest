@@ -53,8 +53,8 @@ instance ConcreteGenExpr Integer where
         CM.liftM3 Ite subexpr3 subexpr3 subexpr3,
         CM.liftM2 Divide subexpr2 subexpr2,
         CM.liftM2 Modulo subexpr2 subexpr2,
-        CM.liftM Sum (FM.fromListT <$> genList subexpr2),
-        CM.liftM Product (FM.fromListT <$> genList subexprSqrt)
+        CM.liftM (Sum IntType) (FM.fromListT <$> genList subexpr2),
+        CM.liftM (Product IntType) (FM.fromListT <$> genList subexprSqrt)
         ]
         where
         subexpr :: ConcreteGenExpr t => Gen (ExprView t)
@@ -79,7 +79,7 @@ instance ConcreteGenExpr Bool where
         CM.liftM2 (Equal IntType) subexpr2 subexpr2,
         CM.liftM2 (Equal BoolType) subexpr2 subexpr2,
         CM.liftM2 (Equal CharType) subexpr2 subexpr2,
-        CM.liftM GezInt subexpr,
+        CM.liftM (Gez @Integer) subexpr,
         CM.liftM Not subexpr,
         CM.liftM And (Set.fromList <$> genList subexprSqrt)
         ]
@@ -192,8 +192,8 @@ instance ConcreteEval Integer where
     concreteEval' (Divide e1 e2) = concreteBinOpMaybe (safeZero div) e1 e2
     concreteEval' (Modulo e1 e2) = concreteBinOpMaybe (safeZero mod) e1 e2
     concreteEval' (Length _ e) = concreteUnaryOp (Prelude.toInteger . length) e
-    concreteEval' (Sum es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* i) <$> x)) (Just 0) es
-    concreteEval' (Product es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0) es
+    concreteEval' (Sum _ es)   = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* i) <$> x)) (Just 0) es
+    concreteEval' (Product _ es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0) es
 
 instance ConcreteEval Double where
     concreteEval' (Var _) = Nothing
@@ -203,8 +203,6 @@ instance ConcreteEval Double where
     concreteEval' (Head xs) = head <$> concreteEval' xs
     concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
-    concreteEval' (SumFloat es)     = foldOccur (\(concreteEval' . unwrap -> x) i y -> (+) <$> y <*> ((* fromInteger i) <$> x)) (Just 0.0) es
-    concreteEval' (ProductFloat es) = foldOccur (\(concreteEval' . unwrap -> x) i y -> (*) <$> y <*> ((^ i) <$> x)) (Just 0.0) es
     concreteEval' (DivideFloat e1 e2) = concreteBinOpMaybe (safeZero (/)) e1 e2
 
 safeZero :: (Num a, Eq a) => (a -> a -> a) -> (a -> a -> Maybe a)
@@ -221,8 +219,7 @@ instance ConcreteEval Bool where
     concreteEval' (Either a b c d e) = concreteEither a b c d e
     concreteEval' (Ite i t e) = concreteIfThenElse i t e
     concreteEval' (Equal t e1 e2) = has @ConcreteEval t $ concreteBinOp (==) e1 e2
-    concreteEval' (GezInt e) = concreteUnaryOp (>= 0) e
-    concreteEval' (GezFloat e) = concreteUnaryOp (>= 0) e
+    concreteEval' (Gez e) = withExprConstraints e $ concreteUnaryOp (>= 0) e
     concreteEval' (Not e) = concreteUnaryOp not e
     concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
     concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y ys -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
@@ -370,11 +367,11 @@ instance Arbitrary SomeType where
   arbitrary = oneof
     [ return . ST $ Some IntType
     , return . ST $ Some FloatType
+    , return . ST $ Some RationalType
     , return . ST $ Some BoolType
     , return . ST $ Some UnitType
     , return . ST $ Some CharType
     , (\(ST (Some t)) -> ST (Some $ ListType t)) <$> arbitrary
-    , (\(ST (Some t)) -> ST (Some $ SetType t)) <$> arbitrary
     , (\(ST (Some a)) (ST (Some b)) -> ST (Some $ SumType   a b)) <$> arbitrary <*> arbitrary
     , (\(ST (Some a)) (ST (Some b)) -> ST (Some $ TupleType a b)) <$> arbitrary <*> arbitrary
     ]

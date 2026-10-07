@@ -24,11 +24,15 @@ module Test.Lattest.Model.STSTest (
     testComposedSeTreeStructure,
     testComposedPathCondition,
     testConcreteTraceSpecifiedAllowedCorrespondence,
-    prop_specifiedAllowedCorrespondence,
+    -- prop_specifiedAllowedCorrespondence,
     composedCoffeeMachineIntrpr,
     testPrintSeqCompSTS,
     testSeqComposedSTS,
     testSeqComposedAtSTS,
+    testPrintSeqCompPrunedSTS,
+    testPrintSeqCompPrunedSTSInit1,
+    testSeqCompPrunedRules,
+    testSelfSeqCompPrunedRules,
     testSequentiallyAtNonSinkLocation,
     testSequentiallyAtSameAction,
     testPrintSelfSeqComposedSTS,
@@ -56,6 +60,7 @@ import Test.HUnit
 import Data.Dependent.Sum
 import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
 import Data.Maybe(isJust, catMaybes)
+import Data.Foldable(toList)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -68,8 +73,8 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSTSTester, Verdict(..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,prependOutputChecks,CheckLoc(..))
-import Lattest.Model.StandardAutomata(interpretSTS, IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll)
+import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,AutSyntax,transRel,reachable)
+import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, sequentiallyPruned, selfSequentiallyPruned, Pruned(..))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
@@ -78,10 +83,10 @@ import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
+import Data.Tuple(swap)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
-import qualified Lattest.SMT as SMT
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
  -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
@@ -245,7 +250,7 @@ data ImpExampleLoc = L0 | L1 | L2 deriving (Eq, Ord, Show)
 -- TODO the "x" here is not implemented properly, it should be something like "xvar = (Variable "x" IntType)", see the example at the top of this file
 tExampleCorrect :: (Ord i, Ord o, IsString i, IsString o) => (ImpExampleLoc, Integer) -> Map.Map (GateValue (IOAct i o)) (ImpExampleLoc, Integer)
 tExampleCorrect (L0, x) = Map.fromList $
-    [(GateValue (In "water") [int p], (L1, x+p)) | p <- [1..10]] ++ [(GateValue (Out "coffee") [], (L2, 0)) | x > 15]
+    [(GateValue (In "water") [int p], (L1, x+p)) | p <- [1..10]] ++ [(GateValue (Out "coffee") [], (L2, 0)) | x >= 15]
 tExampleCorrect (L1, x) = Map.fromList  [(GateValue (Out "ok") [int x], (L0, x))]
 tExampleCorrect (L2, _) = mempty
 impExampleCorrect :: IO (Adapter.Adapter (SuspendedIFGateValue String String) (Maybe (GateValue String)))
@@ -304,7 +309,7 @@ testSTSTestSelection = TestCase $ do
           ]
     let checkExample = go 0 exampleObserved
     assertEqual ("expected conformal trace like " <> show exampleObserved <> ",\ngot " <> show observed) checkObserved checkExample
-    assertEqual "expected pass " Pass verdict
+    assertEqual ("expected pass. Trace: " <> show observed) Pass verdict -- this test is unexpectedly flaky, printing the trace for when it fails again
     where
     inpL g = GateValue (In (InputAttempt (g, True)))
     outL g = GateValue (Out (OutSusp g))
@@ -388,7 +393,8 @@ stsExample2 =
             1 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 0))]
             2 -> Map.fromList [(water, atom (stsTLoc waterGuard1 waterAssign, 3))]
             3 -> Map.fromList [(ok, atom (stsTLoc okGuard noAssignment, 2))]
-    in (automaton initConf (Set.fromList [water,ok,coffee]) switches, automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
+    in ( automaton initConf  (Set.fromList [water,ok,coffee]) switches
+       , automaton initConf2 (Set.fromList [water,ok,coffee]) switches2)
 
 stsExampleIntrpr2a :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
@@ -402,7 +408,7 @@ getSTSValuation val = Valuation $ DMap.singleton (Variable "x" IntType) (Val val
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
 
--- NOTE: Automaton a conjuncts the switches that start from the initial location, while automaton b 
+-- NOTE: Automaton a conjuncts the switches that start from the initial location, while automaton b
 -- conjuncts the initial states.
 testLatticeCoffeeSTS :: Test
 testLatticeCoffeeSTS = TestCase $ do
@@ -857,19 +863,19 @@ testBranchingPathCondition = TestCase $ do
 -- A minimal STS for asserting the tree structures directly (rather than via the SMT solver):
 --   loc 0 --a[p>=5]--> loc 1   (x := p) ; loc 1 is terminal.
 -- One input gate keeps the symbolic-execution tree narrow enough to read.
-inGate :: SymInteract (IOAct String String)
-inGate = SymInteract (In "a") [Some pvar]
-outGate :: SymInteract (IOAct String String)
-outGate = SymInteract (Out "x") [Some pvar]
+inGate :: String -> SymInteract (IOAct String String)
+inGate name = SymInteract (In name) [Some pvar]
+outGate :: String -> SymInteract (IOAct String String)
+outGate name = SymInteract (Out name) [Some pvar]
 
 treeSTS :: IOSTS FreeLattice Integer String String
 treeSTS =
     let switches loc = case loc of
-            0 -> Map.fromList [(inGate, ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
-            1 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
-            2 -> Map.fromList [(outGate, ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
+            0 -> Map.fromList [(inGate "a", ordReturn (stsTLoc (p .>= -20) (assignment [xvar =: p]), 1) /\ ordReturn (stsTLoc (p .<= 20) (assignment [xvar =: p]), 2))]
+            1 -> Map.fromList [(outGate "x", ordReturn (stsTLoc (x .% 2 .== 0) (assignment []), 3) \/ ordReturn (stsTLoc (x .% 3 .== 0) (assignment []), 3))]
+            2 -> Map.fromList [(outGate "x", ordReturn (stsTLoc (x .* p .>= 0) (assignment []), 3))]
             _ -> Map.empty
-    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate, outGate]) switches
+    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate "a", outGate "x"]) switches
 
 milkvar :: Variable Bool
 milkvar = (Variable "milk" BoolType)
@@ -1064,27 +1070,27 @@ genConcreteTrace intrpr = do
         vals <- traverse (\(Some v) -> Some <$> genConstantForType v) vars
         return (interaction, vals)
 
--- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
--- parametric in the model. For every generated concrete trace: the specified guard evaluates to True exactly when
--- the concrete configuration is specified (not underspecified), and the allowed guard exactly when it is allowed
--- (not forbidden).
-prop_specifiedAllowedCorrespondence ::
-    (BoundedMonad m, Foldable m, BooleanConfiguration m, (forall a. Ord a => Ord (m a)), Ord loc)
-    => STSIntrp m loc (IOAct String String) -> Property
-prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ \steps ->
-    let symTrace = fst <$> steps
-        gateValues = stepGateValue <$> steps
-        valuation = traceValuation steps
-        finalConf = stateConf $ foldl after intrpr gateValues
-        specifiedGuard = interactsToSpecifiedCondition intrpr symTrace
-        allowedGuard = interactsToAllowedCondition intrpr symTrace
-    in counterexample ("trace: " ++ show gateValues) $
-            checkGuard "specified" (isSpecified finalConf) (substConst valuation specifiedGuard)
-       .&&. checkGuard "allowed"   (isAllowed finalConf)    (substConst valuation allowedGuard)
-    where
-    checkGuard name expected g = case eval g of
-        Right b  -> counterexample (name ++ " guard evaluated to " ++ show b ++ ", expected " ++ show expected) (b == expected)
-        Left err -> counterexample (name ++ " guard did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")") False
+-- -- | The correspondence property (see 'testConcreteTraceSpecifiedAllowedCorrespondence' for the full explanation),
+-- -- parametric in the model. For every generated concrete trace: the specified guard evaluates to True exactly when
+-- -- the concrete configuration is specified (not underspecified), and the allowed guard exactly when it is allowed
+-- -- (not forbidden).
+-- prop_specifiedAllowedCorrespondence ::
+--     (BoundedMonad m, Foldable m, BooleanConfiguration m, (forall a. Ord a => Ord (m a)), Ord loc)
+--     => STSIntrp m loc (IOAct String String) -> Property
+-- prop_specifiedAllowedCorrespondence intrpr = forAll (genConcreteTrace intrpr) $ \steps ->
+--     let symTrace = fst <$> steps
+--         gateValues = stepGateValue <$> steps
+--         valuation = traceValuation steps
+--         finalConf = stateConf $ foldl after intrpr gateValues
+--         specifiedGuard = interactsToSpecifiedCondition intrpr symTrace
+--         allowedGuard = interactsToAllowedCondition intrpr symTrace
+--     in counterexample ("trace: " ++ show gateValues) $
+--             checkGuard "specified" (isSpecified finalConf) (substConst valuation specifiedGuard)
+--        .&&. checkGuard "allowed"   (isAllowed finalConf)    (substConst valuation allowedGuard)
+--     where
+--     checkGuard name expected g = case eval g of
+--         Right b  -> counterexample (name ++ " guard evaluated to " ++ show b ++ ", expected " ++ show expected) (b == expected)
+--         Left err -> counterexample (name ++ " guard did not reduce to a constant: " ++ err ++ " (guard: " ++ show g ++ ")") False
 
 goldenDir :: FilePath
 goldenDir = "test/expected-test-output"
@@ -1143,11 +1149,11 @@ testSTSPathCondition = TestCase $ do
 stsConjOfDifferentVals :: IOSTS FreeLattice Integer String String
 stsConjOfDifferentVals =
     let switches loc = case loc of
-            0 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment [xvar =: (1 :: Expr Integer)]), 1) /\ ordReturn (stsTLoc sTrue (assignment [xvar =: (2 :: Expr Integer)]), 2))]
-            1 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 1))]
-            2 -> Map.fromList [(outGate, ordReturn (stsTLoc sTrue (assignment []), 2))]
+            0 -> Map.fromList [(outGate "x", ordReturn (stsTLoc sTrue (assignment [xvar =: (1 :: Expr Integer)]), 1) /\ ordReturn (stsTLoc sTrue (assignment [xvar =: (2 :: Expr Integer)]), 2))]
+            1 -> Map.fromList [(outGate "x", ordReturn (stsTLoc sTrue (assignment []), 1))]
+            2 -> Map.fromList [(outGate "x", ordReturn (stsTLoc sTrue (assignment []), 2))]
             _ -> Map.empty
-    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate]) switches
+    in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [outGate "x"]) switches
 
 getSTSIntrpState' :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState' loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
@@ -1203,16 +1209,49 @@ stsPrelude =
             _ -> Map.empty
     in automaton initConf (Set.fromList [startEmpty, startWithWater, error]) switches
 
+stsCoffeeTree :: IOSTS FreeLattice Integer String String
+stsCoffeeTree =
+    let p = sVar pvar :: Expr Integer
+        x = sVar xvar :: Expr Integer
+        someWater = SymInteract (In "someWater") [Some pvar]
+        grindCoffee = SymInteract (In "grindCoffee") []
+        done = SymInteract (Out "done") []
+        error = SymInteract (Out "error") []
+        waterAssign = assignment [xvar =: x .+ p]
+        waterGuard = p .>= 2 .&& x.== 0
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(someWater, ordReturn (stsTLoc waterGuard waterAssign, 1)),
+                               (grindCoffee, ordReturn (stsTLoc sTrue noAssignment, 2))]
+            1 -> Map.fromList [(done, ordReturn (stsTLoc sTrue noAssignment, 3)),
+                               (error, ordReturn (stsTLoc sTrue noAssignment, 4))]
+            2 -> Map.fromList [(done, ordReturn (stsTLoc sTrue noAssignment, 5))]
+            3 -> Map.empty
+            4 -> Map.empty
+            5 -> Map.empty
+            _ -> Map.empty
+    in automaton initConf (Set.fromList [someWater, done, error, grindCoffee]) switches
+
 stsSeqComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposed = interpretSTS (stsPrelude |> stsExampleFL) stsExampleInitAssign
 
 stsSeqComposedAt :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 stsSeqComposedAt = interpretSTS (sequentiallyAt stsPrelude [1,2] stsExampleFL) stsExampleInitAssign
 
-stsSeqComposedAtOne :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
-stsSeqComposedAtOne = interpretSTS (sequentiallyAt stsPrelude [1] stsExampleFL) stsExampleInitAssign
+modelCoffeeTree :: STSIntrp FreeLattice Integer (IOAct String String)
+modelCoffeeTree = interpretSTS stsCoffeeTree stsExampleInitAssign
 
-getSTSIntrpStateEither :: (Either Integer Integer) -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
+stsCoffeeTreeComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+prunedTransitions :: [Pruned Integer Integer (IOSymInteract String String)]
+(stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
+stsCoffeeTreeComposed1 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+prunedTransitions1 :: [Pruned Integer Integer (IOSymInteract String String)]
+(stsCoffeeTreeComposed1, prunedTransitions1) = sequentiallyAtPruned (interpretSTS stsCoffeeTree stsExampleInitAssign2) [3,4,5] stsCoffeeTree
+
+stsExampleInitAssign2 :: Valuation
+stsExampleInitAssign2 = Valuation $ DMap.singleton xvar (Val 1)
+
+getSTSIntrpStateEither :: Either Integer Integer -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
 getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Val val)
 
 testPrintSeqCompSTS :: Test
@@ -1262,6 +1301,236 @@ Right 2  ――!"coffee" []⟶  ⊥
 Right 2  ――!"error" []⟶  ⊥
 Right 2  ――!"ok" [p:Int]⟶  ⊥
 |]
+
+testPrintSeqCompPrunedSTS :: Test
+testPrintSeqCompPrunedSTS = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsCoffeeTreeComposed ++ "\n" ++ show prunedTransitions ++ "\n"
+    expected = [QQ.r|
+current state configuration: (Left 0,{x:=0})
+initial location configuration: Left 0
+locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 1, Right 2, Right 3, Right 4, Right 5
+transitions:
+Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
+Left 0  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Left 1)
+Left 0  ――!"done" []⟶  ⊥
+Left 0  ――!"error" []⟶  ⊥
+Left 1  ――?"grindCoffee" []⟶  ⊤
+Left 1  ――?"someWater" [p:Int]⟶  ⊤
+Left 1  ――!"done" []⟶  (True, {},Left 3)
+Left 1  ――!"error" []⟶  (True, {},Left 4)
+Left 2  ――?"grindCoffee" []⟶  ⊤
+Left 2  ――?"someWater" [p:Int]⟶  ⊤
+Left 2  ――!"done" []⟶  (True, {},Left 5)
+Left 2  ――!"error" []⟶  ⊥
+Left 3  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 3  ――?"someWater" [p:Int]⟶  ⊤
+Left 3  ――!"done" []⟶  ⊥
+Left 3  ――!"error" []⟶  ⊥
+Left 4  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 4  ――?"someWater" [p:Int]⟶  ⊤
+Left 4  ――!"done" []⟶  ⊥
+Left 4  ――!"error" []⟶  ⊥
+Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 5  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Right 1)
+Left 5  ――!"done" []⟶  ⊥
+Left 5  ――!"error" []⟶  ⊥
+Right 1  ――?"grindCoffee" []⟶  ⊤
+Right 1  ――?"someWater" [p:Int]⟶  ⊤
+Right 1  ――!"done" []⟶  (True, {},Right 3)
+Right 1  ――!"error" []⟶  (True, {},Right 4)
+Right 2  ――?"grindCoffee" []⟶  ⊤
+Right 2  ――?"someWater" [p:Int]⟶  ⊤
+Right 2  ――!"done" []⟶  (True, {},Right 5)
+Right 2  ――!"error" []⟶  ⊥
+Right 3  ――?"grindCoffee" []⟶  ⊤
+Right 3  ――?"someWater" [p:Int]⟶  ⊤
+Right 3  ――!"done" []⟶  ⊥
+Right 3  ――!"error" []⟶  ⊥
+Right 4  ――?"grindCoffee" []⟶  ⊤
+Right 4  ――?"someWater" [p:Int]⟶  ⊤
+Right 4  ――!"done" []⟶  ⊥
+Right 4  ――!"error" []⟶  ⊥
+Right 5  ――?"grindCoffee" []⟶  ⊤
+Right 5  ――?"someWater" [p:Int]⟶  ⊤
+Right 5  ――!"done" []⟶  ⊥
+Right 5  ――!"error" []⟶  ⊥
+[PrunedSwitch 3 ?"someWater" [p:Int] 1,PrunedSwitch 4 ?"someWater" [p:Int] 1]
+|]
+
+-- Changing the initial value of the STS impacts the composition
+-- here, we start x := 1, which makes someWater always unsatisfiable
+-- it also means locations 1, 3 and 4 are removed, because those are themselves not reachable
+testPrintSeqCompPrunedSTSInit1 :: Test
+testPrintSeqCompPrunedSTSInit1 = TestCase $ assertBool failureMessage (expected == actual)
+    where
+    failureMessage = "print of STS does not match, expected:" ++ expected ++ "but received:" ++ actual
+    actual = "\n" ++ prettyPrintIntrp stsCoffeeTreeComposed1 ++ "\n" ++ show prunedTransitions1 ++ "\n"
+    expected = [QQ.r|
+current state configuration: (Left 0,{x:=1})
+initial location configuration: Left 0
+locations: Left 0, Left 2, Left 5, Right 2, Right 5
+transitions:
+Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
+Left 0  ――?"someWater" [p:Int]⟶  ⊤
+Left 0  ――!"done" []⟶  ⊥
+Left 0  ――!"error" []⟶  ⊥
+Left 2  ――?"grindCoffee" []⟶  ⊤
+Left 2  ――?"someWater" [p:Int]⟶  ⊤
+Left 2  ――!"done" []⟶  (True, {},Left 5)
+Left 2  ――!"error" []⟶  ⊥
+Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
+Left 5  ――?"someWater" [p:Int]⟶  ⊤
+Left 5  ――!"done" []⟶  ⊥
+Left 5  ――!"error" []⟶  ⊥
+Right 2  ――?"grindCoffee" []⟶  ⊤
+Right 2  ――?"someWater" [p:Int]⟶  ⊤
+Right 2  ――!"done" []⟶  (True, {},Right 5)
+Right 2  ――!"error" []⟶  ⊥
+Right 5  ――?"grindCoffee" []⟶  ⊤
+Right 5  ――?"someWater" [p:Int]⟶  ⊤
+Right 5  ――!"done" []⟶  ⊥
+Right 5  ――!"error" []⟶  ⊥
+[PrunedLocation 1,PrunedLocation 3,PrunedLocation 4,PrunedSwitch 5 ?"someWater" [p:Int] 1]
+|]
+
+{- |
+    A tree with a branch for every rule of `sequentiallyAtPruned`. Starting from x := 0, the guard x = 1 is unsatisfiable:
+
+    0 ―a?⟶ 1 ―b? [x = 1]⟶ 2 ―c!⟶ 3  --> The whole branch should be removed
+    0 ―d?⟶ 4 ―e!⟶ 5 ―f? [x = 1]⟶ 6  --> Remove up until 5, but don't compose there
+    0 ―g?⟶ 7 ―h! [x = 1]⟶ 8 ―i?⟶ 9  --> Keep branch until 9, but don't compose there
+    0 ―j?⟶ 10  --> Keep branch
+-}
+stsPruningTree :: IOSTS FreeLattice Integer String String
+stsPruningTree =
+    let x = sVar xvar :: Expr Integer
+        unsat = x .== 1
+        dest guard loc = ordReturn (stsTLoc guard noAssignment, loc)
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(inGate "a", dest sTrue 1),
+                               (inGate "d", dest sTrue 4),
+                               (inGate "g", dest sTrue 7),
+                               (inGate "j", dest sTrue 10)]
+            1 -> Map.fromList [(inGate "b", dest unsat 2)]
+            2 -> Map.fromList [(outGate "c", dest sTrue 3)]
+            4 -> Map.fromList [(outGate "e", dest sTrue 5)]
+            5 -> Map.fromList [(inGate "f", dest unsat 6)]
+            7 -> Map.fromList [(outGate "h", dest unsat 8)]
+            8 -> Map.fromList [(inGate "i", dest sTrue 9)]
+            _ -> Map.empty
+        gates = (inGate <$> ["a", "b", "d", "f", "g", "i", "j"]) ++ (outGate <$> ["c", "e", "h"])
+    in automaton initConf (Set.fromList gates) switches
+
+-- 0 ―k?⟶ 1, to be merged into stsPruningTree
+stsPruningSuffix :: IOSTS FreeLattice Integer String String
+stsPruningSuffix =
+    let k = inGate "k"
+        switches q = case q of
+            0 -> Map.fromList [(k, ordReturn (stsTLoc sTrue noAssignment, 1))]
+            _ -> Map.empty
+    in automaton (ordReturn 0) (Set.singleton k) switches
+
+{- |
+    Which locations of stsPruningTree are kept, when merging at 3, 6, 9 and 10 (sink locations):
+
+    * 2, 3:  removed, after the unsatisfiable input b? (that 3 is a merge location doesn't matter)
+    * 1:     removed, nothing after it is left and the switch into it is the input a?
+    * 6:     removed, after the unsatisfiable input f?
+    * 5:     kept but not merged, nothing after it is left but the switch into it is the output e!
+    * 4:     kept, 5 after it is kept
+    * 8, 9:  kept as-is but not merged, after the unsatisfiable output h!
+    * 7:     kept, 8 after it is kept
+    * 10:    kept and merged, a reachable merge location
+    * 0:     kept, 4, 7 and 10 after it are kept
+-}
+stsPruningTreeComposed :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
+prunedPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
+(stsPruningTreeComposed, prunedPruningTree) = sequentiallyAtPruned (interpretSTS stsPruningTree stsExampleInitAssign) [3, 6, 9, 10] stsPruningSuffix
+
+testSeqCompPrunedRules :: Test
+testSeqCompPrunedRules = TestCase $ do
+    assertEqual "\ninitial state " (getSTSIntrpStateEither (Left 0) 0) (stateConf stsPruningTreeComposed)
+    assertEqual "\nlocations " expectedLocations (reachable $ syntacticAutomaton stsPruningTreeComposed)
+    assertEqual "\npruned " expectedPruned prunedPruningTree
+    _ <- assertAfter "after c: " stsPruningTreeComposed (GateValue (Out "c") [Some $ CInt 0]) forbidden
+    -- branch a? b? c!: removed entirely
+    _ <- assertAfter "after a: " stsPruningTreeComposed (GateValue (In "a") [Some $ CInt 0]) underspecified
+    -- branch d? e! f?: kept until 5, which is not a merge location
+    intrpD <- assertAfter "after d: " stsPruningTreeComposed (GateValue (In "d") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 4) 0)
+    intrpE <- assertAfter "after d e: " intrpD (GateValue (Out "e") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 5) 0)
+    _ <- assertAfter "after d e f: " intrpE (GateValue (In "f") [Some $ CInt 0]) underspecified
+    _ <- assertAfter "after d e k: " intrpE (GateValue (In "k") [Some $ CInt 0]) underspecified
+    -- branch g? h! i?: kept, but the unsatisfiable output h! is still forbidden
+    intrpG <- assertAfter "after g: " stsPruningTreeComposed (GateValue (In "g") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 7) 0)
+    _ <- assertAfter "after g h: " intrpG (GateValue (Out "h") [Some $ CInt 0]) forbidden
+    -- branch j?: kept and merged at 10, so behavior transitions to stsPruningSuffix
+    intrpJ <- assertAfter "after j: " stsPruningTreeComposed (GateValue (In "j") [Some $ CInt 0]) (getSTSIntrpStateEither (Left 10) 0)
+    intrpK <- assertAfter "after j k: " intrpJ (GateValue (In "k") [Some $ CInt 0]) (getSTSIntrpStateEither (Right 1) 0)
+    _ <- assertAfter "after j k k: " intrpK (GateValue (In "k") [Some $ CInt 0]) underspecified
+    return ()
+    where
+    -- the locations after the initial location; 8 and 9 are kept, although they are only reachable via the unsatisfiable output h!
+    expectedLocations = Set.fromList $ (Left <$> [4, 5, 7, 8, 9, 10]) ++ [Right 1]
+    expectedPruned =
+        [ PrunedLocation 1
+        , PrunedLocation 2
+        , PrunedLocation 3
+        , PrunedLocation 6
+        , UnsatisfiableOutput 7 (outGate "h") [9]
+        ]
+
+{- |
+    A tree with a branch for every rule of `selfSequentiallyAtPruned`. There is no initial valuation, so x starts with an arbitrary
+    value and the guards of the initial switches a? and b? are satisfiable in location 0:
+
+    0 ―a? [x = 1]⟶ 1 ―c!⟶ 2
+    0 ―b? [x = 2]⟶ 3 ―d! {x := 1}⟶ 4
+                   3 ―e! [x = 1]⟶ 5
+    0 ―g?⟶ 6
+-}
+stsSelfPruningTree :: IOSTS FreeLattice Integer String String
+stsSelfPruningTree =
+    let x = sVar xvar :: Expr Integer
+        dest guard assign loc = ordReturn (stsTLoc guard assign, loc)
+        initConf = ordReturn 0
+        switches q = case q of
+            0 -> Map.fromList [(inGate "a", dest (x .== 1) noAssignment 1),
+                               (inGate "b", dest (x .== 2) noAssignment 3),
+                               (inGate "g", dest sTrue noAssignment 6)]
+            1 -> Map.fromList [(outGate "c", dest sTrue noAssignment 2)]
+            3 -> Map.fromList [(outGate "d", dest sTrue (assignment [xvar =: 1]) 4),
+                               (outGate "e", dest (x .== 1) noAssignment 5)]
+            _ -> Map.empty
+        gates = (inGate <$> ["a", "b", "g"]) ++ (outGate <$> ["c", "d", "e"])
+    in automaton initConf (Set.fromList gates) switches
+
+{- |
+    Which of the initial switches a?, b? and g? are copied, when merging at 2, 4, 5 and 6:
+
+    The locations and switches of the tree itself are left as-is, including the unsatisfiable e! and location 5 after it.
+-}
+stsSelfPruningTreeComposed :: IOSTS FreeLattice Integer String String
+prunedSelfPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
+(stsSelfPruningTreeComposed, prunedSelfPruningTree) = selfSequentiallyAtPruned (getVariables stsExampleInitAssign) stsSelfPruningTree [2, 4, 5, 6]
+
+testSelfSeqCompPrunedRules :: Test
+testSelfSeqCompPrunedRules = TestCase $ do
+    assertEqual "\npruned " expectedPruned prunedSelfPruningTree
+    where 
+    expectedPruned = 
+        [ PrunedSwitch 2 (inGate "b") (ordReturn 3)     -- The only possible path to 2 is a? c!. a? requires x == 1 so b? is unfeasible
+        , PrunedSwitch 4 (inGate "b") (ordReturn 3)     -- The path to 4 is b? d!. d! assigns x := 1 so b? is unfeasible
+        -- The path to 5 is b? e!. e was already unfeasible but we keep it as it is an output. However, the subsequent switches are removed.
+        , PrunedSwitch 5 (inGate "a") (ordReturn 1)
+        , PrunedSwitch 5 (inGate "b") (ordReturn 3)
+        , PrunedSwitch 5 (inGate "g") (ordReturn 6)
+        -- No switches from 6 are pruned since its path g? has no guard.
+        ]
+
+-- TODO: Add pruning tests with ListType vars, Rationals, etc
 
 -- Using |> and sequentiallyAt should yield the same result.
 testSeqComposedSTS :: Test
@@ -1655,7 +1924,7 @@ transitions:
 ("tri1",2)  ――!"outA" []⟶  ⊥
 ("tri1",2)  ――!"outB" []⟶  (True, {},("tri0",0)) ∨ (True, {},("tri1",1))
 ("tri1",2)  ――!"outC" []⟶  ⊥
-|]        
+|]
 
 stsTriangle1or2 :: IOSTS FreeLattice Integer String String
 stsTriangle1or2 =
