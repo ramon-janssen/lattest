@@ -26,7 +26,8 @@ module Lattest.SMT (
   Solver(..),
   Some(..),
   RCSet(..),
-  sortOfEqual
+  sortOfEqual,
+  sortOfEqualWith
 ) where
 
 import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic)
@@ -36,7 +37,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), sConst, Val (..), withExprConstraints)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), (.-), sConst, Val (..), withExprConstraints)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -285,30 +286,35 @@ exprToSymbolic = \case
 -- We can't == doubles, and using symbolic equality (===) instead is also not ideal.
 -- We should add more decimal types (fixed point? reals?), rename FloatType,
 -- and add a note that equality on doubles is not exact.
-sortOfEqual :: Double -> ExprView a -> ExprView a -> ExprView Bool
-sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
+sortOfEqual :: Rational -> ExprView a -> ExprView a -> ExprView Bool
+sortOfEqual = sortOfEqualWith False
+
+-- | Like 'sortOfEqual', but if the flag is set then reals are also compared approximately.
+sortOfEqualWith :: Bool -> Rational -> ExprView a -> ExprView a -> ExprView Bool
+sortOfEqualWith approxReals range l r = withExprConstraints (Expr l) $ case typeOf' l of
   -- Our hand-rolled equality check is slower, probably because the solver doesn't understand it,
   -- so we only use it when there are FloatTypes or RationalTypes present.
-  tp | not (hasDecimals tp) -> Equal tp l r
-  FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
-  RationalType -> view $ Expr l - Expr r .< sConst (toRational range) .&& Expr r - Expr l .< sConst (toRational range)
+  tp | not (hasDecimals approxReals tp) -> Equal tp l r
+  FloatType -> view $ Expr l - Expr r .< sConst (fromRational range) .&& Expr r - Expr l .< sConst (fromRational range)
+  RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
+  RealType -> view $ Expr l .- Expr r .< sConst (fromRational range) .&& Expr r .- Expr l .< sConst (fromRational range)
   TupleType a b -> withExprConstraints a $ withExprConstraints b $
-                  And $ Set.fromList [ sortOfEqual range (First b l) (First b r)
-                                     , sortOfEqual range (Second a l) (Second a r)]
+                  And $ Set.fromList [ sortOfEqualWith approxReals range (First b l) (First b r)
+                                     , sortOfEqualWith approxReals range (Second a l) (Second a r)]
   SumType a b -> withExprConstraints a $ withExprConstraints b $
                   let v1 = Variable "eitherEqualityVarL" a
                       v2 = Variable "eitherEqualityVarL" b
                       v3 = Variable "eitherEqualityVarR" a
                       v4 = Variable "eitherEqualityVarR" b
                   in Either v1 v2
-                      (Either v3 v4 (sortOfEqual range (Var v1) (Var v3)) (Const False) r)
-                      (Either v3 v4 (Const False) (sortOfEqual range (Var v2) (Var v4)) r)
+                      (Either v3 v4 (sortOfEqualWith approxReals range (Var v1) (Var v3)) (Const False) r)
+                      (Either v3 v4 (Const False) (sortOfEqualWith approxReals range (Var v2) (Var v4)) r)
                       l
   ListType tp -> withExprConstraints tp $
     let v1 = Variable "mapEqualityVar" (TupleType tp tp)
         v2 = Variable "foldEqualityVar" BoolType
     in And $ Set.fromList
-      [ Foldr v1 v2 (And $ Set.fromList [Var v2, sortOfEqual range (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
+      [ Foldr v1 v2 (And $ Set.fromList [Var v2, sortOfEqualWith approxReals range (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
       , Equal IntType (Length tp l) (Length tp r)]
   -- the version of sets that SBV supports probably just isn't very useful for Lattest,
   -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
@@ -317,14 +323,15 @@ sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
   tp -> Equal tp l r
 
 -- Whether values of the type contain floats or rationals, for which equality is approximated.
-hasDecimals :: Type a -> Bool
-hasDecimals = \case
+hasDecimals :: Bool -> Type a -> Bool
+hasDecimals approxReals = \case
   FloatType -> True
   RationalType -> True
-  ListType t -> hasDecimals t
-  SetType t -> hasDecimals t
-  TupleType a b -> hasDecimals a || hasDecimals b
-  SumType a b -> hasDecimals a || hasDecimals b
+  RealType -> approxReals
+  ListType t -> hasDecimals approxReals t
+  SetType t -> hasDecimals approxReals t
+  TupleType a b -> hasDecimals approxReals a || hasDecimals approxReals b
+  SumType a b -> hasDecimals approxReals a || hasDecimals approxReals b
   _ -> False
 
 -- The free variables of a function body, packed into a single symbolic value, together with 

@@ -17,7 +17,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
-import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqual)
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
@@ -131,7 +131,6 @@ solveGuard vars guard = StateT $ \randomgen ->
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
 
-    -- for doubles, enforce a distance of at least 0.1
+    -- for doubles, rationals and reals, enforce a distance of at least 0.1
     isNot :: DSum Variable Val -> Expr Bool
-    isNot (var :=> (Val val)) = E.sNot $ Expr $ sortOfEqual 0.1 (E.Var var) (E.Const val)
-
+    isNot (var :=> (Val val)) = E.sNot $ Expr $ sortOfEqualWith True 0.1 (E.Var var) (E.Const val)
