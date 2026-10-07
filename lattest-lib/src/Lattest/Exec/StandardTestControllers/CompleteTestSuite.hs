@@ -22,6 +22,8 @@ allSwitches,
 isInputSwitch,
 switchesTaken,
 observeInputCoverage,
+mergeInputCoverage,
+prettyPrintInputCoverage,
 InputCoverageReport, InputCoverageKey, InputCoverageValue
 )
 where
@@ -39,6 +41,7 @@ import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, in
 import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
 
 import Control.Monad (forM, (>=>))
+import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Dependent.Sum (DSum (..))
 import qualified Data.Set as Set
@@ -265,6 +268,25 @@ instance Has a Type => Has a InputCoverageValue where
   has (ICV t _) = has @a t
 instance Has (ComposeC Show InputCoverageValue) (InputCoverageKey i) where
   has (ICK _ _ v) = withExprConstraints v
+
+{- |
+    Combine two input coverage reports.
+-}
+mergeInputCoverage :: Ord i => InputCoverageReport i -> InputCoverageReport i -> InputCoverageReport i
+mergeInputCoverage = DMap.unionWithKey (\_ (ICV t a) (ICV _ b) -> ICV t (Set.union a b))
+
+{- |
+    Render an input coverage report: per input gate, per guard, the values used for each parameter.
+-}
+prettyPrintInputCoverage :: (Show i, Ord i) => InputCoverageReport i -> String
+prettyPrintInputCoverage icr = unlines $ concat
+    [ show gate' : concat
+        [ ("  guard: " <> guard) : [ "    " <> var <> ": " <> List.intercalate ", " vals <> " (" <> show (length vals) <> " different input values)" | (var, vals) <- params ]
+        | (guard, params) <- Map.toList guards ]
+    | (gate', guards) <- Map.toList grouped ]
+  where
+    grouped = Map.fromListWith (Map.unionWith (<>))
+        [ (gate', Map.singleton (show guard) [(show v, show <$> Set.toList vals)]) | ICK gate' guard v :=> ICV _ vals <- DMap.toList icr ]
 
 observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
 observeInputCoverage = observer mempty update pure
