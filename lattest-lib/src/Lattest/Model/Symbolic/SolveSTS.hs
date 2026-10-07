@@ -31,7 +31,7 @@ indexVar
 )
 where
 
-import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue)
+import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue, TestChoice)
 import Lattest.Model.Automaton ( stateConf,IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation(..),sanityCheckSTS )
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
@@ -59,7 +59,6 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
-import Lattest.Model.StandardAutomata (sanityCheckSTS)
 import Data.Bifunctor (Bifunctor(..))
 import qualified Debug.Trace
 
@@ -221,7 +220,7 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
 offlineTests :: forall m loc i o state r
-              . (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)))
+              . (forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
              -> (state -> r)

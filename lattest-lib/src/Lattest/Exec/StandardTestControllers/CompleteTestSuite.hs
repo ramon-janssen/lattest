@@ -35,7 +35,8 @@ import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput, TestObserver, observer)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..), SymGuard)
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, asLoc, TransitionMapping (..), allLocations, STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, asLoc, TransitionMapping (..), STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
+import Lattest.Model.StandardAutomata (allLocations)
 import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp)
 import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
@@ -159,7 +160,7 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
 -- Using 'observeControllerState', the set of uncovered transitions can be passed on to the next test.
 randomCoveringTestSelector
   :: forall m loc q t tdest act i' o i.
-     (After m loc q t tdest act, Ord i', Ord o, Ord q, Ord loc
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord q, Ord loc
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
@@ -169,7 +170,7 @@ randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen i
 -- | As 'randomCoveringTestSelector', starting with the given random seed.
 randomCoveringTestSelectorFromSeed
   :: forall m loc q t tdest act i' o i.
-     (After m loc q t tdest act, Ord i', Ord o, Ord q, Ord loc
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord q, Ord loc
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
@@ -179,7 +180,7 @@ randomCoveringTestSelectorFromSeed intrpr mtocover seed = randomCoveringTestSele
 
 randomCoveringTestSelectorFromGen
   :: forall m loc q t tdest act i' o i.
-     (After m loc q t tdest act, Ord i', Ord o, Ord loc, Ord q,
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord loc, Ord q,
      tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
