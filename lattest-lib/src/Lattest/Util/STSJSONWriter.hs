@@ -20,9 +20,9 @@ import Data.Constraint.Extras (Has(..))
 import Data.Dependent.Sum (DSum(..))
 import Data.Some (Some (..))
 import Lattest.Model.Alphabet (SymInteract (..), IOAct, isOutputInteract, isInputInteract)
-import Lattest.Model.Automaton (Valuation, AutSyntax (..), allLocations, STStdest (..))
+import Lattest.Model.Automaton (Valuation, AutSyntax (..), STStdest (..))
 import Lattest.Model.BoundedMonad
-import Lattest.Model.StandardAutomata (IOSTS)
+import Lattest.Model.StandardAutomata (IOSTS, allLocations)
 import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
 import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..), VarModel (..))
@@ -58,12 +58,15 @@ initValue valuation = JSON.toJSON m
     m = Map.fromList $ map (\(var :=> val) -> (varName var, JSON.toJSON val)) $ DMap.assocs $ runValuation valuation
 
 instance JSON.ToJSON (Val a) where
-  toJSON (Val a) = has @JSON.ToJSON (typeOf a) $ JSON.toJSON a
+  toJSON (Val a) = case typeOf a of
+    RationalType -> JSON.toJSON $ fromRational @Double a
+    _ -> has @JSON.ToJSON (typeOf a) $ JSON.toJSON a
 
 instance Has JSON.ToJSON Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
+    RationalType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k
@@ -135,7 +138,7 @@ instance JSON.ToJSON Switch where
 getGuard :: Expr Bool -> Map.Map (Expr Bool) String -> [String]
 getGuard g guardmap
   | Just nm <- guardmap Map.!? g = [nm]
-  | And gs <- view g = (\(req,_,nms) -> if Set.null req then nms else error "couldn't find guard") $ foldr combine (gs, mempty, []) $ Map.toList guardmap
+  | And gs <- view g = (\(req,_,nms) -> if Set.null req then nms else error ("couldn't find guard" ++ show g)) $ foldr combine (gs, mempty, []) $ Map.toList guardmap
     where
       combine (view -> x,nm) (required, allowed, nms)
         | x `elem` required = (Set.delete x required, Set.insert x allowed, nm:nms)

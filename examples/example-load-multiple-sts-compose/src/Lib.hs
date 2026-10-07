@@ -20,25 +20,28 @@ import Data.Foldable (toList)
 run :: IO ()
 run = do
     putStrLn "loading STSs from JSON..."
-    result <- stsListFromJSONFile "example_coffee_machine.json"
+    result <- stsListFromJSONFile "example.json"
+    -- result <- stsListFromJSONFile "example_coffee_machine.json"
     stss <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
 
-    -- putStrLn $ unlines $ map (\(_,sts,_,_,_) -> prettyPrint sts) stss
+    --putStrLn $ unlines $ map (\(_,sts,_,_,_) -> prettyPrint sts) stss
     -- Compose all parsed STSs
     let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _, _) <- stss ]
-        conjmodel   = conjunctionAll checked
-        seqSelfComposed = conjmodel |>> conjmodel
-        seqComposed = conjmodel |> seqSelfComposed
+        conjunctedSTS = conjunctionAll checked
+        conjunctModel = interpretSTS conjunctedSTS initVal
+        --seqComposed = conjmodel |>> conjmodel
+        (seqSelfComposed, discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
+        (seqComposed, discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
         initVal  = case stss of
             [] -> error "no STSs loaded"
             (_, _, _, _, val):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
-        model    = interpretSTS seqComposed initVal
         gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_) -> g) stss
         as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_) -> a) stss
 
-    putStrLn $ prettyPrintIntrp model
+    --putStrLn $ prettyPrintIntrp seqComposed
+    --print discardedTransit
 
     putStrLn "computing offline test cases..."
     let nrSteps = 5
@@ -67,6 +70,6 @@ run = do
           pure toCover'
     foldM_ testCase switches [0 .. nrTests - 1]
 
+    print "Composition finished, writing result to file..."
     -- To write to a file:
-    -- stsListToJSONFile "example_single_stss.json" (map (\(id,sts,_,_,val) -> (id,sts,val)) stss) gs as
-    stsToJSONFile "example_composed.json" "stscomposed" seqComposed gs as initVal
+    stsToJSONFile "example_composed2.json" "stscomposed" (syntacticAutomaton seqComposed) gs as initVal

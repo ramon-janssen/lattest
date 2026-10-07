@@ -20,6 +20,8 @@ module Lattest.SMT (
   push,
   query,
   runSMT,
+  runSMTWith,
+  Solver(..),
   Some(..),
   RCSet(..),
   sortOfEqual
@@ -32,11 +34,13 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), sConst)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), sConst, Val (..), withExprConstraints)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
 import Control.Monad((<=<))
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import System.Environment (lookupEnv)
 import Control.Monad.State (StateT (..), evalStateT, lift, modify, gets, MonadState (..), runState, State, evalState)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -44,9 +48,8 @@ import qualified Data.Set as Set
 import Lattest.Model.Symbolic.Internal.Product (ProductTerm(..))
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
-import Lattest.Model.Symbolic.Internal.ExprImpls (Val(..))
 import Data.Constraint.Extras (Has(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, withExprConstraints, Expr (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprConstraints, withExprNumConstraint)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
@@ -78,8 +81,30 @@ smt'tosmt smt = StateT $ (\f x -> pure $ f x) $ runState smt
 smt'tosmtq :: SMT' a -> SMTQ a
 smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 
+-- | The SMT solvers that can be used. The solver must be available on the PATH.
+data Solver = Z3 | CVC5
+     deriving (Eq,Ord,Read,Show)
+
 runSMT :: SMT a -> IO a
-runSMT = SBV.runSMT {- With SBV.z3{SBVI.extraArgs = ["parallel.enable=true"]} -} . flip evalStateT Map.empty
+runSMT = runSMTWith Z3
+
+-- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
+-- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
+runSMTWith :: Solver -> SMT a -> IO a
+runSMTWith solver smt = lookupEnv "LATTEST_SMT_DUMP" >>= \case
+    Nothing -> run config
+    Just file -> do
+      start <- getCurrentTime
+      appendFile file $ "** SMT call started at " <> show start <> "\n"
+      result <- run config { SBV.verbose = True, SBV.redirectVerbose = Just file }
+      end <- getCurrentTime
+      appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
+      return result
+  where
+    run cfg = SBV.runSMTWith cfg $ evalStateT smt Map.empty
+    config = case solver of
+      Z3 -> SBV.z3
+      CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound"] }
 
 query :: SMTQ a -> SMT a
 query = StateT . (\f m -> SBV.query (f m)) . runStateT
@@ -122,6 +147,7 @@ addDeclaration (Variable nm ty) = do
     mkvar = \case
       IntType -> SBV.sInteger
       FloatType -> SBV.sDouble
+      RationalType -> SBV.sRational
       BoolType -> SBV.sBool
       UnitType -> SBV.sTuple
       CharType -> SBV.sChar
@@ -155,15 +181,15 @@ exprToSymbolic v = case v of
       Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
       exprview -> go exprview
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
-  DivideFloat x y -> (/)       <$> go x <*> go y
+  DivideFloat x y -> case typeOf' x of -- need to split because of overlapping instances in SBV
+    RationalType -> (/) <$> go x <*> go y
+    FloatType    -> (/) <$> go x <*> go y
+    _ -> error "impossible type"
   Modulo x y -> SBV.sMod  <$> go x <*> go y
-  Sum      s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal i               + sY) <$> go x <*> symY) (pure $ literal 0) s
-  SumFloat s -> foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
-  Product      p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
-  ProductFloat p -> foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
+  Sum t s -> withExprNumConstraint t $ foldOccur (\(SumTerm x) i symY -> (\sX sY -> sX * literal (fromInteger i) + sY) <$> go x <*> symY) (pure $ literal 0) s
+  Product t p -> withExprNumConstraint t $ foldOccur (\(ProductTerm x) i symY -> (\x' y -> x' ^ i * y) <$> go x <*> symY) (pure $ literal 1) p
   Length t x -> withExprConstraints t $ SBV.length <$> go x
-  GezInt   i -> (SBV..>= literal 0) <$> go i
-  GezFloat f -> (SBV..>= literal 0) <$> go f
+  Gez i -> withExprConstraints i $ (SBV..>= literal 0) <$> go i
   Not b -> SBV.sNot <$> go b
   And xs -> foldr (\b bs -> (SBV..&&) <$> go b <*> bs) (pure $ literal True) (Set.toList xs)
    -- The below version errors because SBV doesn't properly declare some variable
@@ -195,38 +221,48 @@ exprToSymbolic v = case v of
 
   -- do-notation makes it easier to massage the functions into the forms that SBV expects
   -- we locally modify the environment to map our placeholder variables to the smtvar we get
-  Map (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
+  -- SBV requires the functions passed to map/filter/fold to be closed, so the free variables of
+  -- the function body are passed explicitly
+  Map v@(Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
     xs <- go x
     m <- get
-    let f' smtvar = flip evalState m $ do
-          modify $ Map.insert nm $ Some smtvar
-          go f
-    pure $ SBV.map f' xs
-  Filter (Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
+    let f' env smtvar = evalState (go f) $ Map.insert nm (Some smtvar) env
+    pure $ case closureEnvFor m $ filter (/= Some v) (freeVars' f) of
+      Nothing -> SBV.map (f' m) xs
+      Just (ClosureEnv env inject) -> SBV.map (SBV.Closure env $ \e -> f' (inject e m)) xs
+  Filter v@(Variable nm ta) f x -> withExprConstraints ta $ withExprConstraints f $ do
     xs <- go x
     m <- get
-    let f' smtvar = flip evalState m $ do
-          modify $ Map.insert nm $ Some smtvar
-          go f
-    pure $ SBV.filter f' xs
-  Foldr (Variable na (ta :: Type a)) (Variable nb (_ :: Type b)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
-    xs <- go x
-    i' <- go i
-    m <- get
-    let f' :: SBV a -> SBV b -> SBV b
-        f' smtvara smtvarb = flip evalState m $ do
-          modify $ Map.insert na (Some smtvara) . Map.insert nb (Some smtvarb)
-          go f
-    pure $ SBV.foldr f' i' xs
-  Foldl (Variable nb (_ :: Type b)) (Variable na (ta :: Type a)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
+    let f' env smtvar = evalState (go f) $ Map.insert nm (Some smtvar) env
+    pure $ case closureEnvFor m $ filter (/= Some v) (freeVars' f) of
+      Nothing -> SBV.filter (f' m) xs
+      Just (ClosureEnv env inject) -> SBV.filter (SBV.Closure env $ \e -> f' (inject e m)) xs
+  -- SBV's own closure instances for foldr/foldl still capture the environment in the generated
+  -- function body, so for folds the environment is paired with every list element instead
+  Foldr va@(Variable na (ta :: Type a)) vb@(Variable nb (_ :: Type b)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
     xs <- go x
     i' <- go i
     m <- get
-    let f' :: SBV b -> SBV a -> SBV b
-        f' smtvara smtvarb = flip evalState m $ do
-          modify $ Map.insert na (Some smtvara) . Map.insert nb (Some smtvarb)
-          go f
-    pure $ SBV.foldl f' i' xs
+    let f' :: Map String (Some SBV) -> SBV a -> SBV b -> SBV b
+        f' env smtvara smtvarb = evalState (go f) $ Map.insert na (Some smtvara) $ Map.insert nb (Some smtvarb) env
+    pure $ case closureEnvFor m $ filter (`notElem` [Some va, Some vb]) (freeVars' f) of
+      Nothing -> SBV.foldr (f' m) i' xs
+      Just (ClosureEnv (env :: SBV env) inject) ->
+        let f'' :: SBV (env, a) -> SBV b -> SBV b
+            f'' ea = let (e, a) = SBV.untuple ea in f' (inject e m) a
+        in SBV.foldr f'' i' $ withClosureEnv env xs
+  Foldl vb@(Variable nb (_ :: Type b)) va@(Variable na (ta :: Type a)) f i x -> withExprConstraints ta $ withExprConstraints f $ do
+    xs <- go x
+    i' <- go i
+    m <- get
+    let f' :: Map String (Some SBV) -> SBV b -> SBV a -> SBV b
+        f' env smtvarb smtvara = evalState (go f) $ Map.insert na (Some smtvara) $ Map.insert nb (Some smtvarb) env
+    pure $ case closureEnvFor m $ filter (`notElem` [Some va, Some vb]) (freeVars' f) of
+      Nothing -> SBV.foldl (f' m) i' xs
+      Just (ClosureEnv (env :: SBV env) inject) ->
+        let f'' :: SBV b -> SBV (env, a) -> SBV b
+            f'' b ea = let (e, a) = SBV.untuple ea in f' (inject e m) b a
+        in SBV.foldl f'' i' $ withClosureEnv env xs
   Either (Variable nml tl) (Variable nmr tr) l r e -> withExprConstraints tl $ withExprConstraints tr $ withExprConstraints e $ do
     ei <- go e
     m <- get
@@ -246,29 +282,74 @@ exprToSymbolic v = case v of
 -- and add a note that equality on doubles is not exact.
 sortOfEqual :: Double -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqual range l r = withExprConstraints (Expr l) $ case typeOf' l of
+  -- Our hand-rolled equality check is slower, probably because the solver doesn't understand it,
+  -- so we only use it when there are FloatTypes or RationalTypes present.
+  tp | not (hasDecimals tp) -> Equal tp l r
   FloatType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
-  TupleType a b -> withExprConstraints a $ withExprConstraints b $ view $
-                  Expr (Equal a (First b l) (First b r)) .&& Expr (Equal b (Second a l) (Second a r))
+  RationalType -> view $ Expr l - Expr r .< sConst (toRational range) .&& Expr r - Expr l .< sConst (toRational range)
+  TupleType a b -> withExprConstraints a $ withExprConstraints b $
+                  And $ Set.fromList [ sortOfEqual range (First b l) (First b r)
+                                     , sortOfEqual range (Second a l) (Second a r)]
   SumType a b -> withExprConstraints a $ withExprConstraints b $
                   let v1 = Variable "eitherEqualityVarL" a
                       v2 = Variable "eitherEqualityVarL" b
                       v3 = Variable "eitherEqualityVarR" a
                       v4 = Variable "eitherEqualityVarR" b
                   in Either v1 v2
-                      (Either v3 v4 (Equal a (Var v1) (Var v3)) (Const False) r)
-                      (Either v3 v4 (Const False) (Equal b (Var v2) (Var v4)) r)
+                      (Either v3 v4 (sortOfEqual range (Var v1) (Var v3)) (Const False) r)
+                      (Either v3 v4 (Const False) (sortOfEqual range (Var v2) (Var v4)) r)
                       l
   ListType tp -> withExprConstraints tp $
     let v1 = Variable "mapEqualityVar" (TupleType tp tp)
         v2 = Variable "foldEqualityVar" BoolType
     in And $ Set.fromList
-      [ Equal IntType (Length tp l) (Length tp r)
-      , Foldr v1 v2 (And $ Set.fromList [Var v2, Equal tp (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r]
+      [ Foldr v1 v2 (And $ Set.fromList [Var v2, sortOfEqual range (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
+      , Equal IntType (Length tp l) (Length tp r)]
   -- the version of sets that SBV supports probably just isn't very useful for Lattest,
   -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
   SetType _ -> error "TODO"
   -- For int, bool, char, and unit; just use equality
-  _ -> Equal (typeOf' l) l r
+  tp -> Equal tp l r
+
+-- Whether values of the type contain floats or rationals, for which equality is approximated.
+hasDecimals :: Type a -> Bool
+hasDecimals = \case
+  FloatType -> True
+  RationalType -> True
+  ListType t -> hasDecimals t
+  SetType t -> hasDecimals t
+  TupleType a b -> hasDecimals a || hasDecimals b
+  SumType a b -> hasDecimals a || hasDecimals b
+  _ -> False
+
+-- The free variables of a function body, packed into a single symbolic value, together with 
+-- a function that unpacks such a value back into the variable environment.
+data ClosureEnv where
+  ClosureEnv :: SymVal env => SBV env -> (SBV env -> Map String (Some SBV) -> Map String (Some SBV)) -> ClosureEnv
+
+-- Return Nothing if there are no free variables, in which case the function is already closed.
+-- The variables are sorted, so that the same function body always gets the same environment layout.
+closureEnvFor :: Map String (Some SBV) -> [Some Variable] -> Maybe ClosureEnv
+closureEnvFor m = pack . Set.toAscList . Set.fromList
+  where
+    pack :: [Some Variable] -> Maybe ClosureEnv
+    pack [] = Nothing
+    pack [Some v@(Variable nm ty)] = withExprConstraints ty $
+      Just $ ClosureEnv (lookupVar v) (\e -> Map.insert nm (Some e))
+    pack (Some v@(Variable nm (ty :: Type t)) : vs) = case pack vs of
+      Nothing -> pack [Some v]
+      Just (ClosureEnv (rest :: SBV r) inject) -> withExprConstraints ty $
+        Just $ ClosureEnv (SBV.tuple (lookupVar v, rest)) $ \e ->
+          let (x, r) = SBV.untuple e :: (SBV t, SBV r)
+          in Map.insert nm (Some x) . inject r
+    lookupVar :: Variable t -> SBV t
+    lookupVar (Variable nm _) = case m Map.!? nm of
+      Nothing -> error $ "closureEnvFor: variable " <> show nm <> " is not declared (declared: " <> show (Map.keys m) <> ")"
+      Just (Some (SBVI.SBV x)) -> SBVI.SBV x
+
+-- pair every element of a list with the closure environment
+withClosureEnv :: forall env a. (SymVal env, SymVal a) => SBV env -> SBV [a] -> SBV [(env, a)]
+withClosureEnv env = SBV.map $ SBV.Closure env (\e (x :: SBV a) -> SBV.tuple (e, x))
 
 checkSatToSolveProblem :: CheckSatResult -> SolvableProblem
 checkSatToSolveProblem = \case
@@ -320,5 +401,4 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       KTuple [k1, k2] -> kindToType k1 $ \t1 -> kindToType k2 $ \t2 -> k $ TupleType t1 t2
       KTuple [] -> k UnitType
       _ -> error $ "couldn't convert kind " <> show kind
-
 

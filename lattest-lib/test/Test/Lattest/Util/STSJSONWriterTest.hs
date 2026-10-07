@@ -6,7 +6,6 @@
 
 module Test.Lattest.Util.STSJSONWriterTest
     ( testSTSJSONWriterComposedConjunction
-    , stsJSONWriterTests
     ) where
 
 import Test.HUnit
