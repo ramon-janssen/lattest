@@ -26,7 +26,7 @@ import qualified Lattest.Model.Internal.MCDCGeneration as MCDC
 import           Lattest.Model.StandardAutomata (STS)
 import           Lattest.Model.Symbolic.Expr (freeVars, (.&&), (.-), (.==), (.||))
 import           Lattest.Model.Symbolic.Internal.ExprDefs (Expr (Expr),
-                                                            ExprView (And, Const, Equal, Filter, GezInt, Length, Not, Product, Sum),
+                                                            ExprView (And, Const, Equal, Filter, Gez, Length, Not, Product, Sum),
                                                             Type (IntType), view)
 import           Lattest.Model.Symbolic.Internal.FreeMonoidX (distinctTermsT)
 import           Lattest.Model.Symbolic.Internal.ExprImpls (sAnd, sNot, sTrue)
@@ -70,9 +70,9 @@ splitGuard guard
 counts :: ExprView t -> Set.Set (ExprView Integer)
 counts e@(Length _ (Filter {}))        = Set.singleton e
 counts (Equal _ l r)                   = counts l `Set.union` counts r
-counts (GezInt e)                      = counts e
-counts (Sum (distinctTermsT -> es))     = Set.unions (map counts es)
-counts (Product (distinctTermsT -> es)) = Set.unions (map counts es)
+counts (Gez e)                         = counts e
+counts (Sum _ (distinctTermsT -> es))   = Set.unions (map counts es)
+counts (Product _ (distinctTermsT -> es)) = Set.unions (map counts es)
 counts _                               = Set.empty
 
 {- |
