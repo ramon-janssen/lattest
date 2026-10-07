@@ -8,7 +8,8 @@ combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
-solveGuard, solveGuardIO
+solveGuard, solveGuardIO,
+isGuardSatisfiable
 ) where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
@@ -70,6 +71,7 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.IntType -> E.int value
                   E.UnitType -> E.unit
                   E.FloatType -> E.float value
+                  E.RationalType -> E.rational value
                   E.BoolType -> E.bool value
                   E.CharType -> E.char value
                   E.ListType t -> has @ExprType t E.list value
@@ -77,6 +79,20 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
                   E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
+
+{-|
+    Check whether the given guard is satisfiable, without obtaining a valuation.
+-}
+isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
+isGuardSatisfiable vars guard = do
+  g <- mkStdGen <$> randomIO -- We don't care about the solution, only whether there is one, so randomness is acceptable here
+  fst $ runSMT g do
+    addDeclarations vars
+    addAssertions [guard]
+    query $ getSolvable >>= \case
+      Sat -> return True
+      Unsat -> return False
+      Unknown -> error $ "isGuardSatisfiable: SMT solver returned unknown for guard " <> show guard -- TODO warning?
 
 solveGuardIO :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
 solveGuardIO vars guard = do
