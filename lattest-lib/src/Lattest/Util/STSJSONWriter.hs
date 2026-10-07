@@ -23,7 +23,7 @@ import Lattest.Model.Alphabet (SymInteract (..), IOAct, isOutputInteract, isInpu
 import Lattest.Model.Automaton (Valuation, AutSyntax (..), STStdest (..))
 import Lattest.Model.BoundedMonad
 import Lattest.Model.StandardAutomata (IOSTS, allLocations)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..))
+import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..), enumIndex)
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
 import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..), VarModel (..))
 import Lattest.SMT (RCSet)
@@ -59,9 +59,16 @@ initValue valuation = JSON.toJSON m
     m = Map.fromList $ map (\(var :=> val) -> (varName var, JSON.toJSON val)) $ DMap.assocs $ runValuation valuation
 
 instance JSON.ToJSON (Val a) where
-  toJSON (Val a) = case typeOf a of
-    RationalType -> JSON.toJSON $ fromRational @Double a
-    _ -> has @JSON.ToJSON (typeOf a) $ JSON.toJSON a
+  toJSON (Val a) = valueToJSON (typeOf a) a
+
+-- | Enums are written as their position in the original range, also when nested in arrays or structures.
+valueToJSON :: Type a -> a -> JSON.Value
+valueToJSON t x | Just i <- enumIndex t x = JSON.toJSON i
+valueToJSON RationalType x = JSON.toJSON $ fromRational @Double x
+valueToJSON (ListType CharType) s = JSON.toJSON s
+valueToJSON (ListType t) xs = JSON.toJSON $ map (valueToJSON t) xs
+valueToJSON (TupleType a b) (x, y) = JSON.toJSON (valueToJSON a x, valueToJSON b y)
+valueToJSON t x = has @JSON.ToJSON t $ JSON.toJSON x
 
 instance Has JSON.ToJSON Type where
   has t k = case t of

@@ -22,6 +22,9 @@ module Lattest.Model.Symbolic.Expr
 , set
 , tuple
 , option
+, enumIndex
+, prettyValue
+, prettyConstant
 , constType
 , ConstType
 , fromConst

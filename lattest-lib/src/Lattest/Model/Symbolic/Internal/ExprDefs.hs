@@ -56,6 +56,9 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , tuple
 , option
 , inhabitants
+, enumIndex
+, prettyValue
+, prettyConstant
 )
 where
 
@@ -574,6 +577,26 @@ tuple :: (ExprType a, ExprType b) => a -> b -> Some Constant
 tuple a b = Some (CTuple a b (typeOf a) (typeOf b))
 option :: (ExprType a, ExprType b) => Either a b -> Some Constant
 option x = Some (CSum x (typeOf undefined) (typeOf undefined))
+
+-- | Recovers the position of the enum in the original range.
+enumIndex :: Type a -> a -> Maybe Int
+enumIndex (SumType UnitType _) (Left ()) = Just 0
+enumIndex (SumType UnitType UnitType) (Right ()) = Just 1
+enumIndex (SumType UnitType t) (Right x) = (+1) <$> enumIndex t x
+enumIndex _ _ = Nothing
+
+-- | Show a value, printing enums as their position in the original range.
+prettyValue :: Type a -> a -> String
+prettyValue t x | Just i <- enumIndex t x = show i
+prettyValue (ListType CharType) s = show s
+prettyValue (ListType t) xs = "[" ++ List.intercalate "," (map (prettyValue t) xs) ++ "]"
+prettyValue (TupleType a b) (x, y) = "(" ++ prettyValue a x ++ "," ++ prettyValue b y ++ ")"
+prettyValue (SumType a _) (Left x) = "Left " ++ prettyValue a x
+prettyValue (SumType _ b) (Right y) = "Right " ++ prettyValue b y
+prettyValue t x = has @Show t $ show x
+
+prettyConstant :: Some Constant -> String
+prettyConstant (Some (Constant t x)) = prettyValue t x
 
 instance GEq Constant where
   a `geq` b = case constType a `geq` constType b of

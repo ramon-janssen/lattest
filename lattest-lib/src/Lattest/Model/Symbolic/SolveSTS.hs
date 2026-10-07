@@ -37,7 +37,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Spec
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.SMT ( Some(..) )
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard, isGuardSatisfiable)
-import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints, prettyConstant)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 
@@ -190,7 +190,7 @@ data OnlyOrInconclusive = Only | Inconclusiv deriving Show
 instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
   show (OfflineTests os is) = "\\case\n" <> indentOfflineTree os' <> indentOfflineTree is'
     where
-      os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> show cs <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
+      os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> "[" <> List.intercalate "," (map prettyConstant cs) <> "]" <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
                   Only -> ""
                   Inconclusiv -> "!"<> show o <> "[..] -> Inconclusive") $ Map.toList os
       is' = case is of
