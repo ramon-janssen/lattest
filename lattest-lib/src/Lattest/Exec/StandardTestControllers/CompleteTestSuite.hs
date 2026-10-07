@@ -275,7 +275,7 @@ observeInputCoverage = observer mempty update pure
         guards
           | Right qs <- asConjunction (stateConf intrpr) = concatMap (\(IntrpState loc _) -> case asConjunction $ transRel (syntacticAutomaton intrpr) loc Map.! SymInteract (In gate') vars of
                 Right tdests -> map (\(STSLoc x,_) -> fst x) $ Set.toList tdests
-                Left _ -> error "TODO: compute input coverage ofr disjunctions") $ Set.toList qs
+                Left _ -> error "TODO: compute input coverage for disjunctions") $ Set.toList qs
           | otherwise = error "TODO: compute input coverage for disjunctions" -- mempty
         taggedvals :: [DSum Constant Variable]
         taggedvals = zipWith
