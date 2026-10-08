@@ -159,5 +159,6 @@
             ],
             "init_loc": "(\"B\",3)"
         }
-    ]
+    ],
+    "enum_translation": []
 }
