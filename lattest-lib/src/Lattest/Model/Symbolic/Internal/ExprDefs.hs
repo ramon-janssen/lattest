@@ -580,10 +580,22 @@ option x = Some (CSum x (typeOf undefined) (typeOf undefined))
 
 -- | Recovers the position of the enum in the original range.
 enumIndex :: Type a -> a -> Maybe Int
-enumIndex (SumType UnitType _) (Left ()) = Just 0
-enumIndex (SumType UnitType UnitType) (Right ()) = Just 1
-enumIndex (SumType UnitType t) (Right x) = (+1) <$> enumIndex t x
-enumIndex _ _ = Nothing
+enumIndex tp val
+  | isEnum tp = go tp val
+  | otherwise = Nothing
+  where
+    go :: Type a -> a -> Maybe Int
+    go UnitType () = Just 0
+    go (SumType t _) (Left x) = go t x
+    go (SumType _ t) (Right x) = (+1) <$> go t x
+    go _ _ = Nothing
+    -- Is this type a sum of units?
+    -- Note: this is an overapproximation. For example, if 'Maybe a := SumType () a',
+    -- 'Nothing' gets printed as 'Left 0', and a sum of two enums gets printed as a single enum.
+    isEnum :: Type a -> Bool
+    isEnum UnitType = True
+    isEnum (SumType a b) = isEnum a && isEnum b
+    isEnum _ = False
 
 -- | Show a value, printing enums as their position in the original range.
 prettyValue :: Type a -> a -> String
