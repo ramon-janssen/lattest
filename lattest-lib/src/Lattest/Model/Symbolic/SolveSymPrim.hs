@@ -15,16 +15,15 @@ isGuardSatisfiable
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation(..), Val (..), Variable (..), ExprType, substConst, eval, freeVars)
-import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..))
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
+import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith)
+
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has(..))
+import System.Random ( randomR, RandomGen, mkStdGen, randomIO )
 import Data.Dependent.Sum (DSum (..))
-import Lattest.SMT (SolvableProblem(..), SMTQ, sortOfEqual, getSolution, getSolvable, addAssertionsQ, query, addAssertions, addDeclarations, runSMT)
-import qualified Data.Set as Set
-import System.Random.Stateful
-import qualified Debug.Trace
 import Control.Monad.State (StateT (..), evalStateT)
 
 {-|
@@ -73,6 +72,7 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.UnitType -> E.unit
                   E.FloatType -> E.float value
                   E.RationalType -> E.rational value
+                  E.RealType -> E.real value
                   E.BoolType -> E.bool value
                   E.CharType -> E.char value
                   E.ListType t -> has @ExprType t E.list value
@@ -85,7 +85,9 @@ valuationToGateValue (SymInteract g' params) valuation =
     Check whether the given guard is satisfiable, without obtaining a valuation.
 -}
 isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
-isGuardSatisfiable vars guard = fst $ runSMT (mkStdGen 0) do -- satisfiability does not depend on the seed, so a fixed one suffices
+isGuardSatisfiable vars guard = do
+  g <- mkStdGen <$> randomIO -- We don't care about the solution, only whether there is one, so randomness is acceptable here
+  fst $ runSMT g do
     addDeclarations vars
     addAssertions [guard]
     query $ getSolvable >>= \case
@@ -130,7 +132,6 @@ solveGuard vars guard = StateT $ \randomgen ->
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
 
-    -- for doubles, enforce a distance of at least 0.1
+    -- for doubles, rationals and reals, enforce a distance of at least 0.1
     isNot :: DSum Variable Val -> Expr Bool
-    isNot (var :=> (Val val)) = E.sNot $ Expr $ sortOfEqual 0.1 (E.Var var) (E.Const val)
-
+    isNot (var :=> (Val val)) = E.sNot $ Expr $ sortOfEqualWith True 0.1 (E.Var var) (E.Const val)

@@ -1,8 +1,12 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 module Lattest.Util.ReportUtils
     ( writeResults
     , flushResults
     , initResultsFile
     , TestResult(..)
+    , prettyTrace
+    , appendTestTrace
     ) where
 
 import Data.Csv (ToRecord(..), record, toField, encode)
@@ -12,6 +16,13 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Sequence as Seq
 import Control.Monad (void)
+import Data.Some (Some)
+
+import Lattest.Model.Alphabet (GateValue(..), IOSymInteract, IOAct(..), IOGateValue)
+import Lattest.Model.Automaton (IntrpState, STStdest, AutIntrpr, IOAfter, StepSemantics)
+import qualified Lattest.Model.BoundedMonad as BM
+import Lattest.Model.Symbolic.Expr (Constant)
+import Lattest.Model.Symbolic.SolveSTS (OfflineTests, OnlyOrInconclusive, toTrace)
 
 
 data TestResult = TestResult
@@ -65,3 +76,22 @@ writeResults csvPath newResults buf threshold = do
 flushResults :: FilePath -> Seq.Seq TestResult -> IO ()
 flushResults csvPath revBuf =
     void $ writeResults csvPath [] revBuf 0
+
+{-|
+    Wrap the output values of a trace in a GateValue, so that they are pretty printed like the inputs (e.g. enums as their index).
+-}
+prettyTrace :: [IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], st)] -> [IOAct (GateValue i) (GateValue o, OnlyOrInconclusive, st)]
+prettyTrace = map prettyOut
+  where
+    prettyOut (In i) = In i
+    prettyOut (Out (o, ooi, cs, st)) = Out (GateValue o cs, ooi, st)
+
+{-|
+    Append the given offline test to the given file as its pretty printed trace and verdict.
+-}
+appendTestTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show i, Show o, Show r, Show (m (IntrpState loc)))
+    => FilePath
+    -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+    -> OfflineTests i o r
+    -> IO ()
+appendTestTrace file intrpr test = appendFile file $ show (fmap (\(steps, r) -> (prettyTrace steps, r)) (toTrace intrpr test)) ++ "\n"

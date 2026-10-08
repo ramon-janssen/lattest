@@ -30,7 +30,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , Expr(..)       -- for local usage only!
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CFloat, CRational, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
+, Constant(Constant, CInt, CFloat, CRational, CReal, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
 , constType
 , constValue
 , ConstType(..)
@@ -47,6 +47,7 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , unit
 , float
 , rational
+, real
 , bool
 , char
 , string
@@ -55,6 +56,9 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , tuple
 , option
 , inhabitants
+, enumIndex
+, prettyValue
+, prettyConstant
 )
 where
 
@@ -79,7 +83,7 @@ import Data.Some (Some(..))
 import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
-import Data.SBV (SymVal(..), RCSet (..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&))
+import Data.SBV (SymVal(..), RCSet (..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&), AlgReal)
 import Data.EqP (EqP (..))
 import Data.Maybe (isJust, maybeToList)
 import Data.Constraint.Extras (Has (..))
@@ -96,6 +100,7 @@ data Type a where
   IntType :: Type Integer
   FloatType :: Type Double
   RationalType :: Type Rational
+  RealType :: Type AlgReal
   BoolType :: Type Bool
   CharType :: Type Char
   UnitType :: Type ()
@@ -112,6 +117,7 @@ instance GEq Type where
   geq IntType IntType = Just Refl
   geq FloatType FloatType = Just Refl
   geq RationalType RationalType = Just Refl
+  geq RealType RealType = Just Refl
   geq BoolType BoolType = Just Refl
   geq CharType CharType = Just Refl
   geq UnitType UnitType = Just Refl
@@ -163,6 +169,7 @@ instance GCompare Type where
       typeTag (TupleType _ _) = 7
       typeTag (SumType _ _)   = 8
       typeTag RationalType = 9
+      typeTag RealType = 10
 
 instance Show (Type a) where
     show IntType = "Int"
@@ -171,6 +178,7 @@ instance Show (Type a) where
     show CharType = "Char"
     show FloatType = "Float"
     show RationalType = "Rational"
+    show RealType = "Real"
     show (ListType t) = "[" ++ show t ++ "]"
     show (SetType t) = "{" ++ show t ++ "}"
     show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
@@ -200,6 +208,9 @@ instance GRead Type where
          ]
       ++ [ (Church.mkSome RationalType, rest)
          | rest <- mylex "Rational" s
+         ]
+      ++ [ (Church.mkSome RealType, rest)
+         | rest <- mylex "Real" s
          ]
       ++ [ (Church.mkSome BoolType, rest)
          | rest <- mylex "Bool" s
@@ -288,6 +299,7 @@ inhabitants = \case
   IntType -> Nothing
   FloatType -> Nothing
   RationalType -> Nothing
+  RealType -> Nothing
   BoolType -> Just 2
   CharType -> Nothing -- maxBound - minBound + 1 = 1114112, I think we'd have overflow issues (in e.g. sums/products of chars) more often than that we'd have such large complement sets
   ListType _ -> Nothing
@@ -321,6 +333,7 @@ withExprNumConstraint f k = case has @ExprType f (typeOf' f) of
   IntType -> k
   FloatType -> k
   RationalType -> k
+  RealType -> k
   _ -> error "impossible Num instance"
 
 instance Has ExprType Type where
@@ -328,6 +341,7 @@ instance Has ExprType Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -342,6 +356,7 @@ instance Has Eq Type where
     UnitType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Eq t' k
@@ -355,6 +370,7 @@ instance Has Ord Type where
     UnitType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Ord t' k
@@ -367,6 +383,7 @@ hasOrdSymbolic t k = case t of
   IntType -> k
   FloatType -> k
   RationalType -> k
+  RealType -> k
   CharType -> k
   UnitType -> k
   BoolType -> k
@@ -384,6 +401,7 @@ instance Has Show Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -397,6 +415,7 @@ instance Has SymVal Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     UnitType -> k
     CharType -> k
@@ -410,6 +429,7 @@ instance Has Read Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     UnitType -> k
     BoolType -> k
     CharType -> k
@@ -418,12 +438,16 @@ instance Has Read Type where
     TupleType a b -> has @Read a $ has @Read b k
     SumType a b -> has @Read a $ has @Read b k
 
+instance Read AlgReal where
+  readsPrec = error "TODO"
+
 instance Has Data Type where
   has t k = case t of
     IntType -> k
     UnitType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     ListType t' -> has @Data t' k
@@ -447,6 +471,9 @@ instance ExprType Double where
 instance ExprType Rational where
     typeOf _ = RationalType
     typeOf' _ = RationalType
+instance ExprType AlgReal where
+    typeOf _ = RealType
+    typeOf' _ = RealType
 instance ExprType Char where
     typeOf _ = CharType
     typeOf' _ = CharType
@@ -500,7 +527,7 @@ deriving instance Ord a => Ord (Constant a)
 deriving instance Show a => Show (Constant a)
 deriving instance (Read a, ExprType a) => Read (Constant a)
 
-{-# COMPLETE CBool, CUnit, CInt, CFloat, CRational, CChar, CList, CTuple, CSet, CSum #-}
+{-# COMPLETE CBool, CUnit, CInt, CFloat, CRational, CReal, CChar, CList, CTuple, CSet, CSum #-}
 pattern CBool :: () => (a ~ Bool) => a -> Constant a
 pattern CBool b = Constant BoolType b
 pattern CUnit :: () => (a ~ ()) => Constant a
@@ -511,6 +538,8 @@ pattern CFloat :: () => (a ~ Double) => a -> Constant a
 pattern CFloat f = Constant FloatType f
 pattern CRational :: () => (a ~ Rational) => a -> Constant a
 pattern CRational f = Constant RationalType f
+pattern CReal :: () => (a ~ AlgReal) => a -> Constant a
+pattern CReal f = Constant RealType f
 pattern CChar :: () => (a ~ Char) => a -> Constant a
 pattern CChar c = Constant CharType c
 pattern CString :: () => (a ~ String) => a -> Constant a
@@ -534,6 +563,8 @@ float :: Double -> Some Constant
 float f = Some (CFloat f)
 rational :: Rational -> Some Constant
 rational f = Some (CRational f)
+real :: AlgReal -> Some Constant
+real f = Some (CReal f)
 char :: Char -> Some Constant
 char c = Some (CChar c)
 string :: String -> Some Constant
@@ -546,6 +577,38 @@ tuple :: (ExprType a, ExprType b) => a -> b -> Some Constant
 tuple a b = Some (CTuple a b (typeOf a) (typeOf b))
 option :: (ExprType a, ExprType b) => Either a b -> Some Constant
 option x = Some (CSum x (typeOf undefined) (typeOf undefined))
+
+-- | Recovers the position of the enum in the original range.
+enumIndex :: Type a -> a -> Maybe Int
+enumIndex tp val
+  | isEnum tp = go tp val
+  | otherwise = Nothing
+  where
+    go :: Type a -> a -> Maybe Int
+    go UnitType () = Just 0
+    go (SumType t _) (Left x) = go t x
+    go (SumType _ t) (Right x) = (+1) <$> go t x
+    go _ _ = Nothing
+    -- Is this type a sum of units?
+    -- Note: this is an overapproximation. For example, if 'Maybe a := SumType () a',
+    -- 'Nothing' gets printed as 'Left 0', and a sum of two enums gets printed as a single enum.
+    isEnum :: Type a -> Bool
+    isEnum UnitType = True
+    isEnum (SumType a b) = isEnum a && isEnum b
+    isEnum _ = False
+
+-- | Show a value, printing enums as their position in the original range.
+prettyValue :: Type a -> a -> String
+prettyValue t x | Just i <- enumIndex t x = show i
+prettyValue (ListType CharType) s = show s
+prettyValue (ListType t) xs = "[" ++ List.intercalate "," (map (prettyValue t) xs) ++ "]"
+prettyValue (TupleType a b) (x, y) = "(" ++ prettyValue a x ++ "," ++ prettyValue b y ++ ")"
+prettyValue (SumType a _) (Left x) = "Left " ++ prettyValue a x
+prettyValue (SumType _ b) (Right y) = "Right " ++ prettyValue b y
+prettyValue t x = has @Show t $ show x
+
+prettyConstant :: Some Constant -> String
+prettyConstant (Some (Constant t x)) = prettyValue t x
 
 instance GEq Constant where
   a `geq` b = case constType a `geq` constType b of
@@ -584,6 +647,7 @@ instance JSON.FromJSON (Some Constant) where
             Some IntType -> parseInt $ lkup "value" m
             Some FloatType -> parseFloat $ lkup "value" m
             Some RationalType -> parseRational $ lkup "value" m
+            Some RealType -> parseReal $ lkup "value" m
             Some UnitType -> parseUnit $ lkup "value" m
             Some CharType -> parseChar $ lkup "value" m
             Some (ListType t) -> parseList t $ lkup "value" m
@@ -596,6 +660,7 @@ instance JSON.FromJSON (Some Constant) where
           "int" -> pure $ Some IntType
           "float" -> pure $ Some FloatType
           "rational" -> pure $ Some RationalType
+          "real" -> pure $ Some RealType
           "bool" -> pure $ Some BoolType
           "()" -> pure $ Some UnitType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
@@ -635,6 +700,8 @@ instance JSON.FromJSON (Some Constant) where
         parseFloat _ = fail "type indicates float, but value is not a number"
         parseRational (JSON.Number f) = return $ rational $ toRational f
         parseRational _ = fail "type indicates rational, but value is not a number"
+        parseReal (JSON.Number f) = return $ real $ fromRational $ toRational f
+        parseReal _ = fail "type indicates rational, but value is not a number"
         parseList t (JSON.Array xs) = has @ExprType t list <$> mapM (unSome t <=< JSON.parseJSON @(Some Constant)) (Vec.toList xs)
           where
             unSome :: Type a -> Some Constant -> JSON.Parser a
@@ -694,6 +761,7 @@ instance JSON.ToJSON (Some Constant) where
       CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
       CFloat f -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
       CRational f -> JSON.Object $ JSON.insert "type" "rational" $ JSON.insert "value" (JSON.Number $ fst $ DS.fromRationalRepetendUnlimited f) JSON.empty
+      CReal f -> JSON.Object $ JSON.insert "type" "real" $ JSON.insert "value" (JSON.Number $ fromRational $ toRational f) JSON.empty
       CChar c -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack [c]) JSON.empty
       CList xs t -> JSON.Object
         $ JSON.insert "type" (fromString . show $ ListType t)
@@ -731,6 +799,7 @@ instance Has ConstType Type where
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k
@@ -1013,47 +1082,50 @@ instance Ord (ExprView t) where
 
 
 instance Show (ExprView t) where
-  show (Var v) = varName v
-  show (Const c) = show c
-  show (Ite cond e1 e2) = "if (" ++ show cond ++ ") then (" ++ show e1 ++ ") else (" ++ show e2 ++ ")"
-  show (Divide e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
-  show (Modulo e1 e2) = "(" ++ show e1 ++ ") % (" ++ show e2 ++ ")"
-  show (DivideFloat e1 e2) = "(" ++ show e1 ++ ") / (" ++ show e2 ++ ")"
-  show (Sum _ es) | es == mempty = "∑∅"
-  show (Sum _ es) = "(" ++ showFreeMonoid "+" showSumTerm es ++ ")"
+  show = \case
+    (Var v) -> varName v
+    (Const c) -> show c
+    (Ite cond e1 e2) -> "if " ++ bshow cond ++ " then " ++ bshow e1 ++ " else " ++ bshow e2
+    (Divide e1 e2) -> bshow e1 ++ " / " ++ bshow e2
+    (Modulo e1 e2) -> bshow e1 ++ " % " ++ bshow e2
+    (DivideFloat e1 e2) -> bshow e1 ++ " / " ++ bshow e2
+    (Sum _ es) | es == mempty -> "∑∅"
+    (Sum _ es) -> showFreeMonoid "+" bshowSumTerm es
       where
-      showSumTerm (-1)     t = "-" ++ t
-      showSumTerm 1 t = t
-      showSumTerm n t = show n ++ "⋅" ++ t
-  show (Product _ es) | es == mempty = "∏∅"
-  show (Product _ es) = showFreeMonoid "⋅" (\n t -> show n ++ "^" ++ t) es -- "(" ++ show e2 ++ ")" --FreeProduct Expr
-  show (Length _ e) = "length(" ++ show e ++ ")"
-  show (Equal _ e1 e2) = "(" ++ show e1 ++ ") = (" ++ show e2 ++ ")"
-  show (Gez e) = "(" ++ show e ++ ") ≥ 0"
-  show (Not e) = "¬(" ++ show e ++ ")"
-  show (And (Set.toList -> [])) = "⋀∅"
-  show (And (Set.toList -> es)) = List.intercalate "∧" $ (\e -> "(" ++ show e ++ ")") <$>  es
-  show (Concat es) = "concat " <> show es
-  show (Cons x xs) = show x ++ ":" ++ show xs
-  show (Append xs ys) = show xs ++ "++" ++ show ys
-  show (LElem _ x xs) = show x ++ "`elem`" ++ show xs
-  show (Take i xs) = "take " ++ show i ++ " " ++ show xs
-  show (Drop i xs) = "drop " ++ show i ++ " " ++ show xs
-  show (Head x) = "head " <> show x
-  show (Tail x) = "tail " <> show x
-  show (First _ x) = "fst " <> show x
-  show (Second _ x) = "snd " <> show x
-  show (Pair x y) = "(" <> show x <> ", " <> show y <> ")"
-  show (Either _ _ l r x) = "either (" <> show l <> ") (" <> show r <> ") " <> show x
-  show (Zip _ _ x y) = "zip (" <> show x <> ") (" <> show y <> ")"
-  show (Map _ f xs) = "map (" <> show f <> ") " <> show xs
-  show (ELeft x) = "Left " <> show x
-  show (ERight x) = "Right " <> show x
-  show (SElem _ x xs) = show x <> "`Set.elem`" <> show xs
-  show (SInsert x xs) = "Set.insert " <> show x <> " " <> show xs
-  show (Filter _ f xs) = "filter (" <> show f <> ") " <> show xs
-  show (Foldr _ _ f i xs) = "foldr (" <> show f <> ") (" <> show i <> ") " <> show xs
-  show (Foldl _ _ f i xs) = "foldl (" <> show f <> ") (" <> show i <> ") " <> show xs
+      bshowSumTerm (-1)     t = "-" ++ t
+      bshowSumTerm 1 t = t
+      bshowSumTerm n t = bshow n ++ "⋅" ++ t
+    (Product _ es) | es == mempty -> "∏∅"
+    (Product _ es) -> showFreeMonoid "⋅" (\n t -> bshow n ++ "^" ++ t) es -- "(" ++ bshow e2 ++ ")" --FreeProduct Expr
+    (Length _ e) -> "length " ++ bshow e
+    (Equal _ e1 e2) -> bshow e1 ++ " = " ++ bshow e2
+    (Gez e) -> bshow e ++ " ≥ 0"
+    (Not e) -> "¬" ++ bshow e
+    (And (Set.toList -> [])) -> "⋀∅"
+    (And (Set.toList -> es)) -> List.intercalate "∧" $ bshow <$> es
+    (Concat es) -> "concat " <> bshow es
+    (Cons x xs) -> bshow x ++ ":" ++ bshow xs
+    (Append xs ys) -> bshow xs ++ "++" ++ bshow ys
+    (LElem _ x xs) -> bshow x ++ "`elem`" ++ bshow xs
+    (Take i xs) -> "take " ++ bshow i ++ " " ++ bshow xs
+    (Drop i xs) -> "drop " ++ bshow i ++ " " ++ bshow xs
+    (Head x) -> "head " <> bshow x
+    (Tail x) -> "tail " <> bshow x
+    (First _ x) -> "fst " <> bshow x
+    (Second _ x) -> "snd " <> bshow x
+    (Pair x y) -> "(" <> show x <> ", " <> show y <> ")"
+    (Either _ _ l r x) -> "either " <> bshow l <> " " <> bshow r <> " " <> bshow x
+    (Zip _ _ x y) -> "zip " <> bshow x <> " " <> bshow y
+    (Map v f xs) -> "map (\\" <> show v <> " -> " <> show f <> ") " <> bshow xs
+    (ELeft x) -> "Left " <> bshow x
+    (ERight x) -> "Right " <> bshow x
+    (SElem _ x xs) -> bshow x <> "`Set.elem`" <> bshow xs
+    (SInsert x xs) -> "Set.insert " <> bshow x <> " " <> bshow xs
+    (Filter _ f xs) -> "filter " <> bshow f <> " " <> bshow xs
+    (Foldr _ _ f i xs) -> "foldr " <> bshow f <> " " <> bshow i <> " " <> bshow xs
+    (Foldl _ _ f i xs) -> "foldl " <> bshow f <> " " <> bshow i <> " " <> bshow xs
+    where
+      bshow x = let y = show x in if isJust (List.elemIndex ' ' y) then '(' : y <> ")" else y
 
 instance Has ExprType Expr where
   has (Expr v) = has @ExprType v
@@ -1112,7 +1184,22 @@ newtype Expr t = Expr {view :: ExprView t} deriving (Eq, Ord)
 -- so I've been assuming that any representable ExprView is fair game
 
 instance Show (Expr t) where
-    show = show . view
+  show = show . view
+
+instance GShow Expr where
+  gshowsPrec = defaultGshowsPrec
+
+instance GEq Expr where
+  geq x y = withExprConstraints x $ withExprConstraints y $ geq (typeOf' x) (typeOf' y)
+
+instance GCompare Expr where
+  gcompare x y = withExprConstraints x $ withExprConstraints y $ case gcompare (typeOf' x) (typeOf' y) of
+    GLT -> GLT
+    GGT -> GGT
+    GEQ -> case compare x y of
+      GT -> GGT
+      LT -> GLT
+      EQ -> GEQ
 
 
 isConst :: ExprView v -> Bool

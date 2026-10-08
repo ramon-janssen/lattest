@@ -119,7 +119,7 @@ import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
 import qualified Data.List as List
-import Data.SBV (RCSet(..))
+import Data.SBV (RCSet(..), AlgReal)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
 import GHC.Integer (divInteger)
 import Data.Maybe (catMaybes)
@@ -339,6 +339,14 @@ getSumR :: ExprView Rational -> FreeSum (ExprView Rational)
 getSumR (Sum RationalType s) = s
 getSumR _ = error "ExprImpls.hs - getSumF - Unexpected Expr "
 
+isSumReal :: ExprView AlgReal -> Bool
+isSumReal (Sum RealType _) = True
+isSumReal _ = False
+
+getSumReal :: ExprView AlgReal -> FreeSum (ExprView AlgReal)
+getSumReal (Sum RealType s) = s
+getSumReal _ = error "ExprImpls.hs - getSumF - Unexpected Expr "
+
 sSumFloat :: FreeSum (Expr Double) -> Expr Double
 sSumFloat = Expr . cstrSumF . FMX.mapTerms (SumTerm . view . summand)
 
@@ -367,7 +375,6 @@ cstrSumF' ms =
 sSumRational :: FreeSum (Expr Rational) -> Expr Rational
 sSumRational = Expr . cstrSumR . FMX.mapTerms (SumTerm . view . summand)
 
--- | Apply operator sum on the provided sum of floating-point values.
 cstrSumR :: FreeSum (ExprView Rational) -> ExprView Rational
 cstrSumR ms = cstrSumR' $ nonadds <> FMX.flatten sumOfAdds
     where
@@ -388,6 +395,30 @@ cstrSumR' ms =
             []         -> Const 0.0 -- sum of nothing equals zero
             [(term,1)] -> summand term
             _          -> Sum RationalType retMS
+
+sSumReal :: FreeSum (Expr AlgReal) -> Expr AlgReal
+sSumReal = Expr . cstrSumReal . FMX.mapTerms (SumTerm . view . summand)
+
+cstrSumReal :: FreeSum (ExprView AlgReal) -> ExprView AlgReal
+cstrSumReal ms = cstrSumReal' $ nonadds <> FMX.flatten sumOfAdds
+    where
+      (adds, nonadds) = FMX.partitionT isSumReal ms
+      sumOfAdds :: FMX.FreeMonoidX (FMX.FreeMonoidX (SumTerm (ExprView AlgReal)))
+      sumOfAdds = FMX.mapTerms (getSumReal . summand) adds
+
+cstrSumReal' :: FreeSum (ExprView AlgReal) -> ExprView AlgReal
+cstrSumReal' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        valueSum = FMX.mapTerms (SumTerm . getConst . summand) vals
+        sumVals = summand $ FMX.foldFMX valueSum
+        retMS = case sumVals of
+                    0.0 -> nonvals                                   -- 0.0 + x == x
+                    _   -> Sum.add (Const sumVals) nonvals
+    in
+        case FMX.toOccurList retMS of
+            []         -> Const 0.0 -- sum of nothing equals zero
+            [(term,1)] -> summand term
+            _          -> Sum RealType retMS
 
 -- Product
 
@@ -460,6 +491,15 @@ isProductR _ = False
 getProductR :: ExprView Rational -> FreeProduct (ExprView Rational)
 getProductR (Product RationalType p) = p
 getProductR _ = error "ExprImpls.hs - getProductF - Unexpected Expr "
+
+-- Product of floating-point values
+isProductReal :: ExprView AlgReal -> Bool
+isProductReal (Product RealType _) = True
+isProductReal _ = False
+
+getProductReal :: ExprView AlgReal -> FreeProduct (ExprView AlgReal)
+getProductReal (Product RealType p) = p
+getProductReal _ = error "ExprImpls.hs - getProductF - Unexpected Expr "
 
 sProductFloat :: FreeProduct (Expr Double) -> Expr Double
 sProductFloat = Expr . cstrPrdF . FMX.mapTerms (ProductTerm . view . factor)
@@ -537,6 +577,44 @@ cstrPrdR' ms =
         isZeroR (Const 0.0) = True
         isZeroR _           = False
 
+sProductReal :: FreeProduct (Expr AlgReal) -> Expr AlgReal
+sProductReal = Expr . cstrPrdReal . FMX.mapTerms (ProductTerm . view . factor)
+
+-- | Apply operator product on the provided product of floating-point values.
+cstrPrdReal :: FreeProduct (ExprView AlgReal) -> ExprView AlgReal
+cstrPrdReal ms =
+    cstrPrdReal' $ noprods <> FMX.flatten prodOfProds
+    where
+      (prods, noprods) = FMX.partitionT isProductReal ms
+      prodOfProds :: FMX.FreeMonoidX (FMX.FreeMonoidX (ProductTerm (ExprView AlgReal)))
+      prodOfProds = FMX.mapTerms (getProductReal . factor) prods
+
+-- Product doesn't contain elements of type ProductFloat
+cstrPrdReal' :: FreeProduct (ExprView AlgReal) -> ExprView AlgReal
+cstrPrdReal' ms =
+    let (vals, nonvals) = FMX.partitionT isConst ms
+        (zeros, _) = FMX.partitionT isZeroR vals
+    in
+        case FMX.nrofDistinctTerms zeros of
+            0   ->  let floatProducts = FMX.mapTerms (getConst <$>) vals
+                        productVals = factor (FMX.foldFMX floatProducts)
+                        withConst = if productVals == 1.0           -- 1.0 * x == x
+                                        then nonvals
+                                        else Product.multiply (Const productVals) nonvals
+                    in
+                        case FMX.toDistinctAscOccurListT withConst of
+                            []          ->  Const productVals
+                            [(term, 1)] ->  term
+                            _           ->  Product RealType withConst
+            _   ->  let (_, n) = Product.fraction zeros in
+                        case FMX.nrofDistinctTerms n of
+                            0   ->  Const 0.0      -- 0.0 * x == 0.0
+                            _   ->  error "Error in model: Division by Zero in Product (via negative power)"
+    where
+        isZeroR :: ExprView AlgReal -> Bool
+        isZeroR (Const 0.0) = True
+        isZeroR _           = False
+
 -- Divide
 
 -- | Apply operator Divide on the provided integer value expressions.
@@ -586,6 +664,7 @@ sSum = case typeOf' (undefined :: Expr a) of
   IntType -> sSumInt
   FloatType -> sSumFloat
   RationalType -> sSumRational
+  RealType -> sSumReal
   _ -> error "impossible Num instance"
 
 sProduct :: forall a. (Num a, ExprType a) => FreeProduct (Expr a) -> Expr a
@@ -593,12 +672,14 @@ sProduct = case typeOf' (undefined :: Expr a) of
   IntType -> sProductInt
   FloatType -> sProductFloat
   RationalType -> sProductRational
+  RealType -> sProductReal
   _ -> error "impossible Num instance"
 sIsNonNegative :: Num a => Expr a -> Expr Bool
 sIsNonNegative a = case withExprConstraints a $ typeOf' a of
   IntType -> sIsNonNegativeInt a
   FloatType -> sIsNonNegativeFloat a
   RationalType -> sIsNonNegativeFloat a
+  RealType -> sIsNonNegativeFloat a
   _ -> error "impossible Num instance"
 
 infixl 7 ./

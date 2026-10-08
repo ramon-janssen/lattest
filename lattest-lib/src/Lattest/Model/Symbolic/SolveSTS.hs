@@ -25,6 +25,7 @@ SETree(..),
 SEIte(..),
 offlineTests,
 OfflineTests(..),
+OnlyOrInconclusive(..),
 toTrace,
 SymIntrpState(..),
 indexExpr,
@@ -38,11 +39,11 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Spec
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.SMT ( Some(..) )
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard, isGuardSatisfiable)
-import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints, prettyConstant)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 import Lattest.Util.Utils(distributeFirstMaybe)
 
-import Control.Arrow((&&&))
+import Control.Arrow((&&&), first)
 import Control.Exception(throw)
 
 import Data.Foldable(toList)
@@ -60,8 +61,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Constraint.Extras (Has(..))
 import Data.GADT.Compare (GEq(..))
 import qualified Data.Dependent.Map as DMap
-import Data.Bifunctor (Bifunctor(..))
-import qualified Debug.Trace
+import Data.Bifunctor (second)
 import Control.Monad.State (StateT (..), MonadTrans (..))
 
 {-|
@@ -207,7 +207,7 @@ data OnlyOrInconclusive = Only | Inconclusiv deriving Show
 instance (Show i, Show o, Show r) => Show (OfflineTests i o r) where
   show (OfflineTests os is) = "\\case\n" <> indentOfflineTree os' <> indentOfflineTree is'
     where
-      os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> show cs <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
+      os' = unlines $ map (\(o,(cs, ooi, ot)) -> "!"<> show o <> "[" <> List.intercalate "," (map prettyConstant cs) <> "]" <> " -> \n" <> indentOfflineTree (show ot) <> case ooi of
                   Only -> ""
                   Inconclusiv -> "!"<> show o <> "[..] -> Inconclusive") $ Map.toList os
       is' = case is of
@@ -230,7 +230,7 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
 offlineTests :: forall g m loc i o state r
-              . (RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), TestChoice (GateValue i) (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)))
+              . (RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)), Show (SymIntrpState loc))
              => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
              -> (state -> r)
@@ -299,14 +299,13 @@ offlineTests intrpr tc inputforbidden
       Right r -> pure $ Right r
       Left st -> pure $ Left (t {testControllerState = st}, after i x)
 
--- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it.
+-- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it together with its verdict.
 -- For outputs, it returns both the given output and the starting location.
 toTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
         => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
         -> OfflineTests i o r
-        -> Maybe [IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))]
-toTrace _ (OfflineTests (Map.toList -> []) (Right _)) = Just []
-toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
-toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
+        -> Maybe ([IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))], r)
+toTrace _ (OfflineTests (Map.toList -> []) (Right r)) = Just ([], r)
+toTrace intrpr (OfflineTests (Map.toList -> []) (Left (gv, ot))) = first (In gv :) <$> toTrace (after intrpr (In <$> gv)) ot
+toTrace intrpr (OfflineTests (Map.toList -> [(o,(cs, ooi, ot))]) (Right _)) = first (Out (o, ooi, cs, stateConf intrpr) :) <$> toTrace (after intrpr (GateValue (Out o) cs)) ot
 toTrace _ _ = Nothing -- either multiple outputs, or input and output
-

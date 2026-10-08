@@ -6,6 +6,7 @@ import           Lattest.Model.Automaton (prettyPrintIntrp, prettyPrint, syntact
 import           Lattest.Model.Symbolic.Expr (getVariables)
 import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
+import           Lattest.Util.ReportUtils (appendTestTrace)
 import           Lattest.Exec.StandardTestControllers
 import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(randomCoveringTestSelectorFromSeed, allSwitches, isInputSwitch, observeInputCoverage, mergeInputCoverage, prettyPrintInputCoverage)
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
@@ -16,7 +17,10 @@ import qualified Data.Set as Set
 import Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
 import Data.Tuple (swap)
 import Control.Monad (foldM)
+import Control.Monad.State (evalStateT)
+import System.Random (mkStdGen)
 import Data.Foldable (toList)
+import Data.Time (getZonedTime, formatTime, defaultTimeLocale)
 
 run :: IO ()
 run = do
@@ -27,9 +31,9 @@ run = do
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
 
-    --putStrLn $ unlines $ map (\(_,sts,_,_,_) -> prettyPrint sts) stss
+    --putStrLn $ unlines $ map (\(_,sts,_,_,_,_) -> prettyPrint sts) stss
     -- Compose all parsed STSs
-    let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _, _) <- stss ]
+    let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _,_, _) <- stss ]
         conjunctedSTS = conjunctionAll checked
         conjunctModel = interpretSTS conjunctedSTS initVal
         --seqComposed = conjmodel |>> conjmodel
@@ -38,17 +42,20 @@ run = do
         model = seqComposed
         initVal  = case stss of
             [] -> error "no STSs loaded"
-            (_, _, _, _, val):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
-        gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_) -> g) stss
-        as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_) -> a) stss
+            (_, _, _, _, val,_):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
+        gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_,_) -> g) stss
+        as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_,_) -> a) stss
+        es =                                        Map.unions $ map (\(_,_,_,_,_,e) -> e) stss
 
     --putStrLn $ prettyPrintIntrp seqComposed
     --print discardedTransit
-
-    putStrLn "computing offline test cases..."
-    let nrSteps = 28
-        nrTests = 8
+    timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
+    putStrLn ("computing offline test cases..." ++ timestamp)
+    let nrSteps = 20
+        nrTests = 20 :: Int
         randomSeed = 456
+        tracesFile = "test_traces_" ++ timestamp ++ ".txt"
+
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
         observeVerdict Nothing _ _ lattice
           | isForbidden lattice = pure $ Just Fail
@@ -56,11 +63,15 @@ run = do
           | otherwise = pure Nothing
         switches      = allSwitches model
         inputSwitches = Set.filter isInputSwitch switches
+
+    writeFile tracesFile ""
+
     -- the covered switches and the input coverage report are carried from one test case to the next
     let testCase (toCover, report) n = do
           -- target the (location, gate) pairs of input switches not covered yet
           let controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` observeInputCoverage
-          tests <- offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)
+          tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
+          appendTestTrace tracesFile model (snd . fst <$> tests)
           -- compute the covered switches
           -- print $ map (\(((_,x,_,_),_),_) -> x) $ toList tests
           let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) switches (toList tests)
@@ -71,9 +82,10 @@ run = do
           -- a test is a tree with a report per leaf, so merge over the leaves as well
           pure (toCover', foldr (mergeInputCoverage . snd) report (toList tests))
     (_, suiteReport) <- foldM testCase (switches, mempty) [0 .. nrTests - 1]
+    putStrLn $ "wrote " ++ show nrTests ++ " test cases to " ++ tracesFile
     putStrLn "input coverage of the test suite:"
     putStr $ prettyPrintInputCoverage suiteReport
 
     print "Composition finished, writing result to file..."
     -- To write to a file:
-    stsToJSONFile "example_composed2.json" "stscomposed" (syntacticAutomaton seqComposed) gs as initVal
+    stsToJSONFile "example_composed2.json" "stscomposed" (syntacticAutomaton seqComposed) gs as es initVal
