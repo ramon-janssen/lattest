@@ -293,11 +293,13 @@ sortOfEqual = sortOfEqualWith False
 sortOfEqualWith :: Bool -> Rational -> ExprView a -> ExprView a -> ExprView Bool
 sortOfEqualWith approxReals range l r = withExprConstraints (Expr l) $ case typeOf' l of
   -- Our hand-rolled equality check is slower, probably because the solver doesn't understand it,
-  -- so we only use it when there are FloatTypes or RationalTypes present.
+  -- so we only use it when there are FloatTypes or RationalTypes (or, sometimes, RealTypes) present.
   tp | not (hasDecimals approxReals tp) -> Equal tp l r
   FloatType -> view $ Expr l - Expr r .< sConst (fromRational range) .&& Expr r - Expr l .< sConst (fromRational range)
   RationalType -> view $ Expr l - Expr r .< sConst range .&& Expr r - Expr l .< sConst range
-  RealType -> view $ Expr l .- Expr r .< sConst (fromRational range) .&& Expr r .- Expr l .< sConst (fromRational range)
+  RealType
+    | approxReals -> view $ Expr l .- Expr r .< sConst (fromRational range) .&& Expr r .- Expr l .< sConst (fromRational range)
+    | otherwise -> Equal RealType l r
   TupleType a b -> withExprConstraints a $ withExprConstraints b $
                   And $ Set.fromList [ sortOfEqualWith approxReals range (First b l) (First b r)
                                      , sortOfEqualWith approxReals range (Second a l) (Second a r)]
