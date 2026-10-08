@@ -51,8 +51,8 @@ run = do
     --print discardedTransit
     timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
     putStrLn ("computing offline test cases..." ++ timestamp)
-    let nrSteps = 20
-        nrTests = 20 :: Int
+    let nrSteps = 10
+        nrTests = 10 :: Int
         randomSeed = 456
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
 
@@ -81,10 +81,11 @@ run = do
               ++ show (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) ++ "/" ++ show (Set.size inputSwitches)
           -- a test is a tree with a report per leaf, so merge over the leaves as well
           pure (toCover', foldr (mergeInputCoverage . snd) report (toList tests))
-    (_, suiteReport) <- foldM testCase (switches, mempty) [0 .. nrTests - 1]
+    (leftToCover, suiteReport) <- foldM testCase (switches, mempty) [0 .. nrTests - 1]
     putStrLn $ "wrote " ++ show nrTests ++ " test cases to " ++ tracesFile
     putStrLn "input coverage of the test suite:"
     putStr $ prettyPrintInputCoverage suiteReport
+    putStrLn $ ("left to cover: " ++ show leftToCover)
 
     print "Composition finished, writing result to file..."
     -- To write to a file:
