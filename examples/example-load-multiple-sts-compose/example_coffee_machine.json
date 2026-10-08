@@ -2,7 +2,7 @@
     {
         "id": "sts_001",
         "description": "01: brewing a small Americano",
-        "documentation": "Brews a small Americano and deducts water and beans.",
+        "documentation": "Brews a small Americano and deducts water and beans",
         "initial_state": false,
         "initial_location": "L0_1",
         "gate_id_type": "string",
@@ -12,27 +12,59 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "max-water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    210
+                ]
             },
             "max-beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    12
+                ]
             }
         },
         "parameters": {
@@ -40,21 +72,47 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             }
         },
         "initialValuation": {
@@ -128,7 +186,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "IDLE"
+                    "enum": "IDLE"
                 }
             },
             "G3_STS001": {
@@ -144,7 +202,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Americano"
+                        "enum": "Americano"
                     }
                 },
                 "op": "&&",
@@ -160,7 +218,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Small"
+                        "enum": "Small"
                     }
                 }
             },
@@ -173,7 +231,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "BREWING"
+                    "enum": "BREWING"
                 }
             },
             "G6_STS001": {
@@ -182,7 +240,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "DONE"
+                    "enum": "DONE"
                 }
             },
             "G7_STS001": {
@@ -191,7 +249,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "IDLE"
+                    "enum": "IDLE"
                 }
             },
             "G8_STS001": {
@@ -381,27 +439,59 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "max-water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    210
+                ]
             },
             "max-beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    12
+                ]
             }
         },
         "parameters": {
@@ -409,21 +499,47 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             }
         },
         "initialValuation": {
@@ -497,7 +613,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "IDLE"
+                    "enum": "IDLE"
                 }
             },
             "G3_STS002": {
@@ -513,7 +629,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Americano"
+                        "enum": "Americano"
                     }
                 },
                 "op": "&&",
@@ -529,7 +645,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Large"
+                        "enum": "Large"
                     }
                 }
             },
@@ -542,7 +658,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "BREWING"
+                    "enum": "BREWING"
                 }
             },
             "G6_STS002": {
@@ -551,7 +667,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "DONE"
+                    "enum": "DONE"
                 }
             },
             "G7_STS002": {
@@ -560,7 +676,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "IDLE"
+                    "enum": "IDLE"
                 }
             },
             "G8_STS002": {
@@ -740,7 +856,7 @@
     {
         "id": "sts_003",
         "description": "03: ordering is rejected when there are no beans",
-        "documentation": "Rejects a brew order when the beans level is zero.",
+        "documentation": "",
         "initial_state": false,
         "initial_location": "L0_3",
         "gate_id_type": "string",
@@ -750,27 +866,59 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "max-water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    210
+                ]
             },
             "max-beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    12
+                ]
             }
         },
         "parameters": {
@@ -778,21 +926,47 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             }
         },
         "initialValuation": {
@@ -859,7 +1033,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Espresso"
+                        "enum": "Espresso"
                     }
                 },
                 "op": "||",
@@ -875,7 +1049,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Americano"
+                        "enum": "Americano"
                     }
                 }
             },
@@ -892,7 +1066,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Small"
+                        "enum": "Small"
                     }
                 },
                 "op": "||",
@@ -908,7 +1082,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Large"
+                        "enum": "Large"
                     }
                 }
             },
@@ -924,7 +1098,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "OUT OF STOCK"
+                    "enum": "OUT OF STOCK"
                 }
             }
         },
@@ -991,7 +1165,7 @@
     {
         "id": "sts_004",
         "description": "04: ordering is rejected when there is no water",
-        "documentation": "Rejects a brew order when the water level is zero.",
+        "documentation": "",
         "initial_state": false,
         "initial_location": "L0_4",
         "gate_id_type": "string",
@@ -1001,27 +1175,59 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "max-water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    210
+                ]
             },
             "max-beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    12
+                ]
             }
         },
         "parameters": {
@@ -1029,21 +1235,47 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             }
         },
         "initialValuation": {
@@ -1110,7 +1342,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Espresso"
+                        "enum": "Espresso"
                     }
                 },
                 "op": "||",
@@ -1126,7 +1358,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Americano"
+                        "enum": "Americano"
                     }
                 }
             },
@@ -1143,7 +1375,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Small"
+                        "enum": "Small"
                     }
                 },
                 "op": "||",
@@ -1159,7 +1391,7 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "Large"
+                        "enum": "Large"
                     }
                 }
             },
@@ -1175,7 +1407,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "OUT OF STOCK"
+                    "enum": "OUT OF STOCK"
                 }
             }
         },
@@ -1252,27 +1484,59 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "max-water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    210
+                ]
             },
             "max-beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    12
+                ]
             }
         },
         "parameters": {
@@ -1280,21 +1544,47 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             }
         },
         "initialValuation": {
@@ -1370,7 +1660,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "IDLE"
+                    "enum": "IDLE"
                 }
             }
         },
@@ -1436,27 +1726,59 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "max-water-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    210
+                ]
             },
             "max-beans-level": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    12
+                ]
             }
         },
         "parameters": {
@@ -1464,21 +1786,47 @@
                 "type": "structure",
                 "attributes": {
                     "type": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Espresso",
+                            "Americano"
+                        ]
                     },
                     "size": {
-                        "type": "string"
+                        "type": "enum",
+                        "range": [
+                            "Small",
+                            "Large"
+                        ]
                     }
                 }
             },
             "state_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "IDLE",
+                    "BREWING",
+                    "DONE",
+                    "OUT OF STOCK"
+                ]
             },
             "water-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 210,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             },
             "beans-level_p": {
-                "type": "integer"
+                "type": "integer",
+                "range": {
+                    "min": 0,
+                    "max": 12,
+                    "minInclusive": true,
+                    "maxInclusive": true
+                }
             }
         },
         "initialValuation": {
@@ -1554,7 +1902,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "IDLE"
+                    "enum": "IDLE"
                 }
             }
         },

@@ -32,11 +32,12 @@ assertWrittenJSONMatches :: (Ord loc, Show loc) => FilePath     -- expected outp
                           -> IOSTS FreeLattice loc String String
                           -> Map.Map (Expr Bool) String
                           -> Map.Map VarModel String
+                          -> Map.Map String (Some Expr)
                           -> Valuation
                           -> Assertion
-assertWrittenJSONMatches expectedFile sid sts guardmap assmap valuation = do
+assertWrittenJSONMatches expectedFile sid sts guardmap assmap enums valuation = do
     let actualFile = testDir ++ "tmp_" ++ expectedFile
-    stsToJSONFile actualFile sid sts guardmap assmap valuation
+    stsToJSONFile actualFile sid sts guardmap assmap enums valuation
     actualBytes <- BSL.readFile actualFile
     removeFile actualFile
     expectedBytes <- BSL.readFile (testDir ++ expectedFile)
@@ -111,7 +112,7 @@ testSTSJSONWriterComposedConjunction = TestCase $
             mempty
     in assertWrittenJSONMatches
         "composed_conjunction_expected.json"
-        "composed" sts guardmap assmap valuation
+        "composed" sts guardmap assmap mempty valuation
 
 stsJSONWriterTests :: [Test]
 stsJSONWriterTests =

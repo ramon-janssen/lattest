@@ -72,7 +72,7 @@ toIOGateValue
 )
 where
 
-import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..))
+import Lattest.Model.Symbolic.Expr (Variable(..), Expr(..), Constant(..), prettyConstant)
 import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics (Generic)
 import Data.Some (Some (..))
@@ -295,7 +295,7 @@ instance ToJSON a => ToJSON (GateValue a)
 type IOGateValue i o = GateValue (IOAct i o)
 
 instance (Show g) => Show (GateValue g) where
-    show (GateValue g' vals) = show g' ++ if null vals then "" else show vals
+    show (GateValue g' vals) = show g' ++ if null vals then "" else "[" ++ intercalate "," (map prettyConstant vals) ++ "]"
 
 instance Read g => Read (GateValue g) where
   readsPrec = error "todo; would be useful for defining adapters"

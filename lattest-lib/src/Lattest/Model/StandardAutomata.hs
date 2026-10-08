@@ -3,7 +3,6 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
-{-# LANGUAGE TypeOperators #-}
 
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
@@ -97,12 +96,11 @@ import Data.Set (Set)
 import Data.Bifunctor (Bifunctor(..))
 import Lattest.Model.Symbolic.Expr
 import qualified Data.List as List
-import Lattest.Model.Symbolic.SolveSTS (SymIntrpState, indexExpr, indexVar)
+import Lattest.Model.Symbolic.SolveSTS (indexExpr, indexVar)
 import Lattest.SMT (Some)
 import System.IO.Unsafe (unsafePerformIO)
 import Lattest.Model.Symbolic.SolveSymPrim (isGuardSatisfiable)
 import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
-import qualified Debug.Trace
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -559,6 +557,24 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
         -- keep input switches as-is
         -- keep input switches as-is
         -- keep input switches as-is
+        -- keep input switches as-is
+        -- keep input switches as-is
+        -- keep input switches as-is
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+        -- keep input switches as-is
+        -- keep input switches as-is
 
         -- keep input switches as-is
 
@@ -566,10 +582,23 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
         
         -- keep input switches as-is
         -- keep input switches as-is
+        -- keep input switches as-is
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+
+        -- keep input switches as-is
+        -- keep input switches as-is
 
         -- keep input switches as-is
         [ (t, BM.ordMap (second Stable) mval) | (t, mval) <- Map.toList (transRel sts loc), not (isOutputInteract t) ]
         ++
+        -- output switches are replaced by a check gate leading to a pending state
+        -- output switches are replaced by a check gate leading to a pending state
+        -- output switches are replaced by a check gate leading to a pending state
+        -- output switches are replaced by a check gate leading to a pending state
         -- output switches are replaced by a check gate leading to a pending state
         -- output switches are replaced by a check gate leading to a pending state
         -- output switches are replaced by a check gate leading to a pending state
@@ -770,7 +799,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
         | l `Set.member` postUnsatOutputLocs                    = True     -- Keep locations right after an unsat output (tests derived from this branch will Fail) even when unreachable
         | not (isReachable l)                                   = False    -- Remove non reachable locations
         | isSinkLocation sts1 l || l `Set.member` mergeLocSet   = True     -- Keep merge locations/sink locations
-        | any (not . isRemoved) (successorsOf l)                = True     -- Keep l if its successor is kept
+        | not (all isRemoved (successorsOf l))                  = True     -- Keep l if its successor is kept
         | otherwise                                             = maybe False isOutputInteract (Map.lookup l incomingGate) -- No locations after l: keep only if the incoming switch is an output
     isRemoved l = not $ Map.findWithDefault False l keptMap
     keptLocs = Map.keysSet $ Map.filter id keptMap

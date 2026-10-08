@@ -92,7 +92,7 @@ import Algebra.Lattice.Free(Free(..))
 import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
-import Lattest.Model.Symbolic.SolveSymPrim(solveGuard)
+import Lattest.Model.Symbolic.SolveSymPrim(solveGuardIO)
 import Lattest.Model.Symbolic.MCDCSTS(completeMCDC)
 import Data.Tuple(swap)
 import qualified Data.Map as Map
@@ -245,12 +245,12 @@ current state configuration: (0,{x:=0})
 initial location configuration: 0
 locations: 0, 1, 2
 transitions:
-0  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},1)
-0  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},2)
+0  ――?"water" [p:Int]⟶  ((-p+10 ≥ 0)∧(p+-1 ≥ 0), {x:=p+x},1)
+0  ――!"coffee" []⟶  (x+-15 ≥ 0, {},2)
 0  ――!"ok" [p:Int]⟶  -forbidden-
 1  ――?"water" [p:Int]⟶  -underspecified-
 1  ――!"coffee" []⟶  -forbidden-
-1  ――!"ok" [p:Int]⟶  ((x) = (p), {},0)
+1  ――!"ok" [p:Int]⟶  (x = p, {},0)
 2  ――?"water" [p:Int]⟶  -underspecified-
 2  ――!"coffee" []⟶  -forbidden-
 2  ――!"ok" [p:Int]⟶  -forbidden-
@@ -445,7 +445,7 @@ testLatticeCoffeeSTS = TestCase $ do
                      ╱——————>•————\
     x:=0            ╱              \
     ———>•—————————>•    end(p,q)    ———>•
-         start(p)   ╲   〚p-q=x〛    /!done
+         startp   ╲   〚p-q=x〛    /!done
          〚1<p<3〛     ╲——————>•————/
           x ≔ p                 
                                     
@@ -485,11 +485,11 @@ specParameterized startType endType comp splitFirst =
     in automaton initConf (Set.fromList [start, end, done]) switches
 
 {- implementation:
-          start(p)   end(p,q)    !done
+          startp   end(p,q)    !done
     ———>•—————————>•—————————>•—————————>•
   parameterized by
   * whether start and end gates are input or output
-  * p and q (note, this means that only s specific, single concrete transition start(p) and single concrete transition end(p,q) is defined)
+  * p and q (note, this means that only s specific, single concrete transition startp and single concrete transition end(p,q) is defined)
 -}
 t1 :: (Ord i, Ord o, Num a1, Num a2, IsString t1, IsString t2, IsString o, Eq a1) => (t1 -> IOAct i o) -> (t2 -> IOAct i o) -> Integer -> Integer -> Integer -> a1 -> Map.Map (GateValue (IOAct i o)) a2
 t1 startType _ p1 _ _ 0 = Map.fromList [(GateValue (startType "start") [int p1], 1)]
@@ -567,7 +567,7 @@ testLatticeSTS = concat [
 
     x:=0                               
     ———>•—————————>•———————————>•      
-        ?start(p)    !end(p,q)         
+        ?startp    !end(p,q)         
          〚1<p<3〛    〚p+q=p+q+x〛        
           x ≔ p                        
                                        
@@ -591,7 +591,7 @@ specQ =
     in automaton initConf (Set.fromList [start, end]) switches
 
 {- implementation:
-          start(p)
+          startp
     ———>•—————————>•
   parameterized by
   * whether start gate is input or output
@@ -660,7 +660,7 @@ testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
                      ╱——————————\      
     x:=0            ╱            \     
     ———>•—————————>• ) !end(p,q)  ———>•
-        ?start(p)   ╲   〚p+q=x〛  /     
+        ?startp   ╲   〚p+q=x〛  /     
          〚1<p<3〛     ╲——————————/      
           x ≔ p                        
                                        
@@ -831,7 +831,7 @@ testBranchingPathCondition :: Test
 testBranchingPathCondition = TestCase $ do
     let disj = (\/) :: Branch
         conj = (/\) :: Branch
-        isSat guard = isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        isSat guard = isJust <$> solveGuardIO (Set.toList $ freeVars guard) guard
         assertSat lbl g = isSat g >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl g = isSat g >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
         assertNotTautology lbl g = isSat (sNot g) >>= assertBool (lbl ++ " should not be a tautology")
@@ -1023,7 +1023,7 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
         [(water, [Some $ CInt 3]), (water, [Some $ CInt 5])] Indefinite
     , correspondenceCase "[water 12, water 5]"               -- underspecified: second water blocked, x=12>=10
         [(water, [Some $ CInt 12]), (water, [Some $ CInt 5])] Underspecified
-    , correspondenceCase "[water 6, b 4, esp 4 milk]"        -- neither: esp satisfies p=x (4) and milk
+    , correspondenceCase "[water 6, b 4, esp 4 milk]"        -- neither: esp satisfies p=x 4 and milk
         [(water, [Some $ CInt 6]), (b, [Some $ CInt 4]), (espresso, [Some $ CInt 4, Some $ CBool True])] Indefinite
     , correspondenceCase "[water 6, b 4, esp 5 milk]"        -- forbidden: esp output violates p=x (5/=4)
         [(water, [Some $ CInt 6]), (b, [Some $ CInt 4]), (espresso, [Some $ CInt 5, Some $ CBool True])] Forbidden
@@ -1035,9 +1035,9 @@ testConcreteTraceSpecifiedAllowedCorrespondence = TestList
         let symTrace = fst <$> steps
             gateValues = stepGateValue <$> steps
             valuation = traceValuation steps
-            -- (1) semantic verdict: the state configuration after running the concrete trace
+            -- 1 semantic verdict: the state configuration after running the concrete trace
             finalConf = stateConf $ foldl after composedCoffeeMachineIntrpr gateValues
-            -- (2) symbolic verdict: fill the concrete values into the guards and evaluate to a constant
+            -- 2 symbolic verdict: fill the concrete values into the guards and evaluate to a constant
             specifiedGuard = interactsToSpecifiedCondition composedCoffeeMachineIntrpr symTrace
             allowedGuard = interactsToAllowedCondition composedCoffeeMachineIntrpr symTrace
         -- sanity check: the chosen values really drive the trace to the specifiedness we expect
@@ -1136,7 +1136,7 @@ goldenAssert checks = do
 testSTSPathCondition :: Test
 testSTSPathCondition = TestCase $ do
     let -- is the given guard satisfiable, according to the SMT solver?
-        isSat guard = isJust <$> solveGuard (Set.toList $ freeVars guard) guard
+        isSat guard = isJust <$> solveGuardIO (Set.toList $ freeVars guard) guard
         pathCond = interactsToSpecifiedCondition stsExampleIntrpr
         assertSat lbl prefix = isSat (pathCond prefix) >>= assertBool (lbl ++ " should be satisfiable")
         assertUnsat lbl prefix = isSat (pathCond prefix) >>= (assertBool (lbl ++ " should be unsatisfiable") . not)
@@ -1276,27 +1276,27 @@ initial location configuration: Left 0
 locations: Left 0, Left 1, Left 2, Right 0, Right 1, Right 2
 transitions:
 Left 0  ――?"startEmpty" []⟶  (True, {},Left 1)
-Left 0  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},Left 2)
+Left 0  ――?"startWithWater" [p:Int]⟶  (True, {x:=p+x},Left 2)
 Left 0  ――?"water" [p:Int]⟶  ⊤
 Left 0  ――!"coffee" []⟶  ⊥
 Left 0  ――!"error" []⟶  (True, {},Left 0)
 Left 0  ――!"ok" [p:Int]⟶  ⊥
 Left 1  ――?"startEmpty" []⟶  ⊤
 Left 1  ――?"startWithWater" [p:Int]⟶  ⊤
-Left 1  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},Right 1)
-Left 1  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},Right 2)
+Left 1  ――?"water" [p:Int]⟶  ((-p+10 ≥ 0)∧(p+-1 ≥ 0), {x:=p+x},Right 1)
+Left 1  ――!"coffee" []⟶  (x+-15 ≥ 0, {},Right 2)
 Left 1  ――!"error" []⟶  ⊥
 Left 1  ――!"ok" [p:Int]⟶  ⊥
 Left 2  ――?"startEmpty" []⟶  ⊤
 Left 2  ――?"startWithWater" [p:Int]⟶  ⊤
-Left 2  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},Right 1)
-Left 2  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},Right 2)
+Left 2  ――?"water" [p:Int]⟶  ((-p+10 ≥ 0)∧(p+-1 ≥ 0), {x:=p+x},Right 1)
+Left 2  ――!"coffee" []⟶  (x+-15 ≥ 0, {},Right 2)
 Left 2  ――!"error" []⟶  ⊥
 Left 2  ――!"ok" [p:Int]⟶  ⊥
 Right 0  ――?"startEmpty" []⟶  ⊤
 Right 0  ――?"startWithWater" [p:Int]⟶  ⊤
-Right 0  ――?"water" [p:Int]⟶  ((((-p+10)) ≥ 0)∧(((p+-1)) ≥ 0), {x:=(p+x)},Right 1)
-Right 0  ――!"coffee" []⟶  (((x+-15)) ≥ 0, {},Right 2)
+Right 0  ――?"water" [p:Int]⟶  ((-p+10 ≥ 0)∧(p+-1 ≥ 0), {x:=p+x},Right 1)
+Right 0  ――!"coffee" []⟶  (x+-15 ≥ 0, {},Right 2)
 Right 0  ――!"error" []⟶  ⊥
 Right 0  ――!"ok" [p:Int]⟶  ⊥
 Right 1  ――?"startEmpty" []⟶  ⊤
@@ -1304,7 +1304,7 @@ Right 1  ――?"startWithWater" [p:Int]⟶  ⊤
 Right 1  ――?"water" [p:Int]⟶  ⊤
 Right 1  ――!"coffee" []⟶  ⊥
 Right 1  ――!"error" []⟶  ⊥
-Right 1  ――!"ok" [p:Int]⟶  ((x) = (p), {},Right 0)
+Right 1  ――!"ok" [p:Int]⟶  (x = p, {},Right 0)
 Right 2  ――?"startEmpty" []⟶  ⊤
 Right 2  ――?"startWithWater" [p:Int]⟶  ⊤
 Right 2  ――?"water" [p:Int]⟶  ⊤
@@ -1324,7 +1324,7 @@ initial location configuration: Left 0
 locations: Left 0, Left 1, Left 2, Left 3, Left 4, Left 5, Right 1, Right 2, Right 3, Right 4, Right 5
 transitions:
 Left 0  ――?"grindCoffee" []⟶  (True, {},Left 2)
-Left 0  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Left 1)
+Left 0  ――?"someWater" [p:Int]⟶  ((x = 0)∧(p+-2 ≥ 0), {x:=p+x},Left 1)
 Left 0  ――!"done" []⟶  ⊥
 Left 0  ――!"error" []⟶  ⊥
 Left 1  ――?"grindCoffee" []⟶  ⊤
@@ -1344,7 +1344,7 @@ Left 4  ――?"someWater" [p:Int]⟶  ⊤
 Left 4  ――!"done" []⟶  ⊥
 Left 4  ――!"error" []⟶  ⊥
 Left 5  ――?"grindCoffee" []⟶  (True, {},Right 2)
-Left 5  ――?"someWater" [p:Int]⟶  (((x) = (0))∧(((p+-2)) ≥ 0), {x:=(p+x)},Right 1)
+Left 5  ――?"someWater" [p:Int]⟶  ((x = 0)∧(p+-2 ≥ 0), {x:=p+x},Right 1)
 Left 5  ――!"done" []⟶  ⊥
 Left 5  ――!"error" []⟶  ⊥
 Right 1  ――?"grindCoffee" []⟶  ⊤
@@ -1703,13 +1703,13 @@ initial location configuration: 0
 locations: 0, 1, 2
 transitions:
 0  ――?"startEmpty" []⟶  (True, {},1)
-0  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},2)
+0  ――?"startWithWater" [p:Int]⟶  (True, {x:=p+x},2)
 0  ――!"error" []⟶  (True, {},0)
 1  ――?"startEmpty" []⟶  (True, {},1)
-1  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},2)
+1  ――?"startWithWater" [p:Int]⟶  (True, {x:=p+x},2)
 1  ――!"error" []⟶  (True, {},0)
 2  ――?"startEmpty" []⟶  (True, {},1)
-2  ――?"startWithWater" [p:Int]⟶  (True, {x:=(p+x)},2)
+2  ――?"startWithWater" [p:Int]⟶  (True, {x:=p+x},2)
 2  ――!"error" []⟶  (True, {},0)
 |]
 
@@ -1738,7 +1738,7 @@ testConjunctionGuardedSTS = TestCase $ do
     -- outA is allowed by both
     intrp4 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateEither (Left 2) 0 /\ getSTSIntrpStateEither (Right 2) 0)
-    -- only the overlapping value for outC (2) is allowed
+    -- only the overlapping value for outC 2 is allowed
     _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Some $ CInt 2])
         (getSTSIntrpStateEither (Left 0) 0 /\ getSTSIntrpStateEither (Right 0) 0)
     _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Some $ CInt 3]) forbidden
@@ -1764,7 +1764,7 @@ testDisjunctionGuardedSTS = TestCase $ do
     -- outA is allowed by both
     intrp5 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateEither (Left 2) 0 \/ getSTSIntrpStateEither (Right 2) 0)
-    -- only the overlapping value for outC (2) is allowed
+    -- only the overlapping value for outC 2 is allowed
     _ <- assertAfter "after outC 2: " intrp5 (GateValue (Out "outC") [Some $ CInt 2]) disjInitState
     _ <- assertAfter "after outC 3: " intrp5 (GateValue (Out "outC") [Some $ CInt 3]) disjInitState
     _ <- assertAfter "after outC 1: " intrp5 (GateValue (Out "outC") [Some $ CInt 1]) disjInitState
@@ -1814,7 +1814,7 @@ testConjunctionAllGuardedSTS = TestCase $ do
     -- outA is allowed by all three
     intrp4 <- assertAfter "after outA: " intrp3 (GateValue (Out "outA") [])
         (getSTSIntrpStateLabeled "A" 2 0 /\ getSTSIntrpStateLabeled "B" 2 0 /\ getSTSIntrpStateLabeled "C" 2 0)
-    -- only the overlapping value for outC (2) is allowed; back to the composed initial state
+    -- only the overlapping value for outC 2 is allowed; back to the composed initial state
     _ <- assertAfter "after outC 2: " intrp4 (GateValue (Out "outC") [Some $ CInt 2]) conjInitState
     _ <- assertAfter "after outC 3: " intrp4 (GateValue (Out "outC") [Some $ CInt 3]) forbidden -- only B's guard holds, forbidden
     _ <- assertAfter "after outC 1: " intrp4 (GateValue (Out "outC") [Some $ CInt 1]) forbidden -- only A's guard holds, forbidden
@@ -2032,7 +2032,7 @@ pending !"o2" [p:Int] -> 2  ――?"check_o2" []⟶  ⊤
 pending !"o2" [p:Int] -> 2  ――?"reset" []⟶  ⊤
 pending !"o2" [p:Int] -> 2  ――?"start" []⟶  ⊤
 pending !"o2" [p:Int] -> 2  ――!"o1" []⟶  ⊥
-pending !"o2" [p:Int] -> 2  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},2) ∨ ((((-p+6)) ≥ 0)∧(((p+-4)) ≥ 0), {},2)
+pending !"o2" [p:Int] -> 2  ――!"o2" [p:Int]⟶  ((-p+4 ≥ 0)∧(p+-2 ≥ 0), {},2) ∨ ((-p+6 ≥ 0)∧(p+-4 ≥ 0), {},2)
 pending !"o1" [] -> 2  ――?"check_o1" []⟶  ⊤
 pending !"o1" [] -> 2  ――?"check_o2" []⟶  ⊤
 pending !"o1" [] -> 2  ――?"reset" []⟶  ⊤
@@ -2044,13 +2044,13 @@ pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
-pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},3)
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((-p+4 ≥ 0)∧(p+-2 ≥ 0), {},3)
 pending !"o2" [p:Int] -> 3  ――?"check_o1" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
-pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  (((p) ≥ 0)∧(((-p+2)) ≥ 0), {},3)
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((p ≥ 0)∧(-p+2 ≥ 0), {},3)
 |]
 
 testPrependOutputChecksDisj :: Test
@@ -2126,7 +2126,7 @@ pending !"o2" [p:Int] -> 2  ――?"check_o2" []⟶  ⊤
 pending !"o2" [p:Int] -> 2  ――?"reset" []⟶  ⊤
 pending !"o2" [p:Int] -> 2  ――?"start" []⟶  ⊤
 pending !"o2" [p:Int] -> 2  ――!"o1" []⟶  ⊥
-pending !"o2" [p:Int] -> 2  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},2) ∧ ((((-p+6)) ≥ 0)∧(((p+-4)) ≥ 0), {},2)
+pending !"o2" [p:Int] -> 2  ――!"o2" [p:Int]⟶  ((-p+4 ≥ 0)∧(p+-2 ≥ 0), {},2) ∧ ((-p+6 ≥ 0)∧(p+-4 ≥ 0), {},2)
 pending !"o1" [] -> 2  ――?"check_o1" []⟶  ⊤
 pending !"o1" [] -> 2  ――?"check_o2" []⟶  ⊤
 pending !"o1" [] -> 2  ――?"reset" []⟶  ⊤
@@ -2138,13 +2138,13 @@ pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
-pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((((-p+4)) ≥ 0)∧(((p+-2)) ≥ 0), {},3)
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((-p+4 ≥ 0)∧(p+-2 ≥ 0), {},3)
 pending !"o2" [p:Int] -> 3  ――?"check_o1" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"check_o2" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"reset" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――?"start" []⟶  ⊤
 pending !"o2" [p:Int] -> 3  ――!"o1" []⟶  ⊥
-pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  (((p) ≥ 0)∧(((-p+2)) ≥ 0), {},3)
+pending !"o2" [p:Int] -> 3  ――!"o2" [p:Int]⟶  ((p ≥ 0)∧(-p+2 ≥ 0), {},3)
 |]
 
 testPrependOutputChecksConj :: Test

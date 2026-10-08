@@ -9,58 +9,109 @@
         "location_id_type": "string",
         "locationVariables": {
             "availability": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
             },
             "critical-section-lane": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    1
+                ]
             },
             "critical-section-start": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    1.5
+                ]
             },
             "critical-section-end": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    2.5
+                ]
             }
         },
         "parameters": {
             "availability_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness_p": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors_p": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
@@ -112,11 +163,11 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "AV"
+                        "enum": "AV"
                     }
                 }
             },
-            "G2_STS001": {
+            "G2_STS001_all": {
                 "op": "forall",
                 "over": {
                     "var": "faulty-detectors_p"
@@ -172,6 +223,12 @@
                             "var": "critical-section-end"
                         }
                     }
+                }
+            },
+            "G_faulty-detectors.unique": {
+                "op": "uniqueElem",
+                "rhs": {
+                    "var": "faulty-detectors_p"
                 }
             },
             "G_faulty-detectors.lane": {
@@ -233,7 +290,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "rational": 1.0
+                            "real": 1.0
                         }
                     },
                     "op": "&&",
@@ -249,7 +306,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "rational": 3.0
+                            "real": 3.0
                         }
                     }
                 }
@@ -287,7 +344,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "AV"
+                    "enum": "AV"
                 }
             }
         },
@@ -311,7 +368,8 @@
                 "gate": "In1",
                 "guard": [
                     "G1_STS001",
-                    "G2_STS001",
+                    "G2_STS001_all",
+                    "G_faulty-detectors.unique",
                     "G_faulty-detectors.lane",
                     "G_faulty-detectors.length-position",
                     "G_faulty-detectors.len"
@@ -344,58 +402,109 @@
         "location_id_type": "string",
         "locationVariables": {
             "availability": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
             },
             "critical-section-lane": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    1
+                ]
             },
             "critical-section-start": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    1.5
+                ]
             },
             "critical-section-end": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    2.5
+                ]
             }
         },
         "parameters": {
             "availability_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness_p": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors_p": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
@@ -447,11 +556,11 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "AV"
+                        "enum": "AV"
                     }
                 }
             },
-            "G2_STS002": {
+            "G2_STS002_exactly": {
                 "op": "cardinality",
                 "quantifier": "exactly",
                 "n": 1,
@@ -511,6 +620,12 @@
                     }
                 }
             },
+            "G_faulty-detectors.unique": {
+                "op": "uniqueElem",
+                "rhs": {
+                    "var": "faulty-detectors_p"
+                }
+            },
             "G_faulty-detectors.lane": {
                 "op": "forall",
                 "over": {
@@ -570,7 +685,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "rational": 1.0
+                            "real": 1.0
                         }
                     },
                     "op": "&&",
@@ -586,7 +701,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "rational": 3.0
+                            "real": 3.0
                         }
                     }
                 }
@@ -624,7 +739,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "PART AV"
+                    "enum": "PART AV"
                 }
             }
         },
@@ -648,7 +763,8 @@
                 "gate": "In1",
                 "guard": [
                     "G1_STS002",
-                    "G2_STS002",
+                    "G2_STS002_exactly",
+                    "G_faulty-detectors.unique",
                     "G_faulty-detectors.lane",
                     "G_faulty-detectors.length-position",
                     "G_faulty-detectors.len"
@@ -681,58 +797,109 @@
         "location_id_type": "string",
         "locationVariables": {
             "availability": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
             },
             "critical-section-lane": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    1
+                ]
             },
             "critical-section-start": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    1.5
+                ]
             },
             "critical-section-end": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    2.5
+                ]
             }
         },
         "parameters": {
             "availability_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness_p": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors_p": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
@@ -784,11 +951,11 @@
                     },
                     "op": "==",
                     "rhs": {
-                        "string": "AV"
+                        "enum": "AV"
                     }
                 }
             },
-            "G2_STS003": {
+            "G2_STS003_atleast": {
                 "op": "cardinality",
                 "quantifier": "at_least",
                 "n": 2,
@@ -848,6 +1015,12 @@
                     }
                 }
             },
+            "G_faulty-detectors.unique": {
+                "op": "uniqueElem",
+                "rhs": {
+                    "var": "faulty-detectors_p"
+                }
+            },
             "G_faulty-detectors.lane": {
                 "op": "forall",
                 "over": {
@@ -907,7 +1080,7 @@
                         },
                         "op": ">",
                         "rhs": {
-                            "rational": 1.0
+                            "real": 1.0
                         }
                     },
                     "op": "&&",
@@ -923,7 +1096,7 @@
                         },
                         "op": "<",
                         "rhs": {
-                            "rational": 3.0
+                            "real": 3.0
                         }
                     }
                 }
@@ -961,7 +1134,7 @@
                 },
                 "op": "==",
                 "rhs": {
-                    "string": "NOT AV"
+                    "enum": "NOT AV"
                 }
             }
         },
@@ -985,7 +1158,8 @@
                 "gate": "In1",
                 "guard": [
                     "G1_STS003",
-                    "G2_STS003",
+                    "G2_STS003_atleast",
+                    "G_faulty-detectors.unique",
                     "G_faulty-detectors.lane",
                     "G_faulty-detectors.length-position",
                     "G_faulty-detectors.len"
@@ -1018,58 +1192,109 @@
         "location_id_type": "string",
         "locationVariables": {
             "availability": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }
             },
             "critical-section-lane": {
-                "type": "integer"
+                "type": "integer",
+                "range": [
+                    1
+                ]
             },
             "critical-section-start": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    1.5
+                ]
             },
             "critical-section-end": {
-                "type": "rational"
+                "type": "real",
+                "range": [
+                    2.5
+                ]
             }
         },
         "parameters": {
             "availability_p": {
-                "type": "string"
+                "type": "enum",
+                "range": [
+                    "AV",
+                    "PART AV",
+                    "NOT AV"
+                ]
             },
             "enabledness_p": {
-                "type": "boolean"
+                "type": "boolean",
+                "range": [
+                    true,
+                    false
+                ]
             },
             "faulty-detectors_p": {
                 "type": "array",
-                "unique": false,
+                "unique": true,
                 "minLength": 0,
                 "maxLength": 3,
                 "elements": {
                     "type": "structure",
                     "attributes": {
                         "lane": {
-                            "type": "integer"
+                            "type": "integer",
+                            "range": {
+                                "min": 1,
+                                "max": 3,
+                                "minInclusive": true,
+                                "maxInclusive": true
+                            }
                         },
                         "length-position": {
-                            "type": "rational"
+                            "type": "real",
+                            "range": {
+                                "min": 1.0,
+                                "max": 3.0,
+                                "minInclusive": false,
+                                "maxInclusive": false
+                            }
                         }
                     }
                 }

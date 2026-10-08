@@ -23,7 +23,7 @@ import Lattest.Model.Alphabet (SymInteract (..), IOAct, isOutputInteract, isInpu
 import Lattest.Model.Automaton (Valuation, AutSyntax (..), STStdest (..))
 import Lattest.Model.BoundedMonad
 import Lattest.Model.StandardAutomata (IOSTS, allLocations)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..))
+import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..), enumIndex)
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
 import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..), VarModel (..))
 import Lattest.SMT (RCSet)
@@ -33,6 +33,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Dependent.Map as DMap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.SBV (AlgReal)
 
 -- TODO: Do we want to export the STS with the check guards?
 
@@ -58,15 +59,23 @@ initValue valuation = JSON.toJSON m
     m = Map.fromList $ map (\(var :=> val) -> (varName var, JSON.toJSON val)) $ DMap.assocs $ runValuation valuation
 
 instance JSON.ToJSON (Val a) where
-  toJSON (Val a) = case typeOf a of
-    RationalType -> JSON.toJSON $ fromRational @Double a
-    _ -> has @JSON.ToJSON (typeOf a) $ JSON.toJSON a
+  toJSON (Val a) = valueToJSON (typeOf a) a
+
+-- | Enums are written as their position in the original range, also when nested in arrays or structures.
+valueToJSON :: Type a -> a -> JSON.Value
+valueToJSON t x | Just i <- enumIndex t x = JSON.toJSON i
+valueToJSON RationalType x = JSON.toJSON $ fromRational @Double x
+valueToJSON (ListType CharType) s = JSON.toJSON s
+valueToJSON (ListType t) xs = JSON.toJSON $ map (valueToJSON t) xs
+valueToJSON (TupleType a b) (x, y) = JSON.toJSON (valueToJSON a x, valueToJSON b y)
+valueToJSON t x = has @JSON.ToJSON t $ JSON.toJSON x
 
 instance Has JSON.ToJSON Type where
   has t k = case t of
     IntType -> k
     FloatType -> k
     RationalType -> k
+    RealType -> k
     BoolType -> k
     CharType -> k
     UnitType -> k
@@ -75,6 +84,9 @@ instance Has JSON.ToJSON Type where
     SumType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
     TupleType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
 
+instance JSON.ToJSON AlgReal where
+  toJSON = JSON.toJSON @Double . fromRational . toRational
+
 deriving instance (JSON.ToJSON a) => JSON.ToJSON (RCSet a)
 
 isEmptySwitch :: Switch -> Bool
@@ -82,14 +94,15 @@ isEmptySwitch (Switch _ act gal) =
     (isForbidden gal && isOutputInteract act) || (isUnderspecified gal && isInputInteract act)
 
 -- | Given ID, STS, the names of guards and assignments, and the initial valuation, make a JSON
-stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Valuation -> JSON.Value
-stsToJSON sid sts guardmap assmap valuation =
+stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Map.Map String (Some Expr) -> Valuation -> JSON.Value
+stsToJSON sid sts guardmap assmap enums valuation =
     object
         [ "id" .= sid
         , "initial_location" .= initLocationJSON locIds (initConf sts)
         , "initialValuation" .= initValue valuation
         , "locations" .= Map.elems locIds
         , "switches" .= switches''
+        , "enum_translation" .= Map.toList (Map.map (\(Some e) -> show e) enums)
         -- , "parameters" .= params -- already wrote this, but it uses a different representation of structures, so probably better to just reuse the ones from before merging
         -- , "inputGates" .= -- not needed
         -- , "outputGates" .= -- not needed
@@ -177,9 +190,10 @@ stsToJSONFile :: (Ord loc, Show loc)
               -> IOSTS FreeLattice loc String String
               -> Map.Map (Expr Bool) String
               -> Map.Map VarModel String
+              -> Map.Map String (Some Expr)
               -> Valuation
               -> IO ()
-stsToJSONFile path sid sts gs as valuation = BSL.writeFile path (JSON.encode (stsToJSON sid sts gs as valuation))
+stsToJSONFile path sid sts gs as enums valuation = BSL.writeFile path (JSON.encode (stsToJSON sid sts gs as enums valuation))
 
 -- | Write a list of STSs to a single file containing a JSON array.
 stsListToJSONFile :: (Ord loc, Show loc)
@@ -187,5 +201,6 @@ stsListToJSONFile :: (Ord loc, Show loc)
                   -> [(String, IOSTS FreeLattice loc String String, Valuation)]
                   -> Map.Map (Expr Bool) String
                   -> Map.Map VarModel String
+                  -> Map.Map String (Some Expr)
                   -> IO ()
-stsListToJSONFile path stss gs as = BSL.writeFile path (JSON.encode [ stsToJSON sid sts gs as valuation | (sid, sts, valuation) <- stss ])
+stsListToJSONFile path stss gs as enums = BSL.writeFile path (JSON.encode [ stsToJSON sid sts gs as enums valuation | (sid, sts, valuation) <- stss ])
