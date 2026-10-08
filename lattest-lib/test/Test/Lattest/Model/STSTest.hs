@@ -59,9 +59,8 @@ import Data.GADT.Compare (GEq(..))
 import Data.Type.Equality ((:~:)(..))
 import Test.HUnit
 import Data.Dependent.Sum
-import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
+import Test.QuickCheck (Gen, elements, choose, vectorOf)
 import Data.Maybe(isJust, catMaybes)
-import Data.Foldable(toList)
 import qualified Data.Set as Set
 import System.Random(mkStdGen)
 import Data.String(IsString)
@@ -74,17 +73,16 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSTSTester, Verdict(..), RunTester (..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,AutSyntax,transRel,reachable)
-import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, sequentiallyPruned, selfSequentiallyPruned, Pruned(..))
+import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,reachable)
+import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, Pruned(..))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
-import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
 import Algebra.Lattice.Free(Free(..))
 import Algebra.Lattice.Levitated(Levitated(..))
 import Lattest.Model.Symbolic.SolveSTS(seTree', interactsToSpecifiedCondition, interactsToAllowedCondition)
 import qualified Lattest.Model.Symbolic.SolveSTS as Solve
 import Lattest.Model.Symbolic.SolveSymPrim(solveGuardIO)
-import Data.Tuple(swap)
 import qualified Data.Map as Map
 import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
@@ -880,7 +878,8 @@ treeSTS =
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate "a", outGate "x"]) switches
 
 milkvar :: Variable Bool
-milkvar = (Variable "milk" BoolType)
+milkvar = Variable "milk" BoolType
+milk :: Expr Bool
 milk = sVar milkvar
 a,b,tea,espresso,take :: SymInteract (IOAct String String)
 a = SymInteract (In "a") []
