@@ -35,10 +35,9 @@ import Lattest.Exec.ADG.SplitGraph(Evidence(..))
 import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput, TestObserver, observer)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
 import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..), SymGuard)
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, asLoc, TransitionMapping (..), STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
-import Lattest.Model.StandardAutomata (allLocations)
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, TransitionMapping (..), STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
 import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp, allLocations)
 import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard)
 
 import Control.Monad (forM, (>=>))
@@ -60,10 +59,6 @@ import qualified Data.Dependent.Map as DMap
 import Data.GADT.Show (GShow (..), defaultGshowsPrec)
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
-import Control.Monad (forM)
-import qualified Data.Map as Map ((!?))
-import qualified Data.Set as Set (empty, Set)
-import System.Random(StdGen)
 import qualified Data.Maybe as Maybe
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
@@ -132,10 +127,10 @@ adgTestSelector aut delta =
 nCompleteSingleState :: (Ord q, Ord l) => ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q
                                                     -> TestController Det q q (IOAct l l) () (IOSuspAct l l) (((), [IOSuspAct l l]), Maybe (Det q)) i20 ([IOSuspAct l l], Maybe (Det q))
                                                     -> IO (TestController Det q q (IOAct l l) () (IOSuspAct l l) (Either (Either [IOAct l l] StdGen, Int) (Evidence l), (((), [IOSuspAct l l]), Maybe (Det q))) (Maybe l) ([IOSuspAct l l], Maybe (Det q)))
-nCompleteSingleState model seed nrSteps delta targetState observer = do
+nCompleteSingleState model seed nrSteps delta targetState observer' = do
     return $ accessSeqSelector model targetState
         `andThen` randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps
-            `andThen` adgTestSelector model delta `observingOnly` observer
+            `andThen` adgTestSelector model delta `observingOnly` observer'
 
 {- | Runs tests from nCompleteSingleState for each given targetState and seed
 -}
@@ -211,7 +206,7 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
           Left _ -> Just (SymInteract i vs, sTrue)
           -- The actual filtering: besides picking a gate with an uncovered switch, require the guard of some uncovered switch
           -- to hold. Otherwise the solver is free to keep picking values for the already covered switches of that gate.
-          Right qs -> case [ substituteInGuard v g | IntrpState l v <- Set.toList qs, Switch loc act (STSLoc (g, _)) _dest <- Set.toList tocover, loc == l, act == SymInteract (In i) vs ] of
+          Right qs -> case [ substituteInGuard v guard | IntrpState l v <- Set.toList qs, Switch loc act (STSLoc (guard, _)) _dest <- Set.toList tocover, loc == l, act == SymInteract (In i) vs ] of
             [] -> Nothing
             gs -> Just (SymInteract i vs, foldr1 (.||) gs)  -- or'd guards of uncovered switches to make sure we cover at least one
 

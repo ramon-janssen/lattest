@@ -23,6 +23,7 @@ import Lattest.Model.Automaton (IntrpState, STStdest, AutIntrpr, IOAfter, StepSe
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Model.Symbolic.Expr (Constant)
 import Lattest.Model.Symbolic.SolveSTS (OfflineTests, OnlyOrInconclusive, toTrace)
+import Data.Bifunctor (Bifunctor(..))
 
 
 data TestResult = TestResult
@@ -94,4 +95,4 @@ appendTestTrace :: (forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord
     -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
     -> OfflineTests i o r
     -> IO ()
-appendTestTrace file intrpr test = appendFile file $ show (fmap (\(steps, r) -> (prettyTrace steps, r)) (toTrace intrpr test)) ++ "\n"
+appendTestTrace file intrpr test = appendFile file $ show (fmap (first prettyTrace) (toTrace intrpr test)) ++ "\n"
