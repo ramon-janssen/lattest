@@ -213,7 +213,7 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
           -- to hold. Otherwise the solver is free to keep picking values for the already covered switches of that gate.
           Right qs -> case [ substituteInGuard v g | IntrpState l v <- Set.toList qs, Switch loc act (STSLoc (g, _)) _dest <- Set.toList tocover, loc == l, act == SymInteract (In i) vs ] of
             [] -> Nothing
-            gs -> Just (SymInteract i vs, foldr1 (.||) gs)
+            gs -> Just (SymInteract i vs, foldr1 (.||) gs)  -- or'd guards of uncovered switches to make sure we cover at least one
 
     -- note: coverage is computed from the `m q` before the transition, which is passed in as the last argument.
     update :: (a, Set.Set (Switch loc i' o), [IOGateValue i' o], m q)
