@@ -16,7 +16,6 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
 import Data.Tuple (swap)
-import Control.Monad (foldM)
 import Control.Monad.State (evalStateT)
 import System.Random (mkStdGen)
 import Data.Foldable (toList)
@@ -53,6 +52,7 @@ run = do
     putStrLn ("computing offline test cases..." ++ timestamp)
     let nrSteps = 8
         nrTrailingSteps = 5 -- the extra steps a test may take to end right after an output
+        maxStale = 20 :: Int -- stop after this many consecutive test cases that did not increase coverage
         nrTests = 10 :: Int
         randomSeed = 456
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
@@ -67,23 +67,32 @@ run = do
 
     writeFile tracesFile ""
 
-    -- the covered switches and the input coverage report are carried from one test case to the next
-    let testCase (toCover, report) n = do
-          -- target the (location, gate) pairs of input switches not covered yet
-          let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` observeInputCoverage
-          tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
-          appendTestTrace tracesFile model (snd . fst <$> tests)
-          -- compute the covered switches
-          -- print $ map (\(((_,x,_,_),_),_) -> x) $ toList tests
-          let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) switches (toList tests)
-          putStrLn $ "after test " ++ show (n + 1) ++ ": switch coverage "
-              ++ show (Set.size switches - Set.size toCover') ++ "/" ++ show (Set.size switches)
-              ++ ", input switch coverage "
-              ++ show (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) ++ "/" ++ show (Set.size inputSwitches)
-          -- a test is a tree with a report per leaf, so merge over the leaves as well
-          pure (toCover', foldr (mergeInputCoverage . snd) report (toList tests))
-    (leftToCover, suiteReport) <- foldM testCase (switches, mempty) [0 .. nrTests - 1]
-    putStrLn $ "wrote " ++ show nrTests ++ " test cases to " ++ tracesFile
+    -- the covered switches and the input coverage report are carried from one kept test case to the next
+    let testCases toCover report n kept stale
+          | Set.null toCover = pure (toCover, report, n, kept, "full switch coverage reached")
+          | stale >= maxStale = pure (toCover, report, n, kept, "the last " ++ show maxStale ++ " test cases did not increase coverage")
+          | otherwise = do
+              -- target the (location, gate) pairs of input switches not covered yet
+              let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` observeInputCoverage
+              tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
+              -- compute the covered switches
+              let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) toCover (toList tests)
+              if Set.size toCover' < Set.size toCover
+                then do
+                  -- the test case increases coverage: keep it
+                  appendTestTrace tracesFile model (snd . fst <$> tests)
+                  putStrLn $ "test " ++ show (n + 1) ++ ": kept, switch coverage "
+                      ++ show (Set.size switches - Set.size toCover') ++ "/" ++ show (Set.size switches)
+                      ++ ", input switch coverage "
+                      ++ show (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) ++ "/" ++ show (Set.size inputSwitches)
+                  -- a test is a tree with a report per leaf, so merge over the leaves as well
+                  testCases toCover' (foldr (mergeInputCoverage . snd) report (toList tests)) (n + 1) (kept + 1) 0
+                else do
+                  putStrLn $ "test " ++ show (n + 1) ++ ": discarded"
+                  testCases toCover report (n + 1) kept (stale + 1)
+    (leftToCover, suiteReport, nrGenerated, nrKept, stopReason) <- testCases switches mempty 0 (0 :: Int) (0 :: Int)
+    putStrLn $ "stopped: " ++ stopReason
+    putStrLn $ "generated " ++ show nrGenerated ++ " test cases, kept " ++ show nrKept ++ " in " ++ tracesFile
     putStrLn "input coverage of the test suite:"
     putStr $ prettyPrintInputCoverage suiteReport
     putStrLn $ ("left to cover: " ++ show leftToCover)
