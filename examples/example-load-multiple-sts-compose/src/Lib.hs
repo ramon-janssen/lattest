@@ -8,7 +8,7 @@ import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import           Lattest.Util.ReportUtils (appendTestTrace)
 import           Lattest.Exec.StandardTestControllers
-import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(randomCoveringTestSelectorFromSeed, allSwitches, isInputSwitch, observeInputCoverage, mergeInputCoverage, prettyPrintInputCoverage)
+import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(slowRandomInputCoverer, allSwitches, isInputSwitch, observeInputCoverage, mergeInputCoverage, prettyPrintInputCoverage)
 import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
 import Lattest.Exec.Testing (Verdict(..))
 import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
@@ -51,7 +51,8 @@ run = do
     --print discardedTransit
     timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
     putStrLn ("computing offline test cases..." ++ timestamp)
-    let nrSteps = 10
+    let nrSteps = 8
+        nrTrailingSteps = 5 -- the extra steps a test may take to end right after an output
         nrTests = 10 :: Int
         randomSeed = 456
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
@@ -69,7 +70,7 @@ run = do
     -- the covered switches and the input coverage report are carried from one test case to the next
     let testCase (toCover, report) n = do
           -- target the (location, gate) pairs of input switches not covered yet
-          let controller = observeControllerState (randomCoveringTestSelectorFromSeed model (Just toCover) (randomSeed + n) `untilCondition` stopAfterSteps nrSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` observeInputCoverage
+          let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` observeInputCoverage
           tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
           appendTestTrace tracesFile model (snd . fst <$> tests)
           -- compute the covered switches
