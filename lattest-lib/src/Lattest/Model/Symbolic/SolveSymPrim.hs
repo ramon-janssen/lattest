@@ -8,7 +8,8 @@ combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
-solveGuard, solveGuardIO,
+valuationToGateValue,
+solveGuard, solveGuardAny, solveGuardIO,
 isGuardSatisfiable
 ) where
 
@@ -101,9 +102,18 @@ solveGuardIO vars guard = do
   evalStateT (solveGuard vars guard) g
 
 solveGuard :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
-solveGuard vars guard = StateT $ \randomgen ->
+solveGuard = solveGuardAmong 20
+
+-- | As 'solveGuard', but takes the first solution that the SMT solver comes up with, instead of picking randomly among several solutions.
+solveGuardAny :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
+solveGuardAny = solveGuardAmong 0
+
+-- solve the guard, picking randomly among the first solution and up to the given number of additional, different solutions
+solveGuardAmong :: RandomGen g => Int -> [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
+solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
   fst $ runSMT randomgen do
     addDeclarations vars
+    -- addDeclarations (Set.toList $ freeVars guard)
     addAssertions [guard]
     -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
     -- Since sbv-14.8 (unreleased), addAssertions on higher order functions no longer need registerFunction to work in query.
@@ -112,8 +122,8 @@ solveGuard vars guard = StateT $ \randomgen ->
       solveOutcome <- getSolvable
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
-        Unknown -> return (Nothing, randomgen)
-        Sat -> go randomgen 20 []
+        Unknown -> error $ "unknown: " <> show guard
+        Sat -> getSolution vars >>= go randomgen extraSolutions . pure
   where
     go :: RandomGen g => g -> Int -> [Valuation] -> SMTQ (Maybe Valuation, g)
     go g 0 xs = do
@@ -123,7 +133,7 @@ solveGuard vars guard = StateT $ \randomgen ->
       addAssertionsQ $ map atleastoneisdifferent xs
       getSolvable >>= \case
         Unsat -> go g 0 xs
-        Unknown -> go g 0 xs
+        Unknown -> error $ "unknown: " <> show guard
         Sat -> do
           x <- getSolution vars
           go g (n-1) (x : xs)

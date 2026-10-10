@@ -427,8 +427,8 @@ instance JSON.FromJSON VarDefJson where
               , Map.insertWith
                 errIfUnequalAccessors
                 (toString nm)
-                (Some ta, \(Some e) -> Some $ sFirst @b @a $ safeCoerce "first" e)
-                (Map.map (\(t,f) -> (t, \(Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "second" e)) accessors))
+                (Some (TupleType ta tb), \(Some e) -> Some $ sFirst @b @a $ safeCoerce "first" e)
+                (Map.map (\(_,f) -> (Some (TupleType ta tb), \(Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "second" e)) accessors))
             , (Map.unionWith errIfUnequalAccessors a b, Map.unionWith errIfUnequalEnums x y))
       mkStructure _ = error "non-object in attributes"
       -- runtime check whether field accessors are used on expressions of the right type

@@ -1,8 +1,32 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TupleSections #-}
 module Lattest.Exec.StandardTestControllers.CompleteTestSuite (
 accessSeqSelector,
 adgTestSelector,
 nCompleteSingleState,
 runNCompleteTestSuite,
+randomCoveringTestSelector,
+randomCoveringTestSelectorFromSeed,
+randomCoveringTestSelectorFromGen,
+slowRandomInputCoverer,
+Switch,
+allSwitches,
+isInputSwitch,
+switchesTaken,
+observeInputCoverage,
+mergeInputCoverage,
+prettyPrintInputCoverage,
+InputCoverageReport, InputCoverageKey, InputCoverageValue
 )
 where
 import Lattest.Adapter.Adapter(Adapter,close)
@@ -10,18 +34,37 @@ import Lattest.Adapter.StandardAdapters(withQuiescenceMillis)
 import Lattest.Exec.ADG.Aut(adgAutFromAutomaton)
 import Lattest.Exec.ADG.DistGraph(computeAdaptiveDistGraph)
 import Lattest.Exec.ADG.SplitGraph(Evidence(..))
-import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver)
+import Lattest.Exec.StandardTestControllers(andThen,randomTestSelectorFromSeed,untilCondition,stopAfterSteps,observingOnly,printActions,traceObserver,andObserving,stateObserver, TestSelector, selector, solveRandomInput, TestObserver, observer)
 import Lattest.Exec.Testing(TestController(..), runTester,Verdict)
-import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended)
-import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax)
-import Lattest.Model.BoundedMonad(Det(..))
-import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete)
+import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, SymInteract (..), IOSymInteract, IOGateValue, GateValue(..), SymGuard)
+import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, TransitionMapping (..), STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
+import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
+import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp, allLocations, symStep)
+import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard, isGuardSatisfiable, solveGuardAny, valuationToGateValue)
 
-import Control.Monad (forM)
-import qualified Data.Map as Map ((!?))
-import qualified Data.Set as Set (empty, Set)
-import System.Random(StdGen)
+import Control.Monad (forM, (>=>), filterM)
+import qualified Data.List as List
+import qualified Data.Map as Map
+import Data.Dependent.Sum (DSum (..))
+import qualified Data.Set as Set
+import System.Random(StdGen, initStdGen, mkStdGen)
+import Data.Maybe (fromMaybe)
+import Data.Foldable (toList)
+import Data.Either (fromRight)
+import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
+import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
+import Data.Dependent.Map (DMap)
+import Data.Some (Some(..), mapSome)
+import Data.Type.Equality ((:~:)(..))
+import Data.GADT.Compare (GEq(..), GCompare (..), GOrdering (..))
+import qualified Data.Dependent.Map as DMap
+import Data.GADT.Show (GShow (..), defaultGshowsPrec)
+import Data.Constraint.Extras (Has (..))
+import Data.Constraint.Compose (ComposeC)
 import qualified Data.Maybe as Maybe
+import Data.Function (on)
+import Control.Monad.Extra (findM, anyM, firstJustM)
+import Control.Monad.State (StateT, runStateT)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -89,10 +132,10 @@ adgTestSelector aut delta =
 nCompleteSingleState :: (Ord q, Ord l) => ConcreteSuspAutIntrpr Det q l l -> Int -> Int -> l -> q
                                                     -> TestController Det q q (IOAct l l) () (IOSuspAct l l) (((), [IOSuspAct l l]), Maybe (Det q)) i20 ([IOSuspAct l l], Maybe (Det q))
                                                     -> IO (TestController Det q q (IOAct l l) () (IOSuspAct l l) (Either (Either [IOAct l l] StdGen, Int) (Evidence l), (((), [IOSuspAct l l]), Maybe (Det q))) (Maybe l) ([IOSuspAct l l], Maybe (Det q)))
-nCompleteSingleState model seed nrSteps delta targetState observer = do
+nCompleteSingleState model seed nrSteps delta targetState observer' = do
     return $ accessSeqSelector model targetState
         `andThen` randomTestSelectorFromSeed seed `untilCondition` stopAfterSteps nrSteps
-            `andThen` adgTestSelector model delta `observingOnly` observer
+            `andThen` adgTestSelector model delta `observingOnly` observer'
 
 {- | Runs tests from nCompleteSingleState for each given targetState and seed
 -}
@@ -105,8 +148,306 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
             let model = interpretQuiescentConcrete spec
             putStrLn "starting test..."
             putStrLn $ "accessing state: " ++ show targetState
-            selector <- testSelector model seed targetState
-            (verdict,(observed, maybeMq)) <- runTester model selector imp
+            selector' <- testSelector model seed targetState
+            (verdict,(observed, maybeMq)) <- runTester model selector' imp
             close adap
             return (targetState, verdict, (observed, maybeMq))
     where testSelector model seed targetState = nCompleteSingleState model seed nrSteps delta targetState $ printActions `observingOnly` traceObserver `andObserving` stateObserver
+
+-- The most basic version: randomly pick an uncovered input, if any, and otherwise just random
+-- If a 'to cover' set is not provided, it gets initialized to the set of every transition
+-- Using 'observeControllerState', the set of uncovered transitions can be passed on to the next test.
+randomCoveringTestSelector
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord q, Ord loc
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+  => AutIntrpr m loc q t tdest act
+  -> Maybe (Set.Set (Switch loc i' o))
+  -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i)
+randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen intrpr mtocover <$> initStdGen
+
+-- | As 'randomCoveringTestSelector', starting with the given random seed.
+randomCoveringTestSelectorFromSeed
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord q, Ord loc
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+  => AutIntrpr m loc q t tdest act
+  -> Maybe (Set.Set (Switch loc i' o))
+  -> Int
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i
+randomCoveringTestSelectorFromSeed intrpr mtocover seed = randomCoveringTestSelectorFromGen intrpr mtocover (mkStdGen seed)
+
+randomCoveringTestSelectorFromGen
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord loc, Ord q,
+     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+  => AutIntrpr m loc q t tdest act
+  -> Maybe (Set.Set (Switch loc i' o))
+  -> StdGen
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i
+randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (allSwitches intrpr) mtocover) select update
+  where
+    select :: (StdGen, Set.Set (Switch loc i' o))
+           -> AutIntrpr m loc q t tdest act
+           -> m q
+           -> IO (Maybe (i, (StdGen, Set.Set (Switch loc i' o))))
+    select (g', tocover) intrpr' mq = do
+      -- as in randomDataTestSelectorFromGen, except we try to take new transitions
+      (maybeGateValue, g'') <- solveRandomInteractionWith intrpr' maybeNewInAct g'
+      case maybeGateValue of
+        Just value -> pure $ Just (value, (g'',tocover))
+        Nothing -> do
+          (maybeGateValue', g''') <- solveRandomInput g'' maybeFromIOAct intrpr'
+          return $ case maybeGateValue' of
+            Just value -> Just (value, (g''',tocover))
+            Nothing -> Nothing
+      where
+        maybeFromIOAct (SymInteract io xs) = case io of
+          In i -> Just $ SymInteract i xs
+          Out _ -> Nothing
+        maybeNewInAct = maybeFromIOAct >=> \(SymInteract i vs) -> case asConjunction mq of
+          -- The state has disjunction, so we're not covering any new transitions anyway.
+          -- Just take a random transition.
+          Left _ -> Just (SymInteract i vs, sTrue)
+          -- The actual filtering: besides picking a gate with an uncovered switch, require the guard of some uncovered switch
+          -- to hold. Otherwise the solver is free to keep picking values for the already covered switches of that gate.
+          Right qs -> case [ substituteInGuard v guard | IntrpState l v <- Set.toList qs, Switch loc act (STSLoc (guard, _)) _dest <- Set.toList tocover, loc == l, act == SymInteract (In i) vs ] of
+            [] -> Nothing
+            gs -> Just (SymInteract i vs, foldr1 (.||) gs)  -- or'd guards of uncovered switches to make sure we cover at least one
+
+    -- note: coverage is computed from the `m q` before the transition, which is passed in as the last argument.
+    update :: (a, Set.Set (Switch loc i' o))
+           -> AutIntrpr m loc q t tdest act
+           -> IOGateValue i' o
+           -> m q
+           -> IO (Maybe (a, Set.Set (Switch loc i' o)))
+    update (g', tocover) intrpr' act mq =
+      let newcover = switchesTaken intrpr' mq act
+      in pure $ Just (g', tocover Set.\\ newcover)
+
+-- | A switch of an STS: source location, interaction (gate and parameters), guard and assignment, and target location.
+data Switch loc i o = Switch loc (IOSymInteract i o) STStdest loc deriving (Eq, Ord, Show)
+
+-- | All switches present in the model.
+allSwitches :: (Ord loc, Ord i, Ord o) => IOSTSIntrp FreeLattice loc i o -> Set.Set (Switch loc i o)
+allSwitches intrpr = let syn = syntacticAutomaton intrpr
+  in Set.fromList [ Switch l t td l' | l <- Set.toList (allLocations syn), (t, dests) <- Map.toList (transRel syn l), (td, l') <- toList dests ]
+
+isInputSwitch :: Switch loc i o -> Bool
+isInputSwitch (Switch _ (SymInteract (In _) _) _ _) = True
+isInputSwitch _ = False
+
+{- |
+    The switches taken by an action from the given state configuration. If the configuration contains a disjunction, it is unknown
+    which switches were taken, so none are reported.
+-}
+switchesTaken :: (Ord loc, Ord i, Ord o)
+  => IOSTSIntrp FreeLattice loc i o -> FreeLattice (IntrpState loc) -> IOGateValue i o -> Set.Set (Switch loc i o)
+switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransition (alphabet syn) gv) of
+  (Right qs, Just t@(SymInteract _ vars)) -> Set.unions
+    [ fromRight mempty $ asConjunction $ dests `ordBind` \(td@(STSLoc (g, _)), l') ->
+        if evalBool (buildGateValuation vars vals) (substituteInGuard v g)
+          then ordReturn $ Switch l t td l'
+          else implicitDestination gv
+    | IntrpState l v <- Set.toList qs
+    , Just dests <- [Map.lookup t (transRel syn l)] ]
+  _ -> mempty
+  where syn = syntacticAutomaton intrpr
+
+data InputCoverageKey i tp = ICK i SymGuard (Variable tp) deriving Show
+data InputCoverageValue tp = ICV (Type tp) (Set.Set (Val tp)) deriving Show
+type InputCoverageReport i = DMap (InputCoverageKey i) InputCoverageValue
+instance GEq (InputCoverageKey i) where
+  geq (ICK _ _ v) (ICK _ _ v') = geq v v'
+instance Ord i => GCompare (InputCoverageKey i) where
+  gcompare (ICK i g v) (ICK i' g' v') = case compare i i' of
+    GT -> GGT
+    LT -> GLT
+    EQ -> case compare g g' of
+      GT -> GGT
+      LT -> GLT
+      EQ -> gcompare v v'
+instance Show i => GShow (InputCoverageKey i) where
+  gshowsPrec = defaultGshowsPrec
+instance Has a Type => Has a InputCoverageValue where
+  has (ICV t _) = has @a t
+instance Has (ComposeC Show InputCoverageValue) (InputCoverageKey i) where
+  has (ICK _ _ v) = withExprConstraints v
+
+{- |
+    Combine two input coverage reports.
+-}
+mergeInputCoverage :: Ord i => InputCoverageReport i -> InputCoverageReport i -> InputCoverageReport i
+mergeInputCoverage = DMap.unionWithKey (\_ (ICV t a) (ICV _ b) -> ICV t (Set.union a b))
+
+{- |
+    Render an input coverage report: per input gate, per guard, the values used for each parameter.
+-}
+prettyPrintInputCoverage :: (Show i, Ord i) => InputCoverageReport i -> String
+prettyPrintInputCoverage icr = unlines $ concat
+    [ show gate' : concat
+        [ ("  guard: " <> guard) : [ "    " <> var <> ": " <> List.intercalate ", " vals <> " (" <> show (length vals) <> " different input values)" | (var, vals) <- params ]
+        | (guard, params) <- Map.toList guards ]
+    | (gate', guards) <- Map.toList grouped ]
+  where
+    grouped = Map.fromListWith (Map.unionWith (<>))
+        [ (gate', Map.singleton (show guard) [(show v, show <$> Set.toList vals)]) | ICK gate' guard v :=> ICV _ vals <- DMap.toList icr ]
+
+observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
+observeInputCoverage = observer mempty update pure
+  where
+    update icr _ (GateValue (Out _) _) _ = pure icr
+    update icr intrpr (GateValue (In gate') consts) _ = pure $ foldr (\(guard, c :=> v) icr' -> DMap.insertWith (\(ICV t a) (ICV _ b) -> ICV t $ Set.union a b) (ICK gate' guard v) (ICV (constType c) $ Set.singleton $ withExprConstraints c Val $ constValue c) icr') icr $ cartesian guards taggedvals
+      where
+        guards
+          | Right qs <- asConjunction (stateConf intrpr) = concatMap (\(IntrpState loc _) -> case asConjunction $ transRel (syntacticAutomaton intrpr) loc Map.! SymInteract (In gate') vars of
+                Right tdests -> map (\(STSLoc x,_) -> fst x) $ Set.toList tdests
+                Left _ -> error "TODO: compute input coverage for disjunctions") $ Set.toList qs
+          | otherwise = error "TODO: compute input coverage for disjunctions" -- mempty
+        taggedvals :: [DSum Constant Variable]
+        taggedvals = zipWith
+          (\(Some c@(Constant tp1 _)) (Some v@(Variable _ tp2)) -> case geq tp1 tp2 of
+              Nothing -> error "type mismatch"
+              Just Refl -> c :=> v)
+          consts
+          vars
+        alph = alphabet $ syntacticAutomaton intrpr
+        vars = case Set.toList $ flip Set.filter alph \case
+          SymInteract (Out _) _ -> False
+          SymInteract (In i) _ -> i == gate' of
+            [SymInteract _ vs] -> vs
+            _ -> error $ "zero or more than one inputs in the alphabet match " <> show gate'
+        cartesian as bs = [(a,b) | a <- as, b <- bs]
+
+slowRandomInputCoverer
+  :: forall m loc q t tdest act i' o i.
+     (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord loc, Ord q,
+     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+  => AutIntrpr m loc q t tdest act
+  -> Maybe (Set.Set (Switch loc i' o))
+  -> Int
+  -> StdGen
+  -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o), Maybe [act], Int) i
+slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allSwitches intrpr) mtocover, Nothing, maxSteps) select update
+  where
+    select :: (StdGen, Set.Set (Switch loc i' o), Maybe [act], Int)
+           -> AutIntrpr m loc q t tdest act
+           -> m q
+           -> IO (Maybe (i, (StdGen, Set.Set (Switch loc i' o), Maybe [act], Int)))
+    select (g', tocover, Just (act:plan), budget) _ _ = case act of -- There is a plan; we execute it.
+      GateValue (Out _) _ -> pure Nothing -- the plan is to wait for an output here, so we don't choose an input
+      GateValue (In i) cs -> pure $ Just (GateValue i cs, (g', tocover, Just (act:plan), budget)) -- don't remove the act from the plan here, only in update!
+    select (g', tocover, Just [], budget) intrpr' mq = select (g', tocover, Nothing, budget) intrpr' mq
+    select (g', tocover, Nothing, budget) intrpr' mq = do
+      -- don't currently have a plan. If there's immediately any untaken switches available, we take one
+      (maybeGateValue, g'') <- solveRandomInteractionWith intrpr' maybeNewInAct g'
+      case maybeGateValue of
+        Just value -> pure $ Just (value, (g'',tocover, Nothing, budget))
+        Nothing -> do
+          -- There are no untaken switches available currently, so we create a plan
+          case asConjunction mq of
+            Left _ -> do -- Not going to BFS in a disjunction state, default to a random transition
+              takeRandomInput g''
+            Right currStates -> do
+              let initial = [ (loc, (sTrue, valuationToVarModel v, 0)) | IntrpState loc v <- Set.toList currStates ]
+              -- only look for plans that can be completed, including taking the uncovered switch afterwards, in the steps that are left
+              found <- breadthFirstSearch fst (Set.fromList $ map fst initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
+              (plan, g''') <- runStateT (maybe (pure Nothing) concretise found) g''
+              case plan of
+                -- Note: the plan only goes to a state where the switch _can_ be taken, but doens't take it.
+                -- Could add taking it, but this testcontroller will, once the plan is done,
+                -- just take a random untaken switch anyway (of which we know at least one is present).
+                Just (act:acts) -> select (g''', tocover, Just (act:acts), budget) intrpr' mq
+                _ -> takeRandomInput g'''
+      where
+        maybeFromIOAct (SymInteract io xs) = case io of
+          In i -> Just $ SymInteract i xs
+          Out _ -> Nothing
+        maybeNewInAct = maybeFromIOAct >=> \(SymInteract i vs) -> case asConjunction mq of
+          -- The state has disjunction, so we're not covering any new transitions anyway.
+          -- Just take a random transition.
+          Left _ -> Just (SymInteract i vs, sTrue)
+          -- The actual filtering: besides picking a gate with an uncovered switch, require the guard of some uncovered switch
+          -- to hold. Otherwise the solver is free to keep picking values for the already covered switches of that gate.
+          Right qs -> case [ substituteInGuard v guard | IntrpState l v <- Set.toList qs, Switch loc act (STSLoc (guard, _)) _dest <- Set.toList tocover, loc == l, act == SymInteract (In i) vs ] of
+            [] -> Nothing
+            gs -> Just (SymInteract i vs, foldr1 (.||) gs)  -- or'd guards of uncovered switches to make sure we cover at least one
+        takeRandomInput g'' = do
+          (maybeGateValue', g''') <- solveRandomInput g'' maybeFromIOAct intrpr'
+          return $ case maybeGateValue' of
+            Just value -> Just (value, (g''',tocover, Nothing, budget))
+            Nothing -> Nothing
+
+        locVars = case toList mq of
+          IntrpState _ v : _ -> getVariables v
+          [] -> []
+        isSat guard = isGuardSatisfiable (toList $ freeVars guard) guard
+        -- the gate parameters as they occur in the guard of the n-th step of a path, see `symStep`
+        indexParams n (SymInteract gate' vars) = SymInteract gate' (mapSome (indexVar n) <$> vars)
+
+        -- arguments to the BFS
+        -- branch to all satisfiable options
+        bfsStep :: SymNode loc -> IO [(SymNode loc, IOSymInteract i' o)]
+        bfsStep (loc, (pathCond, pvar, n)) = filterM (\((_, (pathCond', _, _)), _) -> isSat pathCond')
+          [ ((loc', (pathCond .&& guard, pvar', n + 1)), indexParams n t)
+          | (t, dests) <- Map.toList $ transRel (syntacticAutomaton intrpr') loc
+          , (tdest, loc') <- Set.toList $ Set.fromList $ toList dests
+          , let (guard, pvar') = symStep locVars n pvar tdest ]
+
+        -- check whether an uncovered switch can be taken from this location
+        bfsPred :: SymNode loc -> IO Bool
+        bfsPred = anyM (isSat . snd) . targetConds
+
+        -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
+        targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
+        targetConds (loc, (pathCond, pvar, n)) =
+          [ (vars, pathCond .&& fst (symStep locVars n pvar tdest))
+          | Switch src t tdest _ <- Set.toList tocover, src == loc
+          , let SymInteract _ vars = indexParams n t ]
+
+        -- pick values for the gates along the path, such that an uncovered switch can be taken at the end of it
+        concretise :: (SymNode loc, [IOSymInteract i' o]) -> StateT StdGen IO (Maybe [act])
+        concretise (node, path) = fmap (\valuation -> map (`valuationToGateValue` valuation) path)
+          <$> firstJustM (\(targetVars, cond) -> solveGuardAny (pathVars ++ targetVars) cond) (targetConds node)
+          where pathVars = concat [ vars | SymInteract _ vars <- path ]
+
+    -- note: coverage is computed from the `m q` before the transition, which is passed in as the last argument.
+    update :: (a, Set.Set (Switch loc i' o), Maybe [act], Int)
+           -> AutIntrpr m loc q t tdest act
+           -> IOGateValue i' o
+           -> m q
+           -> IO (Maybe (a, Set.Set (Switch loc i' o), Maybe [act], Int))
+    update (g', tocover, plan, budget) intrpr' act mq =
+      let newcover = switchesTaken intrpr' mq act
+          newplan = case plan of
+            Nothing -> Nothing
+            Just [] -> Nothing
+            Just (act':acts) -> if act == act'
+              then Just acts -- successfully acted on our plan
+              else Nothing -- failed to follow the plan: did the SUT choose an output we didn't hope for?
+      in pure $ Just (g', tocover Set.\\ newcover, newplan, budget - 1)
+
+-- | A vertex of the symbolic search for a path: a location, with the path condition to get there, the symbolic values of the
+-- state variables once there, and the number of steps taken to get there.
+type SymNode loc = (loc, (SymGuard, VarModel, Int))
+
+-- self-rolled BFS that: works with monadic steps, distinguishes between vertices and edges, and returns the vertex it found together with
+-- the path it took as a list of edges. Vertices count as visited only if the location matches, but more info is carried.
+-- I haven't looked much into what else is on Hackage, maybe there's a much more elegant solution using something like Data.Graph
+breadthFirstSearch :: (Monad m, Ord k) => (a -> k) -> Set.Set k -> [(a, [b])] -> (a -> m [(a,b)]) -> (a -> m Bool) -> Int -> m (Maybe (a, [b]))
+breadthFirstSearch key visited frontier step predicate maxdepth
+  | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
+  | otherwise = do
+      -- sorry for this read-only blob! It just applies the step to everything in the frontier,
+      -- and removes all states that have already been visited.
+      -- Could certainly be optimized to remove some log factors, but the bottleneck will never be this list/set processing.
+      new <- filter (not . (`Set.member` visited) . key . fst)
+          . List.nubBy ((==) `on` (key . fst)) -- we only keep one of each state, if there were multiple paths to get somewhere
+          . concat
+          <$> mapM
+                (\(a,bs) -> map (\(a',b') -> (a', b':bs)) <$> step a)
+                frontier
+      let newVisited = Set.union (Set.fromList $ map (key . fst) new) visited
+      findM (predicate . fst) new >>= \case
+        Nothing -> breadthFirstSearch key newVisited new step predicate (maxdepth - 1)
+        Just (a, path) -> pure $ Just (a, reverse path) -- the path was built up back to front

@@ -1,4 +1,4 @@
-resolver: nightly-2026-07-13
+resolver: nightly-2026-09-22
 packages:
 - .
 extra-deps:

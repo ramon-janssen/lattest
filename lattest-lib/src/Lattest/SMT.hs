@@ -181,10 +181,11 @@ exprToSymbolic = \case
       Just (Some (SBVI.SBV x)) -> SBVI.SBV x)
   Const c -> pure $ literal c
   Ite i t e -> SBV.ite <$> go i <*> go t <*> go e
-  Equal _ l r -> case sortOfEqual 0.0001 l r of
-    -- if there are no doubles, use actual equality
-    Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
-    exprview -> go exprview
+  Equal _ l r -> -- withExprConstraints t $ (SBV..==) <$> go l <*> go r
+    case sortOfEqual 0.0001 l r of
+      -- if there are no doubles, use actual equality
+      Equal t l' r' -> withExprConstraints t $ (SBV..==) <$> go l' <*> go r'
+      exprview -> go exprview
   Divide      x y -> SBV.sDiv  <$> go x <*> go y
   DivideFloat x y -> case typeOf' x of -- need to split because of overlapping instances in SBV
     RationalType -> (/) <$> go x <*> go y
