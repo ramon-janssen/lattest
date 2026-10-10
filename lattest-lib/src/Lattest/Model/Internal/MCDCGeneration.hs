@@ -37,6 +37,8 @@ data Expr a
   | Not (Expr a)
   | And (Expr a) (Expr a)
   | Or  (Expr a) (Expr a)
+    -- | A condition on the number of sub-expressions that hold.
+  | Count [Bool] [Expr a]
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 -- | The atoms of an expression, in left-to-right order, with duplicates.
@@ -62,6 +64,7 @@ eval r (Atom a)  = fromMaybe False (M.lookup a r)
 eval r (Not e)   = not (eval r e)
 eval r (And x y) = eval r x && eval r y
 eval r (Or  x y) = eval r x || eval r y
+eval r (Count table es) = table !! length (filter (eval r) es)
 
 -- | Generate the MC/DC rows of an expression, each with the value of the
 -- expression on that row. An expression with @n@ atoms gives @n+1@ different
@@ -72,6 +75,7 @@ gen (Atom a)  = [(M.singleton a True, True), (M.singleton a False, False)]
 gen (Not e)   = [(r, not v) | (r, v) <- gen e]
 gen (And x y) = glue True  x y
 gen (Or  x y) = glue False x y
+gen (Count table es) = glueCount table es
 
 -- | Combine the rows of @x@ and @y@ for @x && y@ (@ident = True@) or
 -- @x || y@ (@ident = False@). A /neutralVal/ is a row on which a child has the value
@@ -88,6 +92,44 @@ glue ident x y =
     (neutralValX, _)      = takeFirstNeutral ident rowsX
     (neutralValY, restY)  = takeFirstNeutral ident rowsY
 
+-- | Combine the rows of the sub-expressions of a count. Let @k@ be a number for
+-- which the count has different values on @k@ and on @k+1@ sub-expressions
+-- that hold. While @k@ of the other sub-expressions hold, the count follows the
+-- value of the remaining one, so the independence pairs of that one stay valid.
+-- The others are on their first true row or their first false row. For
+-- sub-expressions that are atoms, this gives one row more than there are atoms.
+glueCount :: Ord a => [Bool] -> [Expr a] -> [(Row a, Bool)]
+glueCount table es = dedup
+  [ (row `M.union` M.unions [ if j `elem` holding i then firstTrue j else firstFalse j | j <- indices, j /= i ]
+    , table !! (k + fromEnum v))
+  | i <- indices, (row, v) <- rows !! i ]
+  where
+    indices      = [0 .. length es - 1]
+    rows         = map gen es
+    firstTrue j  = fst (takeFirstNeutral True  (rows !! j))
+    firstFalse j = fst (takeFirstNeutral False (rows !! j))
+    k = case [ n | (n, (v, w)) <- zip [0 ..] (zip table (drop 1 table)), v /= w ] of
+      n : _ -> n
+      []    -> error "MCDCGeneration.glueCount: the count has the same value for any number of sub-expressions" -- unreachable after 'isWellFormed'
+    -- the k other sub-expressions that hold while sub-expression i varies, taken from the first k+1 of them
+    holding i = [ j | j <- [0 .. k], j /= (if i <= k then i else 0) ]
+    dedup = go S.empty
+      where
+        go _ [] = []
+        go seen (r@(row, _) : rest)
+          | row `S.member` seen = go seen rest
+          | otherwise           = r : go (S.insert row seen) rest
+
+-- | True if each count has a table of the right size, and a value that depends
+-- on the number of sub-expressions that hold.
+isWellFormed :: Expr a -> Bool
+isWellFormed (Atom _)  = True
+isWellFormed (Not e)   = isWellFormed e
+isWellFormed (And x y) = isWellFormed x && isWellFormed y
+isWellFormed (Or  x y) = isWellFormed x && isWellFormed y
+isWellFormed (Count table es) =
+  length table == length es + 1 && or table && not (and table) && all isWellFormed es
+
 -- | Take out the first row with the given value. Return it and the other rows.
 takeFirstNeutral :: Bool -> [(Row a, Bool)] -> (Row a, [(Row a, Bool)])
 takeFirstNeutral ident rows =
@@ -99,8 +141,9 @@ takeFirstNeutral ident rows =
 -- | The rows of 'gen', or 'Left' if the expression is not singular.
 mcdcRows :: Ord a => Expr a -> Either String [(Row a, Bool)]
 mcdcRows e
-  | isSingular e = Right (gen e)
-  | otherwise    = Left "not a singular Boolean expression: some atom occurs more than once"
+  | not (isSingular e)   = Left "not a singular Boolean expression: some atom occurs more than once"
+  | not (isWellFormed e) = Left "a count does not depend on the number of sub-expressions that hold"
+  | otherwise            = Right (gen e)
 
 -- | The minimal unique-cause MC\/DC test suite.
 mcdc :: Ord a => Expr a -> Either String [Expr a]
@@ -113,6 +156,7 @@ subst r (Atom a)  = if fromMaybe True (M.lookup a r) then Atom a else neg (Atom 
 subst r (Not e)   = neg (subst r e)
 subst r (And x y) = And (subst r x) (subst r y)
 subst r (Or  x y) = Or  (subst r x) (subst r y)
+subst r (Count table es) = Count table (map (subst r) es)
 
 -- | Negation that removes a double negative: @neg (Not e) = e@.
 neg :: Expr a -> Expr a

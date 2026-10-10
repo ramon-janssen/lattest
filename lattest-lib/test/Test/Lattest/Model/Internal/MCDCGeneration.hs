@@ -46,8 +46,26 @@ mcdcGenerationTests =
                `Or` (q `And` (r `Or` s) `And` Not t)
                `Or` (u `And` (v `Or` w))))
 
+    -- Counts: the value depends on the number of sub-expressions that hold.
+    , rowsCase "at least 2 of A, B, C" (Count [False, False, True, True] [a, b, c])
+        [ ("TTF", True)
+        , ("FTF", False)
+        , ("TFF", False)
+        , ("FTT", True)
+        ]
+    , rowsCase "exactly 1 of A, B" (Count [False, True, False] [a, b])
+        [ ("TF", True)
+        , ("FF", False)
+        , ("FT", True)
+        ]
+    , validCase "exactly 1 of (A && B), C, (D || E)" (Count [False, True, False, False] [a `And` b, c, d `Or` e])
+    , validCase "A && at least 2 of B, (C || D), not E" (a `And` Count [False, False, True, True] [b, c `Or` d, Not e])
+
     -- Rejected: an atom occurs more than once.
     , notSingularCase "A && (B || A)" (a `And` (b `Or` a))
+    , notSingularCase "exactly 1 of A, A" (Count [False, True, False] [a, a])
+    -- Rejected: the count has the same value for any number of sub-expressions that hold.
+    , notSingularCase "any number of A, B" (Count [True, True, True] [a, b])
     ]
     where
     a = Atom 'A'; b = Atom 'B'; c = Atom 'C'; d = Atom 'D'; e = Atom 'E'; f = Atom 'F'
