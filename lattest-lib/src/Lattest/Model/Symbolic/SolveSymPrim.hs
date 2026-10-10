@@ -8,7 +8,8 @@ combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
-solveGuard, solveGuardIO,
+valuationToGateValue,
+solveGuard, solveGuardAny, solveGuardIO,
 isGuardSatisfiable
 ) where
 
@@ -101,7 +102,15 @@ solveGuardIO vars guard = do
   evalStateT (solveGuard vars guard) g
 
 solveGuard :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
-solveGuard vars guard = StateT $ \randomgen ->
+solveGuard = solveGuardAmong 20
+
+-- | As 'solveGuard', but takes the first solution that the SMT solver comes up with, instead of picking randomly among several solutions.
+solveGuardAny :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
+solveGuardAny = solveGuardAmong 0
+
+-- solve the guard, picking randomly among the first solution and up to the given number of additional, different solutions
+solveGuardAmong :: RandomGen g => Int -> [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
+solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
   fst $ runSMT randomgen do
     addDeclarations vars
     -- addDeclarations (Set.toList $ freeVars guard)
@@ -114,7 +123,7 @@ solveGuard vars guard = StateT $ \randomgen ->
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
         Unknown -> error $ "unknown: " <> show guard
-        Sat -> getSolution vars >>= go randomgen 20 . pure
+        Sat -> getSolution vars >>= go randomgen extraSolutions . pure
   where
     go :: RandomGen g => g -> Int -> [Valuation] -> SMTQ (Maybe Valuation, g)
     go g 0 xs = do
