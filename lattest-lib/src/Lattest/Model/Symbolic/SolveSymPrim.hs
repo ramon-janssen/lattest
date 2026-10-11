@@ -26,6 +26,13 @@ import Data.Constraint.Extras (Has(..))
 import System.Random ( randomR, RandomGen, mkStdGen, randomIO )
 import Data.Dependent.Sum (DSum (..))
 import Control.Monad.State (StateT (..), evalStateT)
+import Control.Monad.IO.Class (liftIO)
+import System.IO (hPutStrLn, stderr)
+import System.IO.Unsafe (unsafePerformIO)
+import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
+import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
+import Control.Monad (forM_)
 
 {-|
     Combine the given guards into one.
@@ -83,18 +90,35 @@ valuationToGateValue (SymInteract g' params) valuation =
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
 {-|
-    Check whether the given guard is satisfiable, without obtaining a valuation.
+    Check whether the given guard is satisfiable, without obtaining a valuation. If the SMT solver can not tell, the guard is reported
+    as not satisfiable, with a warning on stderr.
+
+    The outcome is cached per guard, so that a guard is only solved once. Outcomes where the SMT solver could not tell are not cached.
 -}
 isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
 isGuardSatisfiable vars guard = do
-  g <- mkStdGen <$> randomIO -- We don't care about the solution, only whether there is one, so randomness is acceptable here
-  fst $ runSMT g do
-    addDeclarations vars
-    addAssertions [guard]
-    query $ getSolvable >>= \case
-      Sat -> return True
-      Unsat -> return False
-      Unknown -> error $ "isGuardSatisfiable: SMT solver returned unknown for guard " <> show guard -- TODO warning?
+  cache <- readIORef satisfiableCache
+  case Map.lookup guard cache of
+    Just isSat -> return isSat
+    Nothing -> do
+      g <- mkStdGen <$> randomIO -- We don't care about the solution, only whether there is one, so randomness is acceptable here
+      outcome <- fst $ runSMT g do
+        addDeclarations vars
+        addAssertions [guard]
+        query $ getSolvable >>= \case
+          Sat -> return $ Just True
+          Unsat -> return $ Just False
+          Unknown -> Nothing <$ warnUnknown guard
+      forM_ outcome \isSat -> atomicModifyIORef' satisfiableCache $ \c -> (Map.insert guard isSat c, ())
+      return $ fromMaybe False outcome
+
+-- the guards solved so far by `isGuardSatisfiable`, with their outcome
+satisfiableCache :: IORef (Map.Map SymGuard Bool)
+satisfiableCache = unsafePerformIO $ newIORef Map.empty
+{-# NOINLINE satisfiableCache #-}
+
+warnUnknown :: SymGuard -> SMTQ ()
+warnUnknown guard = liftIO $ hPutStrLn stderr $ "warning: SMT solver returned unknown, treating as unsatisfiable: " <> show guard
 
 solveGuardIO :: [Some Variable] -> SymGuard -> IO (Maybe Valuation)
 solveGuardIO vars guard = do
@@ -102,13 +126,15 @@ solveGuardIO vars guard = do
   evalStateT (solveGuard vars guard) g
 
 solveGuard :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
-solveGuard = solveGuardAmong 20
+solveGuard = solveGuardAmong 10
 
 -- | As 'solveGuard', but takes the first solution that the SMT solver comes up with, instead of picking randomly among several solutions.
 solveGuardAny :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
 solveGuardAny = solveGuardAmong 0
 
--- solve the guard, picking randomly among the first solution and up to the given number of additional, different solutions
+-- solve the guard, picking randomly among the first solution and up to the given number of additional, different solutions.
+-- If the SMT solver can not tell whether there is a (further) solution, then that is
+-- treated as there being none, with a warning.
 solveGuardAmong :: RandomGen g => Int -> [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
 solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
   fst $ runSMT randomgen do
@@ -122,7 +148,7 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       solveOutcome <- getSolvable
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
-        Unknown -> error $ "unknown: " <> show guard
+        Unknown -> (Nothing, randomgen) <$ warnUnknown guard
         Sat -> getSolution vars >>= go randomgen extraSolutions . pure
   where
     go :: RandomGen g => g -> Int -> [Valuation] -> SMTQ (Maybe Valuation, g)
@@ -133,7 +159,7 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       addAssertionsQ $ map atleastoneisdifferent xs
       getSolvable >>= \case
         Unsat -> go g 0 xs
-        Unknown -> error $ "unknown: " <> show guard
+        Unknown -> warnUnknown guard >> go g 0 xs
         Sat -> do
           x <- getSolution vars
           go g (n-1) (x : xs)
