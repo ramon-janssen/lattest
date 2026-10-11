@@ -297,11 +297,12 @@ observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLatt
 observeInputCoverage = observer mempty update pure
   where
     update icr _ (GateValue (Out _) _) _ = pure icr
-    update icr intrpr (GateValue (In gate') consts) _ = pure $ foldr (\(guard, c :=> v) icr' -> DMap.insertWith (\(ICV t a) (ICV _ b) -> ICV t $ Set.union a b) (ICK gate' guard v) (ICV (constType c) $ Set.singleton $ withExprConstraints c Val $ constValue c) icr') icr $ cartesian guards taggedvals
+    update icr intrpr (GateValue (In gate') consts) mq = pure $ foldr (\(guard, c :=> v) icr' -> DMap.insertWith (\(ICV t a) (ICV _ b) -> ICV t $ Set.union a b) (ICK gate' guard v) (ICV (constType c) $ Set.singleton $ withExprConstraints c Val $ constValue c) icr') icr $ cartesian guards taggedvals
       where
+        -- the guards of the switches that are taken: the ones that hold for the input values, in the state before the transition
         guards
-          | Right qs <- asConjunction (stateConf intrpr) = concatMap (\(IntrpState loc _) -> case asConjunction $ transRel (syntacticAutomaton intrpr) loc Map.! SymInteract (In gate') vars of
-                Right tdests -> map (\(STSLoc x,_) -> fst x) $ Set.toList tdests
+          | Right qs <- asConjunction mq = concatMap (\(IntrpState loc v) -> case asConjunction $ transRel (syntacticAutomaton intrpr) loc Map.! SymInteract (In gate') vars of
+                Right tdests -> [ guard | (STSLoc (guard, _), _) <- Set.toList tdests, evalBool (buildGateValuation vars consts) (substituteInGuard v guard) ]
                 Left _ -> error "TODO: compute input coverage for disjunctions") $ Set.toList qs
           | otherwise = error "TODO: compute input coverage for disjunctions" -- mempty
         taggedvals :: [DSum Constant Variable]
