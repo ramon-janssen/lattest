@@ -157,6 +157,7 @@ makeHUnitTests regenerate = do
         testSTSJSONParserAssignmentTypeMismatch,
         testSTSJSONParserGuardTypeMismatch,
         testSTSJSONParserGateIdDup,
+        testCoverageCheckerIsExhaustive,
         testSTSJSONWriterComposedConjunction,
         testLatticeCoffeeSTS
         ]

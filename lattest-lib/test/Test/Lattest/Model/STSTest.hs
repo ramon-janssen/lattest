@@ -62,6 +62,7 @@ module Test.Lattest.Model.STSTest (
     testCompleteMCDCListErrors,
     testCompleteMCDCConfiguration,
     testCompleteMCDCLocationVariable
+    testCoverageCheckerIsExhaustive
     )
 where
 
@@ -71,7 +72,7 @@ import Data.GADT.Compare (GEq(..))
 import Data.Type.Equality ((:~:)(..))
 import Test.HUnit
 import Data.Dependent.Sum
-import Test.QuickCheck (Gen, Property, forAll, elements, choose, vectorOf, counterexample, (.&&.))
+import Test.QuickCheck (Gen, elements, choose, vectorOf)
 import Data.Maybe(isJust, catMaybes)
 import Data.List(isInfixOf)
 import Data.Foldable(toList)
@@ -86,11 +87,11 @@ import qualified Text.RawString.QQ as QQ
 import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
-import Lattest.Exec.Testing(runSTSTester, Verdict(..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,AutSyntax,transRel,reachable)
-import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, sequentiallyPruned, selfSequentiallyPruned, Pruned(..))
+import Lattest.Exec.Testing(runSTSTester, Verdict(..), RunTester (..))
+import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,reachable)
+import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, Pruned(..))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
-import Lattest.Model.BoundedMonad(Det, BoundedMonad, BooleanConfiguration, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
+import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
 import Reference.FreeLatticeSlow(FreeLatticeSlow(..))
 import Algebra.Lattice.Free(Free(..))
 import Algebra.Lattice.Levitated(Levitated(..))
@@ -104,6 +105,7 @@ import qualified Control.Exception as Exception
 import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
+import Lattest.Exec.StandardTestControllers.CompleteTestSuite (randomCoveringTestSelector)
  -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
 
 pvar :: Variable Integer
@@ -893,7 +895,8 @@ treeSTS =
     in automaton (ordReturn 0 :: FreeLattice Integer) (Set.fromList [inGate "a", outGate "x"]) switches
 
 milkvar :: Variable Bool
-milkvar = (Variable "milk" BoolType)
+milkvar = Variable "milk" BoolType
+milk :: Expr Bool
 milk = sVar milkvar
 a,b,tea,espresso,take :: SymInteract (IOAct String String)
 a = SymInteract (In "a") []
@@ -2505,3 +2508,40 @@ testCompleteMCDCLocationVariable = TestCase $ do
     _ <- assertAfter "x = 1, after water 1 2: " completedX1 (water [1, 2]) (getSTSIntrpState2 2 1) -- p > x no longer holds
     _ <- assertAfter "x = 1, after water 1 0: " completedX1 (water [1, 0]) underspecified
     return ()
+
+-------
+-- Coverage testing
+-------
+-- It's minimally functional at the moment, so only testing the bare minimum
+
+stscovered :: IOSTS FreeLattice Integer String String
+stscovered =
+    let initConf = ordReturn 0
+        switches = \case
+            0 -> Map.fromList [(SymInteract (In "A") [], ordReturn (stsTLoc sTrue noAssignment, 1)),
+                               (SymInteract (In "B") [], ordReturn (stsTLoc sTrue noAssignment, 2)),
+                               (SymInteract (In "C") [], ordReturn (stsTLoc sTrue noAssignment, 3)),
+                               (SymInteract (In "D") [], ordReturn (stsTLoc sTrue noAssignment, 4))]
+            1 -> Map.fromList [(SymInteract (Out "A") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            2 -> Map.fromList [(SymInteract (Out "B") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            3 -> Map.fromList [(SymInteract (Out "C") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            4 -> Map.fromList [(SymInteract (Out "D") [], ordReturn (stsTLoc sTrue noAssignment, 0))]
+            _ -> Map.empty
+    in automaton initConf (Set.fromList $ concatMap (\y -> [SymInteract (In y) [], SymInteract (Out y) []]) ["A","B","C","D"]) switches
+
+coverimp :: IO (Adapter.Adapter (GateValue (IOAct x x)) (GateValue x))
+coverimp = pureMealyAdapter (const (const ())) (\() (GateValue i _) -> [GateValue (In i) [], GateValue (Out i) []]) ()
+
+testCoverageCheckerIsExhaustive :: Test
+testCoverageCheckerIsExhaustive = TestCase $ do
+  let intrpr = interpretSTS stscovered $ Valuation mempty
+  tester <- randomCoveringTestSelector intrpr Nothing
+  imp1 <- coverimp
+  (v1, incompleteTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 7 `observingOnly` traceObserver) imp1
+  imp2 <- coverimp
+  (v2,   completeTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 8 `observingOnly` traceObserver) imp2
+  assertEqual "Should pass 1" Pass v1
+  assertEqual "Should pass 2" Pass v2
+  let complete trace = all (\y -> all (\z -> GateValue z [] `elem` trace) [In [y], Out [y]]) ("ABCD" :: String)
+  assertBool "7 steps is not enough" (not $ complete incompleteTrace)
+  assertBool ("8 steps should cover" <> show completeTrace)        (complete   completeTrace)

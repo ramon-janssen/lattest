@@ -7,14 +7,14 @@
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
-    
+
     'TestController's have multiple duties during testing:
-    
+
     * selecting test inputs,
     * deciding whether to continue testing,
     * returning testing results (other than 'Pass' or 'Fail'), and
     * potentially performing side effects during testing.
-    
+
     The building blocks in this module allow composing 'TestController's in a modular way, by combining various choices for these responsibilities.
     Every building block carries its own state. For example, to stop testing after a fixed number of steps, a state in the form of a counter is
     needed, whereas returning the observed trace as test result requires recording the observed trace as state.
@@ -34,11 +34,13 @@ randomDataOrWaitForOutputTestSelector,
 randomDataOrWaitForOutputTestSelectorFromSeed,
 randomDataOrWaitForOutputTestSelectorFromGen,
 andThen,
+solveRandomInput,
 -- * Stop Conditions
 StopCondition,
 stopCondition,
 untilCondition,
 stopAfterSteps,
+stopAfterStepsAtOutput,
 -- * Test Observers
 TestObserver,
 observer,
@@ -48,6 +50,7 @@ observingOnly,
 traceObserver,
 stateObserver,
 inconclusiveStateObserver,
+observeControllerState,
 -- * Test Side Effects
 TestSideEffect,
 withSideEffect,
@@ -58,8 +61,8 @@ printState
 where
 
 import Lattest.Exec.Testing(TestController(..))
-import Lattest.Model.Alphabet(TestChoice, IOAct(..), actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, IOSuspGateValue)
-import Lattest.Model.Automaton(AutIntrpr(..), StepSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest, After)
+import Lattest.Model.Alphabet(TestChoice, IOAct(..), actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, IOSuspGateValue, isInputInteract, isOutputInteract)
+import Lattest.Model.Automaton(AutIntrpr(..), AutSyntax(..), StepSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest, After, after)
 import Lattest.Model.StandardAutomata(IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction, SymIntrpState)
@@ -69,6 +72,8 @@ import Data.Either.Combinators(leftToMaybe, maybeToLeft)
 import qualified Lattest.Model.BoundedMonad as BM
 import System.Random(RandomGen, StdGen, initStdGen, mkStdGen)
 import Data.Maybe (mapMaybe)
+import Data.Foldable (toList)
+import qualified Data.Map as Map
 
 
 
@@ -310,6 +315,27 @@ stopAfterSteps :: Int -> StopCondition m loc q t tdest act Int
 stopAfterSteps n = stopCondition n (\n' _ _ _ -> return $ if n' <= 1 then Nothing else Just (n'-1))
 
 {- |
+    Observe at least the given number of actions, and then stop testing at the next point where a test can be cut cleanly: after observing an
+    output that leads to a state with a choice between inputs and outputs, or to a state without outgoing outputs. If there is no such point
+    within the given number of additional actions (the trailing cap), stop testing anyway.
+-}
+stopAfterStepsAtOutput :: (After m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Foldable m, Ord loc, Ord i, Ord o, Ord (m (IntrpState loc)))
+    => Int -> Int -> StopCondition m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) Int
+stopAfterStepsAtOutput cap trailingCap = stopCondition 0 $ \steps intrpr act mq -> return $
+    let steps' = steps + 1
+    in if steps' < cap || (steps' < cap + trailingCap && not (isCutPoint intrpr act mq))
+        then Just steps'
+        else Nothing
+    where
+    isCutPoint intrpr act@(GateValue (Out _) _) mq =
+        -- compute the state after the output from the state configuration before it
+        let intrpr' = after (intrpr { stateConf = mq }) act
+            -- TODO this is syntactic: an output switch counts as outgoing, even if its guard can't be satisfied from the current state
+            outgoing = [ t | IntrpState loc _ <- toList (stateConf intrpr'), (t, dests) <- Map.toList (transRel (syntacticAutomaton intrpr') loc), not (null dests) ]
+        in any isInputInteract outgoing || not (any isOutputInteract outgoing)
+    isCutPoint _ _ _ = False
+
+{- |
     'TestObserver's are only concerned with returning a result after testing. They do not select inputs or decide whether to continue testing.
 -}
 type TestObserver m loc q t tdest act s r = TestController m loc q t tdest act s () r
@@ -385,9 +411,19 @@ stateObserver :: TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 stateObserver = observer Nothing (\_ aut _ _ -> return $ Just (stateConf aut)) return
 
 {- |
+    Transform a controller to return its final internal state.
+-}
+observeControllerState :: TestController m loc q t tdest act state i r -> TestController m loc q t tdest act state i state
+observeControllerState tc = TestController
+  { testControllerState = testControllerState tc
+  , selectTest = \st intrpr mq -> fmap (const st) <$> selectTest tc st intrpr mq
+  , updateTestController = \st intrpr act mq -> fmap (const st) <$> updateTestController tc st intrpr act mq
+  , handleTestClose = \st -> st <$ handleTestClose tc st
+  }
+
+{- |
     A 'TestObserver' that returns the last inconclusive state configuration of the specification model. For example, during a failing test,
     this observer returns the last state before the failure.
-    
 -}
 inconclusiveStateObserver :: BoundedConfiguration m => TestObserver m loc q t tdest act (Maybe (m q)) (Maybe (m q))
 inconclusiveStateObserver = observer Nothing makeSelection return

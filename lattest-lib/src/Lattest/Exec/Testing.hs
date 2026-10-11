@@ -93,7 +93,7 @@ data TestController m loc q t tdest act state i r = TestController {
     -}
     selectTest :: (TestChoice i act) => state -> AutIntrpr m loc q t tdest act -> m q -> IO (Either (i, state) r),
     {- |
-        Handle a transition.
+        Handle a transition. Passes the intrpr after the transition, and its state configuration before the transition.
     -}
     updateTestController :: state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
     -- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.
