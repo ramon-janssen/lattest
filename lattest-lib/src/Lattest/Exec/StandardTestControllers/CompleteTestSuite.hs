@@ -399,8 +399,16 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         bfsPred :: SymNode loc -> IO Bool
         bfsPred = anyM (isSat . snd) . targetConds
 
-        key :: SymNode loc -> (loc, VarModel)
-        key (l, (_, v, _)) = (l, v)
+        -- We currently use just the set of visited locations in the BFS. Ideally, we want something
+        -- that's stricter (i.e. considers less things to be equal), but the obvious candidates
+        -- (namely (loc, [gate]) and (loc, VarModel)) are both too strict (making the search take too long, by revisiting nodes too often).
+        -- The ideal 'key' would represent exactly the space of concrete Valuations that are possible at this location,
+        -- and the ideal BFS would check whether the resulting space from a 'step' is a subset of the union of the spaces we have already seen,
+        -- adding only the unseen part of it to the 'frontier'.
+        -- Too strict keys make the search infeasibly slow, too lax keys make the search unable to find certain reachable states (e.g. coffee machine).
+        -- Neither make the testcontroller unsound, they just make it worse at covering all switches.
+        key :: SymNode loc -> loc
+        key = fst
 
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
         targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
