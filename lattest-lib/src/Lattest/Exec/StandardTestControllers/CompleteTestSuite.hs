@@ -62,7 +62,6 @@ import Data.GADT.Show (GShow (..), defaultGshowsPrec)
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
 import qualified Data.Maybe as Maybe
-import Data.Function (on)
 import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
 import Data.Containers.ListUtils (nubOrdOn)
@@ -353,7 +352,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
             Right currStates -> do
               let initial = [ (loc, (sTrue, valuationToVarModel v, 0)) | IntrpState loc v <- Set.toList currStates ]
               -- only look for plans that can be completed, including taking the uncovered switch afterwards, in the steps that are left
-              found <- breadthFirstSearch fst (Set.fromList $ map fst initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
+              found <- breadthFirstSearch key (Set.fromList $ map key initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
               (plan, g''') <- runStateT (maybe (pure Nothing) concretise found) g''
               case plan of
                 -- Note: the plan only goes to a state where the switch _can_ be taken, but doens't take it.
@@ -399,6 +398,9 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         -- check whether an uncovered switch can be taken from this location
         bfsPred :: SymNode loc -> IO Bool
         bfsPred = anyM (isSat . snd) . targetConds
+
+        key :: SymNode loc -> (loc, VarModel)
+        key (l, (_, v, _)) = (l, v)
 
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
         targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
