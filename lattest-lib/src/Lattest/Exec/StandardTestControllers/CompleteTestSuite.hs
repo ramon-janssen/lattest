@@ -65,6 +65,7 @@ import qualified Data.Maybe as Maybe
 import Data.Function (on)
 import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
+import Data.Containers.ListUtils (nubOrdOn)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -439,12 +440,8 @@ breadthFirstSearch :: (Monad m, Ord k) => (a -> k) -> Set.Set k -> [(a, [b])] ->
 breadthFirstSearch key visited frontier step predicate maxdepth
   | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
   | otherwise = do
-      -- sorry for this read-only blob! It just applies the step to everything in the frontier,
-      -- and removes all states that have already been visited.
-      -- Could certainly be optimized to remove some log factors, but the bottleneck will never be this list/set processing.
-      new <- filter (not . (`Set.member` visited) . key . fst)
-          . List.nubBy ((==) `on` (key . fst)) -- we only keep one of each state, if there were multiple paths to get somewhere
-          . concat
+      new <- nubOrdOn (key . fst) -- we only keep one of each state, if there were multiple paths to get somewhere
+          . concatMap (filter (not . (`Set.member` visited) . key . fst))
           <$> mapM
                 (\(a,bs) -> map (\(a',b') -> (a', b':bs)) <$> step a)
                 frontier
@@ -452,3 +449,4 @@ breadthFirstSearch key visited frontier step predicate maxdepth
       findM (predicate . fst) new >>= \case
         Nothing -> breadthFirstSearch key newVisited new step predicate (maxdepth - 1)
         Just (a, path) -> pure $ Just (a, reverse path) -- the path was built up back to front
+

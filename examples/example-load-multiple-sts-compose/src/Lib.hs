@@ -2,7 +2,6 @@ module Lib
     ( run
     ) where
 
-import           Lattest.Model.Automaton (prettyPrintIntrp, prettyPrint, syntacticAutomaton)
 import           Lattest.Model.Symbolic.Expr (getVariables)
 import           Lattest.Model.StandardAutomata
 import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
@@ -14,7 +13,6 @@ import Lattest.Exec.Testing (Verdict(..))
 import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
 import Data.Tuple (swap)
 import Control.Monad.State (evalStateT)
 import System.Random (mkStdGen)
