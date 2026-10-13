@@ -321,9 +321,9 @@ observeInputCoverage = observer mempty update pure
         cartesian as bs = [(a,b) | a <- as, b <- bs]
 
 slowRandomInputCoverer
-  :: forall m loc q t tdest act i' o i.
+  :: forall m loc q t tdest act i' o i g.
      (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord loc, Ord q,
-     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i', g ~ IOAct i' o) -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
   -> Int
@@ -350,7 +350,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
             Left _ -> do -- Not going to BFS in a disjunction state, default to a random transition
               takeRandomInput g''
             Right currStates -> do
-              let initial = [ (loc, (sTrue, valuationToVarModel v, 0)) | IntrpState loc v <- Set.toList currStates ]
+              let initial = [ (loc, (sTrue, valuationToVarModel v, 0, [])) | IntrpState loc v <- Set.toList currStates ]
               -- only look for plans that can be completed, including taking the uncovered switch afterwards, in the steps that are left
               found <- breadthFirstSearch key (Set.fromList $ map key initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
               (plan, g''') <- runStateT (maybe (pure Nothing) concretise found) g''
@@ -388,29 +388,29 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
 
         -- arguments to the BFS
         -- branch to all satisfiable options
-        bfsStep :: SymNode loc -> IO [(SymNode loc, IOSymInteract i' o)]
-        bfsStep (loc, (pathCond, pvar, n)) = filterM (\((_, (pathCond', _, _)), _) -> isSat pathCond')
-          [ ((loc', (pathCond .&& guard, pvar', n + 1)), indexParams n t)
-          | (t, dests) <- Map.toList $ transRel (syntacticAutomaton intrpr') loc
+        bfsStep :: SymNode loc g -> IO [(SymNode loc g, IOSymInteract i' o)]
+        bfsStep (loc, (pathCond, pvar, n, gs)) = filterM (\((_, (pathCond', _, _, _)), _) -> isSat pathCond')
+          [ ((loc', (pathCond .&& guard, pvar', n + 1, gt : gs)), indexParams n t)
+          | (t@(SymInteract gt _), dests) <- Map.toList $ transRel (syntacticAutomaton intrpr') loc
           , (tdest, loc') <- Set.toList $ Set.fromList $ toList dests
           , let (guard, pvar') = symStep locVars n pvar tdest ]
 
         -- check whether an uncovered switch can be taken from this location
-        bfsPred :: SymNode loc -> IO Bool
+        bfsPred :: SymNode loc g -> IO Bool
         bfsPred = anyM (isSat . snd) . targetConds
 
-        key :: SymNode loc -> (loc, VarModel)
-        key (l, (_, v, _)) = (l, v)
+        key :: SymNode loc g -> (loc, [g])
+        key (l, (_, _, _, gs)) = (l, gs)
 
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
-        targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
-        targetConds (loc, (pathCond, pvar, n)) =
+        targetConds :: SymNode loc g -> [([Some Variable], SymGuard)]
+        targetConds (loc, (pathCond, pvar, n, _)) =
           [ (vars, pathCond .&& fst (symStep locVars n pvar tdest))
           | Switch src t tdest _ <- Set.toList tocover, src == loc
           , let SymInteract _ vars = indexParams n t ]
 
         -- pick values for the gates along the path, such that an uncovered switch can be taken at the end of it
-        concretise :: (SymNode loc, [IOSymInteract i' o]) -> StateT StdGen IO (Maybe [act])
+        concretise :: (SymNode loc g, [IOSymInteract i' o]) -> StateT StdGen IO (Maybe [act])
         concretise (node, path) = fmap (\valuation -> map (`valuationToGateValue` valuation) path)
           <$> firstJustM (\(targetVars, cond) -> solveGuardAny (pathVars ++ targetVars) cond) (targetConds node)
           where pathVars = concat [ vars | SymInteract _ vars <- path ]
@@ -432,8 +432,8 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
       in pure $ Just (g', tocover Set.\\ newcover, newplan, budget - 1)
 
 -- | A vertex of the symbolic search for a path: a location, with the path condition to get there, the symbolic values of the
--- state variables once there, and the number of steps taken to get there.
-type SymNode loc = (loc, (SymGuard, VarModel, Int))
+-- state variables once there, the number of steps taken to get there, and the path to get there.
+type SymNode loc g = (loc, (SymGuard, VarModel, Int, [g]))
 
 -- self-rolled BFS that: works with monadic steps, distinguishes between vertices and edges, and returns the vertex it found together with
 -- the path it took as a list of edges. Vertices count as visited only if the location matches, but more info is carried.
