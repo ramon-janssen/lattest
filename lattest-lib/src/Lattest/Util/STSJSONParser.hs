@@ -32,7 +32,7 @@ import Lattest.Model.Symbolic.Expr
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (Constant (..), ExprConstraints, Expr (..))
+import Lattest.Model.Symbolic.Internal.ExprDefs (Constant (..), Expr (..))
 import Data.SBV (RCSet (..), AlgReal)
 import qualified Data.Aeson.Types as JSON
 import qualified Data.Aeson.KeyMap as JSON
@@ -119,7 +119,7 @@ instance JSON.FromJSON UntypedExpr where
   parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
-type AccessorMap = Map.Map String (Some Expr -> Some Expr)
+type AccessorMap = Map.Map String FieldAccessor
 type EnumMap = Map.Map String (Some Expr)
 
 lookupVar :: VarMap -> String -> Either String (DSum Type Expr)
@@ -145,10 +145,12 @@ toExpr varmap accmap enummap = \case
   UEOp1 o e -> go e >>= op1 o
   UEOp2 "project" e (UEVar f) -> -- need to handle this here, because for all other Op2's we check the types (and field accessors do not have a type here)
     case accmap Map.!? f of
-      Just g -> do
-        _ :=> e' <- go e
-        case g (Some e') of
-          Some e'' -> withExprConstraints e'' $ Right $ typeOf' e'' :=> e''
+      Just (FA tbig tsmall g) -> do
+        t :=> e' <- go e
+        case geq tbig t of
+          Nothing -> error $ "mismatched input type to field accessor " <> f <> ": " <> show t <> " , expected " <> show tbig
+          Just Refl -> case g e' of
+            e'' -> Right $ tsmall :=> e''
       Nothing -> Left $ "unknown field projection: " <> f
   UEOp2 o e1 e2 -> do
     t1 :=> x <- go e1
@@ -369,14 +371,16 @@ instance JSON.FromJSON GateId where
 
 -- type, and a list of field accessors
 data VarDefJson = VarDefJson { varDefJsonType :: Some Type
-                             , varDefJsonFieldAccessors :: Map.Map String (Some Type, Some Expr -> Some Expr)
+                             , varDefJsonFieldAccessors :: Map.Map String FieldAccessor
                              , varDefJsonEnumDefs :: EnumMap}
 newtype MkEnumResult tp = MER (Map.Map String (Expr tp))
+data FieldAccessor where
+  FA :: Type big -> Type small -> (Expr big -> Expr small) -> FieldAccessor
 
 instance JSON.FromJSON VarDefJson where
   parseJSON = JSON.withObject "VarDefJson" go
     where
-      go :: JSON.Object -> JSON.Parser VarDefJson -- (Some Type, [(String, Some Expr -> Some Expr)])
+      go :: JSON.Object -> JSON.Parser VarDefJson
       go o = do
         tp :: String <- o JSON..: "type"
         case tp of
@@ -416,8 +420,8 @@ instance JSON.FromJSON VarDefJson where
             (Map.map sRight m))
       mkStructure [] = error "empty structure"
       mkStructure [(nm, JSON.Object o)] = do
-        VarDefJson tp a b <- go o
-        pure ((tp, Map.singleton (toString nm) (tp, id)), (a,b))
+        VarDefJson (Some tp) a b <- go o
+        pure ((Some tp, Map.singleton (toString nm) (FA tp tp id)), (a,b))
       mkStructure ((nm, JSON.Object o) : fields) = do
         VarDefJson (Some  (ta :: Type a)) a x <- go o
         ((Some (tb :: Type b), accessors), (b,y)) <- mkStructure fields
@@ -427,24 +431,19 @@ instance JSON.FromJSON VarDefJson where
               , Map.insertWith
                 errIfUnequalAccessors
                 (toString nm)
-                (Some ta, \(Some e) -> Some $ sFirst @b @a $ safeCoerce "first" e)
-                (Map.map (\(t,f) -> (t, \(Some e) -> f $ Some $ sSecond @a @b $ safeCoerce "second" e)) accessors))
+                (FA (TupleType ta tb) ta sFirst)
+                (Map.map (\(FA tbig tsmall f) -> case geq tbig tb of
+                  Nothing -> error "unexpected result type in mkStructure: this is the result of a call on the tail of the same list"
+                  Just Refl ->FA (TupleType ta tb) tsmall (f . sSecond)) accessors))
             , (Map.unionWith errIfUnequalAccessors a b, Map.unionWith errIfUnequalEnums x y))
       mkStructure _ = error "non-object in attributes"
-      -- runtime check whether field accessors are used on expressions of the right type
-      safeCoerce :: forall a b. String -> ExprConstraints b => Expr a -> Expr b
-      safeCoerce str e = let tb = typeOf' undefined :: Type b in withExprConstraints e case geq (typeOf' e) tb of
-        Just Refl -> e
-        Nothing -> error $ "failed coerce " <> str <> " " <> show e <> " " <> show (typeOf' e) <> " " <> show tb
 
-errIfUnequalAccessors :: (Some Type, Some Expr -> Some Expr) -> (Some Type, Some Expr -> Some Expr) -> (Some Type, Some Expr -> Some Expr)
-errIfUnequalAccessors (Some t1, a) (Some t2, b) = case geq t1 t2 of
+errIfUnequalAccessors :: FieldAccessor -> FieldAccessor -> FieldAccessor
+errIfUnequalAccessors x@(FA tbig1 tsmall1 f1) (FA tbig2 tsmall2 f2) = case geq tbig1 tbig2 of
   Nothing -> error "different expected types for the same field accessor"
-  Just Refl -> let v = Some $ Expr $ Var $ Variable "foo" t1 in
-    case (a v, b v) of
-      (Some x, Some y) -> withExprConstraints x $ withExprConstraints y $ case geq (typeOf' x) (typeOf' y) of
-        Nothing -> error "different resulting types for the same field accessor"
-        Just Refl -> if x == y then (Some t1, a) else error "different functions for the same field accessor"
+  Just Refl -> case geq tsmall1 tsmall2 of
+    Nothing -> error "different resulting types for the same field accessor"
+    Just Refl -> let v = Variable "foo" tbig1 in if f1 (sVar v) == f2 (sVar v) then x else error "different functions for the same field accessor"
 
 errIfUnequalEnums :: Some Expr -> Some Expr -> Some Expr
 errIfUnequalEnums (Some a) (Some b) = withExprConstraints a $ withExprConstraints b $ case geq (typeOf' a) (typeOf' b) of
@@ -530,7 +529,7 @@ buildVarMap :: Map.Map String VarDefJson -> Either String (VarMap, AccessorMap, 
 buildVarMap defs = do
   (varmap, unzip -> (accessorss, enumss)) <- unzip <$> forM (Map.toList defs)
     (\(name, VarDefJson (Some t') accessors enums) -> return ((name, Some $ Variable name t'), (accessors, enums)))
-  let accessors = Map.map snd $ Map.unionsWith errIfUnequalAccessors accessorss
+  let accessors = Map.unionsWith errIfUnequalAccessors accessorss
   let enums = Map.unionsWith errIfUnequalEnums enumss
   let varmap' = Map.fromList varmap
   pure (varmap', accessors, enums)
