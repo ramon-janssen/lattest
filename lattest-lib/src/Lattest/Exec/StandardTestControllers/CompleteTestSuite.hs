@@ -65,7 +65,6 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
 import Data.Containers.ListUtils (nubOrdOn)
-import qualified Debug.Trace
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -451,7 +450,7 @@ type SymNode loc = (loc, (SymGuard, VarModel, Int))
 breadthFirstSearch :: (Monad m, Ord k, Show k) => (a -> k) -> Set.Set k -> [(a, [b])] -> (a -> m [(a,b)]) -> (a -> m Bool) -> Int -> m (Maybe (a, [b]))
 breadthFirstSearch key visited frontier step predicate maxdepth
   | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
-  | Debug.Trace.traceShow visited otherwise = do
+  | otherwise = do
       new <- nubOrdOn (key . fst) -- we only keep one of each state, if there were multiple paths to get somewhere
           . concatMap (filter (not . (`Set.member` visited) . key . fst))
           <$> mapM
