@@ -51,8 +51,9 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
+import Lattest.Model.Symbolic.Expr (Expr, Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
 import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
+import Lattest.Util.PrettyExpr (prettyExpr, prettyVal)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..), mapSome)
 import Data.Type.Equality ((:~:)(..))
@@ -281,17 +282,18 @@ mergeInputCoverage :: Ord i => InputCoverageReport i -> InputCoverageReport i ->
 mergeInputCoverage = DMap.unionWithKey (\_ (ICV t a) (ICV _ b) -> ICV t (Set.union a b))
 
 {- |
-    Render an input coverage report: per input gate, per guard, the values used for each parameter.
+    Render an input coverage report: per input gate, per guard, the values used for each parameter. Guards and values are
+    written as in 'prettyExpr', given the enums and the names of the fields of the structures (as given by the parser).
 -}
-prettyPrintInputCoverage :: (Show i, Ord i) => InputCoverageReport i -> String
-prettyPrintInputCoverage icr = unlines $ concat
+prettyPrintInputCoverage :: (Show i, Ord i) => Map.Map String (Some Expr) -> Map.Map (Some Type, [Bool]) String -> InputCoverageReport i -> String
+prettyPrintInputCoverage enums fields icr = unlines $ concat
     [ show gate' : concat
-        [ ("  guard: " <> guard) : [ "    " <> var <> ": " <> List.intercalate ", " vals <> " (" <> show (length vals) <> " different input values)" | (var, vals) <- params ]
+        [ ("  guard: " <> prettyExpr enums fields guard) : [ "    " <> var <> ": " <> List.intercalate ", " vals <> " (" <> show (length vals) <> " different input values)" | (var, vals) <- params ]
         | (guard, params) <- Map.toList guards ]
     | (gate', guards) <- Map.toList grouped ]
   where
     grouped = Map.fromListWith (Map.unionWith (<>))
-        [ (gate', Map.singleton (show guard) [(show v, show <$> Set.toList vals)]) | ICK gate' guard v :=> ICV _ vals <- DMap.toList icr ]
+        [ (gate', Map.singleton guard [(varName v, prettyVal enums fields <$> Set.toList vals)]) | ICK gate' guard v :=> ICV _ vals <- DMap.toList icr ]
 
 observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
 observeInputCoverage = observer mempty update pure

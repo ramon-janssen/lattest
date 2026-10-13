@@ -24,12 +24,13 @@ import      Data.Foldable (toList)
 import      Data.List (isPrefixOf)
 import      Data.Time (getZonedTime, formatTime, defaultTimeLocale, getCurrentTime, diffUTCTime)
 import      System.IO (hSetBuffering, stdout, BufferMode(..))
+import      Text.Printf (printf)
 
 run :: IO ()
 run = do
     hSetBuffering stdout LineBuffering
     putStrLn "loading STSs from JSON..."
-    result <- stsListFromJSONFile "detectors_2.json"
+    result <- stsListFromJSONFile "example.json"
     -- result <- stsListFromJSONFile "example_coffee_machine.json"
     stss <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
@@ -58,7 +59,7 @@ run = do
     let nrSteps = 30
         nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
         maxStale = 10 :: Int -- stop after this many consecutive test cases that did not increase coverage
-        randomSeed = 567
+        randomSeed = 678
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
 
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
@@ -82,20 +83,16 @@ run = do
         observeSwitchesTaken = observer Set.empty (\taken intrpr act mq -> pure $ taken <> switchesTaken intrpr mq act) pure
         switches      = allSwitches model
         inputSwitches = Set.filter isInputSwitch switches
-
-    -- one test case per seed
-    -- forM_ [1 .. nrTests] $ \n -> do
-    --     putStrLn $ "  test " ++ show n ++ "/" ++ show nrTests
-    --     let controller = randomDataTestSelectorFromSeed (randomSeed + n) `untilCondition` stopAfterSteps nrSteps `observingOnly` observer Nothing observeVerdict pure
-    --     tests <- evalStateT (offlineTests seqComposed controller) (mkStdGen (randomSeed + n))
-    --     appendTestTrace tracesFile seqComposed tests
-    -- putStrLn $ "wrote " ++ show nrTests ++ " test cases to " ++ tracesFile
+        -- covered/total, with the percentage
+        coverage :: Int -> Int -> String
+        coverage covered total = show covered ++ "/" ++ show total
+            ++ if total == 0 then "" else " (" ++ printf "%.1f" (100 * fromIntegral covered / fromIntegral total :: Double) ++ "%)"
 
     let composedFilename = "example_composed_mcdc_another.json"
     putStrLn $ "writing composition to file: " ++ composedFilename
     -- To write to a file:
-    -- stsToJSONFile composedFilename "stscomposed" mcdcComposed gs as es fs initVal
-    --stsToJSONFile "det_2_composed.json" "det2" (syntacticAutomaton seqComposed) gs as es initVal
+    stsToJSONFile composedFilename "stscomposedmcdc" mcdcComposed gs as es fs initVal
+
     writeFile tracesFile ""
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
@@ -119,9 +116,9 @@ run = do
                   -- the test case increases coverage: keep it
                   appendTestTrace tracesFile model (snd . fst <$> tests)
                   report' $ "kept, switch coverage "
-                      ++ show (Set.size switches - Set.size toCover') ++ "/" ++ show (Set.size switches)
+                      ++ coverage (Set.size switches - Set.size toCover') (Set.size switches)
                       ++ ", input switch coverage "
-                      ++ show (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) ++ "/" ++ show (Set.size inputSwitches)
+                      ++ coverage (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) (Set.size inputSwitches)
                   -- a test is a tree with a report and the switches taken per leaf, so merge over the leaves
                   let testReport = foldr (mergeInputCoverage . fst . snd) mempty (toList tests)
                       testTaken = foldMap (snd . snd) (toList tests)
@@ -141,7 +138,7 @@ run = do
         ++ show (length minimal) ++ " that are needed for the same coverage in " ++ tracesFile
     putStrLn $ show (length $ irreplaceable takenBy kept) ++ " of the test cases that increased coverage take a switch that none of the others take"
     putStrLn "input coverage of the test suite:"
-    putStr $ prettyPrintInputCoverage suiteReport
+    putStr $ prettyPrintInputCoverage es fs suiteReport
     putStrLn $ ("left to cover: " ++ show leftToCover)
 
 -- | Pick elements that together cover the same as all given elements: going from the last element to the first, pick the ones
