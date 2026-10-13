@@ -51,7 +51,7 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
+import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel(..), valuationToVarModel, getVariables, freeVars)
 import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..), mapSome)
@@ -65,6 +65,7 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
 import Data.Containers.ListUtils (nubOrdOn)
+import qualified Debug.Trace
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -399,8 +400,17 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         bfsPred :: SymNode loc -> IO Bool
         bfsPred = anyM (isSat . snd) . targetConds
 
+        -- For 'visited', we care about the location, as well as the varmodel at that location.
+        -- This isn't perfect, in particular because it refers to parameters, which makes it neither sound
+        -- (the search might not find something that is reachable) nor complete (the search might traverse switches multiple times even though the possible varmodels are equal),
+        -- but the whole search is still sound (everything it finds is reachable).
         key :: SymNode loc -> (loc, VarModel)
-        key (l, (_, v, _)) = (l, v)
+        key (l, (_, VarModel v, i)) =
+          ( l
+          , VarModel $ DMap.fromList
+                     $ map (\(Variable nm tp :=> e) -> Variable (take (length nm - length ('_':show i)) nm) tp :=> e)
+                     $ DMap.toList
+                     $ DMap.filterWithKey (\(Variable nm _) _ -> ('_':show i) `List.isSuffixOf` nm) v)
 
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
         targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
@@ -438,10 +448,10 @@ type SymNode loc = (loc, (SymGuard, VarModel, Int))
 -- self-rolled BFS that: works with monadic steps, distinguishes between vertices and edges, and returns the vertex it found together with
 -- the path it took as a list of edges. Vertices count as visited only if the location matches, but more info is carried.
 -- I haven't looked much into what else is on Hackage, maybe there's a much more elegant solution using something like Data.Graph
-breadthFirstSearch :: (Monad m, Ord k) => (a -> k) -> Set.Set k -> [(a, [b])] -> (a -> m [(a,b)]) -> (a -> m Bool) -> Int -> m (Maybe (a, [b]))
+breadthFirstSearch :: (Monad m, Ord k, Show k) => (a -> k) -> Set.Set k -> [(a, [b])] -> (a -> m [(a,b)]) -> (a -> m Bool) -> Int -> m (Maybe (a, [b]))
 breadthFirstSearch key visited frontier step predicate maxdepth
   | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
-  | otherwise = do
+  | Debug.Trace.traceShow visited otherwise = do
       new <- nubOrdOn (key . fst) -- we only keep one of each state, if there were multiple paths to get somewhere
           . concatMap (filter (not . (`Set.member` visited) . key . fst))
           <$> mapM

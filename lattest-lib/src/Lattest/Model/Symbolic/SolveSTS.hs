@@ -178,8 +178,8 @@ indexExpr :: Int -> Expr t -> Expr t
 indexExpr n = mapExpressionVars (indexVar n)
 
 indexVar :: Int -> Variable a -> Variable a
-indexVar 0 v = v
-indexVar n v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
+indexVar 0 v = v  -- don't add a suffix for 0 primes, this avoids dealign with primes in a 1-step lookahead
+indexVar n v
     | n < 0 = error $ "left symbolic variable with index " ++ show n
     | otherwise = v {varName = varName v ++ "_" ++ show n} -- Hack. Ideally we have a nice representation which avoids collisions, and maybe a statically typed distinction between primed and unprimed variables
 
