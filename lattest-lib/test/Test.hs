@@ -7,6 +7,7 @@ import Test.Lattest.Model.Internal.MCDCGeneration
 import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
+import Test.Lattest.Model.Symbolic.MCDCSTS
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
 import Test.Lattest.Util.STSJSONWriterTest
@@ -105,19 +106,6 @@ makeHUnitTests regenerate = do
         testSTSHappyFlowFloat,
         testSTSHappyFlowLists,
         testErrorThrowingGates,
-        testCompleteMCDC,
-        testCompleteMCDCConjunction,
-        testCompleteMCDCDependentAtoms,
-        testCompleteMCDCExclusiveAtoms,
-        testCompleteMCDCTuple,
-        testCompleteMCDCList,
-        testCompleteMCDCListLengths,
-        testCompleteMCDCListForall,
-        testCompleteMCDCListExists,
-        testCompleteMCDCErrors,
-        testCompleteMCDCListErrors,
-        testCompleteMCDCConfiguration,
-        testCompleteMCDCLocationVariable,
         testSTSUnHappyFlow,
         testComposedSeTreeStructure regenerate,
         testComposedPathCondition regenerate,
@@ -166,6 +154,7 @@ makeHUnitTests regenerate = do
         ++ evalTests
         ++ solveTests
         ++ mcdcGenerationTests
+        ++ mcdcSTSTests
 
 -- TODO: This wraps HUnit tests into a Tasty test.
 -- The reason we need this wrapper, is that plain HUnit
