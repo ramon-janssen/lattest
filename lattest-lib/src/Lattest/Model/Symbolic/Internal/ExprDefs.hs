@@ -855,6 +855,9 @@ data ExprView t where
     -- The first 'ExprView x' has the 'Variable a' in scope, the second 'ExprView x' has the 'Variable b' in scope.
     -- This is the `either` deconstructor in Haskell: (a -> x) -> (b -> x) -> Either a b -> x
     Either :: (ExprConstraints a, ExprConstraints b, ExprConstraints x) => Variable a -> Variable b -> ExprView x -> ExprView x -> ExprView (Either a b) -> ExprView x
+    -- Quantifiers: Introduce a variable that is in scope within the subexpression
+    Forall :: ExprConstraints a => Variable a -> ExprView Bool -> ExprView Bool
+    Exists :: ExprConstraints a => Variable a -> ExprView Bool -> ExprView Bool
     -- NOTE: when adding more fields, check the Eq instance
 
 type ExprConstraints t = (Data t, Eq t, Ord t, OrdSymbolic (SBV t), Show t, ExprType t, SymVal t, Eq t, ConstType t, Read t)
@@ -920,6 +923,12 @@ instance Eq (ExprView t) where
     | Just Refl <- geq ta tx
     , Just Refl <- geq tb ty
     = a == x && b == y && c == z
+  Forall a x == Forall b y
+    | Just Refl <- geq a b
+    = a == b && x == y
+  Exists a x == Exists b y
+    | Just Refl <- geq a b
+    = a == b && x == y
   _ == _ = False
 
 instance Ord (ExprView t) where
@@ -1040,6 +1049,14 @@ instance Ord (ExprView t) where
           GGT -> GT
           GEQ -> compare (v1, f, x, xs) (v1', g, y, ys)
       (Filter v1 f xs, Filter v2 g ys) -> compare (v1, f, xs) (v2, g, ys)
+      (Forall a x, Forall b y) -> case gcompare a b of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
+      (Exists a x, Exists b y) -> case gcompare a b of
+        GLT -> LT
+        GGT -> GT
+        GEQ -> compare x y
       _ ->
         compare (tag l) (tag r)
     where
@@ -1079,6 +1096,8 @@ instance Ord (ExprView t) where
         Foldr{} -> 34
         Foldl{} -> 35
         Zip{} -> 36
+        Forall{} -> 37
+        Exists{} -> 38
 
 
 instance Show (ExprView t) where
@@ -1124,6 +1143,8 @@ instance Show (ExprView t) where
     (Filter _ f xs) -> "filter " <> bshow f <> " " <> bshow xs
     (Foldr _ _ f i xs) -> "foldr " <> bshow f <> " " <> bshow i <> " " <> bshow xs
     (Foldl _ _ f i xs) -> "foldl " <> bshow f <> " " <> bshow i <> " " <> bshow xs
+    (Forall v x) -> "∀" <> show v <> " " <> show x
+    (Exists v x) -> "∃" <> show v <> " " <> show x
     where
       bshow x = let y = show x in if isJust (List.elemIndex ' ' y) then '(' : y <> ")" else y
 
@@ -1170,6 +1191,8 @@ instance Has ExprType ExprView where
     Filter _ _ x -> has @ExprType x k
     Foldr _ x _ _ _ -> has @ExprType x k
     Foldl x _ _ _ _ -> has @ExprType x k
+    Forall _ x -> has @ExprType x k
+    Exists _ x -> has @ExprType x k
 
 showFreeMonoid :: Show a => String -> (Integer -> String -> String) -> FreeMonoidX a -> String
 showFreeMonoid plusRepr multRepr (FMX p) = List.intercalate plusRepr $ showTerm <$> Map.assocs p
@@ -1246,4 +1269,6 @@ freeVars' (Either vl vr l r x) = filter (/= Some vl) (freeVars' l) ++ filter (/=
 freeVars' (Filter v f xs) = filter (/= Some v) (freeVars' f) ++ freeVars' xs
 freeVars' (Foldr v1 v2 f i xs) = filter (not . flip elem [Some v1, Some v2]) (freeVars' f) ++ freeVars' i ++ freeVars' xs
 freeVars' (Foldl v1 v2 f i xs) = filter (not . flip elem [Some v1, Some v2]) (freeVars' f) ++ freeVars' i ++ freeVars' xs
+freeVars' (Forall v x) = filter (/= Some v) (freeVars' x)
+freeVars' (Exists v x) = filter (/= Some v) (freeVars' x)
 

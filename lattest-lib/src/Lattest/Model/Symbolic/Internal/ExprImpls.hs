@@ -77,6 +77,10 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sLeft
 , sRight
 
+-- * Quantifiers
+, sForall
+, sExists
+
 -- * Substitution of var by value
 , VarModel(..)
 , assign
@@ -772,6 +776,12 @@ sInsert (view -> x) (view -> xs) = Expr $ SInsert x xs
 sSElem :: Expr a -> Expr (RCSet a) -> Expr Bool
 sSElem (view -> x) (view -> xs) = withExprConstraints x $ Expr $ SElem (typeOf' x) x xs
 
+sForall :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
+sForall v (view -> x) = Expr $ Forall v x
+
+sExists :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
+sExists v (view -> x) = Expr $ Exists v x
+
 -- | Apply String In Regular Expression operator on the provided value expressions.
 -- Preconditions are /not/ checked.
 --cstrStrInRe :: Expr -> Expr -> Expr
@@ -942,6 +952,8 @@ subst' ve (Either vl vr l r x) = Expr $ Either
   (view $ subst' ve l)
   (view $ subst' ve r)
   (view $ subst' ve x)
+subst' ve (Forall v x) = Expr $ Forall (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve x)
+subst' ve (Exists v x) = Expr $ Exists (case assignedExprWithDefault v ve of {Expr (Var v') -> v'; _ -> error "impossible"}) (view $ subst' ve x)
 
 
 -- | Evaluate the provided value expression.
@@ -1093,6 +1105,12 @@ reduce (Either vl vr (reduce -> l) (reduce -> r) (reduce -> x))
   | Const (Right x') <- x =
     reduce $ view $ subst' (VarModel $ DMap.singleton vr $ Expr $ Const x') r
   | otherwise = Either vl vr l r x
+reduce (Forall v (reduce -> x))
+  | Const b <- x = Const b
+  | otherwise = Forall v x
+reduce (Exists v (reduce -> x))
+  | Const b <- x = Const b
+  | otherwise = Exists v x
 
 mapExpressionVars :: (forall a. Variable a -> Variable a) -> Expr t -> Expr t
 mapExpressionVars f = Expr . mapExpressionVars' f . view
@@ -1132,4 +1150,6 @@ mapExpressionVars' f (Filter v x xs)         = Filter (f v) (mapExpressionVars' 
 mapExpressionVars' f (Foldr v1 v2 g i xs)    = Foldr (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
 mapExpressionVars' f (Foldl v1 v2 g i xs)    = Foldl (f v1) (f v2) (mapExpressionVars' f g) (mapExpressionVars' f i) (mapExpressionVars' f xs)
 mapExpressionVars' f (Either v1 v2 l r x)    = Either (f v1) (f v2) (mapExpressionVars' f l) (mapExpressionVars' f r) (mapExpressionVars' f x)
+mapExpressionVars' f (Forall v x)            = Forall (f v) (mapExpressionVars' f x)
+mapExpressionVars' f (Exists v x)            = Exists (f v) (mapExpressionVars' f x)
 
