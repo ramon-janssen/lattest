@@ -7,7 +7,6 @@ import      Lattest.Model.StandardAutomata
 import      Lattest.Model.Symbolic.SolveSTS (offlineTests)
 import      Lattest.Util.ReportUtils (appendTestTrace)
 import      Lattest.Model.Symbolic.Expr (getVariables)
-import      Lattest.Model.Symbolic.MCDCSTS (SplitMode(..), completeMCDCReportWith, prettyMCDCReport)
 import      Lattest.Model.Alphabet (IOAct(..), SymInteract(..))
 import      Lattest.Exec.StandardTestControllers
 import      Lattest.Exec.StandardTestControllers.CompleteTestSuite (slowRandomInputCoverer, allSwitches, isInputSwitch, switchesTaken, observeInputCoverage, mergeInputCoverage, prettyPrintInputCoverage)
@@ -21,7 +20,6 @@ import      Data.Tuple (swap)
 import      Control.Monad.State (evalStateT)
 import      System.Random (mkStdGen)
 import      Data.Foldable (toList)
-import      Data.List (isPrefixOf)
 import      Data.Time (getZonedTime, formatTime, defaultTimeLocale, getCurrentTime, diffUTCTime)
 import      System.IO (hSetBuffering, stdout, BufferMode(..))
 import      Text.Printf (printf)
@@ -41,7 +39,7 @@ run = do
     let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _,_, _, _) <- stss ]
         conjunctedSTS = conjunctionAll checked
         conjunctModel = interpretSTS conjunctedSTS initVal
-        --seqComposed = conjmodel |>> conjmodel
+
         (seqSelfComposed, discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
         (seqComposed, discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
         initVal  = case stss of
@@ -52,11 +50,9 @@ run = do
         es =                                        Map.unions $ map (\(_,_,_,_,_,e,_) -> e) stss
         fs =                                        Map.unions $ map (\(_,_,_,_,_,_,f) -> f) stss
 
-    --putStrLn $ prettyPrintIntrp seqComposed
-    --print discardedTransit
     timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
     putStrLn ("computing offline test cases..." ++ timestamp)
-    let nrSteps = 30
+    let nrSteps = 16
         nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
         maxStale = 10 :: Int -- stop after this many consecutive test cases that did not increase coverage
         randomSeed = 678
@@ -70,15 +66,7 @@ run = do
     
     writeFile tracesFile ""
 
-    putStrLn "completing MCDC..."
-    let seqComposedSTS = syntacticAutomaton seqComposed
-        inputGates = ["In1", "In4", "In5", "In8", "In7"]
-        -- the guards that restrict a parameter to its domain are named G_<parameter>.<constraint>
-        domainGuards = [ guard | (_, _, guards, _, _, _, _) <- stss, (name, guard) <- Map.toList guards, "G_" `isPrefixOf` name ]
-    (mcdcComposed, mcdcReport) <- completeMCDCReportWith SplitInitial [1,2] domainGuards seqComposedSTS inputGates
-    putStrLn $ prettyMCDCReport mcdcReport
-    -- the MC/DC completed model is the one that is tested
-    let model = interpretSTS mcdcComposed initVal
+    let model = seqComposed
         -- all switches taken in a test case, also the ones that were covered by an earlier test case
         observeSwitchesTaken = observer Set.empty (\taken intrpr act mq -> pure $ taken <> switchesTaken intrpr mq act) pure
         switches      = allSwitches model
@@ -88,10 +76,10 @@ run = do
         coverage covered total = show covered ++ "/" ++ show total
             ++ if total == 0 then "" else " (" ++ printf "%.1f" (100 * fromIntegral covered / fromIntegral total :: Double) ++ "%)"
 
-    let composedFilename = "example_composed_mcdc_another.json"
+    let composedFilename = "example_composed.json"
     putStrLn $ "writing composition to file: " ++ composedFilename
     -- To write to a file:
-    stsToJSONFile composedFilename "stscomposedmcdc" mcdcComposed gs as es fs initVal
+    stsToJSONFile composedFilename "stscomposed" (syntacticAutomaton seqComposed) gs as es fs initVal
 
     writeFile tracesFile ""
 
