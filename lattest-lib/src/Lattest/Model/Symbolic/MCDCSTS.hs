@@ -117,9 +117,8 @@ hasFoldLength params e = case e of
 
 {- |
     Split a guard into @(side conditions, rest)@. A side condition is a
-    conjunct of the guard that compares the length of a fold over an opened
-    list, or that is one of the given domain conjuncts. It is not opened 
-    and it has no atoms: it holds on every row of the rest of the guard.
+    length guard or a domain guard, met by all possible values of a parameter,
+    regardless of MC/DC rows.
 
     A domain conjunct on the length of an opened list is not a side condition:
     it is a constant for each length, like any other condition on the length.
@@ -179,8 +178,6 @@ elementConditions n x cond xs =
         becomes a count ('MCDC.Count') of the condition on each element.
         Conditions on the same count are combined, e.g.
         @count >= 1 && count <= 2@.
-
-      * A comparison with the length of an opened list is a constant.
 -}
 openGuard :: Int -> Set.Set (Some Variable) -> ExprView Bool -> Either String Opened
 openGuard n params = close <=< open
@@ -349,6 +346,8 @@ splitGuard lengths params guard = do
   return ([ row | (row, True, _, _, _) <- rows ], [ row | (row, False, _, _, _) <- rows ])
 
 -- | The list lengths that 'completeMCDC' opens the list parameters for.
+-- TODO: This is a temporary workaround. The correct thing would be to infere the possible lengths based
+-- on the length guard (if existent) or other guards.
 defaultListLengths :: [Int]
 defaultListLengths = [0 .. 3]
 
@@ -490,11 +489,9 @@ prettyMCDCReport (MCDCReport guards) = unlines $ concatMap prettyGuard guards ++
     that satisfy the original guard but are not an MCDC row become
     underspecified.
 
-    The false rows of a guard should be covered by the other switches on the
-    same gate in the location configuration: those at the same location, and
-    those at the other locations of each reachable configuration that the
-    location is part of. A false row that is not
-    covered is underspecified, so no test exercises it; the report marks it as
+    The false rows of a guard should be covered by the other switches with the
+    same gate in the given location. A false row that is not covered is 
+    underspecified, so no test exercises it; the report marks it as
     'NotCovered'. Only the parameters of the gate can be controlled by a test,
     so a false row is ignored if the atoms that it is a false row for have no
     gate parameter.
