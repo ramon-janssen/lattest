@@ -1,0 +1,148 @@
+loading STSs from JSON...
+computing offline test cases...2026-10-14_13-29-50
+completing MCDC...
+gate ?"In1" [faulty-detectors_p:[(Int, Real)]], guard ((length (filter (((fst e1) = critical-section-lane)∧(¬((-critical-section-end+snd e1) ≥ 0))∧(¬((critical-section-start+-snd e1) ≥ 0))) faulty-detectors_p)) = 1)∧((length (foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p)) = (length faulty-detectors_p))∧(enabledness = True)∧(availability = (Left ()))∧((3+-length faulty-detectors_p) ≥ 0)∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p))∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p))
+  at Left ("sts_002","L0_2") -> Left ("sts_002","L1_2"), split into 3 switch(es)
+  length 1:
+    c1 = (fst (head faulty-detectors_p)) = critical-section-lane
+    c2 = (-critical-section-end+snd (head faulty-detectors_p)) ≥ 0
+    c3 = (critical-section-start+-snd (head faulty-detectors_p)) ≥ 0
+    c4 = enabledness = True
+    c5 = availability = (Left ())
+    c1 c2 c3 c4 c5 | out | status
+    T  F  F  T  T  |  T  | added
+    F  F  F  T  T  |  F  | covered (false row for c1)
+    T  T  F  T  T  |  F  | covered (false row for c2)
+    T  F  T  T  T  |  F  | covered (false row for c3)
+    T  F  F  F  T  |  F  | skipped, no gate parameter (false row for c4)
+    T  F  F  T  F  |  F  | skipped, no gate parameter (false row for c5)
+  length 2:
+    c1 = (fst (head faulty-detectors_p)) = critical-section-lane
+    c2 = (-critical-section-end+snd (head faulty-detectors_p)) ≥ 0
+    c3 = (critical-section-start+-snd (head faulty-detectors_p)) ≥ 0
+    c4 = (fst (head (tail faulty-detectors_p))) = critical-section-lane
+    c5 = (-critical-section-end+snd (head (tail faulty-detectors_p))) ≥ 0
+    c6 = (critical-section-start+-snd (head (tail faulty-detectors_p))) ≥ 0
+    c7 = enabledness = True
+    c8 = availability = (Left ())
+    c1 c2 c3 c4 c5 c6 c7 c8 | out | status
+    T  F  F  F  F  F  T  T  |  T  | added
+    F  F  F  F  F  F  T  T  |  F  | covered (false row for c1, c4)
+    T  T  F  F  F  F  T  T  |  F  | covered (false row for c2)
+    T  F  T  F  F  F  T  T  |  F  | covered (false row for c3)
+    F  F  F  T  F  F  T  T  |  T  | added
+    F  F  F  T  T  F  T  T  |  F  | covered (false row for c5)
+    F  F  F  T  F  T  T  T  |  F  | covered (false row for c6)
+    T  F  F  F  F  F  F  T  |  F  | skipped, no gate parameter (false row for c7)
+    T  F  F  F  F  F  T  F  |  F  | skipped, no gate parameter (false row for c8)
+
+gate ?"In1" [faulty-detectors_p:[(Int, Real)]], guard ((length (foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p)) = (length faulty-detectors_p))∧(enabledness = True)∧(availability = (Left ()))∧((-2+length (filter (((fst e1) = critical-section-lane)∧(¬((-critical-section-end+snd e1) ≥ 0))∧(¬((critical-section-start+-snd e1) ≥ 0))) faulty-detectors_p)) ≥ 0)∧((3+-length faulty-detectors_p) ≥ 0)∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p))∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p))
+  at Left ("sts_003","L0_3") -> Left ("sts_003","L1_3"), split into 1 switch(es)
+  length 2:
+    c1 = (fst (head faulty-detectors_p)) = critical-section-lane
+    c2 = (-critical-section-end+snd (head faulty-detectors_p)) ≥ 0
+    c3 = (critical-section-start+-snd (head faulty-detectors_p)) ≥ 0
+    c4 = (fst (head (tail faulty-detectors_p))) = critical-section-lane
+    c5 = (-critical-section-end+snd (head (tail faulty-detectors_p))) ≥ 0
+    c6 = (critical-section-start+-snd (head (tail faulty-detectors_p))) ≥ 0
+    c7 = enabledness = True
+    c8 = availability = (Left ())
+    c1 c2 c3 c4 c5 c6 c7 c8 | out | status
+    T  F  F  T  F  F  T  T  |  T  | added
+    F  F  F  T  F  F  T  T  |  F  | covered (false row for c1)
+    T  T  F  T  F  F  T  T  |  F  | covered (false row for c2)
+    T  F  T  T  F  F  T  T  |  F  | covered (false row for c3)
+    T  F  F  F  F  F  T  T  |  F  | covered (false row for c4)
+    T  F  F  T  T  F  T  T  |  F  | covered (false row for c5)
+    T  F  F  T  F  T  T  T  |  F  | covered (false row for c6)
+    T  F  F  T  F  F  F  T  |  F  | skipped, no gate parameter (false row for c7)
+    T  F  F  T  F  F  T  F  |  F  | skipped, no gate parameter (false row for c8)
+  length 1: the guard does not hold for any list
+
+gate ?"In1" [faulty-detectors_p:[(Int, Real)]], guard ((length (foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p)) = (length faulty-detectors_p))∧(enabledness = True)∧(availability = (Left ()))∧((3+-length faulty-detectors_p) ≥ 0)∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ¬(((fst e1) = critical-section-lane)∧(¬((-critical-section-end+snd e1) ≥ 0))∧(¬((critical-section-start+-snd e1) ≥ 0)))) faulty-detectors_p))∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p))∧(foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p))
+  at Left ("sts_001","L0_1") -> Left ("sts_001","L1_1"), split into 8 switch(es)
+  length 1:
+    c1 = enabledness = True
+    c2 = availability = (Left ())
+    c3 = (fst (head faulty-detectors_p)) = critical-section-lane
+    c4 = (-critical-section-end+snd (head faulty-detectors_p)) ≥ 0
+    c5 = (critical-section-start+-snd (head faulty-detectors_p)) ≥ 0
+    c1 c2 c3 c4 c5 | out | status
+    T  T  F  F  F  |  T  | added
+    F  T  F  F  F  |  F  | skipped, no gate parameter (false row for c1)
+    T  F  F  F  F  |  F  | skipped, no gate parameter (false row for c2)
+    T  T  T  F  F  |  F  | covered (false row for c3, c4, c5)
+    T  T  T  T  F  |  T  | added
+    T  T  T  F  T  |  T  | added
+  length 2:
+    c1 = enabledness = True
+    c2 = availability = (Left ())
+    c3 = (fst (head faulty-detectors_p)) = critical-section-lane
+    c4 = (-critical-section-end+snd (head faulty-detectors_p)) ≥ 0
+    c5 = (critical-section-start+-snd (head faulty-detectors_p)) ≥ 0
+    c6 = (fst (head (tail faulty-detectors_p))) = critical-section-lane
+    c7 = (-critical-section-end+snd (head (tail faulty-detectors_p))) ≥ 0
+    c8 = (critical-section-start+-snd (head (tail faulty-detectors_p))) ≥ 0
+    c1 c2 c3 c4 c5 c6 c7 c8 | out | status
+    T  T  F  F  F  F  F  F  |  T  | added
+    F  T  F  F  F  F  F  F  |  F  | skipped, no gate parameter (false row for c1)
+    T  F  F  F  F  F  F  F  |  F  | skipped, no gate parameter (false row for c2)
+    T  T  T  F  F  F  F  F  |  F  | covered (false row for c3, c4, c5)
+    T  T  T  T  F  F  F  F  |  T  | added
+    T  T  T  F  T  F  F  F  |  T  | added
+    T  T  F  F  F  T  F  F  |  F  | covered (false row for c6, c7, c8)
+    T  T  F  F  F  T  T  F  |  T  | added
+    T  T  F  F  F  T  F  T  |  T  | added
+
+summary: 3 switch(es) split into 12; 0 row(s) without solution, 0 false row(s) not covered by any other switch, in 3 distinct guard(s)
+
+writing composition to file: example_composed_mcdc.json
+13:30:25 test 1 (3.818123662s): kept, switch coverage 9/41 (22.0%), input switch coverage 6/33 (18.2%)
+13:30:27 test 2 (1.659313177s): kept, switch coverage 13/41 (31.7%), input switch coverage 9/33 (27.3%)
+13:30:27 test 3 (0.382511476s): kept, switch coverage 16/41 (39.0%), input switch coverage 11/33 (33.3%)
+13:30:30 test 4 (2.682641454s): kept, switch coverage 17/41 (41.5%), input switch coverage 12/33 (36.4%)
+13:30:35 test 5 (4.402491623s): kept, switch coverage 22/41 (53.7%), input switch coverage 16/33 (48.5%)
+13:30:38 test 6 (3.766950237s): kept, switch coverage 24/41 (58.5%), input switch coverage 18/33 (54.5%)
+13:30:50 test 7 (12.185615503s): kept, switch coverage 29/41 (70.7%), input switch coverage 22/33 (66.7%)
+13:31:01 test 8 (10.491088507s): kept, switch coverage 31/41 (75.6%), input switch coverage 24/33 (72.7%)
+13:31:16 test 9 (14.600633071s): kept, switch coverage 34/41 (82.9%), input switch coverage 27/33 (81.8%)
+13:31:22 test 10 (6.096837978s): kept, switch coverage 38/41 (92.7%), input switch coverage 30/33 (90.9%)
+13:31:31 test 11 (9.636323188s): kept, switch coverage 39/41 (95.1%), input switch coverage 31/33 (93.9%)
+13:31:38 test 12 (7.08538652s): kept, switch coverage 40/41 (97.6%), input switch coverage 32/33 (97.0%)
+13:31:43 test 13 (4.464723413s): kept, switch coverage 41/41 (100.0%), input switch coverage 33/33 (100.0%)
+stopped: full switch coverage reached
+generated 13 test cases, of which 13 increased coverage; kept the 13 that are needed for the same coverage in test_traces_2026-10-14_13-29-50.txt
+13 of the test cases that increased coverage take a switch that none of the others take
+input coverage of the test suite:
+"In1"
+  guard: if len(faulty-detectors_p) == 1 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[0].length-position >= critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,2.6)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 1 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && enabledness && availability == (Left ()) && critical-section-start >= faulty-detectors_p[0].length-position && faulty-detectors_p[0].length-position < critical-section-end && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,1.1)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 1 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[0].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,2.4)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 1 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && enabledness && availability == (Left ()) && faulty-detectors_p[0].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(2,1.725)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && faulty-detectors_p[1].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[0].length-position < critical-section-end && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,13 % 6),(1,11 % 6)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[0].length-position >= critical-section-end && faulty-detectors_p[1].lane != critical-section-lane && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,2.5),(2,1.625)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && enabledness && availability == (Left ()) && critical-section-start >= faulty-detectors_p[0].length-position && faulty-detectors_p[1].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,1.09609375),(2,1.95859375)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[0].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[1].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(1,1.625),(2,1.625)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[1].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[1].length-position >= critical-section-end && faulty-detectors_p[0].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(2,1.6),(1,2.5)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[1].lane == critical-section-lane && enabledness && availability == (Left ()) && critical-section-start >= faulty-detectors_p[1].length-position && faulty-detectors_p[0].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(2,97 % 60),(1,1.5)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && faulty-detectors_p[1].lane == critical-section-lane && enabledness && availability == (Left ()) && faulty-detectors_p[0].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(2,11 % 6),(1,5 % 3)] (1 different input values)
+  guard: if len(faulty-detectors_p) == 2 then len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && enabledness && availability == (Left ()) && faulty-detectors_p[0].lane != critical-section-lane && faulty-detectors_p[1].lane != critical-section-lane && faulty-detectors_p[0].length-position < critical-section-end && faulty-detectors_p[1].length-position < critical-section-end && critical-section-start < faulty-detectors_p[0].length-position && critical-section-start < faulty-detectors_p[1].length-position && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p)) else False
+    faulty-detectors_p: [(3,1.5125),(3,1.6625)] (1 different input values)
+  guard: len(filter (((fst e1) = critical-section-lane)∧(¬((-critical-section-end+snd e1) ≥ 0))∧(¬((critical-section-start+-snd e1) ≥ 0))) faulty-detectors_p) == 1 && len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && enabledness && availability == (Left ()) && len(faulty-detectors_p) <= 3 && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p))
+    faulty-detectors_p: [(1,2.1)], [(1,2.4)] (2 different input values)
+  guard: len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && enabledness && availability == (Left ()) && len(filter (((fst e1) = critical-section-lane)∧(¬((-critical-section-end+snd e1) ≥ 0))∧(¬((critical-section-start+-snd e1) ≥ 0))) faulty-detectors_p) >= 2 && len(faulty-detectors_p) <= 3 && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p))
+    faulty-detectors_p: [(1,1.725),(1,1.6)], [(1,1.825),(1,1.503125)] (2 different input values)
+  guard: len(foldr (if uniqueIterator`elem`uniqueSeen then uniqueSeen else uniqueIterator:uniqueSeen) [] faulty-detectors_p) == len(faulty-detectors_p) && enabledness && availability == (Left ()) && len(faulty-detectors_p) <= 3 && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ¬(((fst e1) = critical-section-lane)∧(¬((-critical-section-end+snd e1) ≥ 0))∧(¬((critical-section-start+-snd e1) ≥ 0)))) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> ((-1+fst e1) ≥ 0)∧((3+-fst e1) ≥ 0)) faulty-detectors_p)) && (foldr forallAccumulator∧forallIterator True (map (\e1:(Int, Real) -> (¬((-3.0+snd e1) ≥ 0))∧(¬((1.0+-snd e1) ≥ 0))) faulty-detectors_p))
+    faulty-detectors_p: [], [(3,1.5)] (2 different input values)
+left to cover: fromList []
