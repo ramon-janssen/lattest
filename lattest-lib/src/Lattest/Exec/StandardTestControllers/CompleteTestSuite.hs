@@ -51,7 +51,7 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
+import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars, sAnd, sNot, sExists)
 import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..), mapSome)
@@ -352,7 +352,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
             Right currStates -> do
               let initial = [ (loc, (sTrue, valuationToVarModel v, 0)) | IntrpState loc v <- Set.toList currStates ]
               -- only look for plans that can be completed, including taking the uncovered switch afterwards, in the steps that are left
-              found <- breadthFirstSearch key (Set.fromList $ map key initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
+              found <- breadthFirstSearch2 key visit substract (Map.fromList $ map (\a -> (key a, a)) initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
               (plan, g''') <- runStateT (maybe (pure Nothing) concretise found) g''
               case plan of
                 -- Note: the plan only goes to a state where the switch _can_ be taken, but doens't take it.
@@ -399,16 +399,40 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         bfsPred :: SymNode loc -> IO Bool
         bfsPred = anyM (isSat . snd) . targetConds
 
-        -- We currently use just the set of visited locations in the BFS. Ideally, we want something
-        -- that's stricter (i.e. considers less things to be equal), but the obvious candidates
-        -- (namely (loc, [gate]) and (loc, VarModel)) are both too strict (making the search take too long, by revisiting nodes too often).
-        -- The ideal 'key' would represent exactly the space of concrete Valuations that are possible at this location,
-        -- and the ideal BFS would check whether the resulting space from a 'step' is a subset of the union of the spaces we have already seen,
-        -- adding only the unseen part of it to the 'frontier'.
-        -- Too strict keys make the search infeasibly slow, too lax keys make the search unable to find certain reachable states (e.g. coffee machine).
-        -- Neither make the testcontroller unsound, they just make it worse at covering all switches.
         key :: SymNode loc -> loc
         key = fst
+
+        visit :: SymNode loc -> SymNode loc -> SymNode loc
+        visit (l1, (g1, v1, _)) (l2, (g2, v2, _))
+          | l1 == l2 = (l1, (g3,v3,undefined))
+            where
+              -- TODO:
+              -- - rename parameters in both guard and varmodel to avoid clashes
+              -- - return a guard&varmodel that together represent the union ('or')
+              --   of the spaces. The varmodel should resolve each conflict by
+              --   assigning to a variable. The guard should be one big 'or' of
+              --   two guards, each of which includes the corresponding original guard
+              --   as well as equalities of the aforementioned variables to their valuations
+              --   in the original varmodels.
+              g3 = _ -- g1' || g2'
+              v3 = _
+        visit _ _ = error "mismatched locs"
+
+        substract :: SymNode loc -> SymNode loc -> SymNode loc
+        -- TODO:
+        -- return roughly "this && not (exists parameters exceptthat)"
+        -- That corresponds to the solution space that is accepted by 'this',
+        -- but not satisfiable by 'exceptthat'.
+        substract this@(l, (g,v,i)) exceptthat@(_,(g',v',_)) = (l, (guard,v,i))
+          where
+            guard = sAnd $ Set.fromList
+              [ g
+              , sNot
+              $ sExists _ -- TODO: exists over all parameters in exceptthat
+              $ sAnd
+              $ Set.fromList
+                [ g'
+                , _ v']] -- TODO: extract a guard from the varmodel
 
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
         targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
@@ -458,5 +482,20 @@ breadthFirstSearch key visited frontier step predicate maxdepth
       let newVisited = Set.union (Set.fromList $ map (key . fst) new) visited
       findM (predicate . fst) new >>= \case
         Nothing -> breadthFirstSearch key newVisited new step predicate (maxdepth - 1)
+        Just (a, path) -> pure $ Just (a, reverse path) -- the path was built up back to front
+
+-- Like breadthFirstSearch, but more fine-grained. Where bFS represents visited nodes with 'k' (using Eq),
+-- bFS2 keeps track of an 'a' per visited node. It requires a way to combine multiple visited 'a's,
+-- and a way to substract the visited 'a' from a new node.
+breadthFirstSearch2 :: (Monad m, Ord k) => (a -> k) -> (a -> a -> a) -> (a -> a -> a) -> Map.Map k a -> [(a, [b])] -> (a -> m [(a,b)]) -> (a -> m Bool) -> Int -> m (Maybe (a, [b]))
+breadthFirstSearch2 key visit substract visited frontier step predicate maxdepth
+  | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
+  | otherwise = do
+      new <- concat <$> mapM
+            (\(a,bs) -> map (\(a',b') -> (a', b':bs)) <$> step (maybe a (substract a) $ visited Map.!? key a))
+            frontier
+      let newVisited = foldr (\(a,_) -> Map.insertWith visit (key a) a) visited new
+      findM (predicate . fst) new >>= \case
+        Nothing -> breadthFirstSearch2 key visit substract newVisited new step predicate (maxdepth - 1)
         Just (a, path) -> pure $ Just (a, reverse path) -- the path was built up back to front
 
