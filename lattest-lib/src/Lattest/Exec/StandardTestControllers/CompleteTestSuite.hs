@@ -40,7 +40,7 @@ import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, 
 import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, TransitionMapping (..), STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
 import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp, allLocations, symStep)
-import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard, isGuardSatisfiable, solveGuardAny, valuationToGateValue)
+import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard, isGuardSatisfiable, solveGuard, valuationToGateValue)
 
 import Control.Monad (forM, (>=>), filterM)
 import qualified Data.List as List
@@ -411,7 +411,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         -- pick values for the gates along the path, such that an uncovered switch can be taken at the end of it
         concretise :: (SymNode loc, [IOSymInteract i' o]) -> StateT StdGen IO (Maybe [act])
         concretise (node, path) = fmap (\valuation -> map (`valuationToGateValue` valuation) path)
-          <$> firstJustM (\(targetVars, cond) -> solveGuardAny (pathVars ++ targetVars) cond) (targetConds node)
+          <$> firstJustM (\(targetVars, cond) -> solveGuard (pathVars ++ targetVars) cond) (targetConds node)
           where pathVars = concat [ vars | SymInteract _ vars <- path ]
 
     -- note: coverage is computed from the `m q` before the transition, which is passed in as the last argument.
