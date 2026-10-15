@@ -734,4 +734,5 @@ stsListFromJSONFile path = do
         Right stsJsons -> forM stsJsons convertSTSJson
 
 instance JSON.FromJSON AlgReal where
-  parseJSON x = fromRational . toRational <$> JSON.parseJSON @Double x
+  -- convert from the decimal JSON number directly
+  parseJSON = JSON.withScientific "real" (pure . fromRational . toRational)
