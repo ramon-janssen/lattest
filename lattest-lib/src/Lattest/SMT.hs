@@ -23,6 +23,7 @@ module Lattest.SMT (
   query,
   runSMT,
   runSMTWith,
+  runSMTWithFallback,
   Solver(..),
   Some(..),
   RCSet(..),
@@ -58,6 +59,8 @@ import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
 import System.Random (RandomGen, genWord32)
+import Control.Exception (ErrorCall, Handler (..), catches)
+import System.IO (hPutStr, stderr)
 
 
 --------------------
@@ -89,26 +92,47 @@ smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 data Solver = Z3 | CVC5
      deriving (Eq,Ord,Read,Show)
 
+-- | Run an SMT problem with cvc5, falling back to Z3 if cvc5 fails. Both solvers have problems that the other does not
+-- have: cvc5 can crash while building a model for sequences, or return a value that SBV cannot parse (such as
+-- @(seq.nth (as seq.empty ...) 0)@ for an unconstrained element), while Z3 can hang on sequences without a length bound.
 runSMT :: RandomGen g => g -> SMT a -> (IO a, g)
-runSMT = runSMTWith Z3
+runSMT = runSMTWithFallback CVC5 [Z3]
 
 -- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
 -- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
 runSMTWith :: RandomGen g => Solver -> g -> SMT a -> (IO a, g)
-runSMTWith solver g smt = (,g') $ lookupEnv "LATTEST_SMT_DUMP" >>= \case
-  Nothing -> run config
-  Just file -> do
-    start <- getCurrentTime
-    appendFile file $ "** SMT call started at " <> show start <> "\n"
-    result <- run config { SBV.verbose = True, SBV.redirectVerbose = Just file }
-    end <- getCurrentTime
-    appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
-    return result
+runSMTWith solver = runSMTWithFallback solver []
+
+-- | Like 'runSMTWith', but if the solver fails (it crashes, or SBV cannot parse its response), the whole problem is
+-- run again with the next solver in the list. Only the last solver's failure is rethrown. Note that errors in lazily
+-- parsed parts of the result are only raised when they are evaluated, after the fallback is no longer possible.
+runSMTWithFallback :: RandomGen g => Solver -> [Solver] -> g -> SMT a -> (IO a, g)
+runSMTWithFallback solver fallbacks g smt = (,g') $ go solver fallbacks
   where
+    go s [] = runSolver s
+    go s (next:rest) = runSolver s `catches`
+      [ Handler $ \(e :: SBV.SBVException) -> retry s next rest $ show e
+      , Handler $ \(e :: ErrorCall) -> retry s next rest $ show e
+      ]
+    retry s next rest err = do
+      let msg = "** " <> show s <> " failed, retrying with " <> show next <> ":\n" <> err <> "\n"
+      hPutStr stderr msg
+      lookupEnv "LATTEST_SMT_DUMP" >>= mapM_ (`appendFile` msg)
+      go next rest
+    runSolver s = lookupEnv "LATTEST_SMT_DUMP" >>= \case
+      Nothing -> run (config s)
+      Just file -> do
+        start <- getCurrentTime
+        appendFile file $ "** SMT call started at " <> show start <> "\n"
+        result <- run (config s) { SBV.verbose = True, SBV.redirectVerbose = Just file }
+        end <- getCurrentTime
+        appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
+        return result
     run cfg = SBV.runSMTWith (cfg {SBV.solverSetOptions = SBV.RandomSeed seed : SBV.solverSetOptions cfg}) $ evalStateT smt Map.empty
-    config = case solver of
+    config = \case
       Z3 -> SBV.z3
-      CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound"] }
+      -- --arrays-exp: SBV encodes sets as constant arrays ('as const'), which cvc5 only supports with this flag
+      CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound", "--arrays-exp"] }
     (toInteger -> seed, g') = genWord32 g
 
 query :: SMTQ a -> SMT a
