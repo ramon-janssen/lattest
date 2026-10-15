@@ -110,7 +110,7 @@ isGuardSatisfiable vars guard = do
           Unsat -> return $ Just False
           Unknown -> Nothing <$ warnUnknown guard
       forM_ outcome \isSat -> atomicModifyIORef' satisfiableCache $ \c -> (Map.insert guard isSat c, ())
-      return outcome
+      return $ fromMaybe False outcome
 
 -- the guards solved so far by `isGuardSatisfiable`, with their outcome
 satisfiableCache :: IORef (Map.Map SymGuard Bool)
