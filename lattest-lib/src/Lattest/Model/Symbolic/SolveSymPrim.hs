@@ -18,7 +18,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
-import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith)
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith, push, pop)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
@@ -110,7 +110,7 @@ isGuardSatisfiable vars guard = do
           Unsat -> return $ Just False
           Unknown -> Nothing <$ warnUnknown guard
       forM_ outcome \isSat -> atomicModifyIORef' satisfiableCache $ \c -> (Map.insert guard isSat c, ())
-      return $ fromMaybe False outcome
+      return outcome
 
 -- the guards solved so far by `isGuardSatisfiable`, with their outcome
 satisfiableCache :: IORef (Map.Map SymGuard Bool)
@@ -149,22 +149,45 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
         Unknown -> (Nothing, randomgen) <$ warnUnknown guard
-        Sat -> getSolution vars >>= \x -> go randomgen extraSolutions x []
+        Sat -> getSolution vars >>= \x -> go randomgen extraSolutions True x []
   where
-    -- the solutions found so far are the newest one and the older ones
-    go :: RandomGen g => g -> Int -> Valuation -> [Valuation] -> SMTQ (Maybe Valuation, g)
-    go g 0 x xs = do
+    -- the solutions found so far are the newest one and the older ones. The flag tells whether to still try to find
+    -- a solution in which every variable differs from all solutions found so far.
+    go :: RandomGen g => g -> Int -> Bool -> Valuation -> [Valuation] -> SMTQ (Maybe Valuation, g)
+    go g 0 _ x xs = do
       let (ix, g') = randomR (0, length xs) g
       pure (Just $ (x : xs) !! ix, g')
-    go g n x xs = do
-      -- assertions accumulate (there is no push/pop), so only the newest solution has to be excluded
+    go g n tryAllDifferent x xs = do
+      -- assertions accumulate, so only the newest solution has to be excluded
       addAssertionsQ [atleastoneisdifferent x]
-      getSolvable >>= \case
-        Unsat -> go g 0 x xs
-        Unknown -> warnUnknown guard >> go g 0 x xs
-        Sat -> do
-          x' <- getSolution vars
-          go g (n-1) x' (x : xs)
+      allDifferent <- if tryAllDifferent then solveAllDifferent (x : xs) else pure Nothing
+      case allDifferent of
+        Just x' -> go g (n-1) True x' (x : xs)
+        -- once no solution differs in every variable, adding more solutions will not change that
+        Nothing -> getSolvable >>= \case
+          Unsat -> go g 0 False x xs
+          Unknown -> warnUnknown guard >> go g 0 False x xs
+          Sat -> do
+            x' <- getSolution vars
+            go g (n-1) False x' (x : xs)
+
+    -- look for a solution in which every variable differs from the given solutions, without keeping that requirement
+    -- afterwards. Variables that can only have one value are ignored.
+    solveAllDifferent :: [Valuation] -> SMTQ (Maybe Valuation)
+    solveAllDifferent xs = do
+      push
+      addAssertionsQ [ isNot v | x <- xs, v <- DMap.assocs $ runValuation x, hasMultipleValues v ]
+      outcome <- getSolvable
+      x' <- case outcome of
+        Sat -> Just <$> getSolution vars
+        _ -> pure Nothing
+      pop
+      pure x'
+
+    hasMultipleValues :: DSum Variable Val -> Bool
+    hasMultipleValues (var :=> _) = case varType var of
+      E.UnitType -> False
+      _ -> True
 
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
