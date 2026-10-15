@@ -149,20 +149,22 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
         Unknown -> (Nothing, randomgen) <$ warnUnknown guard
-        Sat -> getSolution vars >>= go randomgen extraSolutions . pure
+        Sat -> getSolution vars >>= \x -> go randomgen extraSolutions x []
   where
-    go :: RandomGen g => g -> Int -> [Valuation] -> SMTQ (Maybe Valuation, g)
-    go g 0 xs = do
-      let (ix, g') = randomR (0, length xs - 1) g
-      pure (Just $ xs !! ix, g')
-    go g n xs = do
-      addAssertionsQ $ map atleastoneisdifferent xs
+    -- the solutions found so far are the newest one and the older ones
+    go :: RandomGen g => g -> Int -> Valuation -> [Valuation] -> SMTQ (Maybe Valuation, g)
+    go g 0 x xs = do
+      let (ix, g') = randomR (0, length xs) g
+      pure (Just $ (x : xs) !! ix, g')
+    go g n x xs = do
+      -- assertions accumulate (there is no push/pop), so only the newest solution has to be excluded
+      addAssertionsQ [atleastoneisdifferent x]
       getSolvable >>= \case
-        Unsat -> go g 0 xs
-        Unknown -> warnUnknown guard >> go g 0 xs
+        Unsat -> go g 0 x xs
+        Unknown -> warnUnknown guard >> go g 0 x xs
         Sat -> do
-          x <- getSolution vars
-          go g (n-1) (x : xs)
+          x' <- getSolution vars
+          go g (n-1) x' (x : xs)
 
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
