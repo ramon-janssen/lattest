@@ -45,6 +45,7 @@ import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 import Control.Monad((<=<))
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import System.Environment (lookupEnv)
+import Data.Char (toLower)
 import Control.Monad.State (StateT (..), evalStateT, lift, modify, gets, MonadState (..), runState, State, evalState)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -92,11 +93,25 @@ smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 data Solver = Z3 | CVC5
      deriving (Eq,Ord,Read,Show)
 
--- | Run an SMT problem with cvc5, falling back to Z3 if cvc5 fails. Both solvers have problems that the other does not
--- have: cvc5 can crash while building a model for sequences, or return a value that SBV cannot parse (such as
--- @(seq.nth (as seq.empty ...) 0)@ for an unconstrained element), while Z3 can hang on sequences without a length bound.
+-- | Run an SMT problem with the solver named in the environment variable LATTEST_SMT_SOLVER (@z3@ or @cvc5@, case
+-- insensitive), falling back to the other solver if it fails. If the variable is not set, Z3 is used first. Both solvers
+-- have problems that the other does not have: cvc5 can crash while building a model for sequences, or return a value
+-- that SBV cannot parse (such as @(seq.nth (as seq.empty ...) 0)@ for an unconstrained element), while Z3 can hang on
+-- sequences without a length bound.
 runSMT :: RandomGen g => g -> SMT a -> (IO a, g)
-runSMT = runSMTWithFallback CVC5 [Z3]
+runSMT = runSMTWithSolvers $ (\s -> (s, [other s])) <$> defaultSolver
+  where
+    other Z3 = CVC5
+    other CVC5 = Z3
+
+-- the solver to try first, from the environment variable LATTEST_SMT_SOLVER
+defaultSolver :: IO Solver
+defaultSolver = lookupEnv "LATTEST_SMT_SOLVER" >>= \case
+  Nothing -> return Z3
+  Just name -> case map toLower name of
+    "z3" -> return Z3
+    "cvc5" -> return CVC5
+    _ -> ioError $ userError $ "LATTEST_SMT_SOLVER must be z3 or cvc5, but is " <> show name
 
 -- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
 -- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
@@ -107,7 +122,11 @@ runSMTWith solver = runSMTWithFallback solver []
 -- run again with the next solver in the list. Only the last solver's failure is rethrown. Note that errors in lazily
 -- parsed parts of the result are only raised when they are evaluated, after the fallback is no longer possible.
 runSMTWithFallback :: RandomGen g => Solver -> [Solver] -> g -> SMT a -> (IO a, g)
-runSMTWithFallback solver fallbacks g smt = (,g') $ go solver fallbacks
+runSMTWithFallback solver fallbacks = runSMTWithSolvers $ pure (solver, fallbacks)
+
+-- as 'runSMTWithFallback', with the solver and the fallbacks determined when the problem is run
+runSMTWithSolvers :: RandomGen g => IO (Solver, [Solver]) -> g -> SMT a -> (IO a, g)
+runSMTWithSolvers solvers g smt = (,g') $ solvers >>= uncurry go
   where
     go s [] = runSolver s
     go s (next:rest) = runSolver s `catches`
