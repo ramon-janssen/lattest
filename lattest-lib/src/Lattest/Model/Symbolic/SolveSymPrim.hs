@@ -31,8 +31,8 @@ import System.IO (hPutStrLn, stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
-import Control.Monad (forM_)
+import Data.Maybe (fromMaybe, isJust)
+import Control.Monad (forM_, filterM)
 
 {-|
     Combine the given guards into one.
@@ -126,7 +126,7 @@ solveGuardIO vars guard = do
   evalStateT (solveGuard vars guard) g
 
 solveGuard :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
-solveGuard = solveGuardAmong 10
+solveGuard = solveGuardAmong 20
 
 -- | As 'solveGuard', but takes the first solution that the SMT solver comes up with, instead of picking randomly among several solutions.
 solveGuardAny :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
@@ -149,34 +149,56 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
         Unknown -> (Nothing, randomgen) <$ warnUnknown guard
-        Sat -> getSolution vars >>= \x -> go randomgen extraSolutions True x []
+        Sat -> getSolution vars >>= \x -> go randomgen extraSolutions (filter hasMultipleValues vars) x []
   where
-    -- the solutions found so far are the newest one and the older ones. The flag tells whether to still try to find
-    -- a solution in which every variable differs from all solutions found so far.
-    go :: RandomGen g => g -> Int -> Bool -> Valuation -> [Valuation] -> SMTQ (Maybe Valuation, g)
+    -- the solutions found so far are the newest one and the older ones. The given variables are those that should still
+    -- differ from all solutions found so far. Once none are left, any solution different from the earlier ones is taken.
+    go :: RandomGen g => g -> Int -> [Some Variable] -> Valuation -> [Valuation] -> SMTQ (Maybe Valuation, g)
     go g 0 _ x xs = do
       let (ix, g') = randomR (0, length xs) g
       pure (Just $ (x : xs) !! ix, g')
-    go g n tryAllDifferent x xs = do
+    go g n active x xs = do
       -- assertions accumulate, so only the newest solution has to be excluded
       addAssertionsQ [atleastoneisdifferent x]
-      allDifferent <- if tryAllDifferent then solveAllDifferent (x : xs) else pure Nothing
-      case allDifferent of
-        Just x' -> go g (n-1) True x' (x : xs)
-        -- once no solution differs in every variable, adding more solutions will not change that
+      (active', differing, g') <- solveDifferentIn g active (x : xs)
+      case differing of
+        Just x' -> go g' (n-1) active' x' (x : xs)
         Nothing -> getSolvable >>= \case
-          Unsat -> go g 0 False x xs
-          Unknown -> warnUnknown guard >> go g 0 False x xs
+          Unsat -> go g' 0 [] x xs
+          Unknown -> warnUnknown guard >> go g' 0 [] x xs
           Sat -> do
             x' <- getSolution vars
-            go g (n-1) False x' (x : xs)
+            go g' (n-1) [] x' (x : xs)
 
-    -- look for a solution in which every variable differs from the given solutions, without keeping that requirement
-    -- afterwards. Variables that can only have one value are ignored.
-    solveAllDifferent :: [Valuation] -> SMTQ (Maybe Valuation)
-    solveAllDifferent xs = do
+    -- look for a solution in which all given variables differ from the given solutions. Variables that can no longer
+    -- take a new value are dropped definitely. If the remaining variables can not all differ at once, randomly chosen
+    -- ones are ignored for this solution only.
+    solveDifferentIn :: RandomGen g => g -> [Some Variable] -> [Valuation] -> SMTQ ([Some Variable], Maybe Valuation, g)
+    solveDifferentIn g [] _ = pure ([], Nothing, g)
+    solveDifferentIn g active xs = differIn active xs >>= \case
+      Just x' -> pure (active, Just x', g)
+      Nothing -> do
+        stillVarying <- filterM (\v -> isJust <$> differIn [v] xs) active
+        (differing, g') <- if length stillVarying == length active
+          then dropRandom g stillVarying -- these already failed to differ all at once
+          else dropUntilSolvable g stillVarying
+        pure (stillVarying, differing, g')
+      where
+        dropUntilSolvable g' [] = pure (Nothing, g')
+        dropUntilSolvable g' vs = differIn vs xs >>= \case
+          Just x' -> pure (Just x', g')
+          Nothing -> dropRandom g' vs
+        dropRandom g' vs = do
+          let (ix, g'') = randomR (0, length vs - 1) g'
+              (before, after) = splitAt ix vs
+          dropUntilSolvable g'' (before ++ drop 1 after)
+
+    -- look for a solution in which the given variables differ from the given solutions, without keeping that requirement
+    -- afterwards.
+    differIn :: [Some Variable] -> [Valuation] -> SMTQ (Maybe Valuation)
+    differIn vs xs = do
       push
-      addAssertionsQ [ isNot v | x <- xs, v <- DMap.assocs $ runValuation x, hasMultipleValues v ]
+      addAssertionsQ [ isNot v | x <- xs, v@(var :=> _) <- DMap.assocs $ runValuation x, Some var `elem` vs ]
       outcome <- getSolvable
       x' <- case outcome of
         Sat -> Just <$> getSolution vars
@@ -184,8 +206,9 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       pop
       pure x'
 
-    hasMultipleValues :: DSum Variable Val -> Bool
-    hasMultipleValues (var :=> _) = case varType var of
+    -- variables that can only have one value are never required to differ
+    hasMultipleValues :: Some Variable -> Bool
+    hasMultipleValues (Some var) = case varType var of
       E.UnitType -> False
       _ -> True
 
