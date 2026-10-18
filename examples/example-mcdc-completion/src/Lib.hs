@@ -55,6 +55,7 @@ run = do
         nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
         maxStale = 10 :: Int -- stop after this many consecutive test cases that did not increase coverage
         randomSeed = 678
+        extraSolutions = 10 -- the number of additional SMT solutions to pick input and output values randomly from
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
 
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
@@ -63,6 +64,9 @@ run = do
           | isUnderspecified lattice = pure $ Just Pass
           | otherwise = pure Nothing
     
+    putStrLn $ "test parameters: steps " ++ show nrSteps ++ ", trailing steps " ++ show nrTrailingSteps
+        ++ ", max stale test cases " ++ show maxStale ++ ", random seed " ++ show randomSeed ++ ", extra solutions " ++ show extraSolutions
+
     writeFile tracesFile ""
 
     putStrLn "completing MCDC..."
@@ -96,9 +100,9 @@ run = do
           | stale >= maxStale = pure (toCover, n, kept, "the last " ++ show maxStale ++ " test cases did not increase coverage")
           | otherwise = do
               -- target the (location, gate) pairs of input switches not covered yet
-              let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` (observeInputCoverage `andObserving` observeSwitchesTaken)
+              let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps extraSolutions (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` (observeInputCoverage `andObserving` observeSwitchesTaken)
               start <- getCurrentTime
-              tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
+              tests <- evalStateT (offlineTests extraSolutions model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
               -- compute the covered switches
               let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) toCover (toList tests)
                   -- prefix with the time at which the test case was finished, and how long it took to generate
