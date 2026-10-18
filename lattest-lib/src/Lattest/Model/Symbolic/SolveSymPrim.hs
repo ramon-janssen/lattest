@@ -9,7 +9,7 @@ substituteInGuard,
 evaluateGuard,
 solveAnySequential,
 valuationToGateValue,
-solveGuard, solveGuardAny, solveGuardIO,
+solveGuard, solveGuardAny, solveGuardAmong, solveGuardIO,
 isGuardSatisfiable
 ) where
 
@@ -57,14 +57,15 @@ evaluateGuard guard = case eval guard of
 
 {-|
     For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
-    any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
+    any. The returned gate values for that interaction are picked randomly among the first solution and up to the given number of additional
+    solutions.
 -}
-solveAnySequential :: RandomGen randomgen => [(SymInteract g,SymGuard)] -> StateT randomgen IO (Maybe (GateValue g))
-solveAnySequential [] = return Nothing
-solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
-    maybeSolved <- solveGuard vars guard
+solveAnySequential :: RandomGen randomgen => Int -> [(SymInteract g,SymGuard)] -> StateT randomgen IO (Maybe (GateValue g))
+solveAnySequential _ [] = return Nothing
+solveAnySequential extraSolutions ((interact'@(SymInteract _ vars),guard):alph) = do
+    maybeSolved <- solveGuardAmong extraSolutions vars guard
     case maybeSolved of
-        Nothing -> solveAnySequential alph
+        Nothing -> solveAnySequential extraSolutions alph
         Just solved -> return $ Just $ valuationToGateValue interact' solved
 --data SymInteract g = SymInteract g [Variable]
 --data GateValue g = GateValue g [Constant]
@@ -126,7 +127,7 @@ solveGuardIO vars guard = do
   evalStateT (solveGuard vars guard) g
 
 solveGuard :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
-solveGuard = solveGuardAmong 20
+solveGuard = solveGuardAmong 10
 
 -- | As 'solveGuard', but takes the first solution that the SMT solver comes up with, instead of picking randomly among several solutions.
 solveGuardAny :: RandomGen g => [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)

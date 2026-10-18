@@ -244,7 +244,7 @@ testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 37
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.05 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, _), _)) <- runSTSTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
@@ -474,7 +474,7 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
                 else (Out, In, out, inp)
     let nrSteps = 4
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized startType endType p1 p2 q2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
@@ -574,7 +574,7 @@ testLatticeSTSQuiescentPass :: String -> Bool -> Test
 testLatticeSTSQuiescentPass testName _ = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
@@ -590,7 +590,7 @@ testLatticeSTSQuiescentFail1 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
@@ -606,7 +606,7 @@ testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
@@ -661,7 +661,7 @@ testLatticeSTSUnimplementable :: String -> Bool -> Test
 testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
@@ -717,7 +717,7 @@ testSTSDataSelectionGuardedInput = TestCase $ do
         ()
     let nrSteps = 2
         randomSeed = 456
-        testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+        testSelector = randomDataTestSelectorFromSeed 10 randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     (verdict, ((observed, _), _)) <- runSTSTester guardedInputModel testSelector adap
     assertEqual ("expected the selector to pick the only guard-satisfying input ?Prime [41], got " <> show observed)
@@ -2164,7 +2164,7 @@ coverimp = pureMealyAdapter (const (const ())) (\() (GateValue i _) -> [GateValu
 testCoverageCheckerIsExhaustive :: Test
 testCoverageCheckerIsExhaustive = TestCase $ do
   let intrpr = interpretSTS stscovered $ Valuation mempty
-  tester <- randomCoveringTestSelector intrpr Nothing
+  tester <- randomCoveringTestSelector intrpr Nothing 10
   imp1 <- coverimp
   (v1, incompleteTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 7 `observingOnly` traceObserver) imp1
   imp2 <- coverimp
