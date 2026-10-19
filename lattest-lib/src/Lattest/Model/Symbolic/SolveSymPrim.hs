@@ -16,7 +16,7 @@ isGuardSatisfiable
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr, freeVars)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
 import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith)
 
@@ -33,6 +33,7 @@ import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Control.Monad (forM_)
+import qualified Data.Set as Set
 
 {-|
     Combine the given guards into one.
@@ -139,7 +140,7 @@ solveGuardAmong :: RandomGen g => Int -> [Some Variable] -> SymGuard -> StateT g
 solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
   fst $ runSMT randomgen do
     addDeclarations vars
-    -- addDeclarations (Set.toList $ freeVars guard)
+    addDeclarations (Set.toList $ freeVars guard)
     addAssertions [guard]
     -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.
     -- Since sbv-14.8 (unreleased), addAssertions on higher order functions no longer need registerFunction to work in query.
