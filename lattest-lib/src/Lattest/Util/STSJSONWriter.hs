@@ -100,7 +100,7 @@ isEmptySwitch (Switch _ act gal) =
 -- loaded again.
 stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Map.Map String (Some Expr) -> Map.Map (Some Type, [Bool]) String -> Valuation -> JSON.Value
 stsToJSON sid sts guardmap assmap enums fields valuation =
-    object $
+    object
         [ "id" .= sid
         , "initial_location" .= initLocationJSON locIds (initConf sts)
         , "initialValuation" .= initValue valuation

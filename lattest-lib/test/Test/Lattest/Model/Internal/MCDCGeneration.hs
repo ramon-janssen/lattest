@@ -18,20 +18,20 @@ mcdcGenerationTests =
         , ("TF", False)
         ]
     , rowsCase "A && (B || C)" (a `And` (b `Or` c))
-        [ ("TTF", True)
-        , ("FTF", False)
+        [ ("FFT", False)
         , ("TFF", False)
         , ("TFT", True)
+        , ("TTF", True)
         ]
     , rowsCase "((A && B) || (C || D)) && ((E || F) && G))" (((a `And` b) `Or` (c `Or` d)) `And` ((e `Or` f) `And` g))
-        [ ("FTFFTFT",False),
-        ("FTFTTFT",True),
-        ("FTTFTFT",True),
-        ("TFFFTFT",False),
-        ("TTFFFFT",False),
-        ("TTFFFTT",True),
-        ("TTFFTFF",False),
-        ("TTFFTFT",True)
+        [ ("FTFFFTT",False)
+        , ("FTFTFFT",False)
+        , ("FTFTFTF",False)
+        , ("FTFTFTT",True)
+        , ("FTFTTFT",True)
+        , ("FTTFFTT",True)
+        , ("TFFFFTT",False)
+        , ("TTFFFTT",True)
         ]
 
     -- Valid suite only: N+1 rows, and an independence pair for each atom. Use this if more than one row set is correct.

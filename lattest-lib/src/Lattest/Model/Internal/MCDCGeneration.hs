@@ -1,6 +1,5 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Minimal unique-cause MC/DC test generation for singular Boolean
 -- expressions (SBEs).
@@ -29,6 +28,8 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe      (fromMaybe)
 import qualified Data.Set        as S
+import qualified Data.Set as Set
+import Data.Bifunctor (Bifunctor(..))
 
 -- | A Boolean expression over atoms. The algorithm only compares atoms for
 -- equality, so an atom can be a name or a full predicate such as @x > 5@.
@@ -70,9 +71,9 @@ eval r (Count table es) = table !! length (filter (eval r) es)
 -- expression on that row. An expression with @n@ atoms gives @n+1@ different
 -- rows. For each atom, two of the rows differ in that atom only and give
 -- different values (a unique-cause independence pair).
-gen :: Ord a => Expr a -> [(Row a, Bool)]
-gen (Atom a)  = [(M.singleton a True, True), (M.singleton a False, False)]
-gen (Not e)   = [(r, not v) | (r, v) <- gen e]
+gen :: Ord a => Expr a -> Set.Set (Row a, Bool)
+gen (Atom a)  = Set.fromList [(M.singleton a True, True), (M.singleton a False, False)]
+gen (Not e)   = Set.map (second not) (gen e)
 gen (And x y) = glue True  x y
 gen (Or  x y) = glue False x y
 gen (Count table es) = glueCount table es
@@ -82,15 +83,15 @@ gen (Count table es) = glueCount table es
 -- @ident@. While one child is on its neutralVal, the node has the value of the other
 -- child, so the independence pairs of that child stay valid. The two halves
 -- share the row @neutralValX <> neutralValY@, which gives @(n1+1) + (n2+1) - 1@ rows.
-glue :: Ord a => Bool -> Expr a -> Expr a -> [(Row a, Bool)]
+glue :: Ord a => Bool -> Expr a -> Expr a -> Set.Set (Row a, Bool)
 glue ident x y =
-     [ (rx `M.union` neutralValY, v) | (rx, v) <- rowsX ] -- all rows of x, with y on its neutralVal
-  ++ [ (neutralValX `M.union` ry, w) | (ry, w) <- restY ] -- the other rows of y, with x on its neutralVal
+     Set.map (first (`M.union` neutralValY)) rowsX
+  <> Set.map (first (neutralValX `M.union`)) rowsY
   where
     rowsX          = gen x
     rowsY          = gen y
-    (neutralValX, _)      = takeFirstNeutral ident rowsX
-    (neutralValY, restY)  = takeFirstNeutral ident rowsY
+    neutralValX    = takeFirstNeutral ident rowsX
+    neutralValY    = takeFirstNeutral ident rowsY
 
 -- | Combine the rows of the sub-expressions of a count. Let @k@ be a number for
 -- which the count has different values on @k@ and on @k+1@ sub-expressions
@@ -98,27 +99,21 @@ glue ident x y =
 -- value of the remaining one, so the independence pairs of that one stay valid.
 -- The others are on their first true row or their first false row. For
 -- sub-expressions that are atoms, this gives one row more than there are atoms.
-glueCount :: Ord a => [Bool] -> [Expr a] -> [(Row a, Bool)]
-glueCount table es = dedup
+glueCount :: Ord a => [Bool] -> [Expr a] -> Set.Set (Row a, Bool)
+glueCount table es = Set.fromList
   [ (row `M.union` M.unions [ if j `elem` holding i then firstTrue j else firstFalse j | j <- indices, j /= i ]
     , table !! (k + fromEnum v))
-  | i <- indices, (row, v) <- rows !! i ]
+  | i <- indices, (row, v) <- Set.toList $ rows !! i ]
   where
     indices      = [0 .. length es - 1]
     rows         = map gen es
-    firstTrue j  = fst (takeFirstNeutral True  (rows !! j))
-    firstFalse j = fst (takeFirstNeutral False (rows !! j))
+    firstTrue j  = takeFirstNeutral True  (rows !! j)
+    firstFalse j = takeFirstNeutral False (rows !! j)
     k = case [ n | (n, (v, w)) <- zip [0 ..] (zip table (drop 1 table)), v /= w ] of
       n : _ -> n
       []    -> error "MCDCGeneration.glueCount: the count has the same value for any number of sub-expressions" -- unreachable after 'isWellFormed'
     -- the k other sub-expressions that hold while sub-expression i varies, taken from the first k+1 of them
     holding i = [ j | j <- [0 .. k], j /= (if i <= k then i else 0) ]
-    dedup = go S.empty
-      where
-        go _ [] = []
-        go seen (r@(row, _) : rest)
-          | row `S.member` seen = go seen rest
-          | otherwise           = r : go (S.insert row seen) rest
 
 -- | True if each count has a table of the right size, and a value that depends
 -- on the number of sub-expressions that hold.
@@ -131,19 +126,17 @@ isWellFormed (Count table es) =
   length table == length es + 1 && or table && not (and table) && all isWellFormed es
 
 -- | Take out the first row with the given value. Return it and the other rows.
-takeFirstNeutral :: Bool -> [(Row a, Bool)] -> (Row a, [(Row a, Bool)])
-takeFirstNeutral ident rows =
-  case break ((== ident) . snd) rows of
-    (before, (h, _) : after) -> (h, before ++ after)
-    (_,      [])             -> -- unreachable: 'gen' always gives a true row and a false row
-      error $ "MCDCGeneration.takeFirstNeutral: no row with value " ++ show ident
+takeFirstNeutral :: Bool -> Set.Set (Row a, Bool) -> Row a
+takeFirstNeutral ident rows = case Set.filter ((== ident) . snd) rows of
+  (Set.toList -> []) -> error $ "MCDCGeneration.takeFirstNeutral: no row with value " ++ show ident
+  (Set.toList -> (x:_)) -> fst x
 
 -- | The rows of 'gen', or 'Left' if the expression is not singular.
 mcdcRows :: Ord a => Expr a -> Either String [(Row a, Bool)]
 mcdcRows e
   | not (isSingular e)   = Left "not a singular Boolean expression: some atom occurs more than once"
   | not (isWellFormed e) = Left "a count does not depend on the number of sub-expressions that hold"
-  | otherwise            = Right (gen e)
+  | otherwise            = Right (Set.toList $ gen e)
 
 -- | The minimal unique-cause MC\/DC test suite.
 mcdc :: Ord a => Expr a -> Either String [Expr a]
@@ -181,9 +174,10 @@ independencePairs e rows =
 -- | Check that the rows are a unique-cause MCDC suite: each row assigns all
 -- atoms, all rows are different, and each atom has an independence pair.
 validate :: Ord a => Expr a -> [Row a] -> Bool
-validate e rows = all total rows && distinct && all (not . null . snd) prs
+validate e rows = all total rows && distinct && not (any (null . snd) prs)
   where
     as       = S.fromList (atoms e)
     total r  = M.keysSet r == as
     distinct = S.size (S.fromList rows) == length rows
     prs      = independencePairs e rows
+

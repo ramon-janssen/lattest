@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- | Split the guarded input switches of an STS into their unique-cause MC/DC
 -- rows. A test suite that covers every switch of the result has MC/DC coverage
@@ -245,7 +246,7 @@ openGuard n params = close <=< open
       | otherwise = case count of
           Length _ (Filter x cond xs) -> do
             elements <- mapM (close <=< open) (elementConditions n x cond xs)
-            decisions <- forM elements $ \element -> case element of
+            decisions <- forM elements $ \case
               Decision d -> Right d
               _          -> Left $ "the condition of a count of list elements is a constant, in " ++ show (Expr count)
             Right (Decision (MCDC.Count table decisions))
@@ -559,9 +560,9 @@ completeMCDCReportWith mode lengths domainGuards aut inputGates = do
         [ (GuardReport (show gate) guard [] (emptyLengths gate guard rows)
              (zipWith (rowReport (Set.fromList (params gate)) noSolution notCovered) [0 ..] rows), [(show loc, show dest)])
         | (loc, gate, mval) <- selectedGates
+        , isSplit loc
         , ((guard, dest), noSolution, notCovered) <-
             zip3 (switches mval) (rowsAt unsolvableAt (loc, gate)) (rowsAt uncoveredAt (loc, gate))
-        , isSplit loc
         , Right rows <- [rowsOf gate guard] ]
       report = MCDCReport [ guard { reportSwitches = at } | (guard, at) <- Map.toList reports ]
   return (automaton (initConf aut) (alphabet aut) (\loc -> Map.mapWithKey (splitGate (isSplit loc)) (transRel aut loc)), report)
