@@ -1,28 +1,26 @@
 module Lib
     ( run
     ) where
-
-import      Lattest.Model.Automaton
-import      Lattest.Model.StandardAutomata
-import      Lattest.Model.Symbolic.SolveSTS (offlineTests)
-import      Lattest.Util.ReportUtils (appendTestTrace)
-import      Lattest.Model.Symbolic.Expr (getVariables)
-import      Lattest.Model.Alphabet (IOAct(..), SymInteract(..))
-import      Lattest.Exec.StandardTestControllers
-import      Lattest.Exec.StandardTestControllers.CompleteTestSuite (slowRandomInputCoverer, allSwitches, isInputSwitch, switchesTaken, observeInputCoverage, mergeInputCoverage, prettyPrintInputCoverage)
-import      Lattest.Util.STSJSONParser (stsListFromJSONFile)
-import      Lattest.Exec.Testing (Verdict(..))
-import      Lattest.Model.BoundedMonad (BoundedConfiguration(..))
-import      qualified Data.Map as Map
-import      qualified Data.Set as Set
-import      Lattest.Util.STSJSONWriter (stsListToJSONFile, stsToJSONFile)
-import      Data.Tuple (swap)
-import      Control.Monad.State (evalStateT)
-import      System.Random (mkStdGen)
-import      Data.Foldable (toList)
-import      Data.Time (getZonedTime, formatTime, defaultTimeLocale, getCurrentTime, diffUTCTime)
-import      System.IO (hSetBuffering, stdout, BufferMode(..))
-import      Text.Printf (printf)
+import qualified Data.Set as Set
+import System.IO
+import Lattest.Util.STSJSONParser
+import Lattest.Model.StandardAutomata
+import Lattest.Model.Symbolic.Expr
+import qualified Data.Map as Map
+import Data.Tuple (swap)
+import Data.Time
+import Lattest.Exec.Testing
+import Lattest.Model.BoundedMonad
+import Lattest.Exec.StandardTestControllers
+import Lattest.Exec.StandardTestControllers.CompleteTestSuite
+import Text.Printf
+import Lattest.Util.STSJSONWriter
+import Lattest.Model.Automaton
+import System.Random
+import Lattest.Model.Symbolic.SolveSTS
+import Control.Monad.State
+import Data.Foldable
+import Lattest.Util.ReportUtils
 
 run :: IO ()
 run = do
@@ -40,8 +38,8 @@ run = do
         conjunctedSTS = conjunctionAll checked
         conjunctModel = interpretSTS conjunctedSTS initVal
 
-        (seqSelfComposed, discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
-        (seqComposed, discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
+        (seqSelfComposed, _discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
+        (seqComposed, _discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
         initVal  = case stss of
             [] -> error "no STSs loaded"
             (_, _, _, _, val,_,_):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
@@ -50,7 +48,7 @@ run = do
         es =                                        Map.unions $ map (\(_,_,_,_,_,e,_) -> e) stss
         fs =                                        Map.unions $ map (\(_,_,_,_,_,_,f) -> f) stss
 
-    timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
+    timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime
     putStrLn ("computing offline test cases..." ++ timestamp)
     let nrSteps = 16
         nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
@@ -131,7 +129,7 @@ run = do
     putStrLn $ show (length $ irreplaceable takenBy kept) ++ " of the test cases that increased coverage take a switch that none of the others take"
     putStrLn "input coverage of the test suite:"
     putStr $ prettyPrintInputCoverage es fs suiteReport
-    putStrLn $ ("left to cover: " ++ show leftToCover)
+    putStrLn $ "left to cover: " ++ show leftToCover
 
 -- | Pick elements that together cover the same as all given elements: going from the last element to the first, pick the ones
 -- that cover something that the elements picked so far do not. Then drop the picked elements that the other picked elements have

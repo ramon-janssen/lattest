@@ -63,9 +63,9 @@ import Data.GADT.Show (GShow (..), defaultGshowsPrec)
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
 import qualified Data.Maybe as Maybe
-import Data.Function (on)
 import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
+import Data.Containers.ListUtils (nubOrdOn)
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -358,7 +358,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps extraSolutions g = selector (g, 
             Right currStates -> do
               let initial = [ (loc, (sTrue, valuationToVarModel v, 0)) | IntrpState loc v <- Set.toList currStates ]
               -- only look for plans that can be completed, including taking the uncovered switch afterwards, in the steps that are left
-              found <- breadthFirstSearch fst (Set.fromList $ map fst initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
+              found <- breadthFirstSearch key (Set.fromList $ map key initial) (map (,[]) initial) bfsStep bfsPred (budget - 1)
               (plan, g''') <- runStateT (maybe (pure Nothing) concretise found) g''
               case plan of
                 -- Note: the plan only goes to a state where the switch _can_ be taken, but doens't take it.
@@ -405,6 +405,17 @@ slowRandomInputCoverer intrpr mtocover maxSteps extraSolutions g = selector (g, 
         bfsPred :: SymNode loc -> IO Bool
         bfsPred = anyM (isSat . snd) . targetConds
 
+        -- We currently use just the set of visited locations in the BFS. Ideally, we want something
+        -- that's stricter (i.e. considers less things to be equal), but the obvious candidates
+        -- (namely (loc, [gate]) and (loc, VarModel)) are both too strict (making the search take too long, by revisiting nodes too often).
+        -- The ideal 'key' would represent exactly the space of concrete Valuations that are possible at this location,
+        -- and the ideal BFS would check whether the resulting space from a 'step' is a subset of the union of the spaces we have already seen,
+        -- adding only the unseen part of it to the 'frontier'.
+        -- Too strict keys make the search infeasibly slow, too lax keys make the search unable to find certain reachable states (e.g. coffee machine).
+        -- Neither make the testcontroller unsound, they just make it worse at covering all switches.
+        key :: SymNode loc -> loc
+        key = fst
+
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
         targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
         targetConds (loc, (pathCond, pvar, n)) =
@@ -445,12 +456,8 @@ breadthFirstSearch :: (Monad m, Ord k) => (a -> k) -> Set.Set k -> [(a, [b])] ->
 breadthFirstSearch key visited frontier step predicate maxdepth
   | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
   | otherwise = do
-      -- sorry for this read-only blob! It just applies the step to everything in the frontier,
-      -- and removes all states that have already been visited.
-      -- Could certainly be optimized to remove some log factors, but the bottleneck will never be this list/set processing.
-      new <- filter (not . (`Set.member` visited) . key . fst)
-          . List.nubBy ((==) `on` (key . fst)) -- we only keep one of each state, if there were multiple paths to get somewhere
-          . concat
+      new <- nubOrdOn (key . fst) -- we only keep one of each state, if there were multiple paths to get somewhere
+          . concatMap (filter (not . (`Set.member` visited) . key . fst))
           <$> mapM
                 (\(a,bs) -> map (\(a',b') -> (a', b':bs)) <$> step a)
                 frontier
@@ -458,3 +465,4 @@ breadthFirstSearch key visited frontier step predicate maxdepth
       findM (predicate . fst) new >>= \case
         Nothing -> breadthFirstSearch key newVisited new step predicate (maxdepth - 1)
         Just (a, path) -> pure $ Just (a, reverse path) -- the path was built up back to front
+
