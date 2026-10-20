@@ -58,6 +58,7 @@ import qualified Data.SBV.Either as SBV
 import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
 import System.Random (RandomGen, genWord32)
+import qualified Debug.Trace
 
 
 --------------------
@@ -95,7 +96,7 @@ runSMT = runSMTWith Z3
 -- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
 -- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
 runSMTWith :: RandomGen g => Solver -> g -> SMT a -> (IO a, g)
-runSMTWith solver g smt = (,g') $ lookupEnv "LATTEST_SMT_DUMP" >>= \case
+runSMTWith solver g smt = Debug.Trace.trace "runSMT" $ (,g') $ lookupEnv "LATTEST_SMT_DUMP" >>= \case
   Nothing -> run config
   Just file -> do
     start <- getCurrentTime

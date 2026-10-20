@@ -139,7 +139,7 @@ solveGuardAny = solveGuardAmong 0
 solveGuardAmong :: RandomGen g => Int -> [Some Variable] -> SymGuard -> StateT g IO (Maybe Valuation)
 solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
   fst $ runSMT randomgen do
-    addDeclarations vars
+    -- addDeclarations vars
     addDeclarations (Set.toList $ freeVars guard)
     addAssertions [guard]
     -- Only one `query` block is allowed in a Symbolic. solveGuard returns an IO to avoid running into this problem.

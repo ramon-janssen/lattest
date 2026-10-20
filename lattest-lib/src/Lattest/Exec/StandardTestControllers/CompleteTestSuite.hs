@@ -52,7 +52,8 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel (..), valuationToVarModel, getVariables, freeVars, sAnd, sNot, sExists, varsToGuard, Expr, sVar, (.==))
+import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel (..), valuationToVarModel, getVariables, freeVars, sAnd, sNot, sExists, varsToGuard, Expr, sVar, (.==), reduce)
+import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
 import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..), mapSome)
@@ -67,6 +68,7 @@ import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
 import Data.Containers.ListUtils (nubOrdOn)
 import Data.Char (ord)
+import qualified Debug.Trace
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -385,14 +387,14 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         locVars = case toList mq of
           IntrpState _ v : _ -> getVariables v
           [] -> []
-        isSat guard = isGuardSatisfiable (toList $ freeVars guard) guard
+        isSat (Expr . reduce . view -> guard) = Debug.Trace.traceShow guard $ isGuardSatisfiable (toList $ freeVars guard) guard
         -- the gate parameters as they occur in the guard of the n-th step of a path, see `symStep`
         indexParams n (SymInteract gate' vars) = SymInteract gate' (mapSome (indexVar n) <$> vars)
 
         -- arguments to the BFS
         -- branch to all satisfiable options
         bfsStep :: SymNode loc -> IO [(SymNode loc, IOSymInteract i' o)]
-        bfsStep (loc, (pathCond, pvar, n)) = filterM (\((_, (pathCond', _, _)), _) -> isSat pathCond')
+        bfsStep (loc, (pathCond, pvar, n)) = filterM (\((_, (pathCond', varmodel, _)), _) -> Debug.Trace.trace "bfsStep" $ isSat $ pathCond' .&& varsToGuard varmodel)
           [ ((loc', (pathCond .&& guard, pvar', n + 1)), indexParams n t)
           | (t, dests) <- Map.toList $ transRel (syntacticAutomaton intrpr') loc
           , (tdest, loc') <- Set.toList $ Set.fromList $ toList dests
@@ -400,14 +402,14 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
 
         -- check whether an uncovered switch can be taken from this location
         bfsPred :: SymNode loc -> IO Bool
-        bfsPred = anyM (isSat . snd) . targetConds
+        bfsPred = anyM (Debug.Trace.trace "bfsPred" $ isSat . snd) . targetConds
 
         key :: SymNode loc -> loc
         key = fst
 
         visit :: SymNode loc -> SymNode loc -> String -> (String, SymNode loc)
-        visit (l1, (g1, v1, i1)) (l2, (g2, v2, i2)) nms
-          | l1 == l2 = (nms3, (l1, (g3, v3, max i1 i2)))
+        visit (l1, (g1, v1, _)) (l2, (g2, v2, _)) nms
+          | l1 == l2 = (nms3, (l1, (g3, v3, undefined)))
             where
               -- - rename parameters in both guard and varmodel to avoid clashes
               -- - return a guard&varmodel that together represent the union ('or')
@@ -437,16 +439,13 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         -- but not satisfiable by 'exceptthat'.
         substract _this@(l, (gthis,v,i)) _exceptthat@(_,(gET,v',_)) = (l, (guard,v,i))
           where
-            exceptthatparameters = DMap.foldrWithKey (\_ e vs -> freeVars e `Set.union` vs) (freeVars gET) (runVarModel v') Set.\\ Set.fromList (DMap.keys (runVarModel v'))
+            exceptthatparameters = DMap.foldrWithKey (\_ e vs -> freeVars e `Set.union` vs) (freeVars gET) (runVarModel v') Set.\\ (Set.fromList (DMap.keys (runVarModel v')) `Set.union` Set.fromList (DMap.keys (runVarModel v)))
             existsETP expr = foldr (\(Some var) e -> withExprConstraints var $ sExists var e) expr exceptthatparameters
             guard = sAnd $ Set.fromList
               [ gthis
               , sNot
               $ existsETP
-              $ sAnd
-              $ Set.fromList
-                [ gET
-                , varsToGuard v']]
+              $ gET .&& varsToGuard v']
 
         -- per uncovered switch from this location: its gate parameters, and the condition to get to this location and then take that switch
         targetConds :: SymNode loc -> [([Some Variable], SymGuard)]
@@ -512,7 +511,11 @@ breadthFirstSearch2 key x visit substract visited frontier step predicate maxdep
   | maxdepth <= 0 || null frontier = pure Nothing -- failed to find a path
   | otherwise = do
       new <- concat <$> mapM
-            (\(a,bs) -> map (\(a',b') -> (a', b':bs)) <$> step (maybe a (substract a) $ visited Map.!? key a))
+            (\(a,bs) -> map (\(a',b') -> (a', b':bs)) <$> do
+              preciseStep <- Debug.Trace.trace "step1" $ step (maybe a (substract a) $ visited Map.!? key a)
+              if null preciseStep then Debug.Trace.trace "was empty" $ pure [] else case visited Map.!? key a of
+                Nothing -> Debug.Trace.trace "was pure" $ pure preciseStep
+                Just _ -> Debug.Trace.trace "step2" $ step a)
             frontier
       let (newx, newVisited) = foldr
             (\(a,_) (x', visited') -> case Map.lookup (key a) visited' of
