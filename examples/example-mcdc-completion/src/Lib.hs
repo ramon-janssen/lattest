@@ -55,7 +55,7 @@ run = do
         nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
         maxStale = 10 :: Int -- stop after this many consecutive test cases that did not increase coverage
         randomSeed = 678
-        extraSolutions = 10 -- the number of additional SMT solutions to pick input and output values randomly from
+        extraSolutions = 5 -- the number of additional SMT solutions to pick input and output values randomly from
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
 
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
