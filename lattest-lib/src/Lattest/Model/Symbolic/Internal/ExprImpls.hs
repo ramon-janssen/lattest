@@ -991,8 +991,11 @@ reduce (Gez (reduce -> (Const x))) = Const $ x >= 0
 reduce (Gez (reduce -> e)) = Gez e
 reduce (Not (reduce -> (Const b))) = Const $ not b
 reduce (Not (reduce -> e)) = Not e
-reduce (And (Set.map reduce -> es)) | all isConst es = Const $ and (Set.map constant es) -- TODO could be optimized further: if not all elements are constant, but if there are multiple constant elements, then the latter could still be combined
-reduce (And (Set.map reduce -> es)) = And es
+reduce (And (Set.map reduce -> es))
+  | all isConst es = Const $ and (Set.map constant es)
+  | xs <- Set.filter isConst es
+  , ys <- Set.filter (not . isConst) es
+  = if and (Set.map constant xs) then And ys else Const False
 reduce (Zip a b (reduce -> x) (reduce -> y))
   | Const xs <- x
   , Const ys <- y
