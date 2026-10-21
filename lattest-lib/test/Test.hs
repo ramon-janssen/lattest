@@ -151,6 +151,7 @@ makeHUnitTests regenerate = do
         ++ testLatticeSTSQuiescence
         ++ evalTests
         ++ solveTests
+        ++ testQuantifiers
 
 -- TODO: This wraps HUnit tests into a Tasty test.
 -- The reason we need this wrapper, is that plain HUnit

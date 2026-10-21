@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Test.Lattest.Model.Symbolic.Expr (
 prop_evalSymbolic,
@@ -12,6 +13,7 @@ PropEvalSymbolic,
 prop_solveSymbolic,
 evalTests,
 solveTests,
+testQuantifiers,
 propShowReadType
 )
 where
@@ -35,6 +37,7 @@ import Data.Some (Some (..))
 import Data.Maybe (isJust)
 import Data.GADT.Compare (GEq(..))
 import Data.GADT.Show (gread)
+import qualified Data.Maybe as Maybe
 
 
 
@@ -336,6 +339,22 @@ concreteEither vl vr l r x = has @ExprType x $ case typeOf' x of
 
 evalTests :: [Test]
 evalTests = [testEvalEmptyProduct, testEvalNegativeModulo]
+
+testQuantifiers :: [Test]
+testQuantifiers =
+  [ mkTest (sExists v $ sVar v .>= 3 .&& sVar v `sElem` sConst [1,2,5,2,3] , Maybe.isJust)
+  , mkTest (sExists v $ sVar v .>= 3 .&& sVar v `sElem` sConst [1,2,1,2,0] , Maybe.isNothing)
+  , mkTest (sForall v $ sVar v .>= 3, Maybe.isNothing)
+  , mkTest (sForall w $ sVar w .== sTrue .|| sVar w .== sFalse, Maybe.isJust)
+  , mkTest (sForall v $ sVar v .>= 4 .|| sVar v .< 8, Maybe.isJust)
+  ]
+  where
+    v = Variable "foo" IntType
+    w = Variable "foo" BoolType
+    mkTest :: (Expr Bool, Maybe Valuation -> Bool) -> Test
+    mkTest (expr, predicate) = TestCase $ do
+      x <- solveGuardIO [] expr
+      Test.HUnit.assert $ predicate x
 
 solveTests :: [Test]
 solveTests = [testSolveNegativeModulo]
