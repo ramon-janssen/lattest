@@ -31,7 +31,7 @@ module Lattest.SMT (
   sortOfEqualWith
 ) where
 
-import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic)
+import Data.SBV(constrain, SBV, SymVal (..), RCSet(..), Kind (..), Symbolic, QuantifiedBool (..))
 import Data.SBV.Control( CheckSatResult, checkSat, Query)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Control as SBV
@@ -323,6 +323,18 @@ exprToSymbolic = \case
           modify $ Map.insert nmr $ Some smtvar
           go r
     pure $ SBV.either fl fr ei
+  Forall (Variable nm (t :: Type t)) e -> withExprConstraints t $ withExprConstraints e $ do
+    m <- get
+    let x (SBV.Forall (v :: SBV t)) = flip evalState m $ do
+          modify $ Map.insert nm $ Some v
+          go e
+    pure $ quantifiedBool x
+  Exists (Variable nm (t :: Type t)) e -> withExprConstraints t $ withExprConstraints e $ do
+    m <- get
+    let x (SBV.Exists (v :: SBV t)) = flip evalState m $ do
+          modify $ Map.insert nm $ Some v
+          go e
+    pure $ quantifiedBool x
   where
     go :: ExprConstraints a => ExprView a -> SMT' (SBV a)
     go = exprToSymbolic

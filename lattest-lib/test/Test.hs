@@ -155,6 +155,7 @@ makeHUnitTests regenerate = do
         ++ solveTests
         ++ mcdcGenerationTests
         ++ mcdcSTSTests
+        ++ testQuantifiers
 
 -- TODO: This wraps HUnit tests into a Tasty test.
 -- The reason we need this wrapper, is that plain HUnit

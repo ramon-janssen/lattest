@@ -199,10 +199,13 @@ toExpr varmap accmap enummap = \case
         "len" -> Right $ IntType :=> sLength x
         "head" -> Right $ t :=> sHead x
         "tail" -> Right $ ListType t :=> sTail x
-        "uniqueElem" -> Right $ BoolType :=> let seen = Variable "uniqueSeen" (ListType t)
+        "uniqueElem" -> Right $ BoolType :=> let seen = Variable "uniqueSeen" (TupleType BoolType $ ListType t)
                                                  y = Variable "uniqueIterator" t
-                                                 step = sIfThenElse (sElem (sVar y) (sVar seen)) (sVar seen) (sCons (sVar y) (sVar seen))
-                                             in sLength (sFoldr y seen step sNil x) .== sLength x
+                                                 step = sIfThenElse
+                                                  (sFirst (sVar seen) .&& sNot (sElem (sVar y) (sSecond $ sVar seen)))
+                                                  (sPair sTrue $ sCons (sVar y) (sSecond $ sVar seen))
+                                                  (sFalse `sPair` sSecond (sVar seen)) -- even though the list is irrelevant here, z3 is much faster at consuming this version than with sNil here. I guess it recognizes a pattern? I don't see a difference in speed between consing y or not.
+                                             in sFirst $ sFoldr y seen step (sPair sTrue sNil) x
         _ -> Left $ "unknown op1 @List: " <> o
       TupleType t1 t2 -> withExprConstraints t1 $ withExprConstraints t2 case o of
         "first" -> Right $ t1 :=> sFirst x
