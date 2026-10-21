@@ -1,24 +1,26 @@
 module Lib
     ( run
     ) where
-
-import           Lattest.Model.Symbolic.Expr (getVariables)
-import           Lattest.Model.StandardAutomata
-import           Lattest.Model.Symbolic.SolveSTS (offlineTests)
-import           Lattest.Util.ReportUtils (appendTestTrace)
-import           Lattest.Exec.StandardTestControllers
-import           Lattest.Exec.StandardTestControllers.CompleteTestSuite(slowRandomInputCoverer, allSwitches, isInputSwitch, switchesTaken, observeInputCoverage, mergeInputCoverage, prettyPrintInputCoverage)
-import           Lattest.Util.STSJSONParser (stsListFromJSONFile)
-import Lattest.Exec.Testing (Verdict(..))
-import Lattest.Model.BoundedMonad (BoundedConfiguration(..))
-import qualified Data.Map as Map
 import qualified Data.Set as Set
+import System.IO
+import Lattest.Util.STSJSONParser
+import Lattest.Model.StandardAutomata
+import Lattest.Model.Symbolic.Expr
+import qualified Data.Map as Map
 import Data.Tuple (swap)
-import Control.Monad.State (evalStateT)
-import System.Random (mkStdGen)
-import Data.Foldable (toList)
-import Data.Time (getZonedTime, formatTime, defaultTimeLocale, getCurrentTime, diffUTCTime)
-import System.IO (hSetBuffering, stdout, BufferMode(..))
+import Data.Time
+import Lattest.Exec.Testing
+import Lattest.Model.BoundedMonad
+import Lattest.Exec.StandardTestControllers
+import Lattest.Exec.StandardTestControllers.CompleteTestSuite
+import Text.Printf
+import Lattest.Util.STSJSONWriter
+import Lattest.Model.Automaton
+import System.Random
+import Lattest.Model.Symbolic.SolveSTS
+import Control.Monad.State
+import Data.Foldable
+import Lattest.Util.ReportUtils
 
 run :: IO ()
 run = do
@@ -32,28 +34,27 @@ run = do
 
     --putStrLn $ unlines $ map (\(_,sts,_,_,_,_) -> prettyPrint sts) stss
     -- Compose all parsed STSs
-    let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _,_, _) <- stss ]
+    let checked  = [ (sid, prependOutputChecks (\/) ("check_" ++) sts) | (sid, sts, _, _,_, _, _) <- stss ]
         conjunctedSTS = conjunctionAll checked
         conjunctModel = interpretSTS conjunctedSTS initVal
-        --seqComposed = conjmodel |>> conjmodel
-        (seqSelfComposed, discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
-        (seqComposed, discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
-        model = seqComposed
+
+        (seqSelfComposed, _discardedTransit) = selfSequentiallyPruned (getVariables initVal) conjunctedSTS
+        (seqComposed, _discardedTrans2) = conjunctModel `sequentiallyPruned` seqSelfComposed
         initVal  = case stss of
             [] -> error "no STSs loaded"
-            (_, _, _, _, val,_):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
-        gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_,_) -> g) stss
-        as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_,_) -> a) stss
-        es =                                        Map.unions $ map (\(_,_,_,_,_,e) -> e) stss
+            (_, _, _, _, val,_,_):_ -> val    -- TODO: now each STS has its initial valuation, but this should be common as we are representing a single system
+        gs = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,g,_,_,_,_) -> g) stss
+        as = Map.fromList $ map swap $ Map.toList $ Map.unions $ map (\(_,_,_,a,_,_,_) -> a) stss
+        es =                                        Map.unions $ map (\(_,_,_,_,_,e,_) -> e) stss
+        fs =                                        Map.unions $ map (\(_,_,_,_,_,_,f) -> f) stss
 
-    --putStrLn $ prettyPrintIntrp seqComposed
-    --print discardedTransit
-    timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
+    timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime
     putStrLn ("computing offline test cases..." ++ timestamp)
-    let nrSteps = 30
+    let nrSteps = 16
         nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
         maxStale = 10 :: Int -- stop after this many consecutive test cases that did not increase coverage
-        randomSeed = 567
+        randomSeed = 678
+        extraSolutions = 5 -- the number of additional SMT solutions to pick input and output values randomly from
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
 
         observeVerdict (Just _) _ _ _ = error "shouldn't happen?"
@@ -61,14 +62,27 @@ run = do
           | isForbidden lattice = pure $ Just Fail
           | isUnderspecified lattice = pure $ Just Pass
           | otherwise = pure Nothing
+    
+    putStrLn $ "test parameters: steps " ++ show nrSteps ++ ", trailing steps " ++ show nrTrailingSteps
+        ++ ", max stale test cases " ++ show maxStale ++ ", random seed " ++ show randomSeed ++ ", extra solutions " ++ show extraSolutions
+
+    writeFile tracesFile ""
+
+    let model = seqComposed
         -- all switches taken in a test case, also the ones that were covered by an earlier test case
         observeSwitchesTaken = observer Set.empty (\taken intrpr act mq -> pure $ taken <> switchesTaken intrpr mq act) pure
         switches      = allSwitches model
         inputSwitches = Set.filter isInputSwitch switches
+        -- covered/total, with the percentage
+        coverage :: Int -> Int -> String
+        coverage covered total = show covered ++ "/" ++ show total
+            ++ if total == 0 then "" else " (" ++ printf "%.1f" (100 * fromIntegral covered / fromIntegral total :: Double) ++ "%)"
 
-    print "Composition finished, writing result to file..."
+    let composedFilename = "example_composed.json"
+    putStrLn $ "writing composition to file: " ++ composedFilename
     -- To write to a file:
-    --stsToJSONFile "det_2_composed.json" "det2" (syntacticAutomaton seqComposed) gs as es initVal
+    stsToJSONFile composedFilename "stscomposed" (syntacticAutomaton seqComposed) gs as es fs initVal
+
     writeFile tracesFile ""
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
@@ -77,9 +91,9 @@ run = do
           | stale >= maxStale = pure (toCover, n, kept, "the last " ++ show maxStale ++ " test cases did not increase coverage")
           | otherwise = do
               -- target the (location, gate) pairs of input switches not covered yet
-              let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` (observeInputCoverage `andObserving` observeSwitchesTaken)
+              let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps extraSolutions (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` (observeInputCoverage `andObserving` observeSwitchesTaken)
               start <- getCurrentTime
-              tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
+              tests <- evalStateT (offlineTests extraSolutions model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
               -- compute the covered switches
               let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) toCover (toList tests)
                   -- prefix with the time at which the test case was finished, and how long it took to generate
@@ -92,9 +106,9 @@ run = do
                   -- the test case increases coverage: keep it
                   appendTestTrace tracesFile model (snd . fst <$> tests)
                   report' $ "kept, switch coverage "
-                      ++ show (Set.size switches - Set.size toCover') ++ "/" ++ show (Set.size switches)
+                      ++ coverage (Set.size switches - Set.size toCover') (Set.size switches)
                       ++ ", input switch coverage "
-                      ++ show (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) ++ "/" ++ show (Set.size inputSwitches)
+                      ++ coverage (Set.size inputSwitches - Set.size (Set.filter isInputSwitch toCover')) (Set.size inputSwitches)
                   -- a test is a tree with a report and the switches taken per leaf, so merge over the leaves
                   let testReport = foldr (mergeInputCoverage . fst . snd) mempty (toList tests)
                       testTaken = foldMap (snd . snd) (toList tests)
@@ -114,8 +128,8 @@ run = do
         ++ show (length minimal) ++ " that are needed for the same coverage in " ++ tracesFile
     putStrLn $ show (length $ irreplaceable takenBy kept) ++ " of the test cases that increased coverage take a switch that none of the others take"
     putStrLn "input coverage of the test suite:"
-    putStr $ prettyPrintInputCoverage suiteReport
-    putStrLn $ ("left to cover: " ++ show leftToCover)
+    putStr $ prettyPrintInputCoverage es fs suiteReport
+    putStrLn $ "left to cover: " ++ show leftToCover
 
 -- | Pick elements that together cover the same as all given elements: going from the last element to the first, pick the ones
 -- that cover something that the elements picked so far do not. Then drop the picked elements that the other picked elements have

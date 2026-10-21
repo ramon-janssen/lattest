@@ -3,13 +3,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
 module Lattest.Model.Symbolic.SolveSymPrim (
 combineGuards,
 substituteInGuard,
 evaluateGuard,
 solveAnySequential,
 valuationToGateValue,
-solveGuard, solveGuardAny, solveGuardIO,
+solveGuard, solveGuardAny, solveGuardAmong, solveGuardIO,
 isGuardSatisfiable
 ) where
 
@@ -18,7 +19,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
 import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
-import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith)
+import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith, push, pop)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
@@ -31,8 +32,9 @@ import System.IO (hPutStrLn, stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
-import Control.Monad (forM_)
+import Data.Maybe (fromMaybe, isJust)
+import Control.Monad (forM_, filterM)
+import qualified Data.Set as Set
 
 {-|
     Combine the given guards into one.
@@ -57,14 +59,15 @@ evaluateGuard guard = case eval guard of
 
 {-|
     For the given list of interactions and guards, using SMT solving, pick the first interaction in that list for which the guard is satisfiable, if
-    any. The returned gate values for that interaction are not randomized in any way, picking values is left to the SMT solver.
+    any. The returned gate values for that interaction are picked randomly among the first solution and up to the given number of additional
+    solutions.
 -}
-solveAnySequential :: RandomGen randomgen => [(SymInteract g,SymGuard)] -> StateT randomgen IO (Maybe (GateValue g))
-solveAnySequential [] = return Nothing
-solveAnySequential ((interact'@(SymInteract _ vars),guard):alph) = do
-    maybeSolved <- solveGuard vars guard
+solveAnySequential :: RandomGen randomgen => Int -> [(SymInteract g,SymGuard)] -> StateT randomgen IO (Maybe (GateValue g))
+solveAnySequential _ [] = return Nothing
+solveAnySequential extraSolutions ((interact'@(SymInteract _ vars),guard):alph) = do
+    maybeSolved <- solveGuardAmong extraSolutions vars guard
     case maybeSolved of
-        Nothing -> solveAnySequential alph
+        Nothing -> solveAnySequential extraSolutions alph
         Just solved -> return $ Just $ valuationToGateValue interact' solved
 --data SymInteract g = SymInteract g [Variable]
 --data GateValue g = GateValue g [Constant]
@@ -149,20 +152,68 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
       case solveOutcome of
         Unsat -> return (Nothing, randomgen)
         Unknown -> (Nothing, randomgen) <$ warnUnknown guard
-        Sat -> getSolution vars >>= go randomgen extraSolutions . pure
+        Sat -> getSolution vars >>= \x -> go randomgen extraSolutions (Set.fromList $ filter hasMultipleValues vars) x []
   where
-    go :: RandomGen g => g -> Int -> [Valuation] -> SMTQ (Maybe Valuation, g)
-    go g 0 xs = do
-      let (ix, g') = randomR (0, length xs - 1) g
-      pure (Just $ xs !! ix, g')
-    go g n xs = do
-      addAssertionsQ $ map atleastoneisdifferent xs
-      getSolvable >>= \case
-        Unsat -> go g 0 xs
-        Unknown -> warnUnknown guard >> go g 0 xs
-        Sat -> do
-          x <- getSolution vars
-          go g (n-1) (x : xs)
+    -- the solutions found so far are the newest one and the older ones. The given variables are those that should still
+    -- differ from all solutions found so far. Once none are left, any solution different from the earlier ones is taken.
+    go :: RandomGen g => g -> Int -> Set.Set (Some Variable) -> Valuation -> [Valuation] -> SMTQ (Maybe Valuation, g)
+    go g 0 _ x xs = do
+      let (ix, g') = randomR (0, length xs) g
+      pure (Just $ (x : xs) !! ix, g')
+    go g n active x xs = do
+      -- assertions accumulate, so only the newest solution has to be excluded
+      addAssertionsQ [atleastoneisdifferent x]
+      (active', differing, g') <- solveDifferentIn g active (x : xs)
+      case differing of
+        Just x' -> go g' (n-1) active' x' (x : xs)
+        Nothing -> getSolvable >>= \case
+          Unsat -> go g' 0 mempty x xs
+          Unknown -> warnUnknown guard >> go g' 0 mempty x xs
+          Sat -> do
+            x' <- getSolution vars
+            go g' (n-1) mempty x' (x : xs)
+
+    -- look for a solution in which all given variables differ from the given solutions. Variables that can no longer
+    -- take a new value are dropped definitely. If the remaining variables can not all differ at once, randomly chosen
+    -- ones are ignored for this solution only.
+    solveDifferentIn :: RandomGen g => g -> Set.Set (Some Variable) -> [Valuation] -> SMTQ (Set.Set (Some Variable), Maybe Valuation, g)
+    solveDifferentIn g (Set.size -> 0) _ = pure (mempty, Nothing, g)
+    solveDifferentIn g active xs = differIn active xs >>= \case
+      Just x' -> pure (active, Just x', g)
+      Nothing -> do
+        stillVarying <- fmap Set.fromList <$> filterM (\v -> isJust <$> differIn (Set.singleton v) xs) $ Set.toList active
+        (differing, g') <- if length stillVarying == length active
+          then dropRandom g stillVarying -- these already failed to differ all at once
+          else dropUntilSolvable g stillVarying
+        pure (stillVarying, differing, g')
+      where
+        dropUntilSolvable g' (Set.size -> 0) = pure (Nothing, g')
+        dropUntilSolvable g' vs = differIn vs xs >>= \case
+          Just x' -> pure (Just x', g')
+          Nothing -> dropRandom g' vs
+        dropRandom g' vs = do
+          let (ix, g'') = randomR (0, Set.size vs - 1) g'
+              (before, after) = Set.splitAt ix vs
+          dropUntilSolvable g'' (before <> Set.drop 1 after)
+
+    -- look for a solution in which the given variables differ from the given solutions, without keeping that requirement
+    -- afterwards.
+    differIn :: Set.Set (Some Variable) -> [Valuation] -> SMTQ (Maybe Valuation)
+    differIn vs xs = do
+      push
+      addAssertionsQ [ isNot v | x <- xs, v@(var :=> _) <- DMap.assocs $ runValuation x, Some var `elem` vs ]
+      outcome <- getSolvable
+      x' <- case outcome of
+        Sat -> Just <$> getSolution vars
+        _ -> pure Nothing
+      pop
+      pure x'
+
+    -- variables that can only have one value are never required to differ
+    hasMultipleValues :: Some Variable -> Bool
+    hasMultipleValues (Some var) = case varType var of
+      E.UnitType -> False
+      _ -> True
 
     atleastoneisdifferent :: Valuation -> SymGuard
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation

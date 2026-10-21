@@ -3,9 +3,11 @@ import Test.Lattest.Exec.StandardTestControllers
 import Test.Lattest.Exec.NComplete
 import Test.Lattest.Exec.Testing
 import Test.Lattest.Model.BoundedMonad
+import Test.Lattest.Model.Internal.MCDCGeneration
 import Test.Lattest.Model.StandardAutomata
 import Test.Lattest.Model.STSTest
 import Test.Lattest.Model.Symbolic.Expr
+import Test.Lattest.Model.Symbolic.MCDCSTS
 import Test.Lattest.Util.ModelParsingUtils
 import Test.Lattest.Util.STSJSONParserTest
 import Test.Lattest.Util.STSJSONWriterTest
@@ -151,6 +153,8 @@ makeHUnitTests regenerate = do
         ++ testLatticeSTSQuiescence
         ++ evalTests
         ++ solveTests
+        ++ mcdcGenerationTests
+        ++ mcdcSTSTests
         ++ testQuantifiers
 
 -- TODO: This wraps HUnit tests into a Tasty test.

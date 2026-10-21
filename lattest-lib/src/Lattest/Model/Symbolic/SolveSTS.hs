@@ -38,7 +38,7 @@ import Lattest.Model.Automaton ( stateConf,IntrpState(..), transRel, AutomatonEx
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.SMT ( Some(..) )
-import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard, isGuardSatisfiable)
+import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuardAmong, isGuardSatisfiable)
 import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints, prettyConstant)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 
@@ -65,22 +65,22 @@ import Control.Monad.State (StateT (..), MonadTrans (..))
 {-|
     For the given STS and a subset function, using SMT solving, find a interaction of the STS in that subset for which the guard is true from the
     current STS state. The interaction is picked uniformly randomly among interactions with satisfied gates, if any. This uses the supplied random 
-    generator and returns the new random generator state. The returned gate values for that interaction are not randomized in any way, picking values
-    is left to the SMT solver.
+    generator and returns the new random generator state. The returned gate values for that interaction are picked randomly among the first solution
+    and up to the given number of additional solutions.
 -}
-solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> IO (Maybe (GateValue g'), r)
-solveRandomInteraction intrpr subsetFunction = solveRandomInteractionWith intrpr (fmap (,sTrue) . subsetFunction)
+solveRandomInteraction :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => Int -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g')) -> r -> IO (Maybe (GateValue g'), r)
+solveRandomInteraction extraSolutions intrpr subsetFunction = solveRandomInteractionWith extraSolutions intrpr (fmap (,sTrue) . subsetFunction)
 
 {-|
     As 'solveRandomInteraction', but the subset function also gives an additional guard per interaction, over the state variables substituted by
     their current values and the gate parameters. The solved gate values satisfy that guard as well. This can be used to steer the solver towards
     a specific switch, instead of towards any switch of the interaction.
 -}
-solveRandomInteractionWith :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g', SymGuard)) -> r -> IO (Maybe (GateValue g'), r)
-solveRandomInteractionWith intrpr subsetFunction r = do
+solveRandomInteractionWith :: (BM.BoundedMonad m, Foldable m, BooleanConfiguration m, Ord i, Ord o, Ord loc, RandomGen r, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc)) => Int -> AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g', SymGuard)) -> r -> IO (Maybe (GateValue g'), r)
+solveRandomInteractionWith extraSolutions intrpr subsetFunction r = do
     let interactionsWithGuards = selectInteractionsAndGuards intrpr subsetFunction
         (interactionsWithGuards', r') = shuffle interactionsWithGuards r
-    runStateT (solveAnySequential interactionsWithGuards') r'
+    runStateT (solveAnySequential extraSolutions interactionsWithGuards') r'
     where
     -- select the subset of gates according to the subsetFunction, together with the guards from the current state configuration according to the STS interpretation
     selectInteractionsAndGuards :: (BM.BoundedMonad m, BooleanConfiguration m, Foldable m, Ord i, Show i, Show o, Show (SymIntrpState loc), Ord o, Ord loc, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a)) => AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (GateValue g'') -> (IOSymInteract i o -> Maybe (SymInteract g', SymGuard)) -> [(SymInteract g', SymGuard)]
@@ -229,11 +229,12 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
 
 offlineTests :: forall g m loc i o state r
               . (RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)), Show (SymIntrpState loc))
-             => AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
+             => Int -- ^ the number of additional solutions to pick output values randomly from, besides the first one the SMT solver finds
+             -> AutIntrpr      m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
              -> (state -> r)
              -> StateT g IO (OfflineTests i o r)
-offlineTests intrpr tc inputforbidden
+offlineTests extraSolutions intrpr tc inputforbidden
   | not (sanityCheckSTS intrpr) = error "sanity check failed"
   | BM.isForbidden (stateConf intrpr) = error "forbidden before offline tests"
   | otherwise = do
@@ -247,7 +248,7 @@ offlineTests intrpr tc inputforbidden
               Underspecified -> error "generated an input that went to top: shouldn't be possible, the point of selectTest is that it selects a valid input"
               Forbidden -> pure $ Left (i', OfflineTests mempty $ Right $ inputforbidden (testControllerState tc'))
               Indefinite -> do
-                ot <- offlineTests intrpr' tc' inputforbidden
+                ot <- offlineTests extraSolutions intrpr' tc' inputforbidden
                 pure $ Left (i', ot)
   o <- Map.fromList . catMaybes <$> do
     let os = mapMaybe (\case
@@ -256,7 +257,7 @@ offlineTests intrpr tc inputforbidden
               (toList $ alphabet $ syntacticAutomaton intrpr)
     forM os $ \(SymInteract o vs) -> do
       let guard = interactsToAllowedCondition intrpr [SymInteract (Out o) vs]
-      mv <- solveGuard vs guard
+      mv <- solveGuardAmong extraSolutions vs guard
       case mv of
         Nothing -> pure Nothing
         Just (runValuation -> m) -> let vs' = map (\(Some v) -> case DMap.lookup v m of
@@ -283,7 +284,7 @@ offlineTests intrpr tc inputforbidden
               --   [Some (Constant {constType = [Char], constValue = ""})],
               --   fromList [state_p:[Char] :=> ""]
               -- )
-              | otherwise -> offlineTests intrpr' tc' inputforbidden)
+              | otherwise -> offlineTests extraSolutions intrpr' tc' inputforbidden)
   pure $ OfflineTests o i
   where
     handleAction :: IOGateValue i o
