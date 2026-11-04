@@ -91,13 +91,13 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack, HasCallStack)
-import Lattest.Model.Symbolic.Expr(ConstType(..), Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
+import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, constType, withExprConstraints)
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
-import Data.Constraint.Extras (Has(..))
 import Control.Monad.Extra (anyM)
+import Lattest.Model.Symbolic.Internal.ExprDefs (fromConst)
 
 ------------
 -- syntax --
@@ -498,7 +498,7 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
                               "type of variable and value do not match. Variables: ["
                               <> List.intercalate ", " (map (\(Some v) -> show v) vars)
                               <> "], Values: ["
-                              <> List.intercalate ", " (map (\(Some (Constant t v)) -> has @Show t $ show v) vals)
+                              <> List.intercalate ", " (map (\(Some (Constant v)) -> show v) vals)
                               <> "]"
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
@@ -513,17 +513,17 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
             else let stateValuation2 = Valuation $ DMap.mapWithKey (\var val -> assignNewValue var val valuation assign) $ runValuation stateValuation
                  in BM.ordReturn $ IntrpState l2 stateValuation2
         where
-        assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t
+        assignNewValue :: Variable t -> Constant t -> Valuation -> VarModel -> Constant t
         assignNewValue var oldVal val' assign' = withExprConstraints var
-                                               $ maybe oldVal (Val . fromConst . evalVal val') (assignedExpr var assign')
+                                               $ maybe oldVal (evalVal val') (assignedExpr var assign')
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Some Variable] -> [Some Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
                                               -------------- TODO: this unsafeCoerce should be replaced by a check, which means we need some type tag in Val
 buildGateValuation gateVars gateVals = assignValues $ (\(Some gateVar, Some gateVal) m -> insertIntoValuation gateVar (unsafeCoerce gateVal) m) <$> zip gateVars gateVals
-evalVal :: (ConstType t) => Valuation -> Expr t -> Constant t
+evalVal :: Valuation -> Expr t -> Constant t
 evalVal valuation e = case eval $ substConst valuation e of
-    Right v -> toConst v
+    Right v -> withExprConstraints e $ Constant v
     Left m -> error $ "evalVal: " ++ m
 evalBool :: Valuation -> Expr Bool -> Bool
 evalBool valuation = fromConst . evalVal valuation

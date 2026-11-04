@@ -9,7 +9,7 @@ module Lattest.Model.Symbolic.Expr
 , ExprView(..)
 , ExprType(..)
 , Type(..)
-, Constant(Constant, CInt, CBool, CString, CList, CSet, CSum, CTuple, CFloat, CRational, CReal, CChar)
+, Constant(..)
 , int
 , unit
 , float
@@ -19,17 +19,12 @@ module Lattest.Model.Symbolic.Expr
 , string
 , char
 , list
-, set
 , tuple
 , option
 , enumIndex
 , prettyValue
 , prettyConstant
 , constType
-, ConstType
-, fromConst
-, constValue
-, toConst
 , Variable(..)
 , freeVars
 , withExprConstraints
