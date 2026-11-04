@@ -7,10 +7,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-|
@@ -65,7 +66,8 @@ prettyPrint,
 prettyPrintFrom,
 prettyPrintIntrp,
 sanityCheckLTS,
-sanityCheckSTS
+sanityCheckSTS,
+Q, T, Tdest, Act,
 )
 where
 
@@ -140,6 +142,18 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     Just x -> x
     Nothing -> error "transition function only defined for transition labels in the automaton alphabet"
 
+
+
+-- TODO: associated type families or top-level type families?
+-- class Qx a where
+-- class Tx a where
+-- class Tdestx a where
+-- class Actx a where
+type family Q a loc
+type family T a i o
+type family Tdest a
+type family Act a i o
+
 ---------------
 -- interpret --
 ---------------
@@ -153,9 +167,9 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
     complex automaton model may have states consisting of syntactical locations combined with valuations for data
     variables, clocks for timing, etc.
 -}
-data AutIntrpr m loc q t tdest act = AutInterpretation {
-    stateConf :: m q,
-    syntacticAutomaton :: AutSyntax m loc t tdest
+data AutIntrpr m loc i o foo = AutInterpretation {
+    stateConf :: m (Q foo loc),
+    syntacticAutomaton :: AutSyntax m loc (T foo i o) (Tdest foo)
     }
 
 {- |
@@ -164,11 +178,11 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc q t tdest act
+interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc i o foo
 interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
 
 -- | The given model, in the given configuration.
-inConfiguration :: AutIntrpr m loc q t tdest act -> m q -> AutIntrpr m loc q t tdest act
+inConfiguration :: AutIntrpr m loc i o foo -> m q -> AutIntrpr m loc i o foo
 inConfiguration aut conf = aut {stateConf = conf}
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
@@ -242,7 +256,7 @@ type After m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionS
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: (After m loc q t tdest act, Ord (m q), Ord q) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: (After m loc q t tdest act, Ord (m q), Ord q) => AutIntrpr m loc i o foo -> AutIntrpr m loc i o foo
 after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     where
     takeTransitionId :: (BoundedMonad m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
@@ -251,7 +265,7 @@ after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     fmapId f = Identity . BM.ordMap (runIdentity . f)
 
 class IOAfter m loc q t tdest act where
-    ioAfter :: AutIntrpr m loc q t tdest act -> act -> IO (AutIntrpr m loc q t tdest act)
+    ioAfter :: AutIntrpr m loc i o foo -> act -> IO (AutIntrpr m loc i o foo)
 
 -- tdest ~ () <=> LTS
 instance (After m loc q t () act, Ord (m q), Ord q) => IOAfter m loc q t () act where
@@ -269,14 +283,14 @@ instance (StepSemantics m loc q t STStdest act, IOTransitionSemantics loc q t ST
 afterInternal :: (StepSemantics m loc q t tdest act, Monad execM, Ord t, Ord q, Ord (m q)) =>
     (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
     ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
-    AutIntrpr m loc q t tdest act -> act -> execM (AutIntrpr m loc q t tdest act)
+    AutIntrpr m loc i o foo -> act -> execM (AutIntrpr m loc i o foo)
 afterInternal internalTakeTransition fmapmq intrpr act' = do
     let aut = syntacticAutomaton intrpr
         toNewStateConfig = afterInternal' internalTakeTransition (alphabet aut) (transRel aut) act'
     stateConf' <- toNewStateConfig `fmapmq` stateConf intrpr
     return $ intrpr { stateConf = BM.ordJoin stateConf' }
 {-
-after :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc q t tdest act -> act -> AutIntrpr m loc q t tdest act
+after :: (StepSemantics m loc q t tdest act, Ord q, Ord (m q)) => AutIntrpr m loc i o foo -> act -> AutIntrpr m loc i o foo
 after intrpr act' = 
     let aut = syntacticAutomaton intrpr
         stateConf' = BM.ordBind (stateConf intrpr) (after' (alphabet aut) (transRel $ aut) act')
@@ -323,7 +337,7 @@ after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act
 -}
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q), Show t, Show (m (tdest, loc))) => AutIntrpr m loc q t tdest act -> [act] -> AutIntrpr m loc q t tdest act
+afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q), Show t, Show (m (tdest, loc))) => AutIntrpr m loc i o foo -> [act] -> AutIntrpr m loc i o foo
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -362,7 +376,7 @@ actionMenu aut = (locationActions aut ++) $ concat $ BM.ordMap asActions $ Set.t
 
 -- | Menu of specified actions that are semantically present in the automaton.
 specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
-    => AutIntrpr m loc q t tdest act -> [act]
+    => AutIntrpr m loc i o foo -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
 -----------------------------------------------------------------------------------------------
@@ -645,21 +659,21 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ "  ――" ++ show t ++ "⟶  " ++ show mt
 
-prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc q t tdest act -> String
+prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc i o foo -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
     where
     printStateConf = show $ stateConf intrp
     printAut = prettyPrint $ syntacticAutomaton intrp
 
 
-sanityCheckLTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
-            => AutIntrpr m loc q (IOAct i o) tdest act -> Bool
+sanityCheckLTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m, T foo i o ~ IOAct i o, tdest ~ Tdest foo)
+            => AutIntrpr m loc i o foo -> Bool
 sanityCheckLTS = sanityCheckInternal isInput
-sanityCheckSTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
-            => AutIntrpr m loc q (IOSymInteract i o) tdest act -> Bool
+sanityCheckSTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m, T foo i o ~ IOSymInteract i o, tdest ~ Tdest foo)
+            => AutIntrpr m loc i o foo -> Bool
 sanityCheckSTS = sanityCheckInternal isInputInteract
 sanityCheckInternal :: (Show loc, Show t, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
-            => (t -> Bool) -> AutIntrpr m loc q t tdest act -> Bool
+            => (t -> Bool) -> AutIntrpr m loc i o foo -> Bool
 sanityCheckInternal isIn intrpr = noInputToForbidden && noOutputToUnderspecified
   where
     noInputToForbidden =

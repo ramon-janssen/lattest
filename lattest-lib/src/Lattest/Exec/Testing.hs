@@ -7,6 +7,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleInstances #-}
 {- |
     This module contains the main functions and data structures to run experiments against (external) systems, specifically testing
     experiments.
@@ -49,7 +51,7 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, IOAct, IOSymInteract)
-import Lattest.Model.Automaton ( StepSemantics,StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest, sanityCheckLTS,sanityCheckSTS )
+import Lattest.Model.Automaton ( StepSemantics,StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest, sanityCheckLTS,sanityCheckSTS, Act, Q, Tdest, T)
 import Lattest.Model.BoundedMonad(BoundedConfiguration, isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
@@ -84,18 +86,18 @@ data InconclusiveReason = AutomatonException AutomatonException | OutputNotInOff
     Results can be used to record additional information that the tester is interested in, depending on the controller implementation.
     For example, the actions observed during a testing experiment, or whether certain coverage criteria were achieved during the experiment.
 -}
-data TestController m loc q t tdest act state i r = TestController {
+data TestController m loc i o foo state r = TestController {
     -- | Any state that the controller needs for its decision making duties.
     testControllerState :: state,
     {- |
         Select a test based on test controller state, the specification (in its current state), and previous specification configuration.
         Either select a new controller state and a input, /or/ stop testing and return a result from the controller.
     -}
-    selectTest :: (TestChoice i act) => state -> AutIntrpr m loc q t tdest act -> m q -> IO (Either (i, state) r),
+    selectTest :: (TestChoice i (Act foo i o)) => state -> AutIntrpr m loc i o foo -> m (Q foo loc) -> IO (Either (i, state) r),
     {- |
         Handle a transition. Passes the intrpr after the transition, and its state configuration before the transition.
     -}
-    updateTestController :: state -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (Either state r),
+    updateTestController :: state -> AutIntrpr m loc i o foo -> Act foo i o -> m (Q foo loc) -> IO (Either state r),
     -- | Handle the end of the action stream, i.e. the other end closing, ending the experiment.
     handleTestClose :: state -> IO r
     }
@@ -105,8 +107,8 @@ data TestController m loc q t tdest act state i r = TestController {
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act) =>
-    AutIntrpr m loc q t tdest act -> TestController m loc q t tdest act state i r -> ActionController act i (Verdict, r) (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+makeTester :: forall m loc q t tdest act i o foo state r. (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act, TestChoice i act, act ~ Act foo i o, t ~ T foo i o, tdest ~ Tdest foo, q ~ Q foo loc) =>
+    AutIntrpr m loc i o foo -> TestController m loc i o foo state r -> ActionController act i (Verdict, r) (AutIntrpr m loc i o foo, TestController m loc i o foo state r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
     select = makeSelect,
@@ -114,23 +116,18 @@ makeTester initSpec initTestController = ActionController {
     handleClose = makeHandleClose
     }
     where
-        makeSelect :: (TestChoice i act, BoundedConfiguration m)
-            => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
-            -> IO (Either (i, (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)) (Verdict, r))
+        makeSelect :: (AutIntrpr m loc i o foo, TestController m loc i o foo state r)
+                   -> IO (Either (i, (AutIntrpr m loc i o foo, TestController m loc i o foo state r)) (Verdict, r))
         makeSelect (spec, testController) = do
             next <- selectTest testController (testControllerState testController) spec (stateConf spec)
             case next of
                 Right r -> return $ Right (pToVerd $ stateConf spec, r)
                 Left (i, state') -> return $ Left (i, (spec, testController { testControllerState = state' }))
---            return $ case next of
---                Right r -> Right (pToVerd $ stateConf spec, r)
---                Left (i, state') -> Left (i, (spec, testController { testControllerState = state' }))
-        makeUpdate :: (IOAfter m loc q t tdest act, StepSemantics m loc q t tdest act)
-                   => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r)
+        makeUpdate :: (AutIntrpr m loc i o foo, TestController m loc i o foo state r)
                    -> act
-                   -> IO (Either (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) (Verdict, r))
+                   -> IO (Either (AutIntrpr m loc i o foo, TestController m loc i o foo state r) (Verdict, r))
         makeUpdate (spec, testController) act = do
-            spec' <- ioAfter spec act
+            spec' <- ioAfter @m @loc @q @t @tdest spec act
             confOrAutomatonException <- catchAutomatonException $ stateConf spec'
             case confOrAutomatonException of
                 Left conf' -> do
@@ -146,11 +143,11 @@ makeTester initSpec initTestController = ActionController {
                 Right e -> do
                     r <- handleTestClose testController (testControllerState testController)
                     return $ Right (Inconclusive $ AutomatonException e, r)
-        makeHandleClose :: (BoundedConfiguration m) => (AutIntrpr m loc q t tdest act, TestController m loc q t tdest act state i r) -> IO (Verdict, r)
+        makeHandleClose :: (AutIntrpr m loc i o foo, TestController m loc i o foo state r) -> IO (Verdict, r)
         makeHandleClose (spec, testController) = do
             r <- handleTestClose testController (testControllerState testController)
             return (pToVerd $ stateConf spec, r)
-        pToVerd :: (BoundedConfiguration m) => m x -> Verdict
+        pToVerd :: m x -> Verdict
         pToVerd p | isForbidden p = Fail
                   | otherwise     = Pass
 
@@ -191,7 +188,8 @@ runExperiment controller adapter = do
 class RunTester tdest where
   -- | A constraint synonym for the constraints of 'runTester'.
   --   This allows each instance to have different constraints.
-  type RunnableTester (m :: Type -> Type) loc q t tdest act i o i' :: Constraint
+  -- TODO: remove i' (which is either i or Maybe i), let 'foo' handle that
+  type RunnableTester (m :: Type -> Type) loc i o i' tdest foo :: Constraint
 
   {- |
       Running a tester requires:
@@ -206,20 +204,20 @@ class RunTester tdest where
       result returned by the test controller.
   -}
   runTester
-    :: RunnableTester m loc q t tdest act i o i'
-    => AutIntrpr m loc q t tdest act
-    -> TestController m loc q t tdest act state i' r
-    -> Adapter act i'
+    :: RunnableTester m loc i o i' tdest foo
+    => AutIntrpr m loc i o foo
+    -> TestController m loc i' o foo state r
+    -> Adapter (Act foo i o) i'
     -> IO (Verdict, r)
 
 instance RunTester () where
-  type RunnableTester m loc q t () act i o i' = (t ~ IOAct i o, After m loc q t () act, TestChoice i' act, Ord loc, Ord q, Ord (m q), Show i, Show o, Show loc, Show t, Show (m ((),loc)), Foldable m)
+  type RunnableTester m loc i o i' () foo = (i ~ i', Tdest foo ~ (), T foo i o ~ IOAct i o, After m loc (Q foo loc) (T foo i o) () (Act foo i o), TestChoice i' (Act foo i o), Ord loc, Ord (Q foo loc), Ord (m (Q foo loc)), Show i, Show o, Show loc, Show (T foo i o), Show (m ((),loc)), Foldable m)
   runTester intrpr
     | not (sanityCheckLTS intrpr) = error "check failed"
     | otherwise = runLTSTester intrpr
 
 instance RunTester STStdest where
-  type RunnableTester m loc q t STStdest act i o i' = (t ~ IOSymInteract i o, IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, Show loc, Show i, Show o, Show (m (STStdest, loc)), Ord loc, Foldable m, TestChoice i' act)
+  type RunnableTester m loc i o i' STStdest foo = (i ~ i', Tdest foo ~ STStdest, T foo i o ~ IOSymInteract i o, IOAfter m loc (Q foo loc) (T foo i o) STStdest (Act foo i o), StepSemantics m loc (Q foo loc) (T foo i o) STStdest (Act foo i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Ord loc, Foldable m, TestChoice i' (Act foo i o))
   runTester intrpr
     | not (sanityCheckSTS intrpr) = error "check failed"
     | otherwise = runSTSTester intrpr
@@ -227,14 +225,14 @@ instance RunTester STStdest where
 {- |
     runTester specialized to LTS models, and without running the sanity checks.
 -}
-runLTSTester :: (After m loc q t () act, TestChoice i act, Ord q, Ord (m q)) =>
-    AutIntrpr m loc q t () act -> TestController m loc q t () act state i r -> Adapter act i -> IO (Verdict, r)
+runLTSTester :: (After m loc (Q foo loc) (T foo i o) () (Act foo i o), TestChoice i' (Act foo i o), Ord (Q foo loc), Ord (m (Q foo loc)), Tdest foo ~ (), i ~ i') =>
+    AutIntrpr m loc i o foo -> TestController m loc i' o foo state r -> Adapter (Act foo i o) i' -> IO (Verdict, r)
 runLTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
 {- |
     runTester specialized to STS models, and without running the sanity checks.
 -}
-runSTSTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act) =>
-    AutIntrpr m loc q t STStdest act -> TestController m loc q t STStdest act state i r -> Adapter act i -> IO (Verdict, r)
+runSTSTester :: (IOAfter m loc q t STStdest act, StepSemantics m loc q t STStdest act, TestChoice i act, Tdest foo ~ STStdest, act ~ Act foo i o, t ~ T foo i o, q ~ Q foo loc) =>
+    AutIntrpr m loc i o foo -> TestController m loc i o foo state r -> Adapter act i -> IO (Verdict, r)
 runSTSTester spec testSelection = runExperiment (makeTester spec testSelection)
 
