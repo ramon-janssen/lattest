@@ -64,7 +64,7 @@ run = do
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
-        testSelector = randomDataOrWaitForOutputTestSelectorFromSeed randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
+        testSelector = randomDataOrWaitForOutputTestSelectorFromSeed randomSeed 10 probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     (verdict, (observed, maybeMq)) <- runSTSTester model testSelector adap
 
