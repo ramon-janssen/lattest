@@ -37,7 +37,7 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), (.-), sConst, Val (..), withExprConstraints)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), (.-), sConst, withExprConstraints)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
@@ -55,7 +55,6 @@ import Data.Constraint.Extras (Has(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprNumConstraint)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
-import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
 import System.Random (RandomGen, genWord32)
 
@@ -119,16 +118,16 @@ getSolution vs =
   Valuation . foldr DMap.union mempty
   <$> mapM getVarValue vs
   where
-    getVarValue :: Some Variable -> SMTQ (DMap.DMap Variable Val)
+    getVarValue :: Some Variable -> SMTQ (DMap.DMap Variable Constant)
     getVarValue (Some v@(Variable nm tp)) = do
         sval <- gets (\m -> case m Map.!? nm of
             Nothing -> error $ show nm <> "is not in the map"
             Just (Some (SBVI.SBV x)) -> x)
-        (Constant _ c) <- lift $ svalToConstant tp sval
-        return $ DMap.singleton v (withExprConstraints tp $ Val c)
+        (Constant c) <- lift $ svalToConstant tp sval
+        return $ DMap.singleton v (withExprConstraints tp $ Constant c)
 
 svalToConstant :: Type a -> SBVI.SVal -> Query (Constant a)
-svalToConstant t s = withExprConstraints t $ Constant t <$> SBV.getValue (SBVI.SBV s)
+svalToConstant t s = withExprConstraints t $ Constant <$> SBV.getValue (SBVI.SBV s)
 
 addAssertions :: [Expr Bool] -> SMT ()
 addAssertions = mapM_ (lift . constrain <=< smt'tosmt . exprToSymbolic . view)
@@ -158,7 +157,6 @@ addDeclaration (Variable nm ty) = do
       UnitType -> SBV.sTuple
       CharType -> SBV.sChar
       ListType t -> withExprConstraints t SBV.sList
-      SetType t -> withExprConstraints t SBV.sSet
       TupleType a b -> withExprConstraints a $ withExprConstraints b $ \name -> curry SBV.tuple <$> mkvar a ("fst"<>name) <*> mkvar b ("snd"<>name)
       SumType a b -> withExprConstraints a $ withExprConstraints b SBV.sEither
 
@@ -222,8 +220,6 @@ exprToSymbolic = \case
   Tail xs -> withExprConstraints (typeOf' xs) $ SBV.tail <$> go xs
   ELeft xs -> withExprConstraints (typeOf' xs) $ SBV.sLeft <$> go xs
   ERight xs -> withExprConstraints (typeOf' xs) $ SBV.sRight <$> go xs
-  SElem t x xs -> withExprConstraints t $ withExprConstraints (SetType t) $ SBV.member <$> go x <*> go xs
-  SInsert x xs -> SBV.insert <$> go x <*> go xs
   Zip a b xs ys -> withExprConstraints a $ withExprConstraints b $ SBV.zip <$> go xs <*> go ys
 
   -- do-notation makes it easier to massage the functions into the forms that SBV expects
@@ -333,9 +329,6 @@ sortOfEqualWith approxNonDoubles range l r = withExprConstraints (Expr l) $ case
     in And $ Set.fromList
       [ Foldr v1 v2 (And $ Set.fromList [Var v2, sortOfEqualWith approxNonDoubles range (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
       , Equal IntType (Length tp l) (Length tp r)]
-  -- the version of sets that SBV supports probably just isn't very useful for Lattest,
-  -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
-  SetType _ -> error "TODO"
   -- For int, bool, char, and unit; just use equality
   tp -> Equal tp l r
 
@@ -346,7 +339,6 @@ hasDecimals approxNonDoubles = \case
   RationalType -> approxNonDoubles
   RealType -> approxNonDoubles
   ListType t -> hasDecimals approxNonDoubles t
-  SetType t -> hasDecimals approxNonDoubles t
   TupleType a b -> hasDecimals approxNonDoubles a || hasDecimals approxNonDoubles b
   SumType a b -> hasDecimals approxNonDoubles a || hasDecimals approxNonDoubles b
   _ -> False
@@ -391,7 +383,7 @@ sbvModelToValuation :: SBVI.SMTModel -> Valuation
 sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
   where
     f (varname, cv) = go cv $
-        \tp x -> DMap.insert (Variable varname tp) $ withExprConstraints tp $ Val x
+        \tp x -> DMap.insert (Variable varname tp) $ withExprConstraints tp $ Constant x
 
     go :: SBVI.CV -> (forall t. Type t -> t -> r) -> r
     go cv k = case cv of
@@ -402,13 +394,6 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       SBVI.CV KString (SBVI.CString s) -> k (ListType CharType) s
       SBVI.CV (KList t) (SBVI.CList xs) -> kindToType t $ \tp -> k (ListType tp) $
         foldr (\x ys -> go (SBVI.CV t x) $ \_ y -> unsafeCoerce y:ys) [] xs
-      SBVI.CV (KSet t) (SBVI.CSet s) -> case s of
-        RegularSet    xs -> go (SBVI.CV (KList t) (SBVI.CList $ Set.toList xs)) $ \cases
-          (ListType tp) ys -> withExprConstraints tp $ k (SetType tp) (RegularSet    $ Set.fromList ys)
-          _ _ -> error "impossible"
-        ComplementSet xs -> go (SBVI.CV (KList t) (SBVI.CList $ Set.toList xs)) $ \cases
-          (ListType tp) ys -> withExprConstraints tp $ k (SetType tp) (ComplementSet $ Set.fromList ys)
-          _ _ -> error "impossible"
       SBVI.CV (KTuple [k1, k2]) (SBVI.CTuple [x,y]) -> go (SBVI.CV k1 x) $ \t1 x' -> go (SBVI.CV k2 y) $ \t2 y' -> k (TupleType t1 t2) (x', y')
       SBVI.CV (KTuple []) _ -> k UnitType ()
       SBVI.CV (KADT "Either" _ [("Left", _), ("Right", [rk])]) (SBVI.CADT ("Left", [(k', x)])) -> kindToType rk $ \rty ->
@@ -426,7 +411,6 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       KChar -> k CharType
       KString -> k $ ListType CharType
       KList t -> kindToType t $ k . ListType
-      KSet t -> kindToType t $ k . SetType
       KTuple [k1, k2] -> kindToType k1 $ \t1 -> kindToType k2 $ \t2 -> k $ TupleType t1 t2
       KTuple [] -> k UnitType
       _ -> error $ "couldn't convert kind " <> show kind

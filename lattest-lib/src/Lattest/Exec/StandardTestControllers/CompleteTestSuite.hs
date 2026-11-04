@@ -51,7 +51,7 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
+import Lattest.Model.Symbolic.Expr (Variable (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars, ExprType (..), constType)
 import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..), mapSome)
@@ -255,7 +255,7 @@ switchesTaken intrpr mq gv@(GateValue _ vals) = case (asConjunction mq, asTransi
   where syn = syntacticAutomaton intrpr
 
 data InputCoverageKey i tp = ICK i SymGuard (Variable tp) deriving Show
-data InputCoverageValue tp = ICV (Type tp) (Set.Set (Val tp)) deriving Show
+data InputCoverageValue tp = ICV (Type tp) (Set.Set (Constant tp)) deriving Show
 type InputCoverageReport i = DMap (InputCoverageKey i) InputCoverageValue
 instance GEq (InputCoverageKey i) where
   geq (ICK _ _ v) (ICK _ _ v') = geq v v'
@@ -297,7 +297,7 @@ observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLatt
 observeInputCoverage = observer mempty update pure
   where
     update icr _ (GateValue (Out _) _) _ = pure icr
-    update icr intrpr (GateValue (In gate') consts) mq = pure $ foldr (\(guard, c :=> v) icr' -> DMap.insertWith (\(ICV t a) (ICV _ b) -> ICV t $ Set.union a b) (ICK gate' guard v) (ICV (constType c) $ Set.singleton $ withExprConstraints c Val $ constValue c) icr') icr $ cartesian guards taggedvals
+    update icr intrpr (GateValue (In gate') consts) mq = pure $ foldr (\(guard, c :=> v) icr' -> DMap.insertWith (\(ICV t a) (ICV _ b) -> ICV t $ Set.union a b) (ICK gate' guard v) (ICV (constType c) $ Set.singleton c) icr') icr $ cartesian guards taggedvals
       where
         -- the guards of the switches that are taken: the ones that hold for the input values, in the state before the transition
         guards
@@ -307,7 +307,7 @@ observeInputCoverage = observer mempty update pure
           | otherwise = error "TODO: compute input coverage for disjunctions" -- mempty
         taggedvals :: [DSum Constant Variable]
         taggedvals = zipWith
-          (\(Some c@(Constant tp1 _)) (Some v@(Variable _ tp2)) -> case geq tp1 tp2 of
+          (\(Some c@(Constant x1)) (Some v@(Variable _ tp2)) -> case geq (typeOf x1) tp2 of
               Nothing -> error "type mismatch"
               Just Refl -> c :=> v)
           consts

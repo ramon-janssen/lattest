@@ -32,8 +32,8 @@ import Lattest.Model.Symbolic.Expr
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (Constant (..), Expr (..))
-import Data.SBV (RCSet (..), AlgReal)
+import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
+import Data.SBV (AlgReal)
 import qualified Data.Aeson.Types as JSON
 import qualified Data.Aeson.KeyMap as JSON
 import Data.Aeson.Key (toString)
@@ -279,12 +279,6 @@ toExpr varmap accmap enummap = \case
     op2 "take" (IntType :=> i) (ListType t :=> xs) = Right $ ListType t :=> sTake i xs
     op2 "drop" (IntType :=> i) (ListType t :=> xs) = Right $ ListType t :=> sDrop i xs
     op2 "pair" (t1 :=> x) (t2 :=> y) = Right $ TupleType t1 t2 :=> sPair x y
-    op2 "selem" (t1 :=> x) (SetType t2 :=> y) = case geq t1 t2 of
-      Just Refl -> Right $ BoolType :=> sSElem x y
-      Nothing -> Left "mismatched type for set elem"
-    op2 "insert" (t1 :=> x) (SetType t2 :=> y) = withExprConstraints t1 case geq t1 t2 of
-      Just Refl -> Right $ SetType t1 :=> sInsert x y
-      Nothing -> Left "mismatched type for set insert"
     op2 o _ _ = Left $ "unknown or badly typed op2: " <> o
 
     op3 :: String -> String -> UntypedExpr -> UntypedExpr -> Either String (DSum Type Expr)
@@ -628,7 +622,7 @@ buildValuation locVarCtx initVal enums =
     fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, Some var) ->
         case Map.lookup name initVal of
             Just v -> case jsonToValue (varType var) v of
-                Just x  -> Right (name, insertIntoValuation var (Constant (varType var) x))
+                Just x  -> Right (name, insertIntoValuation var (withExprConstraints var $ Constant x))
                 Nothing -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show (varType var)
             Nothing -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
@@ -654,17 +648,16 @@ buildValuation locVarCtx initVal enums =
         -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
         -- this by test in the future
         defaultConst :: Type t -> Constant t
-        defaultConst IntType    = CInt 0
-        defaultConst UnitType = CUnit
-        defaultConst FloatType  = CFloat 0.0
-        defaultConst RationalType = CRational 0.0
-        defaultConst RealType = CReal 0.0
-        defaultConst BoolType   = CBool False
-        defaultConst CharType = CChar 'a'
-        defaultConst (ListType t) = CList [] t
-        defaultConst (SetType t) = withExprConstraints t $ CSet (RegularSet mempty) t
-        defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
-        defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
+        defaultConst IntType    = Constant 0
+        defaultConst UnitType = Constant ()
+        defaultConst FloatType  = Constant 0.0
+        defaultConst RationalType = Constant 0.0
+        defaultConst RealType = Constant 0.0
+        defaultConst BoolType   = Constant False
+        defaultConst CharType = Constant 'a'
+        defaultConst (ListType t) = withExprConstraints t $ Constant []
+        defaultConst t@(TupleType a b) = withExprConstraints t $ Constant (constValue $ defaultConst a, constValue $ defaultConst b)
+        defaultConst t@(SumType a _) = withExprConstraints t $ Constant (Left $ constValue $ defaultConst a)
 
 -- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, and the initial valuation.
 type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation, EnumMap)
