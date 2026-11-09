@@ -102,6 +102,12 @@ jobs:
     - name: Run examples against their Java SUTs
       run: |
         set -uo pipefail
+
+        echo "debugging:"
+        trap 'echo "!!! Main script received SIGTERM at $(date -Is)"' TERM
+        trap 'echo "!!! Main script received SIGINT at $(date -Is)"' INT
+        trap 'echo "!!! Main script exiting with status $?"' EXIT
+
         for exdir in examples/*/; do
           ex=$(basename "$exdir")
           [ -f "$exdir/stack.yaml" ] || continue
