@@ -50,8 +50,8 @@ run = do
     --print discardedTransit
     timestamp <- formatTime defaultTimeLocale "%Y-%m-%d_%H-%M-%S" <$> getZonedTime 
     putStrLn ("computing offline test cases..." ++ timestamp)
-    let nrSteps = 30
-        nrTrailingSteps = 10 -- the extra steps a test may take to end right after an output
+    let nrSteps = 10
+        nrTrailingSteps = 5 -- the extra steps a test may take to end right after an output
         maxStale = 10 :: Int -- stop after this many consecutive test cases that did not increase coverage
         randomSeed = 567
         tracesFile = "test_traces_" ++ timestamp ++ ".txt"
