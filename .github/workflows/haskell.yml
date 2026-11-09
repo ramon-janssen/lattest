@@ -104,9 +104,12 @@ jobs:
         set -uo pipefail
 
         echo "debugging:"
-        trap 'echo "!!! Main script received SIGTERM at $(date -Is)"' TERM
-        trap 'echo "!!! Main script received SIGINT at $(date -Is)"' INT
-        trap 'echo "!!! Main script exiting with status $?"' EXIT
+        echo "Main PID=$$"
+        echo "Main PPID=$PPID"
+        echo "Main PGID=$(ps -o pgid= -p $$)"
+        echo "Main SID=$(ps -o sid= -p $$)"
+        ps -eo pid,ppid,pgid,sid,stat,etime,cmd --forest
+        trap 'echo "SIGTERM received by PID=$$ at $(date -Is)"' TERM
 
         for exdir in examples/*/; do
           ex=$(basename "$exdir")
