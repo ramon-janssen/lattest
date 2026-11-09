@@ -70,6 +70,7 @@ run = do
     -- To write to a file:
     --stsToJSONFile "det_2_composed.json" "det2" (syntacticAutomaton seqComposed) gs as es initVal
     writeFile tracesFile ""
+    print "written"
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
     let testCases toCover n kept stale
@@ -115,7 +116,7 @@ run = do
     putStrLn $ show (length $ irreplaceable takenBy kept) ++ " of the test cases that increased coverage take a switch that none of the others take"
     putStrLn "input coverage of the test suite:"
     putStr $ prettyPrintInputCoverage suiteReport
-    putStrLn $ ("left to cover: " ++ show leftToCover)
+    putStrLn ("left to cover: " ++ show leftToCover)
 
 -- | Pick elements that together cover the same as all given elements: going from the last element to the first, pick the ones
 -- that cover something that the elements picked so far do not. Then drop the picked elements that the other picked elements have
