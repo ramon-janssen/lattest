@@ -109,7 +109,7 @@ jobs:
         echo "Main PGID=$(ps -o pgid= -p $$)"
         echo "Main SID=$(ps -o sid= -p $$)"
         ps -eo pid,ppid,pgid,sid,stat,etime,cmd --forest
-        trap 'echo "SIGTERM received by PID=$$ at $(date -Is)"' TERM
+        trap 'echo "SIGTERM: PID=$$ PGID=$(ps -o pgid= -p $$) at $(date -Is)"' TERM
 
         for exdir in examples/*/; do
           ex=$(basename "$exdir")
@@ -147,7 +147,7 @@ jobs:
             fi
           fi
 
-          timeout -k 30 600 bash -c 'cd "$1" && stack build --system-ghc --stack-yaml stack.yaml && stack run --system-ghc --stack-yaml stack.yaml' _ "$exdir"
+          timeout --verbose --foreground -k 30 600 bash -c 'cd "$1" && stack build --system-ghc --stack-yaml stack.yaml && stack run --system-ghc --stack-yaml stack.yaml' _ "$exdir"
           status=$?
 
           if [ -n "$sut_pid" ]; then
