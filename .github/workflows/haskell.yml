@@ -147,6 +147,7 @@ jobs:
             fi
           fi
 
+          echo "timeout start: $(date -Is)"
           timeout --verbose --foreground -k 30 600 bash -c 'cd "$1" && stack build --system-ghc --stack-yaml stack.yaml && stack run --rts-options -T --system-ghc --stack-yaml stack.yaml' _ "$exdir"
           status=$?
 
