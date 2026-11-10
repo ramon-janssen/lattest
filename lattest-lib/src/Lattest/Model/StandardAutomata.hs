@@ -101,6 +101,7 @@ import Lattest.Model.Symbolic.SolveSTS (indexExpr, indexVar)
 import Lattest.SMT (Some)
 import System.IO.Unsafe (unsafePerformIO)
 import Lattest.Model.Symbolic.SolveSymPrim (isGuardSatisfiable)
+import qualified Debug.Trace
 
 -- | construct an alphabet of input-output-actions (`IOAct`) from separate alphabets of inputs and outputs
 ioAlphabet :: (Traversable t, Ord i, Ord o) => t i -> t o -> Set.Set (IOAct i o)
@@ -745,7 +746,8 @@ pruneSwitchesAt locVars symStates locs trans = Map.fromList [ (l1, pruneAt l1) |
 sequentiallyAtPruned :: forall loc1 loc2 i o act. (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o) =>
     AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> [loc1] -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
     (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
-sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 `seq` (AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
+sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.Trace.trace "sAP enter" $
+  locs1 `seq` (AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
     where
     locs1 = checkTree "sequentiallyAtPruned" sts1 $ validMergeLocs "sequentiallyAtPruned" sts1 mergeLocs
     locs2 = allLocations sts2
@@ -825,7 +827,7 @@ infixl 1 `sequentiallyPruned`
 sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o) =>
     AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
     (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
-sts1 `sequentiallyPruned` sts2 = case Set.toList $ Set.filter (isSinkLocation syn1) (allLocations syn1) of
+sts1 `sequentiallyPruned` sts2 = Debug.Trace.trace "sP enter" $ case Debug.Trace.traceShowId $ Set.toList $ Set.filter (isSinkLocation syn1) (allLocations syn1) of
     []      -> errorWithoutStackTrace "(sequentiallyPruned): the first automaton has no sink location to sequentially compose at"
     locList -> sequentiallyAtPruned sts1 locList sts2
     where syn1 = syntacticAutomaton sts1
