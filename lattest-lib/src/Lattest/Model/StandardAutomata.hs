@@ -681,19 +681,19 @@ checkTree fnName sts locs
     initial location. For every location with a satisfiable path of switches leading to it: the path condition to get there, the
     symbolic values of the state variables once there, and the number of steps taken to get there.
 -}
-symbolicTree :: (Ord loc, Foldable m, Show t, Show (m loc), Show loc) => AutSyntax m loc t STStdest -> [Some Variable] -> (loc -> VarModel) -> Map loc (SymGuard, VarModel, Int)
+symbolicTree :: (Ord loc, Foldable m, Show t, Show (m loc), Show loc, Show (m (STStdest, loc))) => AutSyntax m loc t STStdest -> [Some Variable] -> (loc -> VarModel) -> Map loc (SymGuard, VarModel, Int)
 symbolicTree sts locVars initModel = Debug.Trace.trace "symbolicTree" $ Debug.Trace.traceShow sts $ Debug.Trace.traceShow locVars $ explore Map.empty [ (l, (sTrue, initModel l, 0)) | l <- atomsOf (initConf sts) ]
     where
     explore acc [] = acc
     explore acc ((l, st@(pathCond, pvar, n)) : rest) = Debug.Trace.trace "explore" $ Debug.Trace.traceShow st $ Debug.Trace.traceShow successors $ explore (Map.insert l st acc) (successors ++ rest)
         where
-        successors =
+        successors = Debug.Trace.trace "successors"
             [ (l', (pathCond', pvar', n + 1))
-            | dests <- Map.elems (transRel sts l)
-            , (tdest, l') <- atomsOf dests
-            , let (guard, pvar') = symStep locVars n pvar tdest
-            , let pathCond' = pathCond .&& guard
-            , satisfiable pathCond' ]
+            | dests <- Debug.Trace.traceShowId $ Map.elems (transRel sts l)
+            , (tdest, l') <- Debug.Trace.traceShowId $ atomsOf dests
+            , let (guard, pvar') = Debug.Trace.traceShowId $ symStep locVars n pvar tdest
+            , let pathCond' = Debug.Trace.traceShowId pathCond .&& Debug.Trace.traceShowId guard
+            , Debug.Trace.traceShowId $ satisfiable pathCond' ]
 
 {- |
     For the given locations of a symbolically executed tree: the given switches, pruned to the ones that are
