@@ -74,9 +74,13 @@ run = do
     writeFile tracesFile ""
     printMemoryStats
     print conjunctModel
+    hFlush stdout
     print seqSelfComposed
+    hFlush stdout
     print seqComposed
+    hFlush stdout
     print switches
+    hFlush stdout
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
     let testCases toCover n kept stale
