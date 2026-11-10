@@ -765,7 +765,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.
 
     -- symbolic execution of the tree sts1, starting from the initial valuation
     symStates = Debug.Trace.trace "h" $ symbolicTree sts1 locVars $ \l -> valuationToVarModel $
-        Map.findWithDefault (errorWithoutStackTrace $ "sequentiallyAtPruned: no valuation for initial location " <> show l) l initVals
+        Map.findWithDefault (Debug.Trace.trace "going to error" $ errorWithoutStackTrace $ "sequentiallyAtPruned: no valuation for initial location " <> show l) l initVals
 
     isReachable l = Debug.Trace.trace "i" $ l `Map.member` symStates
     -- the locations directly after a location, i.e. one switch further
