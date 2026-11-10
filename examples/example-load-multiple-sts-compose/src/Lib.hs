@@ -66,11 +66,15 @@ run = do
         switches      = allSwitches model
         inputSwitches = Set.filter isInputSwitch switches
 
+    printMemoryStats
     print "Composition finished, writing result to file..."
+    hFlush stdout
     -- To write to a file:
     --stsToJSONFile "det_2_composed.json" "det2" (syntacticAutomaton seqComposed) gs as es initVal
     writeFile tracesFile ""
     print "written"
+    hFlush stdout
+    printMemoryStats
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
     let testCases toCover n kept stale
@@ -137,3 +141,13 @@ minimalCover cover ts = dropRedundant [] $ fst $ foldr pick ([], Set.empty) ts
 irreplaceable :: Ord a => (t -> Set.Set a) -> [t] -> [t]
 irreplaceable cover ts = [ t | (i, t) <- indexed, not $ cover t `Set.isSubsetOf` foldMap (cover . snd) (filter ((/= i) . fst) indexed) ]
   where indexed = zip [0 :: Int ..] ts
+
+
+printMemoryStats :: IO ()
+printMemoryStats = do
+    performGC
+    stats <- getRTSStats
+    putStrLn $ "Heap size: " ++ show (gcdetails_live_bytes (gc stats))
+    putStrLn $ "Allocated: " ++ show (allocated_bytes stats)
+    hFlush stdout
+
