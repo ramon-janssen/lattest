@@ -159,6 +159,8 @@ data AutIntrpr m loc q t tdest act = AutInterpretation {
     stateConf :: m q,
     syntacticAutomaton :: AutSyntax m loc t tdest
     }
+instance (Show (m q), Show (AutSyntax m loc t tdest)) => Show (AutIntrpr m loc q t tdest act) where
+  show intrpr = "Intrpr (" <> show (stateConf intrpr) <> ") (" <> show (syntacticAutomaton intrpr) <> ")"
 
 {- |
     Infer a semantical model from a syntactical model, based on the appropriate instance of the 'AutomatonSemantics' typeclass.

@@ -69,14 +69,13 @@ run = do
         inputSwitches = Set.filter isInputSwitch switches
 
     printMemoryStats
-    print "Composition finished, writing result to file..."
-    hFlush stdout
     -- To write to a file:
-    --stsToJSONFile "det_2_composed.json" "det2" (syntacticAutomaton seqComposed) gs as es initVal
+    -- stsToJSONFile "det_2_composed.json" "det2" (syntacticAutomaton seqComposed) gs as es initVal
     writeFile tracesFile ""
-    print "written"
-    hFlush stdout
     printMemoryStats
+    print conjunctModel
+    print seqSelfComposed
+    print seqComposed
     print switches
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
