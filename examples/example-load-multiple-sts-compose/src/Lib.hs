@@ -86,7 +86,9 @@ run = do
               -- target the (location, gate) pairs of input switches not covered yet
               let controller = observeControllerState (slowRandomInputCoverer model (Just toCover) nrSteps (mkStdGen (randomSeed + n)) `untilCondition` stopAfterStepsAtOutput nrSteps nrTrailingSteps) `andObserving` observer Nothing observeVerdict pure `andObserving` (observeInputCoverage `andObserving` observeSwitchesTaken)
               start <- getCurrentTime
+              print start
               tests <- evalStateT (offlineTests model controller $ \st -> ((fst $ fst st, Just Fail), snd st)) (mkStdGen (randomSeed + n))
+              print tests
               -- compute the covered switches
               let toCover' = foldr (Set.intersection . (\((((_,x,_,_),_),_),_) -> x)) toCover (toList tests)
                   -- prefix with the time at which the test case was finished, and how long it took to generate
@@ -96,6 +98,7 @@ run = do
                     putStrLn $ now ++ " test " ++ show (n + 1) ++ " (" ++ show (diffUTCTime end start) ++ "): " ++ msg
               if Set.size toCover' < Set.size toCover
                 then do
+                  report' "kept"
                   -- the test case increases coverage: keep it
                   appendTestTrace tracesFile model (snd . fst <$> tests)
                   report' $ "kept, switch coverage "
