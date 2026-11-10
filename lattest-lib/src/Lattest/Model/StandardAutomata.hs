@@ -758,7 +758,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.
     newInitConf = Debug.Trace.trace "d" $ Left BM.<#> dropAtoms isRemoved (initConf sts1)
     newStateConf = Debug.Trace.trace "e" $ fmap Left BM.<#> dropAtoms (\(IntrpState l _) -> isRemoved l) stateconf1
 
-    initVals = Debug.Trace.trace "f" $ Map.fromList [ (l, v) | IntrpState l v <- toList stateconf1 ]
+    initVals = Debug.Trace.trace "f" $ Debug.Trace.traceShow stateconf1 $ Map.fromList [ (l, v) | IntrpState l v <- toList stateconf1 ]
     locVars = Debug.Trace.trace "g" $ case toList stateconf1 of
         IntrpState _ v : _ -> getVariables v
         []                 -> []
