@@ -65,6 +65,7 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Extra (findM, anyM, firstJustM)
 import Control.Monad.State (StateT, runStateT)
 import Data.Containers.ListUtils (nubOrdOn)
+import qualified Debug.Trace
 
 {- | A TestController that selects inputs that lead to the given targetState. If unexpected outputs are selected by the SUT the TestSelector still tries to provide the inputs of the access sequence, but this may result in reaching another state.
  Result Bool is True when access sequence has been followed and false when the SUT deviated
@@ -160,7 +161,7 @@ runNCompleteTestSuite adapter spec nrSteps delta targetStatesAndSeeds =
 randomCoveringTestSelector
   :: forall m loc q t tdest act i' o i.
      (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord q, Ord loc
-     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i', Show (AutSyntax FreeLattice loc (SymInteract (IOAct i' o)) STStdest)) -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
   -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i)
@@ -170,7 +171,7 @@ randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen i
 randomCoveringTestSelectorFromSeed
   :: forall m loc q t tdest act i' o i.
      (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord q, Ord loc
-     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+     , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i', Show (AutSyntax FreeLattice loc (SymInteract (IOAct i' o)) STStdest)) -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
   -> Int
@@ -180,7 +181,7 @@ randomCoveringTestSelectorFromSeed intrpr mtocover seed = randomCoveringTestSele
 randomCoveringTestSelectorFromGen
   :: forall m loc q t tdest act i' o i.
      (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord loc, Ord q,
-     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i', Show (AutSyntax FreeLattice loc (SymInteract (IOAct i' o)) STStdest)) -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
   -> StdGen
@@ -229,8 +230,8 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
 data Switch loc i o = Switch loc (IOSymInteract i o) STStdest loc deriving (Eq, Ord, Show)
 
 -- | All switches present in the model.
-allSwitches :: (Ord loc, Ord i, Ord o) => IOSTSIntrp FreeLattice loc i o -> Set.Set (Switch loc i o)
-allSwitches intrpr = let syn = syntacticAutomaton intrpr
+allSwitches :: (Ord loc, Ord i, Ord o, Show (AutSyntax FreeLattice loc (SymInteract (IOAct i o)) STStdest)) => IOSTSIntrp FreeLattice loc i o -> Set.Set (Switch loc i o)
+allSwitches intrpr = Debug.Trace.trace "allswitches" $ let syn = Debug.Trace.traceShowId $ syntacticAutomaton intrpr
   in Set.fromList [ Switch l t td l' | l <- Set.toList (allLocations syn), (t, dests) <- Map.toList (transRel syn l), (td, l') <- toList dests ]
 
 isInputSwitch :: Switch loc i o -> Bool
@@ -323,7 +324,7 @@ observeInputCoverage = observer mempty update pure
 slowRandomInputCoverer
   :: forall m loc q t tdest act i' o i.
      (After m loc q t tdest act, Show i', Show o, Show loc, Ord i', Ord o, Ord loc, Ord q,
-     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
+     tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i', Show (AutSyntax FreeLattice loc (SymInteract (IOAct i' o)) STStdest)) -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
   -> Int

@@ -117,6 +117,8 @@ data AutSyntax m loc t tdest = Automaton {
     alphabet :: Set t,
     transRel :: loc -> Map t (m (tdest, loc))
     }
+instance (Show t, Show (m loc)) => Show (AutSyntax m loc t tdest) where
+  show aut = "Aut (" <> show (initConf aut) <> ") (" <> show (alphabet aut)
 
 -- | Construct an automaton from an initial state configuration and a transition mapping
 automaton :: (BoundedConfiguration m, Completable t, Ord t, Foldable fld) => m loc -> fld t -> (loc -> Map t (m (tdest, loc))) -> AutSyntax m loc t tdest
