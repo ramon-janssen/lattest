@@ -18,7 +18,9 @@ import Control.Monad.State (evalStateT)
 import System.Random (mkStdGen)
 import Data.Foldable (toList)
 import Data.Time (getZonedTime, formatTime, defaultTimeLocale, getCurrentTime, diffUTCTime)
-import System.IO (hSetBuffering, stdout, BufferMode(..))
+import System.IO (hSetBuffering, stdout, BufferMode(..), hFlush)
+import GHC.Stats
+import System.Mem
 
 run :: IO ()
 run = do
