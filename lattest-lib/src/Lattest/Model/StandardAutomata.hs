@@ -682,7 +682,7 @@ checkTree fnName sts locs
     symbolic values of the state variables once there, and the number of steps taken to get there.
 -}
 symbolicTree :: (Ord loc, Foldable m) => AutSyntax m loc t STStdest -> [Some Variable] -> (loc -> VarModel) -> Map loc (SymGuard, VarModel, Int)
-symbolicTree sts locVars initModel = explore Map.empty [ (l, (sTrue, initModel l, 0)) | l <- atomsOf (initConf sts) ]
+symbolicTree sts locVars initModel = Debug.Trace.trace "symbolicTree" $ explore Map.empty [ (l, (sTrue, initModel l, 0)) | l <- atomsOf (initConf sts) ]
     where
     explore acc [] = acc
     explore acc ((l, st@(pathCond, pvar, n)) : rest) = explore (Map.insert l st acc) (successors ++ rest)
@@ -764,7 +764,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.
         []                 -> []
 
     -- symbolic execution of the tree sts1, starting from the initial valuation
-    symStates = Debug.Trace.trace "h" $ symbolicTree sts1 locVars $ \l -> valuationToVarModel $
+    symStates = Debug.Trace.trace "h" $ symbolicTree sts1 locVars $ \l -> valuationToVarModel $ Debug.Trace.traceShowId $
         Map.findWithDefault (Debug.Trace.trace "going to error" $ errorWithoutStackTrace $ "sequentiallyAtPruned: no valuation for initial location " <> show l) l initVals
 
     isReachable l = Debug.Trace.trace "i" $ l `Map.member` symStates
