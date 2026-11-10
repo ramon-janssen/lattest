@@ -32,6 +32,7 @@ import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Control.Monad (forM_)
+import qualified Debug.Trace
 
 {-|
     Combine the given guards into one.
@@ -94,7 +95,7 @@ valuationToGateValue (SymInteract g' params) valuation =
     The outcome is cached per guard, so that a guard is only solved once. Outcomes where the SMT solver could not tell are not cached.
 -}
 isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
-isGuardSatisfiable vars guard = do
+isGuardSatisfiable vars guard = Debug.Trace.trace "isGuardSat" $ Debug.Trace.traceShow vars $ Debug.Trace.traceShow guard $ do
   cache <- readIORef satisfiableCache
   case Map.lookup guard cache of
     Just isSat -> return isSat
