@@ -747,9 +747,9 @@ sequentiallyAtPruned :: forall loc1 loc2 i o act. (Ord loc1, Ord loc2, Show loc1
     AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> [loc1] -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
     (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
 sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.Trace.trace "sAP enter" $
-  locs1 `seq` (AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
+  Debug.Trace.traceShowId locs1 `seq` (AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
     where
-    locs1 = checkTree "sequentiallyAtPruned" sts1 $ validMergeLocs "sequentiallyAtPruned" sts1 mergeLocs
+    locs1 = Debug.Trace.traceShowId $ checkTree "sequentiallyAtPruned" sts1 $ Debug.Trace.traceShowId $ validMergeLocs "sequentiallyAtPruned" sts1 mergeLocs
     locs2 = allLocations sts2
     mergeLocSet = Set.fromList mergeLocs
 

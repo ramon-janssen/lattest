@@ -16,7 +16,7 @@ jobs:
         ghcversion: [9.8.4, 9.10.3, 9.12.4]
     name: testsuite
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
