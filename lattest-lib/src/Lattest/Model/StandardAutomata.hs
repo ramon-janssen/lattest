@@ -750,76 +750,76 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.
   Debug.Trace.traceShowId locs1 `seq` (Debug.Trace.traceShowId $ AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
     where
     locs1 = Debug.Trace.traceShowId $ checkTree "sequentiallyAtPruned" sts1 $ Debug.Trace.traceShowId $ validMergeLocs "sequentiallyAtPruned" sts1 mergeLocs
-    locs2 = allLocations sts2
-    mergeLocSet = Set.fromList mergeLocs
+    locs2 = Debug.Trace.trace "a" $ allLocations sts2
+    mergeLocSet = Debug.Trace.trace "b" $ Set.fromList mergeLocs
 
-    newAlphabet = alphabet sts1 `Set.union` alphabet sts2
+    newAlphabet = Debug.Trace.trace "c" $ alphabet sts1 `Set.union` alphabet sts2
     -- If one of the branches of STS1 is removed, we remove its initial location as well from the initial Configuration
-    newInitConf = Left BM.<#> dropAtoms isRemoved (initConf sts1)
-    newStateConf = fmap Left BM.<#> dropAtoms (\(IntrpState l _) -> isRemoved l) stateconf1
+    newInitConf = Debug.Trace.trace "d" $ Left BM.<#> dropAtoms isRemoved (initConf sts1)
+    newStateConf = Debug.Trace.trace "e" $ fmap Left BM.<#> dropAtoms (\(IntrpState l _) -> isRemoved l) stateconf1
 
-    initVals = Map.fromList [ (l, v) | IntrpState l v <- toList stateconf1 ]
-    locVars = case toList stateconf1 of
+    initVals = Debug.Trace.trace "f" $ Map.fromList [ (l, v) | IntrpState l v <- toList stateconf1 ]
+    locVars = Debug.Trace.trace "g" $ case toList stateconf1 of
         IntrpState _ v : _ -> getVariables v
         []                 -> []
 
     -- symbolic execution of the tree sts1, starting from the initial valuation
-    symStates = symbolicTree sts1 locVars $ \l -> valuationToVarModel $
+    symStates = Debug.Trace.trace "h" $ symbolicTree sts1 locVars $ \l -> valuationToVarModel $
         Map.findWithDefault (errorWithoutStackTrace $ "sequentiallyAtPruned: no valuation for initial location " <> show l) l initVals
 
-    isReachable l = l `Map.member` symStates
+    isReachable l = Debug.Trace.trace "i" $ l `Map.member` symStates
     -- the locations directly after a location, i.e. one switch further
-    successorsOf l = [ l' | dests <- Map.elems (transRel sts1 l), (_, l') <- atomsOf dests ]
+    successorsOf l = Debug.Trace.trace "j" $ [ l' | dests <- Map.elems (transRel sts1 l), (_, l') <- atomsOf dests ]
     -- a location together with all locations after it
-    branchFrom l = l : concatMap branchFrom (successorsOf l)
+    branchFrom l = Debug.Trace.trace "k" $ l : concatMap branchFrom (successorsOf l)
     -- the gate of the single switch leading into a location
-    incomingGate = Map.fromList
+    incomingGate = Debug.Trace.trace "l" $ Map.fromList
         [ (l', t) | l <- Set.toList locs1, (t, dests) <- Map.toList (transRel sts1 l), (_, l') <- atomsOf dests ]
 
     -- the unsatisfiable output switches: the branch after such a switch is kept as-is, but isn't merged
-    unsatOutputs =
+    unsatOutputs =Debug.Trace.trace "m" $ 
         [ (l, t, l')
         | l <- Set.toList locs1, isReachable l
         , (t, dests) <- Map.toList (transRel sts1 l), isOutputInteract t
         , (_, l') <- atomsOf dests, not (isReachable l') ]
-    postUnsatOutputLocs = Set.fromList $ concat [ branchFrom l' | (_, _, l') <- unsatOutputs ] -- All locations in a branch after an unsat output
+    postUnsatOutputLocs = Debug.Trace.trace "n" $ Set.fromList $ concat [ branchFrom l' | (_, _, l') <- unsatOutputs ] -- All locations in a branch after an unsat output
 
-    keptMap = Map.fromSet kept locs1
+    keptMap = Debug.Trace.trace "o" $ Map.fromSet kept locs1
     kept l
         | l `Set.member` postUnsatOutputLocs                    = True     -- Keep locations right after an unsat output (tests derived from this branch will Fail) even when unreachable
         | not (isReachable l)                                   = False    -- Remove non reachable locations
         | isSinkLocation sts1 l || l `Set.member` mergeLocSet   = True     -- Keep merge locations/sink locations
         | not (all isRemoved (successorsOf l))                  = True     -- Keep l if its successor is kept
         | otherwise                                             = maybe False isOutputInteract (Map.lookup l incomingGate) -- No locations after l: keep only if the incoming switch is an output
-    isRemoved l = not $ Map.findWithDefault False l keptMap
-    keptLocs = Map.keysSet $ Map.filter id keptMap
-    mergeableLocs = Set.filter (\l -> isReachable l && not (isRemoved l)) mergeLocSet
+    isRemoved l = Debug.Trace.trace "p" $ not $ Map.findWithDefault False l keptMap
+    keptLocs = Debug.Trace.trace "q" $ Map.keysSet $ Map.filter id keptMap
+    mergeableLocs = Debug.Trace.trace "r" $ Set.filter (\l -> isReachable l && not (isRemoved l)) mergeLocSet
 
     -- per mergeable location, the initial switches of sts2 that are satisfiable there, and the ones that we pruned away
-    prunedAt = pruneSwitchesAt locVars symStates (Set.toList mergeableLocs) (initialSwitches sts2)
+    prunedAt = Debug.Trace.trace "s" $ pruneSwitchesAt locVars symStates (Set.toList mergeableLocs) (initialSwitches sts2)
 
     -- sts1's own transitions, where a switch to a removed location is no longer specified
-    ownTransOf1 l1 = flip Map.mapWithKey (transRel sts1 l1) $ \t dests -> BM.ordBind dests $ \(tdest, l1') ->
+    ownTransOf1 l1 = Debug.Trace.trace "t" $ flip Map.mapWithKey (transRel sts1 l1) $ \t dests -> BM.ordBind dests $ \(tdest, l1') ->
         if isRemoved l1'
             then implicitDestination t
             else BM.ordReturn (tdest, Left l1')
 
     -- the locations of sts1 and the transitions from sts1 to sts2 that we pruned away, and the unsatisfiable outputs of sts1
-    pruned = map PrunedLocation (Set.toList $ locs1 Set.\\ keptLocs) ++
+    pruned = Debug.Trace.trace "u" $ map PrunedLocation (Set.toList $ locs1 Set.\\ keptLocs) ++
         [ UnsatisfiableOutput l t (filter (`Set.member` mergeLocSet) $ branchFrom l') | (l, t, l') <- unsatOutputs ] ++
         concatMap snd (Map.elems prunedAt)
 
-    transOf1 l1 = case Map.lookup l1 prunedAt of
+    transOf1 l1 = Debug.Trace.trace "v" $ case Map.lookup l1 prunedAt of
         Just (newTrans, _) -> Map.unionWith mergeSwitch (ownTransOf1 l1) (Map.map (BM.ordMap (second Right)) newTrans)
         Nothing            -> ownTransOf1 l1
 
-    switches1 = Map.fromList [ (Left l1, transOf1 l1) | l1 <- Set.toList keptLocs ]
-    switches2 = Map.fromList
+    switches1 = Debug.Trace.trace "w" $ Map.fromList [ (Left l1, transOf1 l1) | l1 <- Set.toList keptLocs ]
+    switches2 = Debug.Trace.trace "x" $ Map.fromList
         [ (Right l2, Map.map (BM.ordMap (second Right)) (transRel sts2 l2))
         | l2 <- Set.toList locs2 ]
 
-    allSwitches = switches1 `Map.union` switches2
-    switches loc = Map.findWithDefault Map.empty loc allSwitches
+    allSwitches = Debug.Trace.trace "y" $ switches1 `Map.union` switches2
+    switches loc = Debug.Trace.trace "z" $ Map.findWithDefault Map.empty loc allSwitches
 
 
 infixl 1 `sequentiallyPruned`
