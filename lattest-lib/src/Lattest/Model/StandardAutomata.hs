@@ -681,8 +681,8 @@ checkTree fnName sts locs
     initial location. For every location with a satisfiable path of switches leading to it: the path condition to get there, the
     symbolic values of the state variables once there, and the number of steps taken to get there.
 -}
-symbolicTree :: (Ord loc, Foldable m) => AutSyntax m loc t STStdest -> [Some Variable] -> (loc -> VarModel) -> Map loc (SymGuard, VarModel, Int)
-symbolicTree sts locVars initModel = Debug.Trace.trace "symbolicTree" $ explore Map.empty [ (l, (sTrue, initModel l, 0)) | l <- atomsOf (initConf sts) ]
+symbolicTree :: (Ord loc, Foldable m, Show t, Show (m loc)) => AutSyntax m loc t STStdest -> [Some Variable] -> (loc -> VarModel) -> Map loc (SymGuard, VarModel, Int)
+symbolicTree sts locVars initModel = Debug.Trace.trace "symbolicTree" $ Debug.Trace.traceShow sts $ Debug.Trace.traceShow locVars $ explore Map.empty [ (l, (sTrue, initModel l, 0)) | l <- atomsOf (initConf sts) ]
     where
     explore acc [] = acc
     explore acc ((l, st@(pathCond, pvar, n)) : rest) = explore (Map.insert l st acc) (successors ++ rest)
@@ -841,7 +841,7 @@ sts1 `sequentiallyPruned` sts2 = Debug.Trace.trace "sP enter" $ case Debug.Trace
 
     Returns both the pruned sequentially composed automaton, and a list of the pruned away switches (if any).
 -}
-selfSequentiallyAtPruned :: (Ord loc, Show loc, Ord i, Ord o) =>
+selfSequentiallyAtPruned :: (Ord loc, Show loc, Ord i, Ord o, Show i, Show o) =>
     [Some Variable] -> AutSyntax FreeLattice loc (IOSymInteract i o) STStdest -> [loc] ->
     (AutSyntax FreeLattice loc (IOSymInteract i o) STStdest, [Pruned loc loc (IOSymInteract i o)])
 selfSequentiallyAtPruned locVars sts mergeLocs = locs `seq` (automaton (initConf sts) (alphabet sts) switches, pruned)
@@ -860,7 +860,7 @@ selfSequentiallyAtPruned locVars sts mergeLocs = locs `seq` (automaton (initConf
         Nothing            -> transRel sts l
 
 -- | `selfSequentiallyAtPruned` applied to all sink locations of the automaton. Throws an error if the automaton does not have any sink locations.
-selfSequentiallyPruned :: (Ord loc, Show loc, Ord i, Ord o) =>
+selfSequentiallyPruned :: (Ord loc, Show loc, Ord i, Ord o, Show i, Show o) =>
     [Some Variable] -> AutSyntax FreeLattice loc (IOSymInteract i o) STStdest ->
     (AutSyntax FreeLattice loc (IOSymInteract i o) STStdest, [Pruned loc loc (IOSymInteract i o)])
 selfSequentiallyPruned locVars sts = case Set.toList $ Set.filter (isSinkLocation sts) (allLocations sts) of
