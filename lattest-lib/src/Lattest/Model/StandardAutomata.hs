@@ -743,11 +743,11 @@ pruneSwitchesAt locVars symStates locs trans = Map.fromList [ (l1, pruneAt l1) |
 
     Returns both the pruned sequentially composed automaton, and a list of pruned switchs (if any).
 -}
-sequentiallyAtPruned :: forall loc1 loc2 i o act. (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o) =>
+sequentiallyAtPruned :: forall loc1 loc2 i o act. (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o, Show loc2, Show i, Show o) =>
     AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> [loc1] -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
     (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
 sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.Trace.trace "sAP enter" $
-  Debug.Trace.traceShowId locs1 `seq` (AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
+  Debug.Trace.traceShowId locs1 `seq` (Debug.Trace.traceShowId $ AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
     where
     locs1 = Debug.Trace.traceShowId $ checkTree "sequentiallyAtPruned" sts1 $ Debug.Trace.traceShowId $ validMergeLocs "sequentiallyAtPruned" sts1 mergeLocs
     locs2 = allLocations sts2
@@ -824,7 +824,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = Debug.
 
 infixl 1 `sequentiallyPruned`
 -- | Sequentially compose two automata at all sink locations of the first (with pruning). Throws an error if the first automaton does not have any sink locations.
-sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o) =>
+sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o, Show loc2, Show i, Show o) =>
     AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
     (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
 sts1 `sequentiallyPruned` sts2 = Debug.Trace.trace "sP enter" $ case Debug.Trace.traceShowId $ Set.toList $ Set.filter (isSinkLocation syn1) (allLocations syn1) of
