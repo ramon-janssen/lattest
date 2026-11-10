@@ -33,6 +33,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Control.Monad (forM_)
 import qualified Debug.Trace
+import qualified Data.Set as Set
 
 {-|
     Combine the given guards into one.
@@ -97,12 +98,13 @@ valuationToGateValue (SymInteract g' params) valuation =
 isGuardSatisfiable :: [Some Variable] -> SymGuard -> IO Bool
 isGuardSatisfiable vars guard = Debug.Trace.trace "isGuardSat" $ Debug.Trace.traceShow vars $ Debug.Trace.traceShow guard $ do
   cache <- readIORef satisfiableCache
-  case Map.lookup guard cache of
+  case Debug.Trace.traceShowId $ Map.lookup guard cache of
     Just isSat -> return isSat
     Nothing -> do
       g <- mkStdGen <$> randomIO -- We don't care about the solution, only whether there is one, so randomness is acceptable here
       outcome <- fst $ runSMT g do
         addDeclarations vars
+        addDeclarations $ Set.toList $ E.freeVars guard
         addAssertions [guard]
         query $ getSolvable >>= \case
           Sat -> return $ Just True
