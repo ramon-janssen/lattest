@@ -77,6 +77,7 @@ run = do
     print "written"
     hFlush stdout
     printMemoryStats
+    print switches
 
     -- the covered switches and the input coverage report are carried from one kept test case to the next
     let testCases toCover n kept stale
