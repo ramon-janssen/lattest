@@ -318,12 +318,14 @@ initialSwitches sts = Map.fromSet (\t -> BM.ordBind (initConf sts) (\l -> transR
 
 -- | Merge a transition of a merge location with the one copied onto it by a sequential composition: the two are conjuncted, but
 -- only where both are specified (and not forbidden). Otherwise, the one that is specified is used as-is.
--- TODO: I feel like this should differ between inputs and outputs? This somehow feels wrong, but should look
--- at concrete examples to see what makes most sense.
+-- TODO:
 -- It seems like it would be easier to reason about, as a user, if this function was simpler. For example,
 -- mergeSwitch x Bottom = x, but mergeSwitch x y followed by a transition from y to Bottom is Bottom.
--- The obvious (to me) simple options are either always using 'other' (leave sts1 at the mergeloc), or always using 'own /\ other'.
--- And the main alternative I see is to choose between these options depending on whether it's an input or output.
+-- The idea seems to be to take 'transitions that exist', i.e. to ignore missing outputs (which would go to Bottom) or missing inputs (which would go to Top).
+-- observation: Top is the identity of /\, so this function would do exactly the same if we replaced isIndefinite with isAllowed.
+-- This means that, in my opinion, we should:
+-- 1. change isIndefinite to isAllowed, because I think that makes the behaviour of this function clearer
+-- 2. only call this function for output switches, because any inputs to forbidden (which can be legitimate, though we warn about them) should not be ignored here
 mergeSwitch :: (BoundedConfiguration m, MeetSemiLattice (m a)) => m a -> m a -> m a
 mergeSwitch own other
     | BM.isIndefinite own && BM.isIndefinite other = own /\ other
@@ -626,7 +628,6 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
 
 -- | What `sequentiallyAtPruned` removed from the composition.
 data Pruned loc1 loc2 t
-    -- TODO: This is an alternative to returning a warning (we can process it afterwards), but we need this distinction
     = PrunedLocation loc1 -- ^ a location of the first automaton that was removed
     | UnsatisfiableOutput loc1 t [loc1] -- ^ warning: an output switch of the first automaton, given by its location and gate, is unsatisfiable. Its branch is kept, but the given merge locations in that branch are not merged
     | PrunedSwitch loc1 t (FreeLattice loc2) -- ^ the unsatisfiable switches for a gate, from a merge location to locations of the second automaton

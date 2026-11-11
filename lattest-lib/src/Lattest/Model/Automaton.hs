@@ -539,10 +539,12 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
 --------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
-    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+    -- TODO I don't understand the above comment; nothing here is detecting any forbiddens
+    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) vs) m
+     | null vs = do
         qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
+     | otherwise = error $ "Quiescence transition with values encountered: " <> show vs
     ioTakeTransition q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
 hasSymbolicQuiescence :: (BoundedMonad m, BooleanConfiguration m) => Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
