@@ -7,7 +7,7 @@ and this project adheres to the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
-- Refactored the STS expression language, adding support for sets, lists, sum and product types, several additional primitive types,
+- Refactored the STS expression language, adding support for lists, sum and product types, several additional primitive types,
   operations on these types, and made the language more strongly typed.
   This slightly changes the interface, but STSs that were already correct should only need minimal changes.
 - Added support for offline testing: Generating test sequences or trees without an adapter.
