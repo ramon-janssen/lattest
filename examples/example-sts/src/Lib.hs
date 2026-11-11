@@ -46,7 +46,7 @@ stsExample =
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 
-stsExampleInitAssign = Valuation $ DMap.singleton xvar (Val 0)
+stsExampleInitAssign = Valuation $ DMap.singleton xvar (Constant 0)
 
 model = interpretSTSQuiescent stsExample stsExampleInitAssign
 model' = interpretSTS stsExample stsExampleInitAssign
@@ -64,7 +64,7 @@ run = do
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
-        testSelector = randomDataOrWaitForOutputTestSelectorFromSeed randomSeed 10 probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
+        testSelector = randomDataOrWaitForOutputTestSelectorFromSeed randomSeed probabilityOfWaitForOutput `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     (verdict, (observed, maybeMq)) <- runSTSTester model testSelector adap
 
