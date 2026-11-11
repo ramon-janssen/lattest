@@ -73,6 +73,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , EQuadruple, pattern SQuadruple
   -- ** Either
 , sEither, sLeft, sRight
+  -- ** Nested sums
+  -- In Lattest, we only have binary sum (Either) and product (Tuple) types, but you might be interested in a sum or product with three or more subtypes instead.
+  -- Here, we provide a few functions that may relieve some of the burden of using nested binary splits to represent such types.
 , EThree, sFirstOfThree, sSecondOfThree, sThirdOfThree, sThree
 , EFour, sFirstOfFour, sSecondOfFour, sThirdOfFour, sFourthOfFour, sFour
   -- ** Enums
@@ -806,10 +809,17 @@ sFourthOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprC
 sFourthOfFour (view -> d) = Expr $ ERight $ ERight $ ERight d
 -- | Case-of on EFour
 sFour :: Variable a -> Variable b -> Variable c -> Variable d -> Expr x -> Expr x -> Expr x -> Expr x -> EFour a b c d -> Expr x
-sFour va vb vc vd xa xb xc xd four = let vbcd = Variable "sFourIntermediate1" (varType vb `SumType` (varType vc `SumType` varType vd))
-                                         vcd  = Variable "sFourIntermediate2" (varType vc `SumType` varType vd) in
+sFour va vb vc vd xa xb xc xd four = let vthree = Variable "sFourIntermediate1" (varType vb `SumType` (varType vc `SumType` varType vd)) in
   withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints vd $ withExprConstraints xa $
-  sEither va vbcd xa (sEither vb vcd xb (sEither vc vd xc xd (sVar vcd)) (sVar vbcd)) four
+  sEither va vthree xa (sThree vb vc vd xb xc xd $ sVar vthree) four
+
+-- | Sum type with five options
+type EFive a b c d e = Expr (Either a (Either b (Either c (Either d e))))
+-- | Case-of on EFive
+sFive :: Variable a -> Variable b -> Variable c -> Variable d -> Variable e -> Expr x -> Expr x -> Expr x -> Expr x -> Expr x -> EFive a b c d e -> Expr x
+sFive va vb vc vd ve xa xb xc xd xe five = let vfour = Variable "sFiveIntermediate1" (varType vb `SumType` (varType vc `SumType` (varType vd `SumType` varType ve))) in
+  withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints vd $ withExprConstraints ve $ withExprConstraints xa $
+  sEither va vfour xa (sFour vb vc vd ve xb xc xd xe $ sVar vfour) five
 
 -- | Symbolic enumerations, represented as sums of units.
 class ExprType a => SEnum a where
@@ -844,11 +854,10 @@ type SEnumFour = EFour () () () ()
 -- | Case-of on Enum with 4 options
 sEnum4 :: Expr a -> Expr a -> Expr a -> Expr a -> SEnumFour -> Expr a
 sEnum4 = sFour (Variable "1of4" UnitType) (Variable "2of4" UnitType) (Variable "3of4" UnitType) (Variable "4of4" UnitType)
-type SEnumFive = Expr (Either () (Either () (Either () (Either () ()))))
+type SEnumFive = EFive () () () () ()
 -- | Case-of on Enum with 5 options
 sEnum5 :: Expr a -> Expr a -> Expr a -> Expr a -> Expr a -> SEnumFive -> Expr a
-sEnum5 a b c d e five = withExprConstraints a $ let four = (Variable "2to4of5" $ typeOf undefined) in
-  sEither (Variable "1of5" UnitType) four a (sEnum4 b c d e $ sVar four) five
+sEnum5 = sFive (Variable "1of5" UnitType) (Variable "2of5" UnitType) (Variable "3of5" UnitType) (Variable "4of5" UnitType) (Variable "5of5" UnitType)
 
 sForall :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
 sForall v (view -> x) = Expr $ Forall v x
