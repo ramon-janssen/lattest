@@ -204,7 +204,7 @@ toExpr varmap accmap enummap = \case
                                                  step = sIfThenElse
                                                   (sFirst (sVar seen) .&& sNot (sElem (sVar y) (sSecond $ sVar seen)))
                                                   (sPair sTrue $ sCons (sVar y) (sSecond $ sVar seen))
-                                                  (sFalse `sPair` sSecond (sVar seen)) -- even though the list is irrelevant here, z3 is much faster at consuming this version than with sNil here. I guess it recognizes a pattern? I don't see a difference in speed between consing y or not.
+                                                  (sFalse `sPair` sCons (sVar y) (sSecond $ sVar seen)) -- even though the list is irrelevant here, z3 is much faster at consuming this version than with sNil here. I guess it recognizes a pattern? I don't see a difference in speed between consing y or not.
                                              in sFirst $ sFoldr y seen step (sPair sTrue sNil) x
         _ -> Left $ "unknown op1 @List: " <> o
       TupleType t1 t2 -> withExprConstraints t1 $ withExprConstraints t2 case o of
