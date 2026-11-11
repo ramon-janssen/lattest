@@ -75,7 +75,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sEither, sLeft, sRight
 , EThree, sFirstOfThree, sSecondOfThree, sThirdOfThree, sThree
 , EFour, sFirstOfFour, sSecondOfFour, sThirdOfFour, sFourthOfFour, sFour
+  -- ** Enums
 , SEnum (..), SEnum2 (..), SEnum3 (..), SEnum4 (..), SEnum5 (..)
+, SEnumThree, sEnum3, SEnumFour, sEnum4, SEnumFive, sEnum5
 -- * Quantifiers
 , sForall
 , sExists
@@ -833,6 +835,20 @@ class SEnum4 a => SEnum5 a where
   sFifthOf :: Expr a
 instance SEnum4 a => SEnum5 (Either () a) where
   sFifthOf = withExprConstraints (typeOf @a undefined) $ sRight sFourthOf
+
+type SEnumThree = EThree () () ()
+-- | Case-of on Enum with 3 options
+sEnum3 :: Expr a -> Expr a -> Expr a -> SEnumThree -> Expr a
+sEnum3 = sThree (Variable "1of3" UnitType) (Variable "2of3" UnitType) (Variable "3of3" UnitType)
+type SEnumFour = EFour () () () ()
+-- | Case-of on Enum with 4 options
+sEnum4 :: Expr a -> Expr a -> Expr a -> Expr a -> SEnumFour -> Expr a
+sEnum4 = sFour (Variable "1of4" UnitType) (Variable "2of4" UnitType) (Variable "3of4" UnitType) (Variable "4of4" UnitType)
+type SEnumFive = Expr (Either () (Either () (Either () (Either () ()))))
+-- | Case-of on Enum with 5 options
+sEnum5 :: Expr a -> Expr a -> Expr a -> Expr a -> Expr a -> SEnumFive -> Expr a
+sEnum5 a b c d e five = withExprConstraints a $ let four = (Variable "2to4of5" $ typeOf undefined) in
+  sEither (Variable "1of5" UnitType) four a (sEnum4 b c d e $ sVar four) five
 
 sForall :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
 sForall v (view -> x) = Expr $ Forall v x
