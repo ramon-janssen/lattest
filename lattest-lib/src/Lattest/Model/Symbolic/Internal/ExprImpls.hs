@@ -75,6 +75,7 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sEither, sLeft, sRight
 , EThree, sFirstOfThree, sSecondOfThree, sThirdOfThree, sThree
 , EFour, sFirstOfFour, sSecondOfFour, sThirdOfFour, sFourthOfFour, sFour
+, SEnum (..), SEnum2 (..), SEnum3 (..), SEnum4 (..), SEnum5 (..)
 -- * Quantifiers
 , sForall
 , sExists
@@ -807,6 +808,31 @@ sFour va vb vc vd xa xb xc xd four = let vbcd = Variable "sFourIntermediate1" (v
                                          vcd  = Variable "sFourIntermediate2" (varType vc `SumType` varType vd) in
   withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints vd $ withExprConstraints xa $
   sEither va vbcd xa (sEither vb vcd xb (sEither vc vd xc xd (sVar vcd)) (sVar vbcd)) four
+
+-- | Symbolic enumerations, represented as sums of units.
+class ExprType a => SEnum a where
+  sFirstOf :: Expr a
+instance SEnum () where
+  sFirstOf = sConst ()
+instance SEnum a => SEnum (Either () a) where
+  sFirstOf = withExprConstraints (typeOf @a undefined) $ sLeft $ sConst ()
+-- | Class of enums with at least two options.
+class SEnum a => SEnum2 a where
+  sSecondOf :: Expr a
+instance SEnum a => SEnum2 (Either () a) where
+  sSecondOf = withExprConstraints (typeOf @a undefined) $ sRight sFirstOf
+class SEnum2 a => SEnum3 a where
+  sThirdOf :: Expr a
+instance SEnum2 a => SEnum3 (Either () a) where
+  sThirdOf = withExprConstraints (typeOf @a undefined) $ sRight sSecondOf
+class SEnum3 a => SEnum4 a where
+  sFourthOf :: Expr a
+instance SEnum3 a => SEnum4 (Either () a) where
+  sFourthOf = withExprConstraints (typeOf @a undefined) $ sRight sThirdOf
+class SEnum4 a => SEnum5 a where
+  sFifthOf :: Expr a
+instance SEnum4 a => SEnum5 (Either () a) where
+  sFifthOf = withExprConstraints (typeOf @a undefined) $ sRight sFourthOf
 
 sForall :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
 sForall v (view -> x) = Expr $ Forall v x
