@@ -10,6 +10,7 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -67,6 +68,9 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sFirst
 , sSecond
 , sPair
+, pattern SPair
+, ETriple, pattern STriple
+, EQuadruple, pattern SQuadruple
   -- ** Either
 , sEither
 , sLeft
@@ -724,8 +728,22 @@ sFirst (view -> i) = Expr $ First (typeOf undefined) i
 sSecond :: ExprType a => Expr (a, t) -> Expr t
 sSecond (view -> i) = Expr $ Second (typeOf undefined) i
 
-sPair :: Expr a -> Expr b -> Expr (a, b)
-sPair (view -> x) (view -> y) = Expr $ Pair x y
+pattern SPair :: (ExprType a, ExprType b) => () => Expr a -> Expr b -> Expr (a,b)
+pattern SPair x y <- (\xy -> (sFirst xy, sSecond xy) -> (x, y)) where
+  SPair (view -> x) (view -> y) = Expr $ Pair x y
+
+sPair :: Expr a -> Expr b -> Expr (a,b)
+sPair x y = withExprConstraints x $ withExprConstraints y $ SPair x y
+
+type ETriple a b c = Expr (a, (b, c))
+pattern STriple :: (ExprType a, ExprType b, ExprType c) => () => Expr a -> Expr b -> Expr c -> ETriple a b c
+pattern STriple x y z <- (\xyz -> (sFirst xyz, sFirst $ sSecond xyz, sSecond $ sSecond xyz) -> (x, y, z)) where
+  STriple (view -> x) (view -> y) (view -> z) = Expr $ Pair x $ Pair y z
+
+type EQuadruple a b c d = Expr (a, (b, (c, d)))
+pattern SQuadruple :: (ExprType a, ExprType b, ExprType c, ExprType d) => () => Expr a -> Expr b -> Expr c -> Expr d -> EQuadruple a b c d
+pattern SQuadruple w x y z <- (\wxyz -> (sFirst wxyz, sFirst $ sSecond wxyz, sFirst $ sSecond $ sSecond wxyz, sSecond $ sSecond $ sSecond wxyz) -> (w, x, y, z)) where
+  SQuadruple (view -> w) (view -> x) (view -> y) (view -> z) = Expr $ Pair w $ Pair x $ Pair y z
 
 sHead :: ExprConstraints x => Expr [x] -> Expr x
 sHead (view -> xs) = Expr $ Head xs
