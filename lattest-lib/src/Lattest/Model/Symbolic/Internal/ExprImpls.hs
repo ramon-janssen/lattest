@@ -72,14 +72,12 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , ETriple, pattern STriple
 , EQuadruple, pattern SQuadruple
   -- ** Either
-, sEither
-, sLeft
-, sRight
-
+, sEither, sLeft, sRight
+, EThree, sFirstOfThree, sSecondOfThree, sThirdOfThree, sThree
+, EFour, sFirstOfFour, sSecondOfFour, sThirdOfFour, sFourthOfFour, sFour
 -- * Quantifiers
 , sForall
 , sExists
-
 -- * Substitution of var by value
 , VarModel(..)
 , assign
@@ -778,6 +776,37 @@ sLeft (view -> a) = Expr $ ELeft a
 
 sRight :: (ExprConstraints a, ExprConstraints b) => Expr b -> Expr (Either a b)
 sRight (view -> b) = Expr $ ERight b
+
+-- | Sum type with three options
+type EThree a b c = Expr (Either a (Either b c))
+sFirstOfThree :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Expr a -> EThree a b c
+sFirstOfThree (view -> a) = Expr $ ELeft a
+sSecondOfThree :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Expr b -> EThree a b c
+sSecondOfThree (view -> b) = Expr $ ERight $ ELeft b
+sThirdOfThree :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Expr c -> EThree a b c
+sThirdOfThree (view -> c) = Expr $ ERight $ ERight c
+-- | Case-of on EThree
+sThree :: Variable a -> Variable b -> Variable c -> Expr x -> Expr x -> Expr x -> EThree a b c -> Expr x
+sThree va vb vc xa xb xc three = let vbc = Variable "sThreeIntermediate" (varType vb `SumType` varType vc) in
+  withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints xa $
+  sEither va vbc xa (sEither vb vc xb xc (sVar vbc)) three
+
+-- | Sum type with four options
+type EFour a b c d = Expr (Either a (Either b (Either c d)))
+sFirstOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr a -> EFour a b c d
+sFirstOfFour (view -> a) = Expr $ ELeft a
+sSecondOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr b -> EFour a b c d
+sSecondOfFour (view -> b) = Expr $ ERight $ ELeft b
+sThirdOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr c -> EFour a b c d
+sThirdOfFour (view -> c) = Expr $ ERight $ ERight $ ELeft c
+sFourthOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr d -> EFour a b c d
+sFourthOfFour (view -> d) = Expr $ ERight $ ERight $ ERight d
+-- | Case-of on EFour
+sFour :: Variable a -> Variable b -> Variable c -> Variable d -> Expr x -> Expr x -> Expr x -> Expr x -> EFour a b c d -> Expr x
+sFour va vb vc vd xa xb xc xd four = let vbcd = Variable "sFourIntermediate1" (varType vb `SumType` (varType vc `SumType` varType vd))
+                                         vcd  = Variable "sFourIntermediate2" (varType vc `SumType` varType vd) in
+  withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints vd $ withExprConstraints xa $
+  sEither va vbcd xa (sEither vb vcd xb (sEither vc vd xc xd (sVar vcd)) (sVar vbcd)) four
 
 sForall :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
 sForall v (view -> x) = Expr $ Forall v x
