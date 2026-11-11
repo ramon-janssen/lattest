@@ -80,7 +80,7 @@ allLocations
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract, IFGateValue)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, BoundedConfiguration, MeetSemiLattice)
 import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest (..), transRel,syntacticAutomaton, reachable, stsTLoc)
 import qualified Lattest.Model.BoundedMonad as BM
@@ -276,12 +276,18 @@ type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
 interpretSTS :: (Ord loc, BoundedMonad m, Completable (GateValue g)) => STS m loc g -> Valuation -> STSIntrp m loc g
 interpretSTS sts initialValuation = interpret sts (`IntrpState` initialValuation)
 
+-- note: not this is not the same as IOSTSIntrp m loc i (Suspended o) because the Interact does not get suspended
 type SuspSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o)
 
 interpretSTSQuiescent :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspSTSIntrp m loc i o
 interpretSTSQuiescent sts initialValuation = interpret sts (`IntrpState` initialValuation)
 
--- TODO also list an interpretation for quiescence only and input-failure only
+-- note: not this is not the same as IOSTSIntrp m loc (InputAttempt i) o because the Interact does not get suspended
+type InputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o)
+
+interpretSTSInputAttempt :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> InputAttemptSTSIntrp m loc i o
+interpretSTSInputAttempt sts initialValuation = interpret sts (`IntrpState` initialValuation)
+
 type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o)
 
 interpretSTSQuiescentInputAttemptConcrete  :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o

@@ -166,12 +166,14 @@ instance JSON.ToJSON (Some Type) where
     IntType -> "int"
     BoolType -> "bool"
     FloatType -> "float"
+    RationalType -> "rational"
+    RealType -> "real"
     CharType -> "char"
     UnitType -> "()"
     ListType CharType -> "string"
     ListType _ -> "array"
     TupleType _ _ -> "structure"
-    _ -> error "todo: serialize sets and sumtypes"
+    SumType _ _ -> error "not (yet) implemented: toJson for sum types"
     )
     where
       addFields = case tp of

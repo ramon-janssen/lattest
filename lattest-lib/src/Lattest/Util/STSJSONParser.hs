@@ -152,15 +152,6 @@ toExpr varmap accmap enummap = \case
     go = toExpr varmap accmap enummap
 
     op1 :: String -> DSum Type Expr -> Either String (DSum Type Expr)
-    -- TODO: define non-polymorphic sum types in the json, translate them to our adts before parsing the exprs.
-    -- We need to know the type of the other half of an Either to construct it;
-    -- which is why e.g. "left" isn't part of the JSON syntax.
-    -- instead, if we want e.g. availability = Av | PartAv,
-    -- we'll need the json to contain that declaration,
-    -- from which we'd generate Av = Left :: Either () (),
-    -- and then parse "Av" into TupleType () () :=> sLeft ().
-    -- op1 "left"  (tp :=> x) = Right $ TupleType tp undefined :=> sLeft  x
-    -- op1 "right" (tp :=> x) = Right $ TupleType undefined tp :=> sRight x
     op1 o (tp :=> x) = case tp of
       BoolType -> case o of
         "not" -> Right $ BoolType :=> sNot x
@@ -196,7 +187,7 @@ toExpr varmap accmap enummap = \case
         "first" -> Right $ t1 :=> sFirst x
         "second" -> Right $ t2 :=> sSecond x
         _ -> Left $ "unknown op1 @Tuple: " <> o
-      _ -> error "todo"
+      _ -> error "unkown op1"
 
     -- for two equally-typed expressions
     op2ET :: String -> DSum Type TwoExprs -> Either String (DSum Type Expr)
@@ -251,7 +242,7 @@ toExpr varmap accmap enummap = \case
       ListType _ -> case o of
         "++" -> Right $ t :=> sAppend x y
         _ -> op2 o (t :=> x) (t :=> y)
-      _ -> error "operations for this type not yet added"
+      _ -> op2 o (t :=> x) (t :=> y)
     -- for two potentially unequally-typed expressions
     op2 :: String -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
     op2 "cons" (t1 :=> x) (ListType t2 :=> xs) = case geq t1 t2 of

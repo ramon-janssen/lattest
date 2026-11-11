@@ -539,7 +539,7 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
 --------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    -- TODO I don't understand the above comment; nothing here is detecting any forbiddens
+    -- TODO I don't understand the above comment; nothing here is detecting any forbiddens (same goes for the other places with this exact comment)
     ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) vs) m
      | null vs = do
         qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph)
