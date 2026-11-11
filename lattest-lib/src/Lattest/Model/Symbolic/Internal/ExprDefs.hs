@@ -4,6 +4,7 @@ This is a modified version of:
 TorXakis - Model Based Testing
 See LICENSE in the parent Symbolic folder.
 -}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE EmptyDataDeriving #-}
@@ -13,13 +14,11 @@ See LICENSE in the parent Symbolic folder.
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -30,10 +29,9 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , Expr(..)       -- for local usage only!
 , Variable(..)
 , Type(..)
-, Constant(Constant, CInt, CFloat, CRational, CReal, CUnit, CBool, CString, CList, CTuple, CSet, CSum, CChar)
+, Constant(..)
 , constType
-, constValue
-, ConstType(..)
+, fromConst
 , ExprType
 , typeOf
 , typeOf'
@@ -52,10 +50,8 @@ module Lattest.Model.Symbolic.Internal.ExprDefs
 , char
 , string
 , list
-, set
 , tuple
 , option
-, inhabitants
 , enumIndex
 , prettyValue
 , prettyConstant
@@ -83,7 +79,7 @@ import Data.Some (Some(..))
 import Data.GADT.Compare (GEq(..), GOrdering (..), GCompare (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Show (GRead (..), GShow (..), defaultGshowsPrec)
-import Data.SBV (SymVal(..), RCSet (..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&), AlgReal)
+import Data.SBV (SymVal(..), SBV, OrdSymbolic (..), sFalse, SBool, sNot, (.&&), AlgReal)
 import Data.EqP (EqP (..))
 import Data.Maybe (isJust, maybeToList)
 import Data.Constraint.Extras (Has (..))
@@ -105,7 +101,6 @@ data Type a where
   CharType :: Type Char
   UnitType :: Type ()
   ListType :: Type a -> Type [a]
-  SetType :: Type a -> Type (RCSet a)
   TupleType :: Type a -> Type b -> Type (a,b)
   SumType :: Type a -> Type b -> Type (Either a b)
 
@@ -122,17 +117,12 @@ instance GEq Type where
   geq CharType CharType = Just Refl
   geq UnitType UnitType = Just Refl
   geq (ListType a) (ListType b) = (\Refl -> Refl) <$> geq a b
-  geq (SetType a) (SetType b) = (\Refl -> Refl) <$> geq a b
   geq (TupleType a b) (TupleType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
   geq (SumType a b) (SumType x y) = (\Refl Refl -> Refl) <$> geq a x <*> geq b y
   geq _ _ = Nothing
 instance GCompare Type where
   gcompare a b = case (a, b) of
     (ListType a', ListType b')   -> case gcompare a' b' of
-      GLT -> GLT
-      GEQ -> GEQ
-      GGT -> GGT
-    (SetType a', SetType b')     -> case gcompare a' b' of
       GLT -> GLT
       GEQ -> GEQ
       GGT -> GGT
@@ -165,7 +155,6 @@ instance GCompare Type where
       typeTag CharType   = 3
       typeTag UnitType   = 4
       typeTag (ListType _)   = 5
-      typeTag (SetType _)    = 6
       typeTag (TupleType _ _) = 7
       typeTag (SumType _ _)   = 8
       typeTag RationalType = 9
@@ -180,7 +169,6 @@ instance Show (Type a) where
     show RationalType = "Rational"
     show RealType = "Real"
     show (ListType t) = "[" ++ show t ++ "]"
-    show (SetType t) = "{" ++ show t ++ "}"
     show (TupleType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (SumType a b) = "<" ++ show a ++ ", " ++ show b ++ ">"
 instance GShow Type where
@@ -224,12 +212,12 @@ instance GRead Type where
           rest <- mylex "]" s2
           Church.withSome t $ \(tp :: Type t) ->
             return (Church.mkSome $ ListType tp, rest)
-      ++ do
-          s1 <- mylex "{" s
-          (t, s2) <- greadsPrec 11 s1
-          rest <- mylex "}" s2
-          Church.withSome t $ \(tp :: Type t) ->
-            return (Church.mkSome $ SetType tp, rest)
+      -- ++ do
+      --     s1 <- mylex "{" s
+      --     (t, s2) <- greadsPrec 11 s1
+      --     rest <- mylex "}" s2
+      --     Church.withSome t $ \(tp :: Type t) ->
+      --       return (Church.mkSome $ SetType tp, rest)
       ++ do
           s1 <- mylex "(" s
           (a, s2) <- greadsPrec 11 s1
@@ -251,82 +239,82 @@ instance GRead Type where
     where
       mylex prefix = maybeToList . stripPrefix prefix
 
-instance ExprType a => Eq (RCSet a) where
-  a == b = withExprConstraints (typeOf' a) $ case a of
-    RegularSet as -> case b of
-      RegularSet bs -> as == bs
-      ComplementSet bs -> case typeOf' a of
-        SetType x -> case inhabitants x of
-          Nothing -> False -- infinitely large complement
-          Just i -> Set.size as + Set.size bs == i && Set.intersection as bs == mempty
-        _ -> error "not a set"
-    ComplementSet as -> case b of
-      RegularSet bs -> case typeOf' a of
-        SetType x -> case inhabitants x of
-          Nothing -> False -- infinitely large complement
-          Just i -> Set.size as + Set.size bs == i && Set.intersection as bs == mempty
-        _ -> error "not a set"
-      ComplementSet bs -> as == bs
-instance ExprType a => Ord (RCSet a) where
-  -- To ensure transitivity, we choose a < b iff size a < size b, where the size of a complement shrinks as the embedded set grows
-  compare a b = withExprConstraints (typeOf' a) $ case a of
-    RegularSet as -> case b of
-      RegularSet bs -> case compare (Set.size as) (Set.size bs) of
-        EQ -> compare as bs
-        x -> x
-      ComplementSet bs -> case typeOf' a of
-        SetType x -> case inhabitants x of
-          Just i
-           | Set.size as + Set.size bs == i && Set.intersection as bs == mempty
-           -> EQ
-          _ -> LT -- the size of the complementset is infinite
-        _ -> error "not a set"
-    ComplementSet as -> case b of
-      RegularSet bs -> case typeOf' a of
-        SetType x -> case inhabitants x of
-          Just i
-           | Set.size as + Set.size bs == i && Set.intersection as bs == mempty
-           -> EQ
-          _ -> GT -- the size of the complementset is infinite
-        _ -> error "not a set"
-      -- flipping as and bs when comparing two complements
-      ComplementSet bs -> case compare (Set.size bs) (Set.size as) of
-        EQ -> compare bs as
-        x -> x
--- count the inhabitants of a type; to define Eq and Ord instances for RCSet, and to compute the size of a complementset
-inhabitants :: forall e. Type e -> Maybe Int
-inhabitants = \case
-  IntType -> Nothing
-  FloatType -> Nothing
-  RationalType -> Nothing
-  RealType -> Nothing
-  BoolType -> Just 2
-  CharType -> Nothing -- maxBound - minBound + 1 = 1114112, I think we'd have overflow issues (in e.g. sums/products of chars) more often than that we'd have such large complement sets
-  ListType _ -> Nothing
-  SetType _ -> Nothing
-  TupleType x y -> (*) <$> inhabitants x <*> inhabitants y
-  SumType x y -> (+) <$> inhabitants x <*> inhabitants y
-  UnitType -> Just 1
-
-instance (Ord a, Read a) => Read (RCSet a) where
-  readsPrec _ str =
-    (first RegularSet <$> readSet str)
-    <> case str of
-          'U':' ':'-':' ':rest -> first ComplementSet <$> readSet rest
-          'U':rest -> [(ComplementSet mempty, rest)]
-          _ -> []
-
-readSet :: forall a. (Ord a, Read a) => ReadS (Set a)
-readSet ('{':s) = go [] s
-  where
-    go xs ('}':rest) = [(Set.fromList xs, rest)]
-    go xs str = do
-      (x, ',':str') <- reads str
-      go (x:xs) str'
-readSet _ = []
+-- instance ExprType a => Eq (RCSet a) where
+--   a == b = withExprConstraints (typeOf' a) $ case a of
+--     RegularSet as -> case b of
+--       RegularSet bs -> as == bs
+--       ComplementSet bs -> case typeOf' a of
+--         SetType x -> case inhabitants x of
+--           Nothing -> False -- infinitely large complement
+--           Just i -> Set.size as + Set.size bs == i && Set.intersection as bs == mempty
+--         _ -> error "not a set"
+--     ComplementSet as -> case b of
+--       RegularSet bs -> case typeOf' a of
+--         SetType x -> case inhabitants x of
+--           Nothing -> False -- infinitely large complement
+--           Just i -> Set.size as + Set.size bs == i && Set.intersection as bs == mempty
+--         _ -> error "not a set"
+--       ComplementSet bs -> as == bs
+-- instance ExprType a => Ord (RCSet a) where
+--   -- To ensure transitivity, we choose a < b iff size a < size b, where the size of a complement shrinks as the embedded set grows
+--   compare a b = withExprConstraints (typeOf' a) $ case a of
+--     RegularSet as -> case b of
+--       RegularSet bs -> case compare (Set.size as) (Set.size bs) of
+--         EQ -> compare as bs
+--         x -> x
+--       ComplementSet bs -> case typeOf' a of
+--         SetType x -> case inhabitants x of
+--           Just i
+--            | Set.size as + Set.size bs == i && Set.intersection as bs == mempty
+--            -> EQ
+--           _ -> LT -- the size of the complementset is infinite
+--         _ -> error "not a set"
+--     ComplementSet as -> case b of
+--       RegularSet bs -> case typeOf' a of
+--         SetType x -> case inhabitants x of
+--           Just i
+--            | Set.size as + Set.size bs == i && Set.intersection as bs == mempty
+--            -> EQ
+--           _ -> GT -- the size of the complementset is infinite
+--         _ -> error "not a set"
+--       -- flipping as and bs when comparing two complements
+--       ComplementSet bs -> case compare (Set.size bs) (Set.size as) of
+--         EQ -> compare bs as
+--         x -> x
+-- -- count the inhabitants of a type; to define Eq and Ord instances for RCSet, and to compute the size of a complementset
+-- inhabitants :: forall e. Type e -> Maybe Int
+-- inhabitants = \case
+--   IntType -> Nothing
+--   FloatType -> Nothing
+--   RationalType -> Nothing
+--   RealType -> Nothing
+--   BoolType -> Just 2
+--   CharType -> Nothing -- maxBound - minBound + 1 = 1114112, I think we'd have overflow issues (in e.g. sums/products of chars) more often than that we'd have such large complement sets
+--   ListType _ -> Nothing
+--   SetType _ -> Nothing
+--   TupleType x y -> (*) <$> inhabitants x <*> inhabitants y
+--   SumType x y -> (+) <$> inhabitants x <*> inhabitants y
+--   UnitType -> Just 1
+--
+-- instance (Ord a, Read a) => Read (RCSet a) where
+--   readsPrec _ str =
+--     (first RegularSet <$> readSet str)
+--     <> case str of
+--           'U':' ':'-':' ':rest -> first ComplementSet <$> readSet rest
+--           'U':rest -> [(ComplementSet mempty, rest)]
+--           _ -> []
+--
+-- readSet :: forall a. (Ord a, Read a) => ReadS (Set a)
+-- readSet ('{':s) = go [] s
+--   where
+--     go xs ('}':rest) = [(Set.fromList xs, rest)]
+--     go xs str = do
+--       (x, ',':str') <- reads str
+--       go (x:xs) str'
+-- readSet _ = []
 
 withExprConstraints :: Has ExprType f => f a -> (ExprConstraints a => r) -> r
-withExprConstraints f k = let t = has @ExprType f (typeOf' f) in has @Data t $ has @Read t $ has @ConstType t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t $ hasOrdSymbolic t k
+withExprConstraints f k = let t = has @ExprType f (typeOf' f) in has @Data t $ has @Read t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t $ hasOrdSymbolic t k
 
 withExprNumConstraint :: (Has ExprType f, Num a) => f a -> (Num (SBV a) => r) -> r
 withExprNumConstraint f k = case has @ExprType f (typeOf' f) of
@@ -346,7 +334,6 @@ instance Has ExprType Type where
     UnitType -> k
     CharType -> k
     ListType t' -> has @ExprType t' k
-    SetType t' -> has @ExprType t' k
     TupleType a b -> has @ExprType a $ has @ExprType b k
     SumType a b -> has @ExprType a $ has @ExprType b k
 
@@ -360,7 +347,6 @@ instance Has Eq Type where
     BoolType -> k
     CharType -> k
     ListType t' -> has @Eq t' k
-    SetType t' -> withExprConstraints t' k
     TupleType a b -> has @Eq a $ has @Eq b k
     SumType a b -> has @Eq a $ has @Eq b k
 
@@ -374,7 +360,6 @@ instance Has Ord Type where
     BoolType -> k
     CharType -> k
     ListType t' -> has @Ord t' k
-    SetType t' -> withExprConstraints t' k
     TupleType a b -> has @Ord a $ has @Ord b k
     SumType a b -> has @Ord a $ has @Ord b k
 
@@ -388,7 +373,6 @@ hasOrdSymbolic t k = case t of
   UnitType -> k
   BoolType -> k
   ListType t' -> has @SymVal t' k
-  SetType _ -> error "TODO: implement ordsymbolic for sets (or delete RCSets)"
   TupleType a b -> has @SymVal a $ has @SymVal b k
   SumType a b -> has @SymVal a $ has @SymVal b $ hasOrdSymbolic a $ hasOrdSymbolic b k
 instance OrdSymbolic (SBV ()) where
@@ -406,7 +390,6 @@ instance Has Show Type where
     UnitType -> k
     CharType -> k
     ListType t' -> has @Show t' k
-    SetType t' -> has @Show t' k
     TupleType a b -> has @Show a $ has @Show b k
     SumType a b -> has @Show a $ has @Show b k
 
@@ -420,7 +403,6 @@ instance Has SymVal Type where
     UnitType -> k
     CharType -> k
     ListType t' -> has @SymVal t' k
-    SetType t' -> has @SymVal t' $ has @Ord t' k
     TupleType a b -> has @SymVal a $ has @SymVal b k
     SumType a b -> has @SymVal a $ has @SymVal b k
 
@@ -434,7 +416,6 @@ instance Has Read Type where
     BoolType -> k
     CharType -> k
     ListType t' -> has @Read t' k
-    SetType t' -> has @Ord t' $ has @Read t' k
     TupleType a b -> has @Read a $ has @Read b k
     SumType a b -> has @Read a $ has @Read b k
 
@@ -451,7 +432,6 @@ instance Has Data Type where
     BoolType -> k
     CharType -> k
     ListType t' -> has @Data t' k
-    SetType t' -> has @Data t' $ has @Ord t' k
     TupleType a b -> has @Data a $ has @Data b k
     SumType a b -> has @Data a $ has @Data b k
 
@@ -480,9 +460,6 @@ instance ExprType Char where
 instance ExprType a => ExprType [a] where
     typeOf _ = ListType $ typeOf undefined
     typeOf' _ = ListType $ typeOf undefined
-instance ExprType a => ExprType (RCSet a) where
-    typeOf _ = SetType $ typeOf undefined
-    typeOf' _ = SetType $ typeOf undefined
 instance (ExprType a, ExprType b) => ExprType (a,b) where
     typeOf _ = TupleType (typeOf undefined) (typeOf undefined)
     typeOf' _ = TupleType (typeOf undefined) (typeOf undefined)
@@ -520,63 +497,47 @@ instance Has ExprType Variable where
 instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
 
+-- data Val t where
+--   Val :: ExprConstraints t => { runVal :: t } -> Val t
+-- deriving instance Eq (Val t)
+-- deriving instance Ord (Val t)
+-- instance Show (Val t) where
+--   show (Val t) = show t
 data Constant a where
-  Constant :: { constType :: Type a , constValue :: a } -> Constant a
-deriving instance Eq a => Eq (Constant a)
-deriving instance Ord a => Ord (Constant a)
-deriving instance Show a => Show (Constant a)
-deriving instance (Read a, ExprType a) => Read (Constant a)
-
-{-# COMPLETE CBool, CUnit, CInt, CFloat, CRational, CReal, CChar, CList, CTuple, CSet, CSum #-}
-pattern CBool :: () => (a ~ Bool) => a -> Constant a
-pattern CBool b = Constant BoolType b
-pattern CUnit :: () => (a ~ ()) => Constant a
-pattern CUnit = Constant UnitType ()
-pattern CInt :: () => (a ~ Integer) => a -> Constant a
-pattern CInt i = Constant IntType i
-pattern CFloat :: () => (a ~ Double) => a -> Constant a
-pattern CFloat f = Constant FloatType f
-pattern CRational :: () => (a ~ Rational) => a -> Constant a
-pattern CRational f = Constant RationalType f
-pattern CReal :: () => (a ~ AlgReal) => a -> Constant a
-pattern CReal f = Constant RealType f
-pattern CChar :: () => (a ~ Char) => a -> Constant a
-pattern CChar c = Constant CharType c
-pattern CString :: () => (a ~ String) => a -> Constant a
-pattern CString s = Constant (ListType CharType) s
-pattern CList :: () => (xs ~ [x]) => [x] -> Type x -> Constant xs
-pattern CList xs t = (Constant (ListType t) xs)
-pattern CSet :: () => (xs ~ RCSet x) => RCSet x -> Type x -> Constant xs
-pattern CSet xs t = (Constant (SetType t) xs)
-pattern CTuple :: () => (ab ~ (a,b)) => a -> b -> Type a -> Type b -> Constant ab
-pattern CTuple a b ta tb = (Constant (TupleType ta tb) (a,b))
-pattern CSum :: () => (ab ~ (Either a b)) => Either a b -> Type a -> Type b -> Constant ab
-pattern CSum ab ta tb = (Constant (SumType ta tb) ab)
+  Constant :: ExprConstraints a => { constValue :: a } -> Constant a
+constType :: Constant a -> Type a
+constType (Constant x) = typeOf x
+fromConst :: Constant a -> a
+fromConst = constValue
+deriving instance Eq (Constant a)
+deriving instance Ord (Constant a)
+instance Show (Constant a) where
+  show (Constant a) = show a
+instance (ExprConstraints a) => Read (Constant a) where
+  readsPrec x y = withExprConstraints (typeOf @a undefined) $ first Constant <$> readsPrec x y
 
 int :: Integer -> Some Constant
-int i = Some (CInt i)
+int i = Some (Constant i)
 unit :: Some Constant
-unit = Some CUnit
+unit = Some (Constant ())
 bool :: Bool -> Some Constant
-bool b = Some (CBool b)
+bool b = Some (Constant b)
 float :: Double -> Some Constant
-float f = Some (CFloat f)
+float f = Some (Constant f)
 rational :: Rational -> Some Constant
-rational f = Some (CRational f)
+rational f = Some (Constant f)
 real :: AlgReal -> Some Constant
-real f = Some (CReal f)
+real f = Some (Constant f)
 char :: Char -> Some Constant
-char c = Some (CChar c)
+char c = Some (Constant c)
 string :: String -> Some Constant
-string s = Some (CString s)
-list :: ExprType a => [a] -> Some Constant
-list xs = Some (CList xs (typeOf' xs))
-set :: ExprType a => RCSet a -> Some Constant
-set xs = Some (CSet xs (typeOf' xs))
-tuple :: (ExprType a, ExprType b) => a -> b -> Some Constant
-tuple a b = Some (CTuple a b (typeOf a) (typeOf b))
-option :: (ExprType a, ExprType b) => Either a b -> Some Constant
-option x = Some (CSum x (typeOf undefined) (typeOf undefined))
+string s = Some (Constant s)
+list :: ExprConstraints a => [a] -> Some Constant
+list xs = Some (Constant xs)
+tuple :: (ExprConstraints a, ExprConstraints b) => a -> b -> Some Constant
+tuple a b = Some (Constant (a, b))
+option :: (ExprConstraints a, ExprConstraints b) => Either a b -> Some Constant
+option x = Some (Constant x)
 
 -- | Recovers the position of the enum in the original range.
 enumIndex :: Type a -> a -> Maybe Int
@@ -608,7 +569,7 @@ prettyValue (SumType _ b) (Right y) = "Right " ++ prettyValue b y
 prettyValue t x = has @Show t $ show x
 
 prettyConstant :: Some Constant -> String
-prettyConstant (Some (Constant t x)) = prettyValue t x
+prettyConstant (Some (Constant x)) = prettyValue (typeOf x) x
 
 instance GEq Constant where
   a `geq` b = case constType a `geq` constType b of
@@ -630,12 +591,12 @@ instance GRead Constant where
     readParen False $ \s -> do
     ("Constant", s1) <- lex s
     (tp', s2) <- greadsPrec 11 s1
-    Church.withSome tp' $ \tp -> do
-      (x, rest) <- has @Read tp $ readsPrec 11 s2
-      return (Church.mkSome (Constant tp x), rest)
+    Church.withSome tp' $ \(tp :: Type a) -> withExprConstraints tp $ do
+      (x, rest) <- readsPrec 11 s2
+      return (Church.mkSome (Constant @a x), rest)
 
 instance Has c Type => Has c Constant where
-  has (Constant t _) = has @c t
+  has (Constant x) = has @c $ typeOf x
 
 instance JSON.FromJSON (Some Constant) where
     parseJSON (JSON.Object m)
@@ -650,8 +611,7 @@ instance JSON.FromJSON (Some Constant) where
             Some RealType -> parseReal $ lkup "value" m
             Some UnitType -> parseUnit $ lkup "value" m
             Some CharType -> parseChar $ lkup "value" m
-            Some (ListType t) -> parseList t $ lkup "value" m
-            Some (SetType t) -> parseSet t $ lkup "value" m
+            Some (ListType t) -> withExprConstraints t $ parseList t $ lkup "value" m
             Some (TupleType a b) -> parseTuple a b $ lkup "value" m
             Some (SumType a b) -> parseSum a b $ lkup "value" m
         where
@@ -664,7 +624,6 @@ instance JSON.FromJSON (Some Constant) where
           "bool" -> pure $ Some BoolType
           "()" -> pure $ Some UnitType
           '[':(init -> cs) -> (\(Some t) -> Some $ ListType t) <$> parseType (JSON.String (Text.pack cs))
-          '{':(init -> cs) -> (\(Some t) -> Some $ SetType t)  <$> parseType (JSON.String (Text.pack cs))
           '(':(parseTupleType 0 . init -> (a,b))
             -> (\(Some a') (Some b') -> Some $ TupleType a' b')
                       <$> parseType (JSON.String (Text.pack a))
@@ -705,108 +664,68 @@ instance JSON.FromJSON (Some Constant) where
         parseList t (JSON.Array xs) = has @ExprType t list <$> mapM (unSome t <=< JSON.parseJSON @(Some Constant)) (Vec.toList xs)
           where
             unSome :: Type a -> Some Constant -> JSON.Parser a
-            unSome tp (Some (Constant tp' v)) = case tp' `geq` tp of
-              Nothing -> fail $ "type indicates list of " <> show tp <> ", but at least one element was a " <> show tp'
+            unSome tp (Some (Constant v)) = case typeOf v `geq` tp of
+              Nothing -> fail $ "type indicates list of " <> show tp <> ", but at least one element was a " <> show (typeOf v)
               Just Refl -> pure v
         parseList _ _ = fail "type indicates list, but value is not of type array"
-        parseSet :: Type t -> JSON.Value -> JSON.Parser (Some Constant)
-        parseSet t (JSON.Object m')
-          | Just x <- JSON.lookup "regularset" m'
-          = do
-            Some (CList xs t') <- parseList t x
-            case geq t t' of
-              Nothing -> error "unexpected element type in set"
-              Just Refl -> withExprConstraints t $ pure $ Some $ CSet (RegularSet $ Set.fromList xs) t
-          | Just x <- JSON.lookup "complement" m'
-          = do
-            Some (CList xs t') <- parseList t x
-            case geq t t' of
-              Nothing -> error "unexpected element type in set"
-              Just Refl -> withExprConstraints t $ pure $ Some $ CSet (ComplementSet $ Set.fromList xs) t
-        parseSet _ _ = error "no regular or complement fields in json of set"
         parseTuple :: Type a -> Type b -> JSON.Value -> JSON.Parser (Some Constant)
         parseTuple a b (JSON.Object m')
           | Just x <- JSON.lookup "left" m'
           , Just y <- JSON.lookup "right" m'
           = do
-          Some (Constant xt xv) <- JSON.parseJSON x
-          Some (Constant yt yv) <- JSON.parseJSON y
+          Some (Constant xv) <- JSON.parseJSON x
+          Some (Constant yv) <- JSON.parseJSON y
+          let xt = typeOf xv
+          let yt = typeOf yv
           case a `geq` xt of
             Nothing -> fail "type of left element of tuple doesn't match"
             Just Refl -> case b `geq` yt of
               Nothing -> fail "type of right element of tuple doesn't match"
               Just Refl -> has @ExprType xt $ has @ExprType yt $ return $ tuple xv yv
         parseTuple _ _ _ = fail "type indicates pair, but value is not of type object"
-        parseSum :: Type a -> Type b -> JSON.Value -> JSON.Parser (Some Constant)
+        parseSum :: forall a b. Type a -> Type b -> JSON.Value -> JSON.Parser (Some Constant)
         parseSum a b (JSON.Object m')
           | Just x <- JSON.lookup "left" m'
           = do
-          Some (Constant xt xv) <- JSON.parseJSON x
+          Some (Constant xv) <- JSON.parseJSON x
+          let xt = typeOf xv
           case a `geq` xt of
             Nothing -> fail "type of left element of tuple doesn't match"
-            Just Refl -> has @ExprType xt $ return $ Some $ CSum (Left xv) a b
+            Just Refl -> has @ExprType xt $ withExprConstraints b $ return $ Some $ Constant (Left @a @b xv)
           | Just y <- JSON.lookup "right" m'
           = do
-          Some (Constant yt yv) <- JSON.parseJSON y
+          Some (Constant yv) <- JSON.parseJSON y
+          let yt = typeOf yv
           case b `geq` yt of
             Nothing -> fail "type of right element of tuple doesn't match"
-            Just Refl -> has @ExprType yt $ return $ Some $ CSum (Right yv) a b
+            Just Refl -> has @ExprType yt $ withExprConstraints a $ return $ Some $ Constant (Right @a @b yv)
         parseSum _ _ _ = fail "type indicates either, but value is not of type object"
     parseJSON _ = fail "expected Constant JSON"
 
 instance JSON.ToJSON (Some Constant) where
-    toJSON (Some v) = case v of
-      CBool b -> JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool b) JSON.empty
-      CUnit -> JSON.Object $ JSON.insert "type" "()" $ JSON.insert "value" (JSON.String $ Text.pack "()") JSON.empty
-      CInt i -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger i) JSON.empty
-      CFloat f -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits f) JSON.empty
-      CRational f -> JSON.Object $ JSON.insert "type" "rational" $ JSON.insert "value" (JSON.Number $ fst $ DS.fromRationalRepetendUnlimited f) JSON.empty
-      CReal f -> JSON.Object $ JSON.insert "type" "real" $ JSON.insert "value" (JSON.Number $ fromRational $ toRational f) JSON.empty
-      CChar c -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack [c]) JSON.empty
-      CList xs t -> JSON.Object
-        $ JSON.insert "type" (fromString . show $ ListType t)
-        $ JSON.insert "value" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
-        JSON.empty
-      CSet xs t -> JSON.Object
-        $ JSON.insert "type" (fromString . show $ SetType t)
-        $ JSON.insert "value" (case xs of
-          RegularSet    x -> JSON.Object $ JSON.insert "regularset" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) $ Set.toList x) JSON.empty
-          ComplementSet x -> JSON.Object $ JSON.insert "complement" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) $ Set.toList x) JSON.empty
-          ) JSON.empty
-      --(JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . Constant t) xs)
-      CTuple x y a b -> JSON.Object
-        $ JSON.insert "type" (fromString . show $ TupleType a b)
-        $ JSON.insert "value" (JSON.Object $ JSON.insert "left" (JSON.toJSON . Some $ Constant a x) $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
-        JSON.empty
-      CSum xy a b -> JSON.Object
-        $ JSON.insert "type" (fromString . show $ SumType a b)
-        $ JSON.insert "value" (case xy of
-          Left  x -> JSON.Object $ JSON.insert "left"  (JSON.toJSON . Some $ Constant a x) JSON.empty
-          Right y -> JSON.Object $ JSON.insert "right" (JSON.toJSON . Some $ Constant b y) JSON.empty)
-        JSON.empty
+    toJSON (Some (Constant x)) = case typeOf x of
+      BoolType -> JSON.Object $ JSON.insert "type" "bool" $ JSON.insert "value" (JSON.Bool x) JSON.empty
+      UnitType -> JSON.Object $ JSON.insert "type" "()" $ JSON.insert "value" (JSON.String $ Text.pack "()") JSON.empty
+      IntType -> JSON.Object $ JSON.insert "type" "int" $ JSON.insert "value" (JSON.Number $ fromInteger x) JSON.empty
+      FloatType -> JSON.Object $ JSON.insert "type" "float" $ JSON.insert "value" (JSON.Number $ fromFloatDigits x) JSON.empty
+      RationalType -> JSON.Object $ JSON.insert "type" "rational" $ JSON.insert "value" (JSON.Number $ fst $ DS.fromRationalRepetendUnlimited x) JSON.empty
+      RealType -> JSON.Object $ JSON.insert "type" "real" $ JSON.insert "value" (JSON.Number $ fromRational $ toRational x) JSON.empty
+      CharType -> JSON.Object $ JSON.insert "type" "string" $ JSON.insert "value" (JSON.String $ Text.pack [x]) JSON.empty
+      ListType t -> JSON.Object
+       $ JSON.insert "type" (fromString . show $ ListType t)
+       $ JSON.insert "value" (JSON.Array $ Vec.fromList $ map (JSON.toJSON . Some . withExprConstraints t Constant) x)
+       JSON.empty
+      TupleType a b -> JSON.Object $ withExprConstraints a $ withExprConstraints b
+       $ JSON.insert "type" (fromString . show $ TupleType a b)
+       $ JSON.insert "value" (JSON.Object $ JSON.insert "left" (JSON.toJSON . Some $ Constant $ fst x) $ JSON.insert "right" (JSON.toJSON . Some $ Constant $ snd x) JSON.empty)
+       JSON.empty
+      SumType a b -> JSON.Object
+       $ JSON.insert "type" (fromString . show $ SumType a b)
+       $ JSON.insert "value" (case x of
+         Left  y -> withExprConstraints a $ JSON.Object $ JSON.insert "left"  (JSON.toJSON . Some $ Constant y) JSON.empty
+         Right y -> withExprConstraints b $ JSON.Object $ JSON.insert "right" (JSON.toJSON . Some $ Constant y) JSON.empty)
+       JSON.empty
 
--- | convert a Constant to an typed value
-class ExprType t => ConstType t where
-    fromConst :: Constant t -> t
-    toConst :: t -> Constant t
-
-instance ExprType a => ConstType a where
-  fromConst (Constant _ x) = x
-  toConst x = Constant (typeOf x) x
-
-instance Has ConstType Type where
-  has t k = case t of
-    IntType -> k
-    FloatType -> k
-    RationalType -> k
-    RealType -> k
-    BoolType -> k
-    CharType -> k
-    UnitType -> k
-    ListType t' -> has @ConstType t' k
-    SetType t' -> has @ConstType t' k
-    TupleType a b -> has @ConstType a $ has @ConstType b k
-    SumType a b -> has @ConstType a $ has @ConstType b k
 
 -- ----------------------------------------------------------------------------------------- --
 -- value expression
@@ -838,8 +757,6 @@ data ExprView t where
     Tail :: ExprConstraints x => ExprView [x] -> ExprView [x]
     ELeft  :: (ExprConstraints a, ExprConstraints b) => ExprView a -> ExprView (Either a b)
     ERight  :: (ExprConstraints a, ExprConstraints b) => ExprView b -> ExprView (Either a b)
-    SElem :: Type a -> ExprView a -> ExprView (RCSet a) -> ExprView Bool
-    SInsert :: ExprConstraints a => ExprView a -> ExprView (RCSet a) -> ExprView (RCSet a)
     Zip :: Type a -> Type b -> ExprView [a] -> ExprView [b] -> ExprView [(a,b)]
     -- Adding Lam and App would make it impossible to implement some typeclasses that SBV wants,
     -- and is also stronger than we need: we don't need lists of functions, top-level functions, etc.
@@ -860,7 +777,7 @@ data ExprView t where
     Exists :: ExprConstraints a => Variable a -> ExprView Bool -> ExprView Bool
     -- NOTE: when adding more fields, check the Eq instance
 
-type ExprConstraints t = (Data t, Eq t, Ord t, OrdSymbolic (SBV t), Show t, ExprType t, SymVal t, Eq t, ConstType t, Read t)
+type ExprConstraints t = (Data t, Eq t, Ord t, OrdSymbolic (SBV t), Show t, ExprType t, SymVal t, Eq t, Read t)
 
 viewType :: ExprView a -> Type a
 viewType v = withExprConstraints v $ typeOf' v
@@ -902,9 +819,6 @@ instance Eq (ExprView t) where
     | Just Refl <- geq (typeOf' x) (typeOf' y) = x == y
   ERight x == ERight y
     | Just Refl <- geq (typeOf' x) (typeOf' y) = x == y
-  SElem t1 x y == SElem t2 a b
-    | Just Refl <- t1 `geq` t2 = x == a && y == b
-  SInsert x y == SInsert a b = x == a && y == b
   Zip ta tb x y == Zip ta' tb' x' y'
     | Just Refl <- ta `geq` ta'
     , Just Refl <- tb `geq` tb'
@@ -1005,18 +919,6 @@ instance Ord (ExprView t) where
         GLT -> LT
         GGT -> GT
         GEQ -> compare x y
-      (SElem tx x xs, SElem ty y ys) -> case gcompare tx ty of
-        GLT -> LT
-        GGT -> GT
-        GEQ -> case compare x y of
-          EQ -> compare xs ys
-          c -> c
-      (SInsert x xs, SInsert y ys) -> case gcompare (typeOf' x) (typeOf' y) of
-        GLT -> LT
-        GGT -> GT
-        GEQ -> case compare x y of
-          EQ -> compare xs ys
-          c -> c
       (Zip ta tb a b, Zip tx ty x y) ->
         case gcompare ta tx of
           GLT -> LT
@@ -1091,8 +993,6 @@ instance Ord (ExprView t) where
         Tail{} -> 29
         Either{} -> 30
         Map{} -> 31
-        SElem{} -> 32
-        SInsert{} -> 33
         Foldr{} -> 34
         Foldl{} -> 35
         Zip{} -> 36
@@ -1138,8 +1038,6 @@ instance Show (ExprView t) where
     (Map v f xs) -> "map (\\" <> show v <> " -> " <> show f <> ") " <> bshow xs
     (ELeft x) -> "Left " <> bshow x
     (ERight x) -> "Right " <> bshow x
-    (SElem _ x xs) -> bshow x <> "`Set.elem`" <> bshow xs
-    (SInsert x xs) -> "Set.insert " <> bshow x <> " " <> bshow xs
     (Filter _ f xs) -> "filter " <> bshow f <> " " <> bshow xs
     (Foldr _ _ f i xs) -> "foldr " <> bshow f <> " " <> bshow i <> " " <> bshow xs
     (Foldl _ _ f i xs) -> "foldl " <> bshow f <> " " <> bshow i <> " " <> bshow xs
@@ -1186,8 +1084,6 @@ instance Has ExprType ExprView where
     Map _ x _ -> has @ExprType x k
     ELeft x -> has @ExprType x k
     ERight x -> has @ExprType x k
-    SElem{} -> k
-    SInsert x _ -> has @ExprType x k
     Filter _ _ x -> has @ExprType x k
     Foldr _ x _ _ _ -> has @ExprType x k
     Foldl x _ _ _ _ -> has @ExprType x k
@@ -1260,8 +1156,6 @@ freeVars' (Head xs) = freeVars' xs
 freeVars' (Tail xs) = freeVars' xs
 freeVars' (ELeft x) = freeVars' x
 freeVars' (ERight x) = freeVars' x
-freeVars' (SElem _ x xs) = freeVars' x ++ freeVars' xs
-freeVars' (SInsert x xs) = freeVars' x ++ freeVars' xs
 freeVars' (Zip _ _ x y) = freeVars' x ++ freeVars' y
 -- v, vl, and vr are not free
 freeVars' (Map v f xs) = filter (/= Some v) (freeVars' f) ++ freeVars' xs

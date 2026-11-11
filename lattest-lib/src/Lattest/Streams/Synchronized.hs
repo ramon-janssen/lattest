@@ -220,20 +220,6 @@ consumeBufferedWith producer producerHasInput = do
                 unGetTQueue buffer Nothing
                 return Nothing
 
-{-
--- TODO either remove or expose as nice util function, even though we don't seem to need this now
-tconnect :: TInputStream a -> OutputStream a -> IO ()
-tconnect tis os = tconnect'
-    where
-    tconnect' = do
-        mA <- atomically $ read tis
-        case mA of
-            Nothing -> Streams.write Nothing os
-            Just _ -> do
-                Streams.write mA os
-                tconnect'
--}
-
 -- FIXME split to a separate module, conceptually there's nothing synchronized about this w.r.t. other OutputStreams
 duplicate :: OutputStream a -> OutputStream a -> IO (OutputStream a)
 duplicate out1 out2 = makeOutputStream $ \maybeVal -> do

@@ -39,7 +39,7 @@ import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Spec
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.SMT ( Some(..) )
 import Lattest.Model.Symbolic.SolveSymPrim(solveAnySequential, solveGuard, isGuardSatisfiable)
-import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), Val (..), withExprConstraints, prettyConstant)
+import Lattest.Model.Symbolic.Expr(subst, substVarModel, VarModel, valuationToVarModel, sTrue, (.&&), (.||), sNot, varUnion, mapVars, varName, Variable, mapVarExprs, mapExpressionVars, identityVarModel, getVariables, Constant (..), sFalse, (.==), sVar, sConst, ExprView (And), withExprConstraints, prettyConstant)
 import Lattest.Model.Symbolic.Internal.ExprDefs(Expr(..), ExprType (..))
 
 import Control.Exception(throw)
@@ -260,12 +260,12 @@ offlineTests intrpr tc inputforbidden
       case mv of
         Nothing -> pure Nothing
         Just (runValuation -> m) -> let vs' = map (\(Some v) -> case DMap.lookup v m of
-                                                              Just (Val x) -> Some $ Constant (has @ExprType v $ typeOf' v) x
+                                                              Just (Constant x) -> Some $ Constant x
                                                               Nothing -> error $ show v <> "is not in" <> show m) vs in
           (\x y -> Just (o,(vs',x,y)))
           <$> do -- checking whether this is the only valid assignment for this gate, by adding a guard specifying that at least one value should differ
                 let guard' = guard .&& (if null vs then sFalse else sNot $ Expr $ And $ Set.fromList
-                           $ zipWith (\(Some v) (Some (Constant tp c)) -> has @ExprType v $ case geq (typeOf' v) tp of
+                           $ zipWith (\(Some v) (Some (Constant c)) -> has @ExprType v $ case geq (typeOf' v) (typeOf c) of
                                     Just Refl -> withExprConstraints (typeOf' v) $ view $ sVar v .== sConst c
                                     Nothing -> error "internal type mismatch") vs vs')
                 lift (isGuardSatisfiable vs guard') >>= \issat -> pure $ if issat then Inconclusiv else Only

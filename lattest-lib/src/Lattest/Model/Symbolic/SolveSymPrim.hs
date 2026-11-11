@@ -16,13 +16,12 @@ isGuardSatisfiable
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, OrdFunctor, asDualExpr)
 import qualified Lattest.Model.Symbolic.Expr as E
-import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Val (..), Expr)
-import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType, Expr (..))
+import Lattest.Model.Symbolic.Expr (Valuation,Variable(..), runValuation, eval, substConst, Expr)
+import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
 import Lattest.SMT(getSolution,addAssertions,addDeclarations,getSolvable,SolvableProblem(..), runSMT, query, SMTQ, addAssertionsQ, sortOfEqualWith)
 
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
-import Data.Constraint.Extras (Has(..))
 import System.Random ( randomR, RandomGen, mkStdGen, randomIO )
 import Data.Dependent.Sum (DSum (..))
 import Control.Monad.State (StateT (..), evalStateT)
@@ -72,10 +71,10 @@ valuationToGateValue :: SymInteract g -> Valuation -> GateValue g
 valuationToGateValue (SymInteract g' params) valuation =
     GateValue g' $ fmap (getValueForVar $ runValuation valuation) params
     where
-        getValueForVar :: DMap.DMap Variable E.Val -> Some Variable -> Some E.Constant
+        getValueForVar :: DMap.DMap Variable E.Constant -> Some Variable -> Some E.Constant
         getValueForVar val' (Some var) =
             case DMap.lookup var val' of
-                Just (E.Val value) -> case varType var of
+                Just (E.Constant value) -> case varType var of
                   E.IntType -> E.int value
                   E.UnitType -> E.unit
                   E.FloatType -> E.float value
@@ -83,10 +82,9 @@ valuationToGateValue (SymInteract g' params) valuation =
                   E.RealType -> E.real value
                   E.BoolType -> E.bool value
                   E.CharType -> E.char value
-                  E.ListType t -> has @ExprType t E.list value
-                  E.SetType t -> has @ExprType t E.set value
-                  E.TupleType a b -> has @ExprType a $ has @ExprType b $ let (x,y) = value in E.tuple x y
-                  E.SumType a b -> has @ExprType a $ has @ExprType b $ E.option value
+                  E.ListType t -> E.withExprConstraints t E.list value
+                  E.TupleType a b -> E.withExprConstraints a $ E.withExprConstraints b $ let (x,y) = value in E.tuple x y
+                  E.SumType a b -> E.withExprConstraints a $ E.withExprConstraints b $ E.option value
                 Nothing -> undefined  "valuationToGateValue: wrong type" -- TODO throw exception. Static type checking is infeasible due to external SMT solving. Should not happen if SMT solver behaves properly.
 
 {-|
@@ -168,5 +166,5 @@ solveGuardAmong extraSolutions vars guard = StateT $ \randomgen ->
     atleastoneisdifferent = foldr ((E..||) . isNot) E.sFalse . DMap.assocs . runValuation
 
     -- for doubles, rationals and reals, enforce a distance of at least 0.1
-    isNot :: DSum Variable Val -> Expr Bool
-    isNot (var :=> (Val val)) = E.sNot $ Expr $ sortOfEqualWith True 0.1 (E.Var var) (E.Const val)
+    isNot :: DSum Variable E.Constant -> Expr Bool
+    isNot (var :=> (E.Constant val)) = E.sNot $ Expr $ sortOfEqualWith True 0.1 (E.Var var) (E.Const val)

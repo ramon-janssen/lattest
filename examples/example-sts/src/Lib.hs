@@ -46,7 +46,7 @@ stsExample =
             2 -> Map.empty
     in automaton initConf (Set.fromList [water,ok,coffee]) switches
 
-stsExampleInitAssign = Valuation $ DMap.singleton xvar (Val 0)
+stsExampleInitAssign = Valuation $ DMap.singleton xvar (Constant 0)
 
 model = interpretSTSQuiescent stsExample stsExampleInitAssign
 model' = interpretSTS stsExample stsExampleInitAssign

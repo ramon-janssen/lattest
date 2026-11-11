@@ -16,7 +16,8 @@ jobs:
         ghcversion: [9.8.4, 9.10.3, 9.12.4]
     name: testsuite
 
-    runs-on: ubuntu-latest
+    # note: since november 2026, ubuntu-latest points to ubuntu 26. For some reason the CI job keeps getting terminated without feedback on ubuntu 26 (always during the exact same SMT call; OOM?), so for now we just pin it to 24.04 until we fix that issue.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -91,6 +92,13 @@ jobs:
             -e "s|^- lattest-lib-[0-9]+(\.[0-9]+)*\$|- ../../lattest-lib|" \
             "$exdir/stack.yaml"
         done
+
+    - name: Cache stack
+      uses: actions/cache/save@v4
+      # if: steps.cache2.outputs.cache-hit != 'true'
+      with:
+        path: ~/.stack
+        key: ${{ steps.cache2.outputs.cache-primary-key }}
 
     - name: Run examples against their Java SUTs
       run: |

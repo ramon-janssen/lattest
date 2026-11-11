@@ -23,9 +23,9 @@ import Lattest.Model.Alphabet (SymInteract (..), IOAct, isOutputInteract, isInpu
 import Lattest.Model.Automaton (Valuation, AutSyntax (..), STStdest (..))
 import Lattest.Model.BoundedMonad
 import Lattest.Model.StandardAutomata (IOSTS, allLocations)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..), enumIndex)
+import Lattest.Model.Symbolic.Expr (Variable (..), Type (..), ExprType (..), VarModel, ExprView(..), enumIndex, Constant (..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
-import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..), VarModel (..))
+import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), VarModel (..))
 import Lattest.SMT (RCSet)
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
@@ -58,8 +58,8 @@ initValue valuation = JSON.toJSON m
     m :: Map.Map String JSON.Value
     m = Map.fromList $ map (\(var :=> val) -> (varName var, JSON.toJSON val)) $ DMap.assocs $ runValuation valuation
 
-instance JSON.ToJSON (Val a) where
-  toJSON (Val a) = valueToJSON (typeOf a) a
+instance JSON.ToJSON (Constant a) where
+  toJSON (Constant a) = valueToJSON (typeOf a) a
 
 -- | Enums are written as their position in the original range, also when nested in arrays or structures.
 valueToJSON :: Type a -> a -> JSON.Value
@@ -80,7 +80,6 @@ instance Has JSON.ToJSON Type where
     CharType -> k
     UnitType -> k
     ListType tp -> has @JSON.ToJSON tp k
-    SetType tp -> has @JSON.ToJSON tp k
     SumType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
     TupleType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
 
@@ -167,12 +166,14 @@ instance JSON.ToJSON (Some Type) where
     IntType -> "int"
     BoolType -> "bool"
     FloatType -> "float"
+    RationalType -> "rational"
+    RealType -> "real"
     CharType -> "char"
     UnitType -> "()"
     ListType CharType -> "string"
     ListType _ -> "array"
     TupleType _ _ -> "structure"
-    _ -> error "todo: serialize sets and sumtypes"
+    SumType _ _ -> error "not (yet) implemented: toJson for sum types"
     )
     where
       addFields = case tp of

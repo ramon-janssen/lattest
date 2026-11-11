@@ -244,10 +244,7 @@ buildSplitGraphSimple aut graph todo notSplitYet compRel admin
   | Set.null todo && Set.null notSplitYet = (graph, admin)
   | Set.null todo = buildSplitGraphSimple aut graph notSplitYet Set.empty compRel admin
   | otherwise = let node = Set.elemAt 0 todo
-                in -- Trace.trace ("todo: " ++ (show $ Set.map (\n -> show $ Set.map Aut.sid (nodeStates n) ) todo)
-                   --                ++ " notSplitYet: " ++ (show $ Set.map (\n -> show $ Set.map Aut.sid (nodeStates n) ) notSplitYet)) $
-                   -- Trace.trace ("todo: " ++ (show $ Set.size todo) ++ " notSplitYet: " ++ (show $ Set.size notSplitYet)) $
-                   case splitNode aut graph node compRel admin of
+                in case splitNode aut graph node compRel admin of
                        (Nothing,_) -> -- Trace.trace("skipping " ++ (show $ Set.map Aut.sid $ nodeStates node))
                                    buildSplitGraphSimple aut graph (Set.delete node todo) (Set.insert node notSplitYet) compRel admin
                        (Just newGraph,nadmin) -> buildSplitGraphSimple aut newGraph (Set.foldr (\ch todoset ->

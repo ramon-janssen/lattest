@@ -105,10 +105,10 @@ testSTSJSONWriterComposedConjunction = TestCase $
             [ (assignment [assignFlipY], "Flip"), (assignment [assignDupX], "Dup"), (assignment [setPair], "Pair")
             ]
         valuation = Valuation
-            $ DMap.insert xvar (Val (5 :: Integer))
-            $ DMap.insert yvar (Val True)
-            $ DMap.insert itemsVar (Val [1, 2, 3 :: Integer])
-            $ DMap.insert pairVar (Val (3 :: Integer, "hi"))
+            $ DMap.insert xvar (Constant (5 :: Integer))
+            $ DMap.insert yvar (Constant True)
+            $ DMap.insert itemsVar (Constant [1, 2, 3 :: Integer])
+            $ DMap.insert pairVar (Constant (3 :: Integer, "hi"))
             mempty
     in assertWrittenJSONMatches
         "composed_conjunction_expected.json"
