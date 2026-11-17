@@ -40,7 +40,7 @@ import Lattest.Model.Alphabet(IOAct(..), IOSuspAct, Suspended(..), asSuspended, 
 import Lattest.Model.Automaton(AutIntrpr(..),AutSyntax (..), After, TransitionMapping (..), STStdest(..), IntrpState(..), buildGateValuation, evalBool, implicitDestination)
 import Lattest.Model.BoundedMonad(Det(..), asConjunction, FreeLattice, ordBind, ordReturn)
 import Lattest.Model.StandardAutomata(ConcreteSuspAutIntrpr, accessSequences, interpretQuiescentConcrete, IOSTSIntrp, allLocations, symStep)
-import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard, isGuardSatisfiable, solveGuardAny, valuationToGateValue)
+import Lattest.Model.Symbolic.SolveSymPrim(substituteInGuard, isGuardSatisfiable, solveGuardAmong, valuationToGateValue)
 
 import Control.Monad (forM, (>=>), filterM)
 import qualified Data.List as List
@@ -51,8 +51,9 @@ import System.Random(StdGen, initStdGen, mkStdGen)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList)
 import Data.Either (fromRight)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
+import Lattest.Model.Symbolic.Expr (Expr, Variable (..), Val (..), Constant (..), withExprConstraints, Type, sTrue, (.||), (.&&), VarModel, valuationToVarModel, getVariables, freeVars)
 import Lattest.Model.Symbolic.SolveSTS (solveRandomInteractionWith, indexVar)
+import Lattest.Util.PrettyExpr (prettyExpr, prettyVal)
 import Data.Dependent.Map (DMap)
 import Data.Some (Some(..), mapSome)
 import Data.Type.Equality ((:~:)(..))
@@ -163,8 +164,9 @@ randomCoveringTestSelector
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
+  -> Int -- ^ the number of additional solutions to pick input values randomly from, besides the first one the SMT solver finds
   -> IO (TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i)
-randomCoveringTestSelector intrpr mtocover = randomCoveringTestSelectorFromGen intrpr mtocover <$> initStdGen
+randomCoveringTestSelector intrpr mtocover extraSolutions = randomCoveringTestSelectorFromGen intrpr mtocover extraSolutions <$> initStdGen
 
 -- | As 'randomCoveringTestSelector', starting with the given random seed.
 randomCoveringTestSelectorFromSeed
@@ -173,9 +175,10 @@ randomCoveringTestSelectorFromSeed
      , tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
+  -> Int -- ^ the number of additional solutions to pick input values randomly from, besides the first one the SMT solver finds
   -> Int
   -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i
-randomCoveringTestSelectorFromSeed intrpr mtocover seed = randomCoveringTestSelectorFromGen intrpr mtocover (mkStdGen seed)
+randomCoveringTestSelectorFromSeed intrpr mtocover extraSolutions seed = randomCoveringTestSelectorFromGen intrpr mtocover extraSolutions (mkStdGen seed)
 
 randomCoveringTestSelectorFromGen
   :: forall m loc q t tdest act i' o i.
@@ -183,9 +186,10 @@ randomCoveringTestSelectorFromGen
      tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
+  -> Int -- ^ the number of additional solutions to pick input values randomly from, besides the first one the SMT solver finds
   -> StdGen
   -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o)) i
-randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (allSwitches intrpr) mtocover) select update
+randomCoveringTestSelectorFromGen intrpr mtocover extraSolutions g = selector (g, fromMaybe (allSwitches intrpr) mtocover) select update
   where
     select :: (StdGen, Set.Set (Switch loc i' o))
            -> AutIntrpr m loc q t tdest act
@@ -193,11 +197,11 @@ randomCoveringTestSelectorFromGen intrpr mtocover g = selector (g, fromMaybe (al
            -> IO (Maybe (i, (StdGen, Set.Set (Switch loc i' o))))
     select (g', tocover) intrpr' mq = do
       -- as in randomDataTestSelectorFromGen, except we try to take new transitions
-      (maybeGateValue, g'') <- solveRandomInteractionWith intrpr' maybeNewInAct g'
+      (maybeGateValue, g'') <- solveRandomInteractionWith extraSolutions intrpr' maybeNewInAct g'
       case maybeGateValue of
         Just value -> pure $ Just (value, (g'',tocover))
         Nothing -> do
-          (maybeGateValue', g''') <- solveRandomInput g'' maybeFromIOAct intrpr'
+          (maybeGateValue', g''') <- solveRandomInput extraSolutions g'' maybeFromIOAct intrpr'
           return $ case maybeGateValue' of
             Just value -> Just (value, (g''',tocover))
             Nothing -> Nothing
@@ -281,17 +285,18 @@ mergeInputCoverage :: Ord i => InputCoverageReport i -> InputCoverageReport i ->
 mergeInputCoverage = DMap.unionWithKey (\_ (ICV t a) (ICV _ b) -> ICV t (Set.union a b))
 
 {- |
-    Render an input coverage report: per input gate, per guard, the values used for each parameter.
+    Render an input coverage report: per input gate, per guard, the values used for each parameter. Guards and values are
+    written as in 'prettyExpr', given the enums and the names of the fields of the structures (as given by the parser).
 -}
-prettyPrintInputCoverage :: (Show i, Ord i) => InputCoverageReport i -> String
-prettyPrintInputCoverage icr = unlines $ concat
+prettyPrintInputCoverage :: (Show i, Ord i) => Map.Map String (Some Expr) -> Map.Map (Some Type, [Bool]) String -> InputCoverageReport i -> String
+prettyPrintInputCoverage enums fields icr = unlines $ concat
     [ show gate' : concat
-        [ ("  guard: " <> guard) : [ "    " <> var <> ": " <> List.intercalate ", " vals <> " (" <> show (length vals) <> " different input values)" | (var, vals) <- params ]
+        [ ("  guard: " <> prettyExpr enums fields guard) : [ "    " <> var <> ": " <> List.intercalate ", " vals <> " (" <> show (length vals) <> " different input values)" | (var, vals) <- params ]
         | (guard, params) <- Map.toList guards ]
     | (gate', guards) <- Map.toList grouped ]
   where
     grouped = Map.fromListWith (Map.unionWith (<>))
-        [ (gate', Map.singleton (show guard) [(show v, show <$> Set.toList vals)]) | ICK gate' guard v :=> ICV _ vals <- DMap.toList icr ]
+        [ (gate', Map.singleton guard [(varName v, prettyVal enums fields <$> Set.toList vals)]) | ICK gate' guard v :=> ICV _ vals <- DMap.toList icr ]
 
 observeInputCoverage :: (Show i, Ord loc, Ord i, Ord o) => TestObserver FreeLattice loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) (InputCoverageReport i) (InputCoverageReport i)
 observeInputCoverage = observer mempty update pure
@@ -326,10 +331,11 @@ slowRandomInputCoverer
      tdest ~ STStdest, m ~ FreeLattice, t ~ IOSymInteract i' o, q ~ IntrpState loc, act ~ IOGateValue i' o, i ~ GateValue i') -- hardcoding to STS
   => AutIntrpr m loc q t tdest act
   -> Maybe (Set.Set (Switch loc i' o))
-  -> Int
+  -> Int -- ^ the maximum number of steps
+  -> Int -- ^ the number of additional solutions to pick input values randomly from, besides the first one the SMT solver finds
   -> StdGen
   -> TestSelector m loc q t tdest act (StdGen, Set.Set (Switch loc i' o), Maybe [act], Int) i
-slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allSwitches intrpr) mtocover, Nothing, maxSteps) select update
+slowRandomInputCoverer intrpr mtocover maxSteps extraSolutions g = selector (g, fromMaybe (allSwitches intrpr) mtocover, Nothing, maxSteps) select update
   where
     select :: (StdGen, Set.Set (Switch loc i' o), Maybe [act], Int)
            -> AutIntrpr m loc q t tdest act
@@ -341,7 +347,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
     select (g', tocover, Just [], budget) intrpr' mq = select (g', tocover, Nothing, budget) intrpr' mq
     select (g', tocover, Nothing, budget) intrpr' mq = do
       -- don't currently have a plan. If there's immediately any untaken switches available, we take one
-      (maybeGateValue, g'') <- solveRandomInteractionWith intrpr' maybeNewInAct g'
+      (maybeGateValue, g'') <- solveRandomInteractionWith extraSolutions intrpr' maybeNewInAct g'
       case maybeGateValue of
         Just value -> pure $ Just (value, (g'',tocover, Nothing, budget))
         Nothing -> do
@@ -374,7 +380,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
             [] -> Nothing
             gs -> Just (SymInteract i vs, foldr1 (.||) gs)  -- or'd guards of uncovered switches to make sure we cover at least one
         takeRandomInput g'' = do
-          (maybeGateValue', g''') <- solveRandomInput g'' maybeFromIOAct intrpr'
+          (maybeGateValue', g''') <- solveRandomInput extraSolutions g'' maybeFromIOAct intrpr'
           return $ case maybeGateValue' of
             Just value -> Just (value, (g''',tocover, Nothing, budget))
             Nothing -> Nothing
@@ -420,7 +426,7 @@ slowRandomInputCoverer intrpr mtocover maxSteps g = selector (g, fromMaybe (allS
         -- pick values for the gates along the path, such that an uncovered switch can be taken at the end of it
         concretise :: (SymNode loc, [IOSymInteract i' o]) -> StateT StdGen IO (Maybe [act])
         concretise (node, path) = fmap (\valuation -> map (`valuationToGateValue` valuation) path)
-          <$> firstJustM (\(targetVars, cond) -> solveGuardAny (pathVars ++ targetVars) cond) (targetConds node)
+          <$> firstJustM (\(targetVars, cond) -> solveGuardAmong extraSolutions (pathVars ++ targetVars) cond) (targetConds node)
           where pathVars = concat [ vars | SymInteract _ vars <- path ]
 
     -- note: coverage is computed from the `m q` before the transition, which is passed in as the last argument.

@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -5,9 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -121,6 +120,7 @@ instance JSON.FromJSON UntypedExpr where
 type VarMap = Map.Map String (Some Variable)
 type AccessorMap = Map.Map String FieldAccessor
 type EnumMap = Map.Map String (Some Expr)
+type AttrNameMap = Map.Map (Some Type, [Bool]) String
 
 lookupVar :: VarMap -> String -> Either String (DSum Type Expr)
 lookupVar varmap name = case Map.lookup name varmap of
@@ -375,7 +375,8 @@ instance JSON.FromJSON GateId where
 -- type, and a list of field accessors
 data VarDefJson = VarDefJson { varDefJsonType :: Some Type
                              , varDefJsonFieldAccessors :: Map.Map String FieldAccessor
-                             , varDefJsonEnumDefs :: EnumMap}
+                             , varDefJsonEnumDefs :: EnumMap
+                             , varDefJsonAttrNames :: AttrNameMap}
 newtype MkEnumResult tp = MER (Map.Map String (Expr tp))
 data FieldAccessor where
   FA :: Type big -> Type small -> (Expr big -> Expr small) -> FieldAccessor
@@ -399,18 +400,18 @@ instance JSON.FromJSON VarDefJson where
           "real"    -> k $ Some RealType
           "array"   -> do
             o' <- o JSON..: "elements"
-            VarDefJson (Some t) a b <- go o'
-            pure $ VarDefJson (Some $ ListType t) a b
+            VarDefJson (Some t) a b n <- go o'
+            pure $ VarDefJson (Some $ ListType t) a b n
           "structure" -> do
             JSON.Object o' <- o JSON..: "attributes"
-            ((t, a), (b,c)) <- mkStructure $ JSON.toList o'
-            pure $ VarDefJson t (a <> b) c
+            ((t, a), (b,c,n)) <- mkStructure $ JSON.toList o'
+            pure $ VarDefJson t (a <> b) c (unionAttrNames (fieldNames a) n)
           "enum" -> do
             range <- o JSON..: "range"
             case mkEnum range of
-              t :=> MER m -> pure $ VarDefJson (Some t) mempty (Map.map Some m)
+              t :=> MER m -> pure $ VarDefJson (Some t) mempty (Map.map Some m) mempty
           _ -> fail $ "unknown variable type: " ++ tp
-      k tp = pure $ VarDefJson tp mempty mempty
+      k tp = pure $ VarDefJson tp mempty mempty mempty
       mkEnum :: [String] -> DSum Type MkEnumResult
       mkEnum [] = error "empty enum"
       mkEnum [nm] = UnitType :=> MER (Map.singleton nm $ Expr $ Const ())
@@ -423,11 +424,11 @@ instance JSON.FromJSON VarDefJson where
             (Map.map sRight m))
       mkStructure [] = error "empty structure"
       mkStructure [(nm, JSON.Object o)] = do
-        VarDefJson (Some tp) a b <- go o
-        pure ((Some tp, Map.singleton (toString nm) (FA tp tp id)), (a,b))
+        VarDefJson (Some tp) a b n <- go o
+        pure ((Some tp, Map.singleton (toString nm) (FA tp tp id)), (a,b,n))
       mkStructure ((nm, JSON.Object o) : fields) = do
-        VarDefJson (Some  (ta :: Type a)) a x <- go o
-        ((Some (tb :: Type b), accessors), (b,y)) <- mkStructure fields
+        VarDefJson (Some  (ta :: Type a)) a x n <- go o
+        ((Some (tb :: Type b), accessors), (b,y,m)) <- mkStructure fields
         withExprConstraints ta $ withExprConstraints tb $
           pure
             ( (Some (TupleType ta tb)
@@ -438,8 +439,27 @@ instance JSON.FromJSON VarDefJson where
                 (Map.map (\(FA tbig tsmall f) -> case geq tbig tb of
                   Nothing -> error "unexpected result type in mkStructure: this is the result of a call on the tail of the same list"
                   Just Refl ->FA (TupleType ta tb) tsmall (f . sSecond)) accessors))
-            , (Map.unionWith errIfUnequalAccessors a b, Map.unionWith errIfUnequalEnums x y))
+            , (Map.unionWith errIfUnequalAccessors a b, Map.unionWith errIfUnequalEnums x y, unionAttrNames n m))
       mkStructure _ = error "non-object in attributes"
+
+-- | The names of the attributes of a structure
+fieldNames :: Map.Map String FieldAccessor -> AttrNameMap
+fieldNames accessors = Map.fromList
+    [ ((Some t, path), nm)
+    | (nm, FA t _ f) <- Map.toList accessors
+    , e <- [f $ Expr $ Var $ Variable "" t]
+    , let path = projections (view e)
+    , not (null path) -- a structure with a single attr is that attr
+    ]
+  where
+    projections :: ExprView a -> [Bool]
+    projections (First _ x) = projections x ++ [False]
+    projections (Second _ x) = projections x ++ [True]
+    projections _ = []
+
+-- | Two structures of the same type have their attrs in the same places, such a place gets both names.
+unionAttrNames :: AttrNameMap -> AttrNameMap -> AttrNameMap
+unionAttrNames = Map.unionWith (\a b -> if a == b then a else a <> "/" <> b)
 
 errIfUnequalAccessors :: FieldAccessor -> FieldAccessor -> FieldAccessor
 errIfUnequalAccessors x@(FA tbig1 tsmall1 f1) (FA tbig2 tsmall2 f2) = case geq tbig1 tbig2 of
@@ -528,14 +548,14 @@ instance JSON.FromJSON STSJsonFormat where
 
 -- STS elements builders
 
-buildVarMap :: Map.Map String VarDefJson -> Either String (VarMap, AccessorMap, EnumMap)
+buildVarMap :: Map.Map String VarDefJson -> Either String (VarMap, AccessorMap, EnumMap, AttrNameMap)
 buildVarMap defs = do
-  (varmap, unzip -> (accessorss, enumss)) <- unzip <$> forM (Map.toList defs)
-    (\(name, VarDefJson (Some t') accessors enums) -> return ((name, Some $ Variable name t'), (accessors, enums)))
+  (varmap, unzip3 -> (accessorss, enumss, fieldss)) <- unzip <$> forM (Map.toList defs)
+    (\(name, VarDefJson (Some t') accessors enums fields) -> return ((name, Some $ Variable name t'), (accessors, enums, fields)))
   let accessors = Map.unionsWith errIfUnequalAccessors accessorss
   let enums = Map.unionsWith errIfUnequalEnums enumss
   let varmap' = Map.fromList varmap
-  pure (varmap', accessors, enums)
+  pure (varmap', accessors, enums, foldr unionAttrNames mempty fieldss)
 
 buildGateMap
     :: (String -> IOAct String String)
@@ -666,13 +686,14 @@ buildValuation locVarCtx initVal enums =
         defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
         defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
 
--- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, and the initial valuation.
-type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation, EnumMap)
+-- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, the initial valuation,
+-- the enums, and the names of the fields of the structures for printing.
+type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation, EnumMap, AttrNameMap)
 
 convertSTSJson :: STSJsonFormat -> Either String STSParseResult
 convertSTSJson json = do
-    (locVarMap, accessors1, enums1) <- buildVarMap (stsJsonLocVars json)
-    (paramMap, accessors2, enums2)  <- buildVarMap (stsJsonParams json)
+    (locVarMap, accessors1, enums1, fields1) <- buildVarMap (stsJsonLocVars json)
+    (paramMap, accessors2, enums2, fields2)  <- buildVarMap (stsJsonParams json)
     let accMap = accessors1 <> accessors2
     let enums = enums1 <> enums2
     initVal    <- buildValuation locVarMap (stsJsonInitValuation json) enums
@@ -690,7 +711,7 @@ convertSTSJson json = do
     let transRel = buildTransitionRel switchList
         initCfg  = atom $ locId (stsJsonInitLoc json)
         sts      = automaton initCfg alphabet transRel
-    return (stsJsonId json, sts, guardMap, Map.map ($ noAssignment) assignMap, initVal, enums)
+    return (stsJsonId json, sts, guardMap, Map.map ($ noAssignment) assignMap, initVal, enums, unionAttrNames fields1 fields2)
 
 {-|
     Read a JSON file and parse an STS from it. Returns a tuple (ID, STS, Initial Valuation) if successful,
@@ -714,4 +735,5 @@ stsListFromJSONFile path = do
         Right stsJsons -> forM stsJsons convertSTSJson
 
 instance JSON.FromJSON AlgReal where
-  parseJSON x = fromRational . toRational <$> JSON.parseJSON @Double x
+  -- convert from the decimal JSON number directly
+  parseJSON = JSON.withScientific "real" (pure . fromRational . toRational)
