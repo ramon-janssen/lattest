@@ -322,6 +322,7 @@ guardRows lengths params domain guard
     atLength n row = sIfThenElse (hasLength n) row sFalse
     rowsFor decision always wrap len n = do
       -- a guard with side conditions only has no decision to cover
+      -- TODO: opening an array guard could be made optional (if not selected, the condition over the list is considered a single atom)
       opened <- if view decision == Const True then Right (Known True) else openGuard n params (view decision)
       case opened of
         Known True  -> Right [(always, True, [], len, [])]
@@ -483,8 +484,19 @@ prettyMCDCReport (MCDCReport guards) = unlines $ concatMap prettyGuard guards ++
     they are, and they are not in the report.
 
     A guard on a list parameter of the gate is split once for each of the given
-    list lengths, with the atoms of each element of the list as separate atoms. 
+    list lengths, with the atoms of each element of the list as separate atoms.
     A list of another length is underspecified.
+
+    Limitations:
+
+      * Only lists that are gate parameters are opened.
+      * Only @forall@, @exists@, counts @length (filter x cond xs)@ and
+        @length xs@ are opened; any other condition on a list is one atom.
+      * A length or count is only recognised inside sums, products and
+        comparisons. A count may only be compared with constants and list
+        lengths, and an atom may have at most one count.
+      * Lists are only tested up to the longest given length
+        ('defaultListLengths' is @[0 .. 3]@).
 
     Use the result to steer test generation, not as a specification: values
     that satisfy the original guard but are not an MCDC row become
