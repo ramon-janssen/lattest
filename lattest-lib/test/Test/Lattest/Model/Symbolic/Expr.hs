@@ -21,7 +21,6 @@ where
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
 import Lattest.Model.Symbolic.SolveSymPrim
-import qualified Lattest.SMT as SMT
 
 import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
@@ -32,7 +31,6 @@ import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
 import qualified Data.Dependent.Map as DMap
-import Data.SBV (RCSet(..))
 import Data.Some (Some (..))
 import Data.Maybe (isJust)
 import Data.GADT.Compare (GEq(..))

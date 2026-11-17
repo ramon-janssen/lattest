@@ -497,12 +497,6 @@ instance Has ExprType Variable where
 instance Show (Variable a) where
     show (Variable name stype) = name ++ ":" ++ show stype
 
--- data Val t where
---   Val :: ExprConstraints t => { runVal :: t } -> Val t
--- deriving instance Eq (Val t)
--- deriving instance Ord (Val t)
--- instance Show (Val t) where
---   show (Val t) = show t
 data Constant a where
   Constant :: ExprConstraints a => { constValue :: a } -> Constant a
 constType :: Constant a -> Type a

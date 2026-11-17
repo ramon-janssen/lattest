@@ -13,7 +13,7 @@ run :: IO ()
 run = do
     putStrLn "loading STS from JSON..."
     result <- stsFromJSONFile "toy_example_sts_coffee.json"
-    (id, sts, _, _, initVal, _) <- case result of
+    (_, sts, _, _, initVal, _, _) <- case result of
         Left  err -> error $ "failed to parse STS JSON: " ++ err
         Right r   -> return r
 
@@ -35,8 +35,9 @@ run = do
     let nrSteps = 50
         probabilityOfWaitForOutput = 0.0
         randomSeed = 456
+        extraSolutions = 5
         testSelector =
-            randomDataOrWaitForOutputTestSelectorFromSeed randomSeed probabilityOfWaitForOutput
+            randomDataOrWaitForOutputTestSelectorFromSeed extraSolutions randomSeed probabilityOfWaitForOutput
             `untilCondition` stopAfterSteps nrSteps
             `observingOnly` traceObserver
             `andObserving` stateObserver

@@ -284,8 +284,8 @@ testQuiscence :: Test
 testQuiscence = TestCase $ do
     -- NOTE this tests the timing behaviour of quiescence so is inherently timing-dependent, and therefore potentially unstable. Raise the deltaMillis
     -- and/or marginMillis for increased stability (and increased duration of this test)
-    let deltaMillis = 4
-    let marginMillis = 2
+    let deltaMillis = 8
+    let marginMillis = 4
     let halfDeltaMillis = deltaMillis `div` 2
     let twoAndHalfDeltaMillis = (deltaMillis * 5) `div` 2
     let threeAndHalfDeltaMillis = (deltaMillis * 7) `div` 2

@@ -73,7 +73,7 @@ import qualified Lattest.Adapter.Adapter as Adapter
 import Lattest.Adapter.StandardAdapters(pureAdapter, pureMealyAdapter)
 import Lattest.Exec.StandardTestControllers
 import Lattest.Exec.Testing(runSTSTester, Verdict(..), RunTester (..))
-import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,reachable)
+import Lattest.Model.Automaton(after, AutIntrpr, stateConf,automaton,IntrpState(..),prettyPrintIntrp,stsTLoc,STStdest,alphabet,syntacticAutomaton,reachable)
 import Lattest.Model.StandardAutomata( interpretSTS,IOSTS, STSIntrp, interpretSTSQuiescentInputAttemptConcrete, sequentiallyAt, (|>), selfSequentiallyAt,CheckLoc(..), prependOutputChecks, (|>>), (//\\), (\\//), conjunctionAll, disjunctionAll, sequentiallyAtPruned, selfSequentiallyAtPruned, Pruned(..))
 import Lattest.Model.Alphabet(IOAct(..), Suspended(..), SuspendedIF, SuspendedIFGateValue, δ, SymInteract(..),GateValue(..), gateValueAsIOAct,toIOGateValue, InputAttempt(..), IOSymInteract)
 import Lattest.Model.BoundedMonad(Det, (/\), (\/), underspecified, forbidden, FreeLattice, atom, disjunction, isSpecified, isAllowed, specifiedness, Specifiedness(..), ordReturn, (<#>))
@@ -89,17 +89,9 @@ import Lattest.Model.Symbolic.Expr hiding (Var) -- 'Var' would clash with 'Algeb
 import Data.Some (Some (..))
 import qualified Data.Dependent.Map as DMap
 import Lattest.Exec.StandardTestControllers.CompleteTestSuite (randomCoveringTestSelector)
+import Test.Lattest.Util.STSTestUtils(pvar, qvar, xvar, stsExampleInitAssign, stsExampleInitAssignWith, getSTSIntrpState2, assertAfter)
+import Control.Monad (replicateM)
  -- 'Var' would clash with 'Algebra.Lattice.Free.Var' used by prettySeTree
-
-pvar :: Variable Integer
-pvar = Variable "p" IntType
-qvar :: Variable Integer
-qvar = Variable "q" IntType
-xvar :: Variable Integer
-xvar = Variable "x" IntType
-
-stsExampleInitAssign :: Valuation
-stsExampleInitAssign = Valuation $ DMap.singleton xvar (Constant 0)
 
 stsExample :: IOSTS Det Integer String String
 stsExample =
@@ -124,17 +116,6 @@ stsExampleIntrpr = interpretSTS stsExample stsExampleInitAssign
 
 getSTSIntrpState :: Integer ->  Integer -> Det (IntrpState Integer)
 getSTSIntrpState loc val = pure $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Constant val)
-
-{- |
-    Takes a tuple of description, STS model, gate-parameter value pair and expected state and computes
-    STS `after` interaction, asserting that the resulting state configuration matches the expected one.
--}
-assertAfter :: (After m loc q t tdest act, Ord (m q), Ord q, Show (m q)) =>
-    String -> AutIntrpr m loc q t tdest act -> act -> m q -> IO (AutIntrpr m loc q t tdest act)
-assertAfter msg intrp act expected = do
-    let intrp' = after intrp act
-    assertEqual msg expected (stateConf intrp')
-    return intrp'
 
 testSTSHappyFlow :: Test
 testSTSHappyFlow = TestCase $ do
@@ -262,7 +243,7 @@ testSTSTestSelection :: Test
 testSTSTestSelection = TestCase $ do
     let nrSteps = 37
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.05 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.05 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impExampleCorrect
     (verdict, ((observed, _), _)) <- runSTSTester (interpretSTSQuiescentInputAttemptConcrete stsExample stsExampleInitAssign) testSelector imp
@@ -404,12 +385,6 @@ stsExampleIntrpr2a = interpretSTS (fst stsExample2) stsExampleInitAssign
 stsExampleIntrpr2b :: STSIntrp FreeLattice Integer (IOAct String String)
 stsExampleIntrpr2b = interpretSTS (snd stsExample2) stsExampleInitAssign
 
-getSTSValuation :: Integer -> Valuation
-getSTSValuation val = Valuation $ DMap.singleton (Variable "x" IntType) (Constant val)
-
-getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
-getSTSIntrpState2 loc val = atom (IntrpState loc $ getSTSValuation val)
-
 -- NOTE: Automaton a conjuncts the switches that start from the initial location, while automaton b
 -- conjuncts the initial states.
 testLatticeCoffeeSTS :: Test
@@ -500,7 +475,7 @@ testLatticeSTSParameterized' testName inputThenOut comp splitFirst p1 p2 q2 expe
                 else (Out, In, out, inp)
     let nrSteps = 4
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized startType endType p1 p2 q2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized startType endType comp splitFirst) stsExampleInitAssign
@@ -600,7 +575,7 @@ testLatticeSTSQuiescentPass :: String -> Bool -> Test
 testLatticeSTSQuiescentPass testName _ = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
@@ -616,7 +591,7 @@ testLatticeSTSQuiescentFail1 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail1 testName splitFirst = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specParameterized In Out (\/) splitFirst) stsExampleInitAssign
@@ -632,7 +607,7 @@ testLatticeSTSQuiescentFail2 :: String -> Bool -> Test
 testLatticeSTSQuiescentFail2 testName _ = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impParameterized In Out 2 42 42
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete specQ stsExampleInitAssign
@@ -687,7 +662,7 @@ testLatticeSTSUnimplementable :: String -> Bool -> Test
 testLatticeSTSUnimplementable testName splitFirst = TestCase $ do
     let nrSteps = 2
 
-    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 456 0.0 `untilCondition` stopAfterSteps nrSteps
+    let testSelector = randomDataOrWaitForOutputTestSelectorFromSeed 10 456 0.0 `untilCondition` stopAfterSteps nrSteps
                 `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     imp <- impQParameterized In 2
     let specIntrpr = interpretSTSQuiescentInputAttemptConcrete (specUnimplementableParameterized splitFirst) stsExampleInitAssign
@@ -743,7 +718,7 @@ testSTSDataSelectionGuardedInput = TestCase $ do
         ()
     let nrSteps = 2
         randomSeed = 456
-        testSelector = randomDataTestSelectorFromSeed randomSeed `untilCondition` stopAfterSteps nrSteps
+        testSelector = randomDataTestSelectorFromSeed 10 randomSeed `untilCondition` stopAfterSteps nrSteps
                         `observingOnly` traceObserver `andObserving` stateObserver `andObserving` inconclusiveStateObserver
     (verdict, ((observed, _), _)) <- runSTSTester guardedInputModel testSelector adap
     assertEqual ("expected the selector to pick the only guard-satisfying input ?Prime [41], got " <> show observed)
@@ -982,7 +957,7 @@ testComposedPathCondition regenerate = TestCase $ goldenAssert
     where
     alph = Set.toList $ alphabet $ syntacticAutomaton composedCoffeeMachineIntrpr
     -- all traces over the alphabet up to length 3 (sequence . replicate n = all n-length combinations)
-    traces = concatMap (\n -> sequence (replicate n alph)) [0 .. 3 :: Int]
+    traces = concatMap (\n -> replicateM n alph) [0 .. 3 :: Int]
     render tr = unlines
         [ "=== " ++ show tr ++ " ==="
         , "specified: " ++ show (interactsToSpecifiedCondition composedCoffeeMachineIntrpr tr)
@@ -1250,10 +1225,7 @@ prunedTransitions :: [Pruned Integer Integer (IOSymInteract String String)]
 (stsCoffeeTreeComposed, prunedTransitions) = sequentiallyAtPruned modelCoffeeTree [3,4,5] stsCoffeeTree
 stsCoffeeTreeComposed1 :: STSIntrp FreeLattice (Either Integer Integer) (IOAct String String)
 prunedTransitions1 :: [Pruned Integer Integer (IOSymInteract String String)]
-(stsCoffeeTreeComposed1, prunedTransitions1) = sequentiallyAtPruned (interpretSTS stsCoffeeTree stsExampleInitAssign2) [3,4,5] stsCoffeeTree
-
-stsExampleInitAssign2 :: Valuation
-stsExampleInitAssign2 = Valuation $ DMap.singleton xvar (Constant 1)
+(stsCoffeeTreeComposed1, prunedTransitions1) = sequentiallyAtPruned (interpretSTS stsCoffeeTree (stsExampleInitAssignWith 1)) [3,4,5] stsCoffeeTree
 
 getSTSIntrpStateEither :: Either Integer Integer -> Integer -> FreeLattice (IntrpState (Either Integer Integer))
 getSTSIntrpStateEither loc val = ordReturn $ IntrpState loc $ Valuation $ DMap.singleton (Variable "x" IntType) (Constant val)
@@ -1523,8 +1495,8 @@ prunedSelfPruningTree :: [Pruned Integer Integer (IOSymInteract String String)]
 testSelfSeqCompPrunedRules :: Test
 testSelfSeqCompPrunedRules = TestCase $ do
     assertEqual "\npruned " expectedPruned prunedSelfPruningTree
-    where 
-    expectedPruned = 
+    where
+    expectedPruned =
         [ PrunedSwitch 2 (inGate "b") (ordReturn 3)     -- The only possible path to 2 is a? c!. a? requires x == 1 so b? is unfeasible
         , PrunedSwitch 4 (inGate "b") (ordReturn 3)     -- The path to 4 is b? d!. d! assigns x := 1 so b? is unfeasible
         -- The path to 5 is b? e!. e was already unfeasible but we keep it as it is an output. However, the subsequent switches are removed.
@@ -2194,7 +2166,7 @@ coverimp = pureMealyAdapter (const (const ())) (\() (GateValue i _) -> [GateValu
 testCoverageCheckerIsExhaustive :: Test
 testCoverageCheckerIsExhaustive = TestCase $ do
   let intrpr = interpretSTS stscovered $ Valuation mempty
-  tester <- randomCoveringTestSelector intrpr Nothing
+  tester <- randomCoveringTestSelector intrpr Nothing 10
   imp1 <- coverimp
   (v1, incompleteTrace) <- runTester intrpr (tester `untilCondition` stopAfterSteps 7 `observingOnly` traceObserver) imp1
   imp2 <- coverimp
@@ -2204,4 +2176,3 @@ testCoverageCheckerIsExhaustive = TestCase $ do
   let complete trace = all (\y -> all (\z -> GateValue z [] `elem` trace) [In [y], Out [y]]) ("ABCD" :: String)
   assertBool "7 steps is not enough" (not $ complete incompleteTrace)
   assertBool ("8 steps should cover" <> show completeTrace)        (complete   completeTrace)
-
