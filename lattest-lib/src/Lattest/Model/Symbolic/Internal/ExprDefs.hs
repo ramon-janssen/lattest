@@ -212,12 +212,6 @@ instance GRead Type where
           rest <- mylex "]" s2
           Church.withSome t $ \(tp :: Type t) ->
             return (Church.mkSome $ ListType tp, rest)
-      -- ++ do
-      --     s1 <- mylex "{" s
-      --     (t, s2) <- greadsPrec 11 s1
-      --     rest <- mylex "}" s2
-      --     Church.withSome t $ \(tp :: Type t) ->
-      --       return (Church.mkSome $ SetType tp, rest)
       ++ do
           s1 <- mylex "(" s
           (a, s2) <- greadsPrec 11 s1
@@ -238,80 +232,6 @@ instance GRead Type where
               return (Church.mkSome $ SumType ta tb, rest)
     where
       mylex prefix = maybeToList . stripPrefix prefix
-
--- instance ExprType a => Eq (RCSet a) where
---   a == b = withExprConstraints (typeOf' a) $ case a of
---     RegularSet as -> case b of
---       RegularSet bs -> as == bs
---       ComplementSet bs -> case typeOf' a of
---         SetType x -> case inhabitants x of
---           Nothing -> False -- infinitely large complement
---           Just i -> Set.size as + Set.size bs == i && Set.intersection as bs == mempty
---         _ -> error "not a set"
---     ComplementSet as -> case b of
---       RegularSet bs -> case typeOf' a of
---         SetType x -> case inhabitants x of
---           Nothing -> False -- infinitely large complement
---           Just i -> Set.size as + Set.size bs == i && Set.intersection as bs == mempty
---         _ -> error "not a set"
---       ComplementSet bs -> as == bs
--- instance ExprType a => Ord (RCSet a) where
---   -- To ensure transitivity, we choose a < b iff size a < size b, where the size of a complement shrinks as the embedded set grows
---   compare a b = withExprConstraints (typeOf' a) $ case a of
---     RegularSet as -> case b of
---       RegularSet bs -> case compare (Set.size as) (Set.size bs) of
---         EQ -> compare as bs
---         x -> x
---       ComplementSet bs -> case typeOf' a of
---         SetType x -> case inhabitants x of
---           Just i
---            | Set.size as + Set.size bs == i && Set.intersection as bs == mempty
---            -> EQ
---           _ -> LT -- the size of the complementset is infinite
---         _ -> error "not a set"
---     ComplementSet as -> case b of
---       RegularSet bs -> case typeOf' a of
---         SetType x -> case inhabitants x of
---           Just i
---            | Set.size as + Set.size bs == i && Set.intersection as bs == mempty
---            -> EQ
---           _ -> GT -- the size of the complementset is infinite
---         _ -> error "not a set"
---       -- flipping as and bs when comparing two complements
---       ComplementSet bs -> case compare (Set.size bs) (Set.size as) of
---         EQ -> compare bs as
---         x -> x
--- -- count the inhabitants of a type; to define Eq and Ord instances for RCSet, and to compute the size of a complementset
--- inhabitants :: forall e. Type e -> Maybe Int
--- inhabitants = \case
---   IntType -> Nothing
---   FloatType -> Nothing
---   RationalType -> Nothing
---   RealType -> Nothing
---   BoolType -> Just 2
---   CharType -> Nothing -- maxBound - minBound + 1 = 1114112, I think we'd have overflow issues (in e.g. sums/products of chars) more often than that we'd have such large complement sets
---   ListType _ -> Nothing
---   SetType _ -> Nothing
---   TupleType x y -> (*) <$> inhabitants x <*> inhabitants y
---   SumType x y -> (+) <$> inhabitants x <*> inhabitants y
---   UnitType -> Just 1
---
--- instance (Ord a, Read a) => Read (RCSet a) where
---   readsPrec _ str =
---     (first RegularSet <$> readSet str)
---     <> case str of
---           'U':' ':'-':' ':rest -> first ComplementSet <$> readSet rest
---           'U':rest -> [(ComplementSet mempty, rest)]
---           _ -> []
---
--- readSet :: forall a. (Ord a, Read a) => ReadS (Set a)
--- readSet ('{':s) = go [] s
---   where
---     go xs ('}':rest) = [(Set.fromList xs, rest)]
---     go xs str = do
---       (x, ',':str') <- reads str
---       go (x:xs) str'
--- readSet _ = []
 
 withExprConstraints :: Has ExprType f => f a -> (ExprConstraints a => r) -> r
 withExprConstraints f k = let t = has @ExprType f (typeOf' f) in has @Data t $ has @Read t $ has @Ord t $ has @Show t $ has @ExprType t $ has @SymVal t $ has @Eq t $ hasOrdSymbolic t k
@@ -546,7 +466,7 @@ enumIndex tp val
     go _ _ = Nothing
     -- Is this type a sum of units?
     -- Note: this is an overapproximation. For example, if 'Maybe a := SumType () a',
-    -- 'Nothing' gets printed as 'Left 0', and a sum of two enums gets printed as a single enum.
+    -- 'Nothing' gets printed as 'Left 0'. A sum of two enums gets printed as a single enum.
     isEnum :: Type a -> Bool
     isEnum UnitType = True
     isEnum (SumType a b) = isEnum a && isEnum b
@@ -629,7 +549,7 @@ instance JSON.FromJSON (Some Constant) where
           _ -> fail $ "bad type: " <> s
         parseType _ = fail "type is not a string"
         -- splits the string at the first comma that isn't part of a new tuple
-        -- inefficient, but simple, and types should never be complicated
+        -- inefficient, but simple, and types should never be large
         parseTupleType :: Int -> String -> (String, String)
         parseTupleType 0 (',':xs) = ("",xs)
         parseTupleType n ('(':xs) = first ('(':) $ parseTupleType (n+1) xs
