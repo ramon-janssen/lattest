@@ -10,7 +10,7 @@ module Lattest.Util.PrettyExpr (
 import Data.Bifunctor (Bifunctor(..))
 import Data.Constraint.Extras (Has(..))
 import Data.Some (Some (..))
-import Lattest.Model.Symbolic.Expr (Variable (..), Val (..), Type (..), ExprType (..), ExprView(..), prettyValue)
+import Lattest.Model.Symbolic.Expr (Variable (..), Type (..), ExprType (..), ExprView(..), prettyValue, Constant (..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -18,8 +18,8 @@ import qualified Data.Set as Set
 import qualified Lattest.Model.Symbolic.Internal.FreeMonoidX as FMX
 
 -- | The text of a value, as that of a constant in 'prettyExpr'.
-prettyVal :: Map.Map String (Some Expr) -> Map.Map (Some Type, [Bool]) String -> Val t -> String
-prettyVal enums fields (Val x) = prettyExpr enums fields (Expr (Const x))
+prettyVal :: Map.Map String (Some Expr) -> Map.Map (Some Type, [Bool]) String -> Constant t -> String
+prettyVal enums fields (Constant x) = prettyExpr enums fields (Expr (Const x))
 
 -- | The text of an expression, in a readable form. Given are the enums and the names of the fields of the structures (as
 -- given by the parser): a constant that is an enum is written as its name, and a projection of a structure as its field.

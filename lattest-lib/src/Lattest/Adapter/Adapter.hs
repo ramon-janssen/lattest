@@ -29,7 +29,7 @@ import qualified Lattest.Streams.Synchronized as Streams (map,read)
 data Adapter act i = Adapter {
     inputCommandsToSut :: OutputStream i, -- ^ Channel for sending input commands.
     actionsFromSut :: TInputStream act, -- ^ Channel for receiving outputs.
-    
+
     -- TODO should calling close somehow also automatically send a Nothing to the inputCommandsToSut?
     close :: IO () -- ^ Close the (channels of this) adapter.
     }

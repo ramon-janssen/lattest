@@ -23,7 +23,7 @@ dependencies:
     - aeson >= 2.2.3.0 && < 2.4
     - attoparsec >= 0.14.4 && < 0.15
     - attoparsec-aeson >= 2.2.2 && < 2.3
-    - base >= 4.19.2 && < 4.22
+    - base >= 4.19.2 && < 4.23
     - bytestring >= 0.12.1 && < 0.13
     - cassava >= 0.5.3.2 && < 0.6
     - containers >= 0.6.8 && < 0.8
@@ -42,10 +42,10 @@ dependencies:
     - unbounded-delays >= 0.1.1 && < 0.2
     - some >= 1.0.6 && <1.2
     - sbv >= 11.0 && <15
-    - dependent-map
-    - dependent-sum
-    - constraints-extras
-    - vector
+    - dependent-map >= 0.4 && < 0.5
+    - dependent-sum >= 0.7.2 && < 0.8
+    - constraints-extras >= 0.4.0.2 && < 0.5
+    - vector >= 0.13.2.0 && < 0.14
 ghc-options:
 - -Wall
 - -Wcompat
@@ -86,14 +86,14 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - HUnit >= 1.6.2.0
-    - QuickCheck >= 2.15.0.1 && <2.18
+    - HUnit >= 1.6.2.0 && < 1.7
+    - QuickCheck >= 2.15.0.1 && < 2.18
     - lattest-lib
     - lattices >= 2.2.1 && < 2.3
     - raw-strings-qq >= 1.1 && < 1.2
-    - tasty >= 1.5.3
-    - tasty-quickcheck
-    - utf8-string >= 1.0.2
-    - directory >= 1.3.0.0
-    - filepath >= 1.4
+    - tasty >= 1.5.3 && < 1.6
+    - tasty-quickcheck >= 0.11 && < 0.12
+    - utf8-string >= 1.0.2 && < 1.1
+    - directory >= 1.3.0.0 && < 1.4
+    - filepath >= 1.4 && < 1.6
     - bytestring >= 0.12.1 && < 0.13

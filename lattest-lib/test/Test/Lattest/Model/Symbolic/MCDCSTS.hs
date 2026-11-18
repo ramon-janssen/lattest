@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Test.Lattest.Model.Symbolic.MCDCSTS (
     mcdcSTSTests
@@ -60,7 +61,7 @@ testCompleteMCDC = TestCase $ do
     let p = sVar pvar .> 1
         q = sVar qvar .> 1
         sts = stsExampleMCDC [p .|| q, sNot p .&& sNot q]
-        water vals = GateValue (In "water") (map (Some . CInt) vals)
+        water vals = GateValue (In "water") (map int vals)
     completedSTS <- completeMCDC sts ["water"]
     let completed = interpretSTS completedSTS stsExampleInitAssign
     _ <- assertAfter "after water 2 0: " completed (water [2, 0]) (getSTSIntrpState2 1 0)
@@ -77,7 +78,7 @@ testCompleteMCDCConjunction = TestCase $ do
     let p = sVar pvar .> 1
         q = sVar qvar .> 1
         sts = stsExampleMCDC [p .&& q, sNot p .|| sNot q] -- the second switch covers both false rows of p && q
-        water vals = GateValue (In "water") (map (Some . CInt) vals)
+        water vals = GateValue (In "water") (map int vals)
     completedSTS <- completeMCDC sts ["water"]
     let completed = interpretSTS completedSTS stsExampleInitAssign
     _ <- assertAfter "after water 2 2: " completed (water [2, 2]) (getSTSIntrpState2 1 0)
@@ -95,7 +96,7 @@ testCompleteMCDCDependentAtoms = TestCase $ do
         guardAnd = p5 .&& p10
         guardNand = sNot p5 .|| sNot p10
         sts = stsExampleMCDC [guardAnd, guardNand]
-        water vals = GateValue (In "water") (map (Some . CInt) vals)
+        water vals = GateValue (In "water") (map int vals)
     completedSTS <- completeMCDC sts ["water"]
     let completed = interpretSTS completedSTS stsExampleInitAssign
     _ <- assertAfter "after water 11 0: " completed (water [11, 0]) (getSTSIntrpState2 1 0)
@@ -109,7 +110,7 @@ testCompleteMCDCExclusiveAtoms :: Test
 testCompleteMCDCExclusiveAtoms = TestCase $ do
     let p = sVar pvar
         sts = stsExampleMCDC [p .== 1 .|| p .< 0 .|| p .> 5, sNot (p .== 1) .&& p .>= 0 .&& p .<= 5]
-        water vals = GateValue (In "water") (map (Some . CInt) vals)
+        water vals = GateValue (In "water") (map int vals)
     completedSTS <- completeMCDC sts ["water"]
     let completed = interpretSTS completedSTS stsExampleInitAssign
     _ <- assertAfter "after water 1 0: " completed (water [1, 0]) (getSTSIntrpState2 1 0) -- only p == 1 holds
@@ -136,7 +137,7 @@ stsExampleMCDC2 =
 
 testCompleteMCDCTuple :: Test
 testCompleteMCDCTuple = TestCase $ do
-    let water a b = GateValue (In "water") [Some $ CTuple a b IntType IntType]
+    let water a b = GateValue (In "water") [Some $ Constant (a :: Integer, b :: Integer)]
     completedSTS <- completeMCDC stsExampleMCDC2 ["water"]
     let completed = interpretSTS completedSTS emptyValuation
     _ <- assertAfter "after water (1,5): " completed (water 1 5) (atLoc 1) -- only snd > 2 holds
@@ -166,7 +167,7 @@ transitions:
 -- completed STS.
 assertMCDCLists :: IOSTS FreeLattice Integer String String -> [([(Integer, Integer)], Maybe Integer)] -> IO ()
 assertMCDCLists completedSTS expectations = do
-    let water pairs = GateValue (In "water") [Some $ CList pairs (TupleType IntType IntType)]
+    let water pairs = GateValue (In "water") [Some $ Constant @[(Integer, Integer)] pairs]
         expected = maybe underspecified atLoc
         completed = interpretSTS completedSTS emptyValuation
     sequence_ [assertAfter ("after water " ++ show pairs ++ ": ") completed (water pairs) (expected loc) | (pairs, loc) <- expectations]
@@ -333,7 +334,7 @@ testCompleteMCDCConfiguration = TestCase $ do
             0 -> Map.fromList [(water, atom (stsTLoc guard0 noAssignment, 2))]
             1 -> Map.fromList [(water, atom (stsTLoc guard1 noAssignment, 3))]
             _ -> Map.empty
-        waterVals vals = GateValue (In "water") (map (Some . CInt) vals)
+        waterVals vals = GateValue (In "water") (map int vals)
     completedSTS <- completeMCDC (sts (p .&& q) (sNot p .|| sNot q)) ["water"]
     let completed = interpretSTS completedSTS stsExampleInitAssign
     _ <- assertAfter "after water 2 2: " completed (waterVals [2, 2]) (getSTSIntrpState2 2 0)
@@ -353,7 +354,7 @@ testCompleteMCDCLocationVariable :: Test
 testCompleteMCDCLocationVariable = TestCase $ do
     let px = sVar pvar .> sVar xvar
         q = sVar qvar .> 1
-        water vals = GateValue (In "water") (map (Some . CInt) vals)
+        water vals = GateValue (In "water") (map int vals)
     completedSTS <- completeMCDC (stsExampleMCDC [px .&& q, sNot px .|| sNot q]) ["water"]
     let completedX0 = interpretSTS completedSTS stsExampleInitAssign -- x == 0
     _ <- assertAfter "x = 0, after water 1 2: " completedX0 (water [1, 2]) (getSTSIntrpState2 1 0)

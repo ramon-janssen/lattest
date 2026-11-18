@@ -4,19 +4,19 @@ TorXakis - Model Based Testing
 See LICENSE in the parent Symbolic folder.
 -}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns        #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Lattest.Model.Symbolic.Internal.ExprImpls
@@ -64,28 +64,30 @@ module Lattest.Model.Symbolic.Internal.ExprImpls
 , sFilter
 , sFoldr
 , sFoldl
-  -- ** Set operations
-, sInsert
-, sEmptySet
-, sSElem
   -- ** Pair operations
 , sFirst
 , sSecond
 , sPair
+, pattern SPair
+, ETriple, pattern STriple
+, EQuadruple, pattern SQuadruple
   -- ** Either
-, sEither
-, sLeft
-, sRight
-
+, sEither, sLeft, sRight
+  -- ** Nested sums
+  -- In Lattest, we only have binary sum (Either) and product (Tuple) types, but you might be interested in a sum or product with three or more subtypes instead.
+  -- Here, we provide a few functions that may relieve some of the burden of using nested binary splits to represent such types.
+, EThree, sFirstOfThree, sSecondOfThree, sThirdOfThree, sThree
+, EFour, sFirstOfFour, sSecondOfFour, sThirdOfFour, sFourthOfFour, sFour
+  -- ** Enums
+, SEnum (..), SEnum2 (..), SEnum3 (..), SEnum4 (..), SEnum5 (..)
+, SEnumThree, sEnum3, SEnumFour, sEnum4, SEnumFive, sEnum5
 -- * Quantifiers
 , sForall
 , sExists
-
 -- * Substitution of var by value
 , VarModel(..)
 , assign
 , Valuation(..)
-, Val(..)
 , varUnion
 , mapVars
 , mapVarExprs
@@ -123,7 +125,7 @@ import qualified Data.Dependent.Map as DMap
 import Data.Constraint.Extras (Has (..))
 import Data.Constraint.Compose (ComposeC)
 import qualified Data.List as List
-import Data.SBV (RCSet(..), AlgReal)
+import Data.SBV (AlgReal)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX (mapFreeMonoidX, allFreeMonoidX)
 import GHC.Integer (divInteger)
 import Data.Maybe (catMaybes)
@@ -730,8 +732,22 @@ sFirst (view -> i) = Expr $ First (typeOf undefined) i
 sSecond :: ExprType a => Expr (a, t) -> Expr t
 sSecond (view -> i) = Expr $ Second (typeOf undefined) i
 
-sPair :: Expr a -> Expr b -> Expr (a, b)
-sPair (view -> x) (view -> y) = Expr $ Pair x y
+pattern SPair :: (ExprType a, ExprType b) => () => Expr a -> Expr b -> Expr (a,b)
+pattern SPair x y <- (\xy -> (sFirst xy, sSecond xy) -> (x, y)) where
+  SPair (view -> x) (view -> y) = Expr $ Pair x y
+
+sPair :: Expr a -> Expr b -> Expr (a,b)
+sPair x y = withExprConstraints x $ withExprConstraints y $ SPair x y
+
+type ETriple a b c = Expr (a, (b, c))
+pattern STriple :: (ExprType a, ExprType b, ExprType c) => () => Expr a -> Expr b -> Expr c -> ETriple a b c
+pattern STriple x y z <- (\xyz -> (sFirst xyz, sFirst $ sSecond xyz, sSecond $ sSecond xyz) -> (x, y, z)) where
+  STriple (view -> x) (view -> y) (view -> z) = Expr $ Pair x $ Pair y z
+
+type EQuadruple a b c d = Expr (a, (b, (c, d)))
+pattern SQuadruple :: (ExprType a, ExprType b, ExprType c, ExprType d) => () => Expr a -> Expr b -> Expr c -> Expr d -> EQuadruple a b c d
+pattern SQuadruple w x y z <- (\wxyz -> (sFirst wxyz, sFirst $ sSecond wxyz, sFirst $ sSecond $ sSecond wxyz, sSecond $ sSecond $ sSecond wxyz) -> (w, x, y, z)) where
+  SQuadruple (view -> w) (view -> x) (view -> y) (view -> z) = Expr $ Pair w $ Pair x $ Pair y z
 
 sHead :: ExprConstraints x => Expr [x] -> Expr x
 sHead (view -> xs) = Expr $ Head xs
@@ -767,14 +783,81 @@ sLeft (view -> a) = Expr $ ELeft a
 sRight :: (ExprConstraints a, ExprConstraints b) => Expr b -> Expr (Either a b)
 sRight (view -> b) = Expr $ ERight b
 
-sEmptySet :: (ExprConstraints a, ExprConstraints (RCSet a)) => Expr (RCSet a)
-sEmptySet = Expr $ Const $ RegularSet $ Set.fromList []
+-- | Sum type with three options
+type EThree a b c = Expr (Either a (Either b c))
+sFirstOfThree :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Expr a -> EThree a b c
+sFirstOfThree (view -> a) = Expr $ ELeft a
+sSecondOfThree :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Expr b -> EThree a b c
+sSecondOfThree (view -> b) = Expr $ ERight $ ELeft b
+sThirdOfThree :: (ExprConstraints a, ExprConstraints b, ExprConstraints c) => Expr c -> EThree a b c
+sThirdOfThree (view -> c) = Expr $ ERight $ ERight c
+-- | Case-of on EThree
+sThree :: Variable a -> Variable b -> Variable c -> Expr x -> Expr x -> Expr x -> EThree a b c -> Expr x
+sThree va vb vc xa xb xc three = let vbc = Variable "sThreeIntermediate" (varType vb `SumType` varType vc) in
+  withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints xa $
+  sEither va vbc xa (sEither vb vc xb xc (sVar vbc)) three
 
-sInsert :: ExprConstraints a => Expr a -> Expr (RCSet a) -> Expr (RCSet a)
-sInsert (view -> x) (view -> xs) = Expr $ SInsert x xs
+-- | Sum type with four options
+type EFour a b c d = Expr (Either a (Either b (Either c d)))
+sFirstOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr a -> EFour a b c d
+sFirstOfFour (view -> a) = Expr $ ELeft a
+sSecondOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr b -> EFour a b c d
+sSecondOfFour (view -> b) = Expr $ ERight $ ELeft b
+sThirdOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr c -> EFour a b c d
+sThirdOfFour (view -> c) = Expr $ ERight $ ERight $ ELeft c
+sFourthOfFour :: (ExprConstraints a, ExprConstraints b, ExprConstraints c, ExprConstraints d) => Expr d -> EFour a b c d
+sFourthOfFour (view -> d) = Expr $ ERight $ ERight $ ERight d
+-- | Case-of on EFour
+sFour :: Variable a -> Variable b -> Variable c -> Variable d -> Expr x -> Expr x -> Expr x -> Expr x -> EFour a b c d -> Expr x
+sFour va vb vc vd xa xb xc xd four = let vthree = Variable "sFourIntermediate1" (varType vb `SumType` (varType vc `SumType` varType vd)) in
+  withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints vd $ withExprConstraints xa $
+  sEither va vthree xa (sThree vb vc vd xb xc xd $ sVar vthree) four
 
-sSElem :: Expr a -> Expr (RCSet a) -> Expr Bool
-sSElem (view -> x) (view -> xs) = withExprConstraints x $ Expr $ SElem (typeOf' x) x xs
+-- | Sum type with five options
+type EFive a b c d e = Expr (Either a (Either b (Either c (Either d e))))
+-- | Case-of on EFive
+sFive :: Variable a -> Variable b -> Variable c -> Variable d -> Variable e -> Expr x -> Expr x -> Expr x -> Expr x -> Expr x -> EFive a b c d e -> Expr x
+sFive va vb vc vd ve xa xb xc xd xe five = let vfour = Variable "sFiveIntermediate1" (varType vb `SumType` (varType vc `SumType` (varType vd `SumType` varType ve))) in
+  withExprConstraints va $ withExprConstraints vb $ withExprConstraints vc $ withExprConstraints vd $ withExprConstraints ve $ withExprConstraints xa $
+  sEither va vfour xa (sFour vb vc vd ve xb xc xd xe $ sVar vfour) five
+
+-- | Symbolic enumerations, represented as sums of units.
+class ExprType a => SEnum a where
+  sFirstOf :: Expr a
+instance SEnum () where
+  sFirstOf = sConst ()
+instance SEnum a => SEnum (Either () a) where
+  sFirstOf = withExprConstraints (typeOf @a undefined) $ sLeft $ sConst ()
+-- | Class of enums with at least two options.
+class SEnum a => SEnum2 a where
+  sSecondOf :: Expr a
+instance SEnum a => SEnum2 (Either () a) where
+  sSecondOf = withExprConstraints (typeOf @a undefined) $ sRight sFirstOf
+class SEnum2 a => SEnum3 a where
+  sThirdOf :: Expr a
+instance SEnum2 a => SEnum3 (Either () a) where
+  sThirdOf = withExprConstraints (typeOf @a undefined) $ sRight sSecondOf
+class SEnum3 a => SEnum4 a where
+  sFourthOf :: Expr a
+instance SEnum3 a => SEnum4 (Either () a) where
+  sFourthOf = withExprConstraints (typeOf @a undefined) $ sRight sThirdOf
+class SEnum4 a => SEnum5 a where
+  sFifthOf :: Expr a
+instance SEnum4 a => SEnum5 (Either () a) where
+  sFifthOf = withExprConstraints (typeOf @a undefined) $ sRight sFourthOf
+
+type SEnumThree = EThree () () ()
+-- | Case-of on Enum with 3 options
+sEnum3 :: Expr a -> Expr a -> Expr a -> SEnumThree -> Expr a
+sEnum3 = sThree (Variable "1of3" UnitType) (Variable "2of3" UnitType) (Variable "3of3" UnitType)
+type SEnumFour = EFour () () () ()
+-- | Case-of on Enum with 4 options
+sEnum4 :: Expr a -> Expr a -> Expr a -> Expr a -> SEnumFour -> Expr a
+sEnum4 = sFour (Variable "1of4" UnitType) (Variable "2of4" UnitType) (Variable "3of4" UnitType) (Variable "4of4" UnitType)
+type SEnumFive = EFive () () () () ()
+-- | Case-of on Enum with 5 options
+sEnum5 :: Expr a -> Expr a -> Expr a -> Expr a -> Expr a -> SEnumFive -> Expr a
+sEnum5 = sFive (Variable "1of5" UnitType) (Variable "2of5" UnitType) (Variable "3of5" UnitType) (Variable "4of5" UnitType) (Variable "5of5" UnitType)
 
 sForall :: (ExprConstraints a) => Variable a -> Expr Bool -> Expr Bool
 sForall v (view -> x) = Expr $ Forall v x
@@ -794,25 +877,19 @@ cstrPredef :: PredefKind -> FuncId -> [Expr] -> Expr
 cstrPredef p f a = Expr (Vpredef p f a)
 -}
 
-data Val t where
-  Val :: ExprConstraints t => { runVal :: t } -> Val t
-deriving instance Eq (Val t)
-deriving instance Ord (Val t)
-instance Show (Val t) where
-  show (Val t) = show t
-newtype Valuation = Valuation { runValuation :: DMap Variable Val }
+newtype Valuation = Valuation { runValuation :: DMap Variable Constant }
   deriving (Eq, Ord)
-instance Has (ComposeC Eq Val) Variable where
+instance Has (ComposeC Eq Constant) Variable where
   has _ k = k
-instance Has (ComposeC Ord Val) Variable where
+instance Has (ComposeC Ord Constant) Variable where
   has _ k = k
-instance Has (ComposeC Show Val) Variable where
+instance Has (ComposeC Show Constant) Variable where
   has _ k = k
 
 instance Show Valuation where
   show (Valuation val) = "{" ++ List.intercalate "," (printAsAssignments val) ++ "}"
     where
-    printAsAssignments :: DMap Variable Val -> [String]
+    printAsAssignments :: DMap Variable Constant -> [String]
     printAsAssignments = DMap.foldrWithKey printAsAssignment []
     printAsAssignment v t strs = (varName v ++ ":=" ++ show t) : strs
 
@@ -835,10 +912,10 @@ assignment :: [VarModel -> VarModel] -> VarModel
 assignment = foldr ($) noAssignment
 
 valuationToVarModel :: Valuation -> VarModel
-valuationToVarModel = VarModel . DMap.map (\(Val v) -> sConst v) . runValuation
+valuationToVarModel = VarModel . DMap.map (\(Constant v) -> sConst v) . runValuation
 
 insertIntoValuation :: Variable t -> Constant t -> Valuation -> Valuation
-insertIntoValuation v c = withExprConstraints (varType v) $ assignValue v (fromConst' c)
+insertIntoValuation v c = withExprConstraints (varType v) $ assignValue v (fromConst c)
 
 getVariables :: Valuation -> [Some Variable]
 getVariables = DMap.keys . runValuation
@@ -861,9 +938,6 @@ mapVarExprs f (VarModel vars) = VarModel $ DMap.map (mapExpressionVars f) vars
 varsToGuard :: VarModel -> Expr Bool
 varsToGuard (VarModel vars) = sAnd $ Set.fromList $ map (\(var :=> val) -> has @ExprType val $ withExprConstraints (typeOf' val) $ sVar var .== val) $ DMap.assocs vars
 
-fromConst' :: ConstType a => Constant a -> a
-fromConst' = fromConst
-
 
 (=:) :: Variable t -> Expr t -> VarModel -> VarModel
 (=:) = assign
@@ -873,7 +947,7 @@ assign :: Variable t -> Expr t -> VarModel -> VarModel
 assign v e = VarModel . DMap.insert v e . runVarModel
 
 assignValue :: ExprConstraints t => Variable t -> t -> Valuation -> Valuation
-assignValue v val = Valuation . DMap.insert v (Val val) . runValuation
+assignValue v val = Valuation . DMap.insert v (Constant val) . runValuation
 
 assignedExpr :: Variable t -> VarModel -> Maybe (Expr t)
 assignedExpr v = DMap.lookup v . runVarModel
@@ -936,8 +1010,6 @@ subst' ve (Head x) = sHead $ subst' ve x
 subst' ve (Tail x) = sTail $ subst' ve x
 subst' ve (ELeft x) = sLeft $ subst' ve x
 subst' ve (ERight x) = sRight $ subst' ve x
-subst' ve (SElem t x xs) = withExprConstraints t $ sSElem (subst' ve x) (subst' ve xs)
-subst' ve (SInsert x xs) = sInsert (subst' ve x) (subst' ve xs)
 subst' ve (Zip a b x y) = withExprConstraints a $ withExprConstraints b $ sZip (subst' ve x) (subst' ve y)
 -- note: we purposely substitute the non-free variables too here. This ensures that any nested higher-order functions (e.g. a Map with an Either in the function)
 -- that have shadowing (i.e. the name of the Map variable is also used by one of the Either variables) continue to work as expected:
@@ -1050,25 +1122,6 @@ reduce (ELeft (reduce -> x))
 reduce (ERight (reduce -> x))
   | Const y <- x = Const (Right y)
   | otherwise = ERight x
-reduce (SElem t (reduce -> x) (reduce -> xs))
-  | Const y <- x
-  , Const ys <- xs = case ys of
-      RegularSet    s -> Const $       y `Set.member` s
-      ComplementSet s -> Const $ not $ y `Set.member` s
-  | otherwise = SElem t x xs
-reduce (SInsert (reduce -> x) (reduce -> xs))
-  | Const y <- x
-  , Const ys <- xs = case ys of
-      RegularSet    s -> Const $ RegularSet    $ y `Set.insert` s
-      ComplementSet s -> Const $ ComplementSet $ y `Set.delete` s
-  | otherwise = SInsert x xs
--- We can't lift this into sbv, which is why we don't currently have a set.size in exprview
--- reduce (Size (reduce -> x)) = case x of
---   Const (RegularSet xs) -> Const (toInteger (Set.size xs))
---   Const (ComplementSet xs) -> case inhabitants (typeOf' x) of
---     Nothing -> error "requesting size of an infinite list"
---     Just i -> Const (toInteger $ i - Set.size xs)
---   xs -> Size xs
 reduce (Map v (reduce -> f') (reduce -> xs))
   | Const ys <- xs =
     let f y = reduce $ view $ subst' (VarModel $ DMap.singleton v $ Expr $ Const y) f'
@@ -1133,7 +1186,6 @@ mapExpressionVars' f (And vexps)             = And (Set.map (mapExpressionVars' 
 mapExpressionVars' f (Not vexp)              = Not (mapExpressionVars' f vexp)
 mapExpressionVars' f (Equal t x y)           = Equal t (mapExpressionVars' f x) (mapExpressionVars' f y)
 mapExpressionVars' f (LElem t x y)           = LElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
-mapExpressionVars' f (SElem t x y)           = SElem t (mapExpressionVars' f x) (mapExpressionVars' f y)
 mapExpressionVars' f (Concat x)              = Concat (mapExpressionVars' f x)
 mapExpressionVars' f (Cons x xs)             = Cons (mapExpressionVars' f x) (mapExpressionVars' f xs)
 mapExpressionVars' f (Append x xs)           = Append (mapExpressionVars' f x) (mapExpressionVars' f xs)
@@ -1142,7 +1194,6 @@ mapExpressionVars' f (Drop x xs)             = Drop (mapExpressionVars' f x) (ma
 mapExpressionVars' f (First t x)             = First t (mapExpressionVars' f x)
 mapExpressionVars' f (Second t x)            = Second t (mapExpressionVars' f x)
 mapExpressionVars' f (Pair x xs)             = Pair (mapExpressionVars' f x) (mapExpressionVars' f xs)
-mapExpressionVars' f (SInsert x xs)          = SInsert (mapExpressionVars' f x) (mapExpressionVars' f xs)
 mapExpressionVars' f (Head v)                = Head (mapExpressionVars' f v)
 mapExpressionVars' f (Tail v)                = Tail (mapExpressionVars' f v)
 mapExpressionVars' f (ELeft v)               = ELeft (mapExpressionVars' f v)

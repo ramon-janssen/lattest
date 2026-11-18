@@ -21,7 +21,7 @@ import Test.HUnit
 import Lattest.Model.Alphabet(IOAct(..), SymInteract(..))
 import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
-import Lattest.Model.Symbolic.Expr(Type(..), Variable(..), Val (..), Valuation(..))
+import Lattest.Model.Symbolic.Expr(Type(..), Variable(..), Valuation(..), Constant(..))
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
 import qualified Data.Dependent.Map as DMap
 import Data.Some (Some(..))
@@ -54,9 +54,9 @@ testSTSJSONParserNominal = TestCase $ do
             assertEqual "STS id" "STS1" id
             assertEqual "initial valuation"
                 (Valuation $
-                 DMap.insert (Variable "counter" IntType)  (Val 5) $
-                 DMap.insert (Variable "label" (ListType CharType)) (Val "") $
-                 DMap.insert (Variable "active" BoolType)  (Val False) $
+                 DMap.insert (Variable "counter" IntType)  (Constant 5) $
+                 DMap.insert (Variable "label" (ListType CharType)) (Constant "") $
+                 DMap.insert (Variable "active" BoolType)  (Constant False) $
                  mempty)
                 valuation
             assertEqual "alphabet"
@@ -103,9 +103,9 @@ testSTSJSONParserNominalFloat = TestCase $ do
             assertEqual "STS id" "" id  -- no ID defined
             assertEqual "initial valuation"
                 (Valuation $
-                    DMap.insert (Variable "counter" FloatType)  (Val 0.0) $
-                    DMap.insert (Variable "label"   (ListType CharType)) (Val "") $
-                    DMap.insert (Variable "active"  BoolType)   (Val False)
+                    DMap.insert (Variable "counter" FloatType)  (Constant 0.0) $
+                    DMap.insert (Variable "label"   (ListType CharType)) (Constant "") $
+                    DMap.insert (Variable "active"  BoolType)   (Constant False)
                     mempty)
                 valuation
             assertEqual "alphabet"

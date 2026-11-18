@@ -7,7 +7,9 @@ and this project adheres to the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
-- Refactored the STS expression language, adding support for sets, lists, sum and product types, several additional primitive types,
+
+## 0.2 - 2026-11-18
+- Refactored the STS expression language, adding support for lists, sum and product types, several additional primitive types,
   operations on these types, and made the language more strongly typed.
   This slightly changes the interface, but STSs that were already correct should only need minimal changes.
 - Added support for offline testing: Generating test sequences or trees without an adapter.
@@ -20,6 +22,7 @@ and this project adheres to the
 - Added symbolic look-ahead, which computes the combined guard of a trace through an STS.
 - Where appropriate, we now generate pseudo-random input values for testing STS automata, rather than the first (and often simplest)
   solution that the SMT solver finds.
+- Added support for MCDC conversion
 
 ## 0.1.1 - 2026-07-15
 Bugfix patch: adds instance OrdTraversable FreeLattice, and properly kills the reading thread before its socket is closed.

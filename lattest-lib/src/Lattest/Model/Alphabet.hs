@@ -297,9 +297,6 @@ type IOGateValue i o = GateValue (IOAct i o)
 instance (Show g) => Show (GateValue g) where
     show (GateValue g' vals) = show g' ++ if null vals then "" else "[" ++ intercalate "," (map prettyConstant vals) ++ "]"
 
-instance Read g => Read (GateValue g) where
-  readsPrec = error "todo; would be useful for defining adapters"
-
 valueGate :: GateValue g -> g
 valueGate (GateValue g' _) = g'
 

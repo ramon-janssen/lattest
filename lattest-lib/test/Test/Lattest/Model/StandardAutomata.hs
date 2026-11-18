@@ -176,19 +176,19 @@ testSpecGQuiescent = TestCase $ do
 
 sDoubleState :: BM.FreeLattice Integer
 sDoubleState = BM.disjunction [0 :: Integer, 1]
-tDoubleRecursion :: Integer -> Map.Map String (BM.FreeLattice ((), Integer))
+tDoubleRecursion :: Integer -> Map.Map (IOAct String String) (BM.FreeLattice ((), Integer))
 tDoubleRecursion = nonDetConcTransFromMRel
-    [(0, "act", sDoubleState)
-    ,(1, "act", sDoubleState)
+    [(0, In "act", sDoubleState)
+    ,(1, In "act", sDoubleState)
     ]
-sDoubleRecursion :: AutSyntax BM.FreeLattice Integer String ()
-sDoubleRecursion = automaton sDoubleState ["act"] tDoubleRecursion
+sDoubleRecursion :: AutSyntax BM.FreeLattice Integer (IOAct String String) ()
+sDoubleRecursion = automaton sDoubleState [In "act"] tDoubleRecursion
 
 testExponentialNonDeterminism :: Test
 testExponentialNonDeterminism = TestCase $ do
     -- take 1000 steps, each 'duplicating' the state configuration. With deduplication, the state configuration should still have size 2
     let doubleRecursion = interpretConcrete sDoubleRecursion
-        BM.FreeLattice conf = stateConf $ doubleRecursion `afters` replicate 1000 "act"
+        BM.FreeLattice conf = stateConf $ doubleRecursion `afters` replicate 1000 (In "act")
         nrStatesAfterBlowup = Set.size . Set.unions $ conf
     assertEqual ("only 2 states in automaton but found " ++ show nrStatesAfterBlowup ++ " in state configuration") 2 nrStatesAfterBlowup
 

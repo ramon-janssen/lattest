@@ -15,7 +15,7 @@ import Test.HUnit
 import qualified Data.Dependent.Map as DMap
 import Lattest.Model.Automaton(after, After, AutIntrpr, stateConf, IntrpState(..))
 import Lattest.Model.BoundedMonad(FreeLattice, atom)
-import Lattest.Model.Symbolic.Expr(Variable(..), Type(..), Valuation(..), Val(..), emptyValuation)
+import Lattest.Model.Symbolic.Expr(Variable(..), Type(..), Valuation(..), Constant (..), emptyValuation)
 
 pvar :: Variable Integer
 pvar = Variable "p" IntType
@@ -29,7 +29,7 @@ stsExampleInitAssign = stsExampleInitAssignWith 0
 
 -- | The valuation with the given initial value of x.
 stsExampleInitAssignWith :: Integer -> Valuation
-stsExampleInitAssignWith x = Valuation $ DMap.singleton xvar (Val x)
+stsExampleInitAssignWith x = Valuation $ DMap.singleton xvar (Constant x)
 
 getSTSIntrpState2 :: Integer ->  Integer -> FreeLattice (IntrpState Integer)
 getSTSIntrpState2 loc val = atom (IntrpState loc $ stsExampleInitAssignWith val)
