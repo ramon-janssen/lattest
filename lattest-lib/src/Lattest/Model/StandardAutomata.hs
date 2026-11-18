@@ -3,7 +3,6 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeApplications #-}
 
