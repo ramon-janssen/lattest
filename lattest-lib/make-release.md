@@ -9,7 +9,7 @@
 - cabal sdist
 - upload a package candidate
 - cabal v2-haddock --builddir="$dir" --haddock-for-hackage --enable-doc
-- upload the generated docs to the package candidate (under 'mainain')
+- upload the generated docs to the package candidate (under 'maintainer's corner')
 - if all looks good, click 'publish'
 
 # STACKAGE:

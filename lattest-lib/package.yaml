@@ -1,5 +1,5 @@
 name:                lattest-lib
-version:             0.1.1
+version:             0.2
 synopsis: Model-based testing framework
 description: |
   Welcome to Lattest, the latest attested lattice testing tech!
@@ -26,7 +26,7 @@ dependencies:
     - base >= 4.19.2 && < 4.23
     - bytestring >= 0.12.1 && < 0.13
     - cassava >= 0.5.3.2 && < 0.6
-    - containers >= 0.6.8 && < 0.8
+    - containers >= 0.6.8 && < 0.9
     - either >= 5.0.2 && < 5.1
     - extra >= 1.7.16 && < 1.9
     - io-streams >= 1.5.2 && < 1.6
@@ -38,7 +38,7 @@ dependencies:
     - scientific >= 0.3.8 && < 0.4
     - stm >= 2.5.3 && < 2.6
     - text >= 2.1.1 && < 2.2
-    - time >=1.12.2 && <1.15
+    - time >=1.12.2 && <1.17
     - unbounded-delays >= 0.1.1 && < 0.2
     - some >= 1.0.6 && <1.2
     - sbv >= 11.0 && <15
@@ -87,7 +87,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - HUnit >= 1.6.2.0 && < 1.7
-    - QuickCheck >= 2.15.0.1 && < 2.18
+    - QuickCheck >= 2.15.0.1 && < 2.20
     - lattest-lib
     - lattices >= 2.2.1 && < 2.3
     - raw-strings-qq >= 1.1 && < 1.2
