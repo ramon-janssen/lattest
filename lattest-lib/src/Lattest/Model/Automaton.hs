@@ -369,8 +369,10 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 -- special case where the semantic states and actions are directly represented syntactically --
 -----------------------------------------------------------------------------------------------
 
-instance {-# OVERLAPPABLE #-} (Completable act) where
-    implicitDestination _ = forbidden
+-- note: This seems undesireable to me, both because there are no guarantees that this gets
+-- overlapped when we want it to, and when using this straight-up.
+-- instance {-# OVERLAPPABLE #-} (Completable act) where
+--     implicitDestination _ = forbidden
 
 instance TransitionMapping act act where
     asTransition _ = Just
@@ -379,7 +381,7 @@ instance (Ord act, Completable act) => TransitionSemantics q q act () act
 
 instance FiniteMenu act act where
     asActions t = [t]
-    locationActions _ = []
+    locationActions _ = error "unknown what actions are possible"
 
 instance StateSemantics q q where
     asLoc = id

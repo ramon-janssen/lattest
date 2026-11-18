@@ -3,6 +3,9 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
@@ -322,21 +325,14 @@ validMergeLocs fnName sts1 mergeLocs
 initialSwitches :: (Ord loc, Ord t, Ord tdest, BoundedMonad m) => AutSyntax m loc t tdest -> Map t (m (tdest, loc))
 initialSwitches sts = Map.fromSet (\t -> BM.ordBind (initConf sts) (\l -> transRel sts l Map.! t)) (alphabet sts)
 
--- | Merge a transition of a merge location with the one copied onto it by a sequential composition: the two are conjuncted, but
--- only where both are specified (and not forbidden). Otherwise, the one that is specified is used as-is.
--- TODO:
--- It seems like it would be easier to reason about, as a user, if this function was simpler. For example,
--- mergeSwitch x Bottom = x, but mergeSwitch x y followed by a transition from y to Bottom is Bottom.
--- The idea seems to be to take 'transitions that exist', i.e. to ignore missing outputs (which would go to Bottom) or missing inputs (which would go to Top).
--- observation: Top is the identity of /\, so this function would do exactly the same if we replaced isIndefinite with isAllowed.
--- This means that, in my opinion, we should:
--- 1. change isIndefinite to isAllowed, because I think that makes the behaviour of this function clearer
--- 2. only call this function for output switches, because any inputs to forbidden (which can be legitimate, though we warn about them) should not be ignored here
-mergeSwitch :: (BoundedConfiguration m, MeetSemiLattice (m a)) => m a -> m a -> m a
-mergeSwitch own other
-    | BM.isIndefinite own && BM.isIndefinite other = own /\ other
-    | BM.isIndefinite own                          = own
-    | otherwise                                    = other
+-- | Merge a transition of a merge location with the one copied onto it by a sequential composition: the two are conjuncted,
+-- except for outputs to forbidden, which are ignored.
+mergeSwitch :: forall m a act. (BoundedConfiguration m, MeetSemiLattice (m a), Completable act) => act -> m a -> m a -> m a
+mergeSwitch (BM.isForbidden . implicitDestination @_ @m -> True) own other
+  | BM.isForbidden own   = other
+  | BM.isForbidden other = own
+  | otherwise            = own /\ other
+mergeSwitch _ own other = own /\ other
 
 {- |
     Sequentially compose two automata: sequentiallyAt sts1 locs sts2 merges sts2 into sts1 at the given locations of sts1. Where a merge
@@ -358,7 +354,7 @@ sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphab
     initTransOf2 = Map.map (BM.ordMap (second Right)) (initialSwitches sts2)
 
     transOf1 l1
-        | l1 `Set.member` mergeLocSet = Map.unionWith mergeSwitch ownTrans initTransOf2
+        | l1 `Set.member` mergeLocSet = Map.unionWithKey mergeSwitch ownTrans initTransOf2
         | otherwise                   = ownTrans
         where
         ownTrans = Map.map (BM.ordMap (second Left)) (transRel sts1 l1)
@@ -400,7 +396,7 @@ selfSequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAl
     initTransOf2 = initialSwitches sts2
 
     transOf1 l1
-        | l1 `Set.member` mergeLocSet = Map.unionWith mergeSwitch (transRel sts1 l1) initTransOf2
+        | l1 `Set.member` mergeLocSet = Map.unionWithKey mergeSwitch (transRel sts1 l1) initTransOf2
         | otherwise                   = transRel sts1 l1
 
     switches1 = Map.fromList [ (l1, transOf1 l1) | l1 <- Set.toList locs1 ]
@@ -815,7 +811,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
         concatMap snd (Map.elems prunedAt)
 
     transOf1 l1 = case Map.lookup l1 prunedAt of
-        Just (newTrans, _) -> Map.unionWith mergeSwitch (ownTransOf1 l1) (Map.map (BM.ordMap (second Right)) newTrans)
+        Just (newTrans, _) -> Map.unionWithKey mergeSwitch (ownTransOf1 l1) (Map.map (BM.ordMap (second Right)) newTrans)
         Nothing            -> ownTransOf1 l1
 
     switches1 = Map.fromList [ (Left l1, transOf1 l1) | l1 <- Set.toList keptLocs ]
@@ -861,7 +857,7 @@ selfSequentiallyAtPruned locVars sts mergeLocs = locs `seq` (automaton (initConf
     pruned = concatMap snd (Map.elems prunedAt)
 
     switches l = case Map.lookup l prunedAt of
-        Just (newTrans, _) -> Map.unionWith mergeSwitch (transRel sts l) newTrans
+        Just (newTrans, _) -> Map.unionWithKey mergeSwitch (transRel sts l) newTrans
         Nothing            -> transRel sts l
 
 -- | `selfSequentiallyAtPruned` applied to all sink locations of the automaton. Throws an error if the automaton does not have any sink locations.
