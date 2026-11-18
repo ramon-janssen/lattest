@@ -8,6 +8,9 @@ and this project adheres to the
 
 ## Unreleased
 
+## 0.2.1 - 2026-11-18
+- Fix: Also package non-source files in test/
+
 ## 0.2 - 2026-11-18
 - Refactored the STS expression language, adding support for lists, sum and product types, several additional primitive types,
   operations on these types, and made the language more strongly typed.

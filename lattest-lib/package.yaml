@@ -1,5 +1,5 @@
 name:                lattest-lib
-version:             0.2
+version:             0.2.1
 synopsis: Model-based testing framework
 description: |
   Welcome to Lattest, the latest attested lattice testing tech!
@@ -17,6 +17,7 @@ copyright:           2023 Ramon Janssen
 category:            Testing
 extra-source-files:
 - CHANGELOG.md
+- test/**/* # include non-haskell files in the test folder, e.g. .json examples
 
 dependencies:
     - MissingH >= 1.6.0 && < 1.7
