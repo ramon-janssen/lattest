@@ -7,6 +7,7 @@ import Lattest.Adapter.StandardAdapters(Adapter,connectJSONSocketAdapterAcceptin
 import Lattest.Model.StandardAutomata
 import Lattest.Exec.Testing(runTester)
 import Lattest.Exec.StandardTestControllers
+import Lattest.Model.BoundedMonad(Det(..))
 --import Network.Socket(withSocketsDo)
 
 data State = PickEither | PickEitherIn | Picked2 | Picked1 | Confirm1 | Confirmed1 | Confirm2 | Confirmed2 deriving (Eq, Ord, Show)
@@ -25,19 +26,19 @@ Just trans = detConcTransFromRel
         (Confirmed2, In 2, PickEither)
     ]
 alphabet = ioAlphabet [0, 1, 2] [1, 2]
-initialConfiguration = pure PickEither
+initialConfiguration = Det PickEither
 
-spec = automaton initialConfiguration alphabet trans
+syn = automaton initialConfiguration alphabet trans
 
 nrSteps = 50
-testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `observingOnly` printActions `observingOnly` traceObserver `andObserving` stateObserver
+testSelector = randomTestSelectorFromSeed 456 `untilCondition` stopAfterSteps nrSteps `withSideEffect` printActions `observingOnly` traceObserver `andObserving` stateObserver
 
 someFunc :: IO () -- FIXME give this function a sensible name
 someFunc = do
     putStrLn $ "connecting..."
     adap <- connectJSONSocketAdapterAcceptingInputs :: IO (Adapter (IOAct Int Int) Int) -- the adapter connects, with explicit typing because it should know how to parse incoming data
     imp <- withQuiescenceMillis 200 adap
-    let model = interpretQuiescentConcrete spec
+    let model = interpretQuiescentConcrete syn
     putStrLn $ "starting test..."
     (verdict, (observed, maybeMq)) <- runTester model testSelector imp
     putStrLn $ "verdict: " ++ show verdict
