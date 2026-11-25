@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
     This module contains building blocks for constructing out-of-the-box 'TestController's.
@@ -60,10 +61,9 @@ printState
 )
 where
 
-import Lattest.Exec.Testing(TestController(..))
+import Lattest.Exec.Testing(TestController(..), TestControllerType(..))
 import Lattest.Model.Alphabet(TestChoice, IOAct(..), actToChoice, SymInteract(..), IOSymInteract, GateValue(..), IOGateValue, IOSuspGateValue, isInputInteract, isOutputInteract)
 import Lattest.Model.Automaton(AutIntrpr(..), AutSyntax(..), StepSemantics, FiniteMenu, specifiedMenu, stateConf, IntrpState(..), STStdest, After, after)
-import Lattest.Model.StandardAutomata(IOSTSIntrp)
 import Lattest.Model.BoundedMonad(isConclusive, BoundedConfiguration, BooleanConfiguration)
 import Lattest.Model.Symbolic.SolveSTS(solveRandomInteraction, SymIntrpState)
 import Lattest.Util.Utils(takeRandom, flipCoin)
@@ -75,12 +75,13 @@ import Data.Maybe (mapMaybe)
 import Data.Foldable (toList)
 import qualified Data.Map as Map
 
-
-
 {- |
     'Testselector's are test controllers that are only concerned with selecting inputs for testing. They do not return any testing results.
 -}
-type TestSelector m loc q t tdest act s i = TestController m loc q t tdest act s i ()
+-- type TestSelector m loc i o foo state = TestController m loc i o foo state ()
+data TestSelector
+instance TestControllerType TestSelector where
+  type TCI TestSelector i = () -- TODO: not right; should be i or gatevalue i, so we need multiple versions of TestSelector, and another typeclass to abstract over them?
 
 {- |
     Create a 'TestSelector'. Requires one function to select an input, also updating the state, and one function to update the state when observing
@@ -155,7 +156,7 @@ randomDataTestSelectorFromGen :: (StepSemantics m loc (IntrpState loc) (IOSymInt
 randomDataTestSelectorFromGen extraSolutions g = selector g solveRandomIfPossible (\s _ _ _ -> return $ Just s)
     where
     solveRandomIfPossible :: (StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), BooleanConfiguration m, Foldable m, Ord i, Ord o, Ord loc, RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), Show i, Show o, Show (SymIntrpState loc))
-        => g -> IOSTSIntrp m loc i o -> m (IntrpState loc) -> IO (Maybe (GateValue i, g))
+        => g -> AutIntrpr m loc i o foo -> m (IntrpState loc) -> IO (Maybe (GateValue i, g))
     solveRandomIfPossible g'' intrpr _ = do
         (maybeGateValue, g') <- solveRandomInput extraSolutions g'' maybeFromIOAct intrpr
         return $ case maybeGateValue of
@@ -264,7 +265,11 @@ andThen tester1 tester2 =
     'StopCondition's are test controllers that are only concerned with deciding whether to continue testing after observing an action. They do not
     select inputs or return any testing results.
 -}
-type StopCondition m loc q t tdest act s = TestController m loc q t tdest act s () ()
+-- TODO: maybe I want this, and the intrpr ones that are now constraint synonyms, to be the actual singleton datatypes with type family instances
+data StopCondition
+instance TestControllerType StopCondition where
+  type TCI StopCondition _ = ()
+-- type StopCondition m loc i o foo state = TestController m loc i o foo state () -- TODO: TCI foo i ~ ()
 
 {- |
     Create a state-based stop condition, starting in the given initial state. The provided function should provide either 'Just' a new state to continue

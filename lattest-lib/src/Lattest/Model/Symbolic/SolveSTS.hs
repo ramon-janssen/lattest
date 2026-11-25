@@ -36,7 +36,7 @@ indexVar
 where
 
 import Lattest.Model.Alphabet(SymInteract(..), GateValue(..), SymGuard, IOSymInteract, IOAct(..), IOGateValue)
-import Lattest.Model.Automaton ( stateConf,IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation(..),sanityCheckSTS, Foo, Tdest, Q, T, Act )
+import Lattest.Model.Automaton ( stateConf,IntrpState(..), transRel, AutomatonException(ActionOutsideAlphabet), STStdest(STSLoc), syntacticAutomaton, alphabet, AutIntrpr, after, IOAfter, StepSemantics, Valuation(..),sanityCheckSTS, IntrprConstraint, Tdest, Q, T, Act)
 import Lattest.Model.BoundedMonad(BooleanConfiguration, asExpr, asDualExpr, Specifiedness (..))
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.SMT ( Some(..) )
@@ -54,7 +54,7 @@ import List.Shuffle(shuffle)
 import System.Random(RandomGen)
 import Data.Maybe (mapMaybe, catMaybes)
 import Data.Some (mapSome)
-import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..))
+import Lattest.Exec.Testing (Verdict (..), TestController (..), InconclusiveReason (..), TestControllerType(..))
 import Control.Monad (forM)
 import qualified Data.Set as Set
 import Data.Type.Equality ((:~:)(..))
@@ -257,7 +257,7 @@ giveOutputOffline (OfflineTests m _) (GateValue o os) = case m Map.!? o of
       Inconclusiv -> Right $ Inconclusive OutputNotInOfflineTest
 
 offlineTests :: forall g m loc i o state r foo
-              . (RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)), Show (SymIntrpState loc), STSFoo foo loc i o, Act foo i o ~ IOGateValue i o)
+              . (RandomGen g, forall a. Ord a => Ord (m a), forall a. Show a => Show (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), Show loc, Show i, Show o, Show (m (STStdest, loc)), Show (m (IntrpState loc)), Show (SymIntrpState loc), STSFoo foo loc i o, Act foo i o ~ IOGateValue i o, TCI foo i ~ GateValue i)
              => Int -- ^ the number of additional solutions to pick output values randomly from, besides the first one the SMT solver finds
              -> AutIntrpr      m loc i o foo -- (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
              -> TestController m loc i o foo state r -- (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o) state (GateValue i) r
@@ -329,7 +329,7 @@ offlineTests extraSolutions intrpr tc inputforbidden
 
 -- | Given an OfflineTests, checks whether it is a trace (no branching), and returns it together with its verdict.
 -- For outputs, it returns both the given output and the starting location.
-toTrace :: (Foo foo q t tdest act loc i o, tdest ~ STStdest, forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
+toTrace :: (IntrprConstraint foo q t tdest act loc i o, tdest ~ STStdest, forall a. Ord a => Ord (m a), BM.BooleanConfiguration m, Ord i, Ord o, Foldable m, Ord loc, Ord (m (IntrpState loc)), IOAfter m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o), StepSemantics m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o))
         => AutIntrpr      m loc i o foo -- (IntrpState loc) (IOSymInteract i o) STStdest (IOGateValue i o)
         -> OfflineTests i o r
         -> Maybe ([IOAct (GateValue i) (o, OnlyOrInconclusive, [Some Constant], m (IntrpState loc))], r)

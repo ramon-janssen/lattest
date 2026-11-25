@@ -67,7 +67,7 @@ prettyPrintFrom,
 prettyPrintIntrp,
 sanityCheckLTS,
 sanityCheckSTS,
-Q, T, Tdest, Act, TCI, Foo
+Intrpr(..), IntrprConstraint
 )
 where
 
@@ -100,6 +100,7 @@ import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
 import Control.Monad.Extra (anyM)
 import Lattest.Model.Symbolic.Internal.ExprDefs (fromConst)
+import Data.Kind (Constraint)
 
 ------------
 -- syntax --
@@ -145,16 +146,13 @@ trans aut loc t = case Map.lookup t (transRel aut loc) of
 
 
 -- TODO: associated type families or top-level type families?
--- class Qx a where
--- class Tx a where
--- class Tdestx a where
--- class Actx a where
-type family Q a loc
-type family T a i o
-type family Tdest a
-type family Act a i o
-type family TCI foo i
-type Foo foo q t tdest act loc i o = (q ~ Q foo loc, t ~ T foo i o, tdest ~ Tdest foo, act ~ Act foo i o)
+class Intrpr intrprtype where
+  type family InterpretConstraint intrprtype loc i o :: Constraint
+  type family Q intrprtype loc
+  type family T intrprtype i o
+  type family Tdest intrprtype
+  type family Act intrprtype i o
+type IntrprConstraint intrprtype q t tdest act loc i o = (q ~ Q intrprtype loc, t ~ T intrprtype i o, tdest ~ Tdest intrprtype, act ~ Act intrprtype i o)
 
 ---------------
 -- interpret --
@@ -381,7 +379,7 @@ actionMenu :: (Foldable m, Ord t, Ord act, FiniteMenu t act, BoundedMonad m) => 
 actionMenu aut = (locationActions aut ++) $ concat $ BM.ordMap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act, Foo foo q t tdest act loc i o)
+specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act, IntrprConstraint foo q t tdest act loc i o)
     => AutIntrpr m loc i o foo -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
@@ -669,7 +667,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ "  ――" ++ show t ++ "⟶  " ++ show mt
 
-prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m, Foo foo q t tdest act loc i o) => AutIntrpr m loc i o foo -> String
+prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m, IntrprConstraint foo q t tdest act loc i o) => AutIntrpr m loc i o foo -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
     where
     printStateConf = show $ stateConf intrp

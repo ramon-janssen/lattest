@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
     This module contains some simple automata types, and auxiliary functions for constructing them in a convenient manner.
@@ -87,7 +88,7 @@ where
 
 import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract, IFGateValue, IOGateValue)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, BoundedConfiguration, MeetSemiLattice)
-import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest (..), transRel,syntacticAutomaton, reachable, stsTLoc, Act, T, Q, Tdest, Foo)
+import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest (..), transRel,syntacticAutomaton, reachable, stsTLoc, Intrpr(..), IntrprConstraint)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 
@@ -245,35 +246,70 @@ addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
 ---------------------------------
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions.
--- type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
-type ConcreteAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ Act foo i o, Tdest foo ~ ())
+data ConcreteAut
+type ConcreteAutIntrpr m loc i o = AutIntrpr m loc i o ConcreteAut
+instance Intrpr ConcreteAut where
+  type InterpretConstraint ConcreteAut loc i o = (Ord i, Ord o, Ord loc)
+  type Q ConcreteAut loc = loc
+  type T ConcreteAut i o = IOAct i o
+  type Act ConcreteAut i o = IOAct i o
+  type Tdest ConcreteAut = ()
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-interpretConcrete :: (BoundedMonad m, Ord t, Ord loc, Completable t, ConcreteAutFoo foo loc i o, t ~ T foo i o) => AutSyntax m loc t () -> AutIntrpr m loc i o foo
+interpretConcrete :: (BoundedMonad m, InterpretConstraint ConcreteAut loc i o)
+                  => AutSyntax m loc (IOAct i o) ()
+                  -> ConcreteAutIntrpr m loc i o
 interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
--- type ConcreteSuspAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
-type ConcreteSuspAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ IOAct i o, Act foo i o ~ IOSuspAct i o, Tdest foo ~ ())
+data ConcreteSuspAut
+type ConcreteSuspAutIntrpr m loc i o = AutIntrpr m loc i o ConcreteSuspAut
+instance Intrpr ConcreteSuspAut where
+  type InterpretConstraint ConcreteSuspAut loc i o = (Ord i, Ord o, Ord loc)
+  type Q ConcreteSuspAut loc = loc
+  type T ConcreteSuspAut i o = IOAct i o
+  type Act ConcreteSuspAut i o = IOSuspAct i o
+  type Tdest ConcreteSuspAut = ()
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc, ConcreteSuspAutFoo foo loc i o) => AutSyntax m loc (IOAct i o) () -> AutIntrpr m loc i o foo
+interpretQuiescentConcrete
+  :: (BoundedMonad m, InterpretConstraint ConcreteSuspAut loc i o)
+  => AutSyntax m loc (IOAct i o) ()
+  -> ConcreteSuspAutIntrpr m loc i o
 interpretQuiescentConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
--- type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
-type ConcreteInputAttemptAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ IOAct i o, Act foo i o ~ IFAct i o, Tdest foo ~ ())
+data ConcreteInputAttemptAut
+type ConcreteInputAttemptAutIntrpr m loc i o = AutIntrpr m loc i o ConcreteInputAttemptAut
+instance Intrpr ConcreteInputAttemptAut where
+  type InterpretConstraint ConcreteInputAttemptAut loc i o = (Ord i, Ord o, Ord loc)
+  type Q ConcreteInputAttemptAut loc = loc
+  type T ConcreteInputAttemptAut i o = IOAct i o
+  type Act ConcreteInputAttemptAut i o = IFAct i o
+  type Tdest ConcreteInputAttemptAut = ()
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc, ConcreteInputAttemptAutFoo foo loc i o) => AutSyntax m loc (IOAct i o) () -> AutIntrpr m loc i o foo
+interpretInputAttemptConcrete :: (BoundedMonad m, InterpretConstraint ConcreteInputAttemptAut loc i o)
+  => AutSyntax m loc (IOAct i o) ()
+  -> ConcreteInputAttemptAutIntrpr m loc i o
 interpretInputAttemptConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
 -- type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
 type ConcreteSuspInputAttemptAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ IOAct i o, Act foo i o ~ SuspendedIF i o, Tdest foo ~ ())
+data ConcreteSuspInputAttemptAut
+type ConcreteSuspInputAttemptAutIntrpr m loc i o = AutIntrpr m loc i o ConcreteSuspInputAttemptAut
+instance Intrpr ConcreteSuspInputAttemptAut where
+  type InterpretConstraint ConcreteSuspInputAttemptAut loc i o = (Ord i, Ord o, Ord loc)
+  type Q ConcreteSuspInputAttemptAut loc = loc
+  type T ConcreteSuspInputAttemptAut i o = IOAct i o
+  type Act ConcreteSuspInputAttemptAut i o = SuspendedIF i o
+  type Tdest ConcreteSuspInputAttemptAut = ()
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc, ConcreteSuspInputAttemptAutFoo foo loc i o) => AutSyntax m loc (IOAct i o) () -> AutIntrpr m loc i o foo
+interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, InterpretConstraint ConcreteSuspInputAttemptAut loc i o)
+  => AutSyntax m loc (IOAct i o) ()
+  -> ConcreteSuspInputAttemptAutIntrpr m loc i o
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
 type STS m loc g = AutSyntax m loc (SymInteract g) STStdest

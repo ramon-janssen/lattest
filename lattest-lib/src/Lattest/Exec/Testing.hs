@@ -40,6 +40,7 @@ runExperiment,
     * [/Jan Tretmans/, Model based testing with labelled transition systems (Formal Methods and Testing), 2008](https://repository.ubn.ru.nl/bitstream/handle/2066/72680/72680.pdf)
 -}
 TestController(..),
+TestControllerType(..),
 makeTester,
 RunTester(..),
 runLTSTester,
@@ -50,7 +51,7 @@ InconclusiveReason(..)
 where
 
 import Lattest.Model.Alphabet(TestChoice, IOAct, IOSymInteract)
-import Lattest.Model.Automaton ( StepSemantics,StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest, sanityCheckLTS,sanityCheckSTS, Act, Q, Tdest, T, Foo, TCI)
+import Lattest.Model.Automaton ( StepSemantics,StepSemantics, AutIntrpr, After, IOAfter, ioAfter, stateConf, AutomatonException, STStdest, sanityCheckLTS,sanityCheckSTS, Act, Q, Tdest, T, IntrprConstraint)
 import Lattest.Model.BoundedMonad(isConclusive, isForbidden)
 import Lattest.Adapter.Adapter(Adapter(..), send, tryObserve)
 
@@ -101,12 +102,16 @@ data TestController m loc i o foo state r = TestController {
     handleTestClose :: state -> IO r
     }
 
+class TestControllerType tct where
+  type family TCI tct i
+
+
 {- |
     From a test controller and a specification model, create an action controller. The test controller is used to decide which inputs
     are supplied to the system under test, and whether to continue or stop testing. The automaton specification model is used to infer whether
     observed actions are allowed or not, and to return a verdict in case of forbidden or underspecified observations.
 -}
-makeTester :: forall m loc q t tdest act i o foo state r. (IOAfter m loc foo i o tdest, StepSemantics m loc q t tdest act, TestChoice (TCI foo i) act, Foo foo q t tdest act loc i o) =>
+makeTester :: forall m loc q t tdest act i o foo state r. (IOAfter m loc foo i o tdest, StepSemantics m loc q t tdest act, TestChoice (TCI foo i) act, IntrprConstraint foo q t tdest act loc i o) =>
     AutIntrpr m loc i o foo -> TestController m loc i o foo state r -> ActionController act (TCI foo i) (Verdict, r) (AutIntrpr m loc i o foo, TestController m loc i o foo state r)
 makeTester initSpec initTestController = ActionController {
     controllerState = (initSpec, initTestController),
