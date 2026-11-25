@@ -21,7 +21,7 @@ import Test.HUnit
 import Lattest.Model.Alphabet(IOAct(..), SymInteract(..))
 import Lattest.Model.Automaton(alphabet, prettyPrintIntrp)
 import Lattest.Model.StandardAutomata(interpretSTS)
-import Lattest.Model.Symbolic.Expr(Type(..), Variable(..), Val (..), Valuation(..))
+import Lattest.Model.Symbolic.Expr(Type(..), Variable(..), Valuation(..), Constant(..))
 import Lattest.Util.STSJSONParser(stsFromJSONFile)
 import qualified Data.Dependent.Map as DMap
 import Data.Some (Some(..))
@@ -50,13 +50,13 @@ testSTSJSONParserNominal = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_all_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (id, sts, gs, as, valuation, enums) -> do
+        Right (id, sts, gs, as, valuation, enums, _) -> do
             assertEqual "STS id" "STS1" id
             assertEqual "initial valuation"
                 (Valuation $
-                 DMap.insert (Variable "counter" IntType)  (Val 5) $
-                 DMap.insert (Variable "label" (ListType CharType)) (Val "") $
-                 DMap.insert (Variable "active" BoolType)  (Val False) $
+                 DMap.insert (Variable "counter" IntType)  (Constant 5) $
+                 DMap.insert (Variable "label" (ListType CharType)) (Constant "") $
+                 DMap.insert (Variable "active" BoolType)  (Constant False) $
                  mempty)
                 valuation
             assertEqual "alphabet"
@@ -99,13 +99,13 @@ testSTSJSONParserNominalFloat = TestCase $ do
     result <- stsFromJSONFile (testDir ++ "nominal_float_types.json")
     case result of
         Left err -> assertFailure ("expected successful parse, got: " ++ err)
-        Right (id, sts, gs, as, valuation, enums) -> do
+        Right (id, sts, gs, as, valuation, enums, _) -> do
             assertEqual "STS id" "" id  -- no ID defined
             assertEqual "initial valuation"
                 (Valuation $
-                    DMap.insert (Variable "counter" FloatType)  (Val 0.0) $
-                    DMap.insert (Variable "label"   (ListType CharType)) (Val "") $
-                    DMap.insert (Variable "active"  BoolType)   (Val False)
+                    DMap.insert (Variable "counter" FloatType)  (Constant 0.0) $
+                    DMap.insert (Variable "label"   (ListType CharType)) (Constant "") $
+                    DMap.insert (Variable "active"  BoolType)   (Constant False)
                     mempty)
                 valuation
             assertEqual "alphabet"

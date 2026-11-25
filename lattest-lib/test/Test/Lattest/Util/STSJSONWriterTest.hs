@@ -37,7 +37,7 @@ assertWrittenJSONMatches :: (Ord loc, Show loc) => FilePath     -- expected outp
                           -> Assertion
 assertWrittenJSONMatches expectedFile sid sts guardmap assmap enums valuation = do
     let actualFile = testDir ++ "tmp_" ++ expectedFile
-    stsToJSONFile actualFile sid sts guardmap assmap enums valuation
+    stsToJSONFile actualFile sid sts guardmap assmap enums mempty valuation
     actualBytes <- BSL.readFile actualFile
     removeFile actualFile
     expectedBytes <- BSL.readFile (testDir ++ expectedFile)
@@ -105,10 +105,10 @@ testSTSJSONWriterComposedConjunction = TestCase $
             [ (assignment [assignFlipY], "Flip"), (assignment [assignDupX], "Dup"), (assignment [setPair], "Pair")
             ]
         valuation = Valuation
-            $ DMap.insert xvar (Val (5 :: Integer))
-            $ DMap.insert yvar (Val True)
-            $ DMap.insert itemsVar (Val [1, 2, 3 :: Integer])
-            $ DMap.insert pairVar (Val (3 :: Integer, "hi"))
+            $ DMap.insert xvar (Constant (5 :: Integer))
+            $ DMap.insert yvar (Constant True)
+            $ DMap.insert itemsVar (Constant [1, 2, 3 :: Integer])
+            $ DMap.insert pairVar (Constant (3 :: Integer, "hi"))
             mempty
     in assertWrittenJSONMatches
         "composed_conjunction_expected.json"

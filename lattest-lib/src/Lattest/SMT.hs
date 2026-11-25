@@ -23,6 +23,7 @@ module Lattest.SMT (
   query,
   runSMT,
   runSMTWith,
+  runSMTWithFallback,
   Solver(..),
   Some(..),
   RCSet(..),
@@ -37,13 +38,14 @@ import qualified Data.SBV.Control as SBV
 import qualified Data.SBV.List as SBV
 import qualified Data.SBV.Internals as SBVI -- 'unsafe' internals
 
-import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), (.-), sConst, Val (..), withExprConstraints)
+import Lattest.Model.Symbolic.Expr(ExprView(..), Variable (..), Valuation (..), Expr, Type (..), Constant (..), (.&&), (.<), (.-), sConst, withExprConstraints)
 import Lattest.Model.Symbolic.Internal.FreeMonoidX
 import Lattest.Model.Symbolic.Internal.Sum(SumTerm(..))
 
 import Control.Monad((<=<))
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import System.Environment (lookupEnv)
+import Data.Char (toLower)
 import Control.Monad.State (StateT (..), evalStateT, lift, modify, gets, MonadState (..), runState, State, evalState)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -55,9 +57,10 @@ import Data.Constraint.Extras (Has(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (ExprType (..), ExprConstraints, freeVars', Expr (..), withExprNumConstraint)
 import qualified Data.SBV.Tuple as SBV
 import qualified Data.SBV.Either as SBV
-import qualified Data.SBV.Set as SBV
 import Unsafe.Coerce (unsafeCoerce)
 import System.Random (RandomGen, genWord32)
+import Control.Exception (ErrorCall, Handler (..), catches)
+import System.IO (hPutStr, stderr)
 
 
 --------------------
@@ -89,26 +92,65 @@ smt'tosmtq smt = StateT $ (\f x -> pure $ f x) $ runState smt
 data Solver = Z3 | CVC5
      deriving (Eq,Ord,Read,Show)
 
+-- | Run an SMT problem with the solver named in the environment variable LATTEST_SMT_SOLVER (@z3@ or @cvc5@, case
+-- insensitive), falling back to the other solver if it fails. If the variable is not set, Z3 is used first. Both solvers
+-- have problems that the other does not have: cvc5 can crash while building a model for sequences, or return a value
+-- that SBV cannot parse (such as @(seq.nth (as seq.empty ...) 0)@ for an unconstrained element), while Z3 can hang on
+-- sequences without a length bound.
 runSMT :: RandomGen g => g -> SMT a -> (IO a, g)
-runSMT = runSMTWith Z3
+runSMT = runSMTWithSolvers $ (\s -> (s, [other s])) <$> defaultSolver
+  where
+    other Z3 = CVC5
+    other CVC5 = Z3
+
+-- the solver to try first, from the environment variable LATTEST_SMT_SOLVER
+defaultSolver :: IO Solver
+defaultSolver = lookupEnv "LATTEST_SMT_SOLVER" >>= \case
+  Nothing -> return Z3
+  Just name -> case map toLower name of
+    "z3" -> return Z3
+    "cvc5" -> return CVC5
+    _ -> ioError $ userError $ "LATTEST_SMT_SOLVER must be z3 or cvc5, but is " <> show name
 
 -- | Run an SMT problem with the given solver. If the environment variable LATTEST_SMT_DUMP is set to a file path, the
 -- interaction with the solver is appended to that file, with a timestamp at the start and the end of every call.
 runSMTWith :: RandomGen g => Solver -> g -> SMT a -> (IO a, g)
-runSMTWith solver g smt = (,g') $ lookupEnv "LATTEST_SMT_DUMP" >>= \case
-  Nothing -> run config
-  Just file -> do
-    start <- getCurrentTime
-    appendFile file $ "** SMT call started at " <> show start <> "\n"
-    result <- run config { SBV.verbose = True, SBV.redirectVerbose = Just file }
-    end <- getCurrentTime
-    appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
-    return result
+runSMTWith solver = runSMTWithFallback solver []
+
+-- | Like 'runSMTWith', but if the solver fails (it crashes, or SBV cannot parse its response), the whole problem is
+-- run again with the next solver in the list. Only the last solver's failure is rethrown. Note that errors in lazily
+-- parsed parts of the result are only raised when they are evaluated, after the fallback is no longer possible.
+runSMTWithFallback :: RandomGen g => Solver -> [Solver] -> g -> SMT a -> (IO a, g)
+runSMTWithFallback solver fallbacks = runSMTWithSolvers $ pure (solver, fallbacks)
+
+-- as 'runSMTWithFallback', with the solver and the fallbacks determined when the problem is run
+runSMTWithSolvers :: RandomGen g => IO (Solver, [Solver]) -> g -> SMT a -> (IO a, g)
+runSMTWithSolvers solvers g smt = (,g') $ solvers >>= uncurry go
   where
+    go s [] = runSolver s
+    go s (next:rest) = runSolver s `catches`
+      [ Handler $ \(e :: SBV.SBVException) -> retry s next rest $ show e
+      , Handler $ \(e :: ErrorCall) -> retry s next rest $ show e
+      ]
+    retry s next rest err = do
+      let msg = "** " <> show s <> " failed, retrying with " <> show next <> ":\n" <> err <> "\n"
+      hPutStr stderr msg
+      lookupEnv "LATTEST_SMT_DUMP" >>= mapM_ (`appendFile` msg)
+      go next rest
+    runSolver s = lookupEnv "LATTEST_SMT_DUMP" >>= \case
+      Nothing -> run (config s)
+      Just file -> do
+        start <- getCurrentTime
+        appendFile file $ "** SMT call started at " <> show start <> "\n"
+        result <- run (config s) { SBV.verbose = True, SBV.redirectVerbose = Just file }
+        end <- getCurrentTime
+        appendFile file $ "** SMT call finished at " <> show end <> " (took " <> show (diffUTCTime end start) <> ")\n"
+        return result
     run cfg = SBV.runSMTWith (cfg {SBV.solverSetOptions = SBV.RandomSeed seed : SBV.solverSetOptions cfg}) $ evalStateT smt Map.empty
-    config = case solver of
+    config = \case
       Z3 -> SBV.z3
-      CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound"] }
+      -- --arrays-exp: SBV encodes sets as constant arrays ('as const'), which cvc5 only supports with this flag
+      CVC5 -> SBV.cvc5 { SBV.extraArgs = ["--fmf-fun", "--fmf-bound", "--arrays-exp"] }
     (toInteger -> seed, g') = genWord32 g
 
 query :: SMTQ a -> SMT a
@@ -119,16 +161,16 @@ getSolution vs =
   Valuation . foldr DMap.union mempty
   <$> mapM getVarValue vs
   where
-    getVarValue :: Some Variable -> SMTQ (DMap.DMap Variable Val)
+    getVarValue :: Some Variable -> SMTQ (DMap.DMap Variable Constant)
     getVarValue (Some v@(Variable nm tp)) = do
         sval <- gets (\m -> case m Map.!? nm of
             Nothing -> error $ show nm <> "is not in the map"
             Just (Some (SBVI.SBV x)) -> x)
-        (Constant _ c) <- lift $ svalToConstant tp sval
-        return $ DMap.singleton v (withExprConstraints tp $ Val c)
+        (Constant c) <- lift $ svalToConstant tp sval
+        return $ DMap.singleton v (withExprConstraints tp $ Constant c)
 
 svalToConstant :: Type a -> SBVI.SVal -> Query (Constant a)
-svalToConstant t s = withExprConstraints t $ Constant t <$> SBV.getValue (SBVI.SBV s)
+svalToConstant t s = withExprConstraints t $ Constant <$> SBV.getValue (SBVI.SBV s)
 
 addAssertions :: [Expr Bool] -> SMT ()
 addAssertions = mapM_ (lift . constrain <=< smt'tosmt . exprToSymbolic . view)
@@ -158,7 +200,6 @@ addDeclaration (Variable nm ty) = do
       UnitType -> SBV.sTuple
       CharType -> SBV.sChar
       ListType t -> withExprConstraints t SBV.sList
-      SetType t -> withExprConstraints t SBV.sSet
       TupleType a b -> withExprConstraints a $ withExprConstraints b $ \name -> curry SBV.tuple <$> mkvar a ("fst"<>name) <*> mkvar b ("snd"<>name)
       SumType a b -> withExprConstraints a $ withExprConstraints b SBV.sEither
 
@@ -222,8 +263,6 @@ exprToSymbolic = \case
   Tail xs -> withExprConstraints (typeOf' xs) $ SBV.tail <$> go xs
   ELeft xs -> withExprConstraints (typeOf' xs) $ SBV.sLeft <$> go xs
   ERight xs -> withExprConstraints (typeOf' xs) $ SBV.sRight <$> go xs
-  SElem t x xs -> withExprConstraints t $ withExprConstraints (SetType t) $ SBV.member <$> go x <*> go xs
-  SInsert x xs -> SBV.insert <$> go x <*> go xs
   Zip a b xs ys -> withExprConstraints a $ withExprConstraints b $ SBV.zip <$> go xs <*> go ys
 
   -- do-notation makes it easier to massage the functions into the forms that SBV expects
@@ -333,9 +372,6 @@ sortOfEqualWith approxNonDoubles range l r = withExprConstraints (Expr l) $ case
     in And $ Set.fromList
       [ Foldr v1 v2 (And $ Set.fromList [Var v2, sortOfEqualWith approxNonDoubles range (First tp $ Var v1) (Second tp $ Var v1)]) (Const True) $ Zip tp tp l r
       , Equal IntType (Length tp l) (Length tp r)]
-  -- the version of sets that SBV supports probably just isn't very useful for Lattest,
-  -- so we might just remove them. I'll try to implement this if we decide that we do want to keep RCSets.
-  SetType _ -> error "TODO"
   -- For int, bool, char, and unit; just use equality
   tp -> Equal tp l r
 
@@ -346,7 +382,6 @@ hasDecimals approxNonDoubles = \case
   RationalType -> approxNonDoubles
   RealType -> approxNonDoubles
   ListType t -> hasDecimals approxNonDoubles t
-  SetType t -> hasDecimals approxNonDoubles t
   TupleType a b -> hasDecimals approxNonDoubles a || hasDecimals approxNonDoubles b
   SumType a b -> hasDecimals approxNonDoubles a || hasDecimals approxNonDoubles b
   _ -> False
@@ -391,7 +426,7 @@ sbvModelToValuation :: SBVI.SMTModel -> Valuation
 sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
   where
     f (varname, cv) = go cv $
-        \tp x -> DMap.insert (Variable varname tp) $ withExprConstraints tp $ Val x
+        \tp x -> DMap.insert (Variable varname tp) $ withExprConstraints tp $ Constant x
 
     go :: SBVI.CV -> (forall t. Type t -> t -> r) -> r
     go cv k = case cv of
@@ -402,13 +437,6 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       SBVI.CV KString (SBVI.CString s) -> k (ListType CharType) s
       SBVI.CV (KList t) (SBVI.CList xs) -> kindToType t $ \tp -> k (ListType tp) $
         foldr (\x ys -> go (SBVI.CV t x) $ \_ y -> unsafeCoerce y:ys) [] xs
-      SBVI.CV (KSet t) (SBVI.CSet s) -> case s of
-        RegularSet    xs -> go (SBVI.CV (KList t) (SBVI.CList $ Set.toList xs)) $ \cases
-          (ListType tp) ys -> withExprConstraints tp $ k (SetType tp) (RegularSet    $ Set.fromList ys)
-          _ _ -> error "impossible"
-        ComplementSet xs -> go (SBVI.CV (KList t) (SBVI.CList $ Set.toList xs)) $ \cases
-          (ListType tp) ys -> withExprConstraints tp $ k (SetType tp) (ComplementSet $ Set.fromList ys)
-          _ _ -> error "impossible"
       SBVI.CV (KTuple [k1, k2]) (SBVI.CTuple [x,y]) -> go (SBVI.CV k1 x) $ \t1 x' -> go (SBVI.CV k2 y) $ \t2 y' -> k (TupleType t1 t2) (x', y')
       SBVI.CV (KTuple []) _ -> k UnitType ()
       SBVI.CV (KADT "Either" _ [("Left", _), ("Right", [rk])]) (SBVI.CADT ("Left", [(k', x)])) -> kindToType rk $ \rty ->
@@ -426,7 +454,6 @@ sbvModelToValuation = Valuation . foldr f DMap.empty . SBVI.modelAssocs
       KChar -> k CharType
       KString -> k $ ListType CharType
       KList t -> kindToType t $ k . ListType
-      KSet t -> kindToType t $ k . SetType
       KTuple [k1, k2] -> kindToType k1 $ \t1 -> kindToType k2 $ \t2 -> k $ TupleType t1 t2
       KTuple [] -> k UnitType
       _ -> error $ "couldn't convert kind " <> show kind

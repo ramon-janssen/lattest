@@ -2,6 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeOperators #-}
+
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 {- |
@@ -59,30 +64,30 @@ concTransFromFunc,
 -- * Automaton Semantics
 -- | Auxiliary functions for creating semantical automata `AutIntrpr`. Note that most of these functions are no more than calls to `interpret`, instantiating
 -- the type of the semantical interpretation.
-ConcreteAutIntrpr,
+-- ConcreteAutIntrpr,
 interpretConcrete,
-ConcreteSuspAutIntrpr,
+-- ConcreteSuspAutIntrpr,
 interpretQuiescentConcrete,
-ConcreteSuspInputAttemptAutIntrpr,
+-- ConcreteSuspInputAttemptAutIntrpr,
 interpretInputAttemptConcrete,
 interpretQuiescentInputAttemptConcrete,
 STS,
 IOSTS,
-STSIntrp,
-IOSTSIntrp,
+-- STSIntrp,
+-- IOSTSIntrp,
 accessSequences,
 interpretSTS,
-SuspSTSIntrp,
+-- SuspSTSIntrp,
 interpretSTSQuiescent,
-SuspInputAttemptSTSIntrp,
+-- SuspInputAttemptSTSIntrp,
 interpretSTSQuiescentInputAttemptConcrete,
 allLocations
 )
 where
 
-import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract)
+import Lattest.Model.Alphabet (IOAct(..), IOSuspAct, IFAct, SuspendedIF, SymInteract (..), IOSymInteract, SymGuard, GateValue, SuspendedIFGateValue, IOSuspGateValue, isOutputInteract, IFGateValue, IOGateValue)
 import Lattest.Model.BoundedMonad (Det(..), BoundedMonad, FreeLattice, atom, top, bot, (\/), (/\), JoinSemiLattice, BoundedConfiguration, MeetSemiLattice)
-import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest (..), transRel,syntacticAutomaton, reachable, stsTLoc)
+import Lattest.Model.Automaton (AutSyntax (..), automaton, AutIntrpr (..), interpret, Completable, implicitDestination,IntrpState(..),STStdest (..), transRel,syntacticAutomaton, reachable, stsTLoc, Act, T, Q, Tdest, Foo)
 import qualified Lattest.Model.BoundedMonad as BM
 import Lattest.Util.Utils(takeArbitrary)
 
@@ -207,7 +212,7 @@ concTransFromFunc fTrans alph loc = Map.fromSet fTransConc (foldableAsSet alph)
 foldableAsSet :: (Foldable fld, Ord a) => fld a -> Set.Set a
 foldableAsSet fld = Set.fromList $ Foldable.toList fld
 
-accessSequences :: (Ord loc, Foldable m) => AutIntrpr m loc loc t tdest act -> loc -> Map loc [t]
+accessSequences :: (Ord loc, Foldable m) => AutIntrpr m loc i o foo -> loc -> Map loc [T foo i o]
 accessSequences aut initLoc =
     let initialMap = Map.singleton initLoc []
     in fst $ accessSequences' (syntacticAutomaton aut) initialMap $ Set.singleton initLoc
@@ -240,51 +245,65 @@ addStateAndAccSeq accMap q accSeq = case Map.lookup q accMap of
 ---------------------------------
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions.
-type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
+-- type ConcreteAutIntrpr m q act = AutIntrpr m q q act () act
+type ConcreteAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ Act foo i o, Tdest foo ~ ())
 
 -- | Interpret syntactical states and actions directly as literal, semantical states and actions.
-interpretConcrete :: (BoundedMonad m, Ord t, Ord loc, Completable t) => AutSyntax m loc t () -> ConcreteAutIntrpr m loc t
+interpretConcrete :: (BoundedMonad m, Ord t, Ord loc, Completable t, ConcreteAutFoo foo loc i o, t ~ T foo i o) => AutSyntax m loc t () -> AutIntrpr m loc i o foo
 interpretConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts as possible output observations.
-type ConcreteSuspAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
+-- type ConcreteSuspAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IOSuspAct i o)
+type ConcreteSuspAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ IOAct i o, Act foo i o ~ IOSuspAct i o, Tdest foo ~ ())
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts as possible output observations.
-interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspAutIntrpr m loc i o
+interpretQuiescentConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc, ConcreteSuspAutFoo foo loc i o) => AutSyntax m loc (IOAct i o) () -> AutIntrpr m loc i o foo
 interpretQuiescentConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with input failures as possible input observations.
-type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
+-- type ConcreteInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (IFAct i o)
+type ConcreteInputAttemptAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ IOAct i o, Act foo i o ~ IFAct i o, Tdest foo ~ ())
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with input failures as possible input observations.
-interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteInputAttemptAutIntrpr m loc i o
+interpretInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc, ConcreteInputAttemptAutFoo foo loc i o) => AutSyntax m loc (IOAct i o) () -> AutIntrpr m loc i o foo
 interpretInputAttemptConcrete = flip interpret id
 
 -- | Semantics of automata in which syntactical states and actions are directly interpreted as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
+-- type ConcreteSuspInputAttemptAutIntrpr m q i o = AutIntrpr m q q (IOAct i o) () (SuspendedIF i o)
+type ConcreteSuspInputAttemptAutFoo foo loc i o = (Q foo loc ~ loc, T foo i o ~ IOAct i o, Act foo i o ~ SuspendedIF i o, Tdest foo ~ ())
 
 -- | Interpret syntactical states and actions are directly as literal, semantical states and actions, but with timeouts and input failures as possible observations.
-interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc) => AutSyntax m loc (IOAct i o) () -> ConcreteSuspInputAttemptAutIntrpr m loc i o
+interpretQuiescentInputAttemptConcrete :: (BoundedMonad m, Ord i, Ord o, Ord loc, ConcreteSuspInputAttemptAutFoo foo loc i o) => AutSyntax m loc (IOAct i o) () -> AutIntrpr m loc i o foo
 interpretQuiescentInputAttemptConcrete = flip interpret id
 
 type STS m loc g = AutSyntax m loc (SymInteract g) STStdest
 type IOSTS m loc i o = STS m loc (IOAct i o)
 
-type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
-type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
+-- type STSIntrp m loc g = AutIntrpr m loc (IntrpState loc) (SymInteract g) STStdest (GateValue g)
+-- type IOSTSIntrp m loc i o = STSIntrp m loc (IOAct i o)
+type STSFoo foo loc i o = (Tdest foo ~ STStdest, T foo i o ~ IOSymInteract i o, Q foo loc ~ IntrpState loc, Act foo i o ~ IOGateValue i o)
 
-interpretSTS :: (Ord loc, BoundedMonad m, Completable (GateValue g)) => STS m loc g -> Valuation -> STSIntrp m loc g
+interpretSTS :: (Ord loc, BoundedMonad m, Completable (GateValue g), STSFoo foo loc i o, g ~ IOAct i o) => STS m loc g -> Valuation -> AutIntrpr m loc i o foo
 interpretSTS sts initialValuation = interpret sts (`IntrpState` initialValuation)
 
-type SuspSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o)
+-- note: not this is not the same as IOSTSIntrp m loc i (Suspended o) because the Interact does not get suspended
+-- type SuspSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o)
+type SuspSTSFoo foo loc i o = (Tdest foo ~ STStdest, T foo i o ~ IOSymInteract i o, Q foo loc ~ IntrpState loc, Act foo i o ~ IOSuspGateValue i o)
 
-interpretSTSQuiescent :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspSTSIntrp m loc i o
+interpretSTSQuiescent :: (Ord loc, BoundedMonad m, SuspSTSFoo foo loc i o) => IOSTS m loc i o -> Valuation -> AutIntrpr m loc i o foo --SuspSTSIntrp m loc i o
 interpretSTSQuiescent sts initialValuation = interpret sts (`IntrpState` initialValuation)
 
--- TODO also list an interpretation for quiescence only and input-failure only
-type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o)
+-- note: not this is not the same as IOSTSIntrp m loc (InputAttempt i) o because the Interact does not get suspended
+-- type InputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (IFGateValue i o)
+type InputAttemptSTSFoo foo loc i o = (Tdest foo ~ STStdest, T foo i o ~ IOSymInteract i o, Q foo loc ~ IntrpState loc, Act foo i o ~ IFGateValue i o)
 
-interpretSTSQuiescentInputAttemptConcrete  :: (Ord loc, BoundedMonad m) => IOSTS m loc i o -> Valuation -> SuspInputAttemptSTSIntrp m loc i o
+interpretSTSInputAttempt :: (Ord loc, BoundedMonad m, InputAttemptSTSFoo foo loc i o) => IOSTS m loc i o -> Valuation -> AutIntrpr m loc i o foo
+interpretSTSInputAttempt sts initialValuation = interpret sts (`IntrpState` initialValuation)
+
+-- type SuspInputAttemptSTSIntrp m loc i o = AutIntrpr m loc (IntrpState loc) (IOSymInteract i o) STStdest (SuspendedIFGateValue i o)
+type SuspInputAttemptSTSFoo foo loc i o = (Tdest foo ~ STStdest, T foo i o ~ IOSymInteract i o, Q foo loc ~ IntrpState loc, Act foo i o ~ SuspendedIFGateValue i o)
+
+interpretSTSQuiescentInputAttemptConcrete  :: (Ord loc, BoundedMonad m, SuspInputAttemptSTSFoo foo loc i o) => IOSTS m loc i o -> Valuation -> AutIntrpr m loc i o foo
 interpretSTSQuiescentInputAttemptConcrete sts initialValuation = interpret sts (`IntrpState` initialValuation)
 
 ------------------------------
@@ -316,19 +335,14 @@ validMergeLocs fnName sts1 mergeLocs
 initialSwitches :: (Ord loc, Ord t, Ord tdest, BoundedMonad m) => AutSyntax m loc t tdest -> Map t (m (tdest, loc))
 initialSwitches sts = Map.fromSet (\t -> BM.ordBind (initConf sts) (\l -> transRel sts l Map.! t)) (alphabet sts)
 
--- | Merge a transition of a merge location with the one copied onto it by a sequential composition: the two are conjuncted, but
--- only where both are specified (and not forbidden). Otherwise, the one that is specified is used as-is.
--- TODO: I feel like this should differ between inputs and outputs? This somehow feels wrong, but should look
--- at concrete examples to see what makes most sense.
--- It seems like it would be easier to reason about, as a user, if this function was simpler. For example,
--- mergeSwitch x Bottom = x, but mergeSwitch x y followed by a transition from y to Bottom is Bottom.
--- The obvious (to me) simple options are either always using 'other' (leave sts1 at the mergeloc), or always using 'own /\ other'.
--- And the main alternative I see is to choose between these options depending on whether it's an input or output.
-mergeSwitch :: (BoundedConfiguration m, MeetSemiLattice (m a)) => m a -> m a -> m a
-mergeSwitch own other
-    | BM.isIndefinite own && BM.isIndefinite other = own /\ other
-    | BM.isIndefinite own                          = own
-    | otherwise                                    = other
+-- | Merge a transition of a merge location with the one copied onto it by a sequential composition: the two are conjuncted,
+-- except for outputs to forbidden, which are ignored.
+mergeSwitch :: forall m a act. (BoundedConfiguration m, MeetSemiLattice (m a), Completable act) => act -> m a -> m a -> m a
+mergeSwitch (BM.isForbidden . implicitDestination @_ @m -> True) own other
+  | BM.isForbidden own   = other
+  | BM.isForbidden other = own
+  | otherwise            = own /\ other
+mergeSwitch _ own other = own /\ other
 
 {- |
     Sequentially compose two automata: sequentiallyAt sts1 locs sts2 merges sts2 into sts1 at the given locations of sts1. Where a merge
@@ -350,7 +364,7 @@ sequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAlphab
     initTransOf2 = Map.map (BM.ordMap (second Right)) (initialSwitches sts2)
 
     transOf1 l1
-        | l1 `Set.member` mergeLocSet = Map.unionWith mergeSwitch ownTrans initTransOf2
+        | l1 `Set.member` mergeLocSet = Map.unionWithKey mergeSwitch ownTrans initTransOf2
         | otherwise                   = ownTrans
         where
         ownTrans = Map.map (BM.ordMap (second Left)) (transRel sts1 l1)
@@ -392,7 +406,7 @@ selfSequentiallyAt sts1 mergeLocs sts2 = locs1 `seq` automaton newInitConf newAl
     initTransOf2 = initialSwitches sts2
 
     transOf1 l1
-        | l1 `Set.member` mergeLocSet = Map.unionWith mergeSwitch (transRel sts1 l1) initTransOf2
+        | l1 `Set.member` mergeLocSet = Map.unionWithKey mergeSwitch (transRel sts1 l1) initTransOf2
         | otherwise                   = transRel sts1 l1
 
     switches1 = Map.fromList [ (l1, transOf1 l1) | l1 <- Set.toList locs1 ]
@@ -626,7 +640,6 @@ prependOutputChecks combine checkNaming sts = automaton newInitConf newAlphabet 
 
 -- | What `sequentiallyAtPruned` removed from the composition.
 data Pruned loc1 loc2 t
-    -- TODO: This is an alternative to returning a warning (we can process it afterwards), but we need this distinction
     = PrunedLocation loc1 -- ^ a location of the first automaton that was removed
     | UnsatisfiableOutput loc1 t [loc1] -- ^ warning: an output switch of the first automaton, given by its location and gate, is unsatisfiable. Its branch is kept, but the given merge locations in that branch are not merged
     | PrunedSwitch loc1 t (FreeLattice loc2) -- ^ the unsatisfiable switches for a gate, from a merge location to locations of the second automaton
@@ -742,9 +755,11 @@ pruneSwitchesAt locVars symStates locs trans = Map.fromList [ (l1, pruneAt l1) |
 
     Returns both the pruned sequentially composed automaton, and a list of pruned switchs (if any).
 -}
-sequentiallyAtPruned :: forall loc1 loc2 i o act. (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o) =>
-    AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> [loc1] -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
-    (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
+sequentiallyAtPruned :: forall loc1 loc2 foo i o. (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o, STSFoo foo loc1 i o, STSFoo foo (Either loc1 loc2) i o)
+    => AutIntrpr FreeLattice loc1 i o foo -- (IntrpState loc1) (IOSymInteract i o) STStdest act
+    -> [loc1]
+    -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest
+    -> (AutIntrpr FreeLattice (Either loc1 loc2) i o foo, [Pruned loc1 loc2 (IOSymInteract i o)])
 sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 `seq` (AutInterpretation newStateConf $ automaton newInitConf newAlphabet switches, pruned)
     where
     locs1 = checkTree "sequentiallyAtPruned" sts1 $ validMergeLocs "sequentiallyAtPruned" sts1 mergeLocs
@@ -808,7 +823,7 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
         concatMap snd (Map.elems prunedAt)
 
     transOf1 l1 = case Map.lookup l1 prunedAt of
-        Just (newTrans, _) -> Map.unionWith mergeSwitch (ownTransOf1 l1) (Map.map (BM.ordMap (second Right)) newTrans)
+        Just (newTrans, _) -> Map.unionWithKey mergeSwitch (ownTransOf1 l1) (Map.map (BM.ordMap (second Right)) newTrans)
         Nothing            -> ownTransOf1 l1
 
     switches1 = Map.fromList [ (Left l1, transOf1 l1) | l1 <- Set.toList keptLocs ]
@@ -822,9 +837,10 @@ sequentiallyAtPruned (AutInterpretation stateconf1 sts1) mergeLocs sts2 = locs1 
 
 infixl 1 `sequentiallyPruned`
 -- | Sequentially compose two automata at all sink locations of the first (with pruning). Throws an error if the first automaton does not have any sink locations.
-sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o) =>
-    AutIntrpr FreeLattice loc1 (IntrpState loc1) (IOSymInteract i o) STStdest act -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest ->
-    (AutIntrpr FreeLattice (Either loc1 loc2) (IntrpState (Either loc1 loc2)) (IOSymInteract i o) STStdest act, [Pruned loc1 loc2 (IOSymInteract i o)])
+sequentiallyPruned :: (Ord loc1, Ord loc2, Show loc1, Ord i, Ord o, STSFoo foo loc1 i o, STSFoo foo (Either loc1 loc2) i o)
+  => AutIntrpr FreeLattice loc1 i o foo -- (IntrpState loc1) (IOSymInteract i o) STStdest act
+  -> AutSyntax FreeLattice loc2 (IOSymInteract i o) STStdest
+  -> (AutIntrpr FreeLattice (Either loc1 loc2) i o foo, [Pruned loc1 loc2 (IOSymInteract i o)])
 sts1 `sequentiallyPruned` sts2 = case Set.toList $ Set.filter (isSinkLocation syn1) (allLocations syn1) of
     []      -> errorWithoutStackTrace "(sequentiallyPruned): the first automaton has no sink location to sequentially compose at"
     locList -> sequentiallyAtPruned sts1 locList sts2
@@ -854,7 +870,7 @@ selfSequentiallyAtPruned locVars sts mergeLocs = locs `seq` (automaton (initConf
     pruned = concatMap snd (Map.elems prunedAt)
 
     switches l = case Map.lookup l prunedAt of
-        Just (newTrans, _) -> Map.unionWith mergeSwitch (transRel sts l) newTrans
+        Just (newTrans, _) -> Map.unionWithKey mergeSwitch (transRel sts l) newTrans
         Nothing            -> transRel sts l
 
 -- | `selfSequentiallyAtPruned` applied to all sink locations of the automaton. Throws an error if the automaton does not have any sink locations.

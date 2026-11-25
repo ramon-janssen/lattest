@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -5,9 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Lattest.Util.STSJSONParser (
     stsFromJSONFile,
@@ -32,8 +31,8 @@ import Lattest.Model.Symbolic.Expr
 import Data.Some (Some (..))
 import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare (GEq(..))
-import Lattest.Model.Symbolic.Internal.ExprDefs (Constant (..), Expr (..))
-import Data.SBV (RCSet (..), AlgReal)
+import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
+import Data.SBV (AlgReal)
 import qualified Data.Aeson.Types as JSON
 import qualified Data.Aeson.KeyMap as JSON
 import Data.Aeson.Key (toString)
@@ -58,69 +57,55 @@ data UntypedExpr
     | UEOp5  String String String UntypedExpr UntypedExpr UntypedExpr
     deriving (Show, Eq)
 
+data HideArgumentOfFunction = forall a. JSON.FromJSON a => X (a -> UntypedExpr) -- only used in the instance below
 instance JSON.FromJSON UntypedExpr where
   parseJSON (JSON.Bool b)   = pure (UEBool b)
   parseJSON (JSON.Number _) = error "untagged constant integer or float"
   parseJSON (JSON.String s) = pure (UEStr (unpack s))
   parseJSON (JSON.Object o) = do
-    -- TODO: refactor this giant expression into a fold over a list?
-    mvar <- o JSON..:? "var"
-    case mvar of
-      Just name -> pure (UEVar name)
-      Nothing -> do
-        mint <- o JSON..:? "integer"
-        case mint of
-          Just i -> pure (UEInt i)
-          Nothing -> do
-            mfloat <- o JSON..:? "float"
-            case mfloat of
-              Just f -> pure (UEFloat f)
-              Nothing -> do
-                mrat <- o JSON..:? "rational"
-                case mrat of
-                  Just r -> pure (UERational r)
-                  Nothing -> do
-                    mreal <- o JSON..:? "real"
-                    case mreal of
-                      Just r -> pure (UEReal r)
-                      Nothing -> do
-                        mbool <- o JSON..:? "boolean"
-                        case mbool of
-                          Just b -> pure (UEBool b)
-                          Nothing -> do
-                            mstr <- o JSON..:? "string"
-                            case mstr of
-                              Just s -> pure (UEStr s)
-                              Nothing -> do
-                                menum <- o JSON..:? "enum"
-                                case menum of
-                                  Just e -> pure (UEEnum e)
-                                  Nothing -> do
-                                    (op :: String) <- o JSON..: "op"
-                                    case op of
-                                      "neg" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "not" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "len" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "head" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "tail" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "concat" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "first" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "second" -> UEOp1 op <$> o JSON..: "rhs"
-                                      "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                                      "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
-                                      "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
-                                      "exists" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
-                                      "cardinality" -> UEOp5 op <$> o JSON..: "lambda"  <*> o JSON..: "quantifier" <*> o JSON..: "expression"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
-                                      "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                                      "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
-                                      "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
-                                      _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+    foldr
+      (\(field, X constructor) rec -> do
+        m <- o JSON..:? field
+        case m of
+          Just x -> pure $ constructor x
+          Nothing -> rec)
+      (do
+        (op :: String) <- o JSON..: "op"
+        case op of
+          "neg"        -> UEOp1 op <$> o JSON..: "rhs"
+          "not"        -> UEOp1 op <$> o JSON..: "rhs"
+          "len"        -> UEOp1 op <$> o JSON..: "rhs"
+          "head"       -> UEOp1 op <$> o JSON..: "rhs"
+          "tail"       -> UEOp1 op <$> o JSON..: "rhs"
+          "concat"     -> UEOp1 op <$> o JSON..: "rhs"
+          "uniqueElem" -> UEOp1 op <$> o JSON..: "rhs"
+          "first"      -> UEOp1 op <$> o JSON..: "rhs"
+          "second"     -> UEOp1 op <$> o JSON..: "rhs"
+          "map"    -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
+          "filter" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "fun" <*> o JSON..: "lst"
+          "forall" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
+          "exists" -> UEOp3 op <$> o JSON..: "lambda" <*> o JSON..: "expression" <*> o JSON..: "over"
+          "cardinality" -> UEOp5 op <$> o JSON..: "lambda"  <*> o JSON..: "quantifier" <*> o JSON..: "expression"  <*> o JSON..: "over" <*> (UEInt <$> o JSON..: "n")
+          "foldr"       -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+          "foldl"       -> UEOp5 op <$> o JSON..: "lamb" <*> o JSON..: "lama"       <*> o JSON..: "func" <*> o JSON..: "init" <*> o JSON..: "list"
+          "either"      -> UEOp5 op <$> o JSON..: "lama" <*> o JSON..: "lamb"       <*> o JSON..: "funa" <*> o JSON..: "funb" <*> o JSON..: "eith"
+          _ -> UEOp2 op <$> o JSON..: "lhs" <*> o JSON..: "rhs"
+      )
+      [ ("var", X UEVar)
+      , ("integer", X UEInt)
+      , ("float", X UEFloat)
+      , ("rational", X UERational)
+      , ("real", X UEReal)
+      , ("boolean", X UEBool)
+      , ("string", X UEStr)
+      , ("enum", X UEEnum)
+      ]
   parseJSON _ = fail "expected expression"
 
 type VarMap = Map.Map String (Some Variable)
 type AccessorMap = Map.Map String FieldAccessor
 type EnumMap = Map.Map String (Some Expr)
+type AttrNameMap = Map.Map (Some Type, [Bool]) String
 
 lookupVar :: VarMap -> String -> Either String (DSum Type Expr)
 lookupVar varmap name = case Map.lookup name varmap of
@@ -167,15 +152,6 @@ toExpr varmap accmap enummap = \case
     go = toExpr varmap accmap enummap
 
     op1 :: String -> DSum Type Expr -> Either String (DSum Type Expr)
-    -- TODO: define non-polymorphic sum types in the json, translate them to our adts before parsing the exprs.
-    -- We need to know the type of the other half of an Either to construct it;
-    -- which is why e.g. "left" isn't part of the JSON syntax.
-    -- instead, if we want e.g. availability = Av | PartAv,
-    -- we'll need the json to contain that declaration,
-    -- from which we'd generate Av = Left :: Either () (),
-    -- and then parse "Av" into TupleType () () :=> sLeft ().
-    -- op1 "left"  (tp :=> x) = Right $ TupleType tp undefined :=> sLeft  x
-    -- op1 "right" (tp :=> x) = Right $ TupleType undefined tp :=> sRight x
     op1 o (tp :=> x) = case tp of
       BoolType -> case o of
         "not" -> Right $ BoolType :=> sNot x
@@ -211,7 +187,7 @@ toExpr varmap accmap enummap = \case
         "first" -> Right $ t1 :=> sFirst x
         "second" -> Right $ t2 :=> sSecond x
         _ -> Left $ "unknown op1 @Tuple: " <> o
-      _ -> error "todo"
+      _ -> error "unkown op1"
 
     -- for two equally-typed expressions
     op2ET :: String -> DSum Type TwoExprs -> Either String (DSum Type Expr)
@@ -266,8 +242,7 @@ toExpr varmap accmap enummap = \case
       ListType _ -> case o of
         "++" -> Right $ t :=> sAppend x y
         _ -> op2 o (t :=> x) (t :=> y)
-
-      _ -> error "todo"
+      _ -> op2 o (t :=> x) (t :=> y)
     -- for two potentially unequally-typed expressions
     op2 :: String -> DSum Type Expr -> DSum Type Expr -> Either String (DSum Type Expr)
     op2 "cons" (t1 :=> x) (ListType t2 :=> xs) = case geq t1 t2 of
@@ -279,12 +254,6 @@ toExpr varmap accmap enummap = \case
     op2 "take" (IntType :=> i) (ListType t :=> xs) = Right $ ListType t :=> sTake i xs
     op2 "drop" (IntType :=> i) (ListType t :=> xs) = Right $ ListType t :=> sDrop i xs
     op2 "pair" (t1 :=> x) (t2 :=> y) = Right $ TupleType t1 t2 :=> sPair x y
-    op2 "selem" (t1 :=> x) (SetType t2 :=> y) = case geq t1 t2 of
-      Just Refl -> Right $ BoolType :=> sSElem x y
-      Nothing -> Left "mismatched type for set elem"
-    op2 "insert" (t1 :=> x) (SetType t2 :=> y) = withExprConstraints t1 case geq t1 t2 of
-      Just Refl -> Right $ SetType t1 :=> sInsert x y
-      Nothing -> Left "mismatched type for set insert"
     op2 o _ _ = Left $ "unknown or badly typed op2: " <> o
 
     op3 :: String -> String -> UntypedExpr -> UntypedExpr -> Either String (DSum Type Expr)
@@ -375,7 +344,8 @@ instance JSON.FromJSON GateId where
 -- type, and a list of field accessors
 data VarDefJson = VarDefJson { varDefJsonType :: Some Type
                              , varDefJsonFieldAccessors :: Map.Map String FieldAccessor
-                             , varDefJsonEnumDefs :: EnumMap}
+                             , varDefJsonEnumDefs :: EnumMap
+                             , varDefJsonAttrNames :: AttrNameMap}
 newtype MkEnumResult tp = MER (Map.Map String (Expr tp))
 data FieldAccessor where
   FA :: Type big -> Type small -> (Expr big -> Expr small) -> FieldAccessor
@@ -399,18 +369,18 @@ instance JSON.FromJSON VarDefJson where
           "real"    -> k $ Some RealType
           "array"   -> do
             o' <- o JSON..: "elements"
-            VarDefJson (Some t) a b <- go o'
-            pure $ VarDefJson (Some $ ListType t) a b
+            VarDefJson (Some t) a b n <- go o'
+            pure $ VarDefJson (Some $ ListType t) a b n
           "structure" -> do
             JSON.Object o' <- o JSON..: "attributes"
-            ((t, a), (b,c)) <- mkStructure $ JSON.toList o'
-            pure $ VarDefJson t (a <> b) c
+            ((t, a), (b,c,n)) <- mkStructure $ JSON.toList o'
+            pure $ VarDefJson t (a <> b) c (unionAttrNames (fieldNames a) n)
           "enum" -> do
             range <- o JSON..: "range"
             case mkEnum range of
-              t :=> MER m -> pure $ VarDefJson (Some t) mempty (Map.map Some m)
+              t :=> MER m -> pure $ VarDefJson (Some t) mempty (Map.map Some m) mempty
           _ -> fail $ "unknown variable type: " ++ tp
-      k tp = pure $ VarDefJson tp mempty mempty
+      k tp = pure $ VarDefJson tp mempty mempty mempty
       mkEnum :: [String] -> DSum Type MkEnumResult
       mkEnum [] = error "empty enum"
       mkEnum [nm] = UnitType :=> MER (Map.singleton nm $ Expr $ Const ())
@@ -423,11 +393,11 @@ instance JSON.FromJSON VarDefJson where
             (Map.map sRight m))
       mkStructure [] = error "empty structure"
       mkStructure [(nm, JSON.Object o)] = do
-        VarDefJson (Some tp) a b <- go o
-        pure ((Some tp, Map.singleton (toString nm) (FA tp tp id)), (a,b))
+        VarDefJson (Some tp) a b n <- go o
+        pure ((Some tp, Map.singleton (toString nm) (FA tp tp id)), (a,b,n))
       mkStructure ((nm, JSON.Object o) : fields) = do
-        VarDefJson (Some  (ta :: Type a)) a x <- go o
-        ((Some (tb :: Type b), accessors), (b,y)) <- mkStructure fields
+        VarDefJson (Some  (ta :: Type a)) a x n <- go o
+        ((Some (tb :: Type b), accessors), (b,y,m)) <- mkStructure fields
         withExprConstraints ta $ withExprConstraints tb $
           pure
             ( (Some (TupleType ta tb)
@@ -438,8 +408,27 @@ instance JSON.FromJSON VarDefJson where
                 (Map.map (\(FA tbig tsmall f) -> case geq tbig tb of
                   Nothing -> error "unexpected result type in mkStructure: this is the result of a call on the tail of the same list"
                   Just Refl ->FA (TupleType ta tb) tsmall (f . sSecond)) accessors))
-            , (Map.unionWith errIfUnequalAccessors a b, Map.unionWith errIfUnequalEnums x y))
+            , (Map.unionWith errIfUnequalAccessors a b, Map.unionWith errIfUnequalEnums x y, unionAttrNames n m))
       mkStructure _ = error "non-object in attributes"
+
+-- | The names of the attributes of a structure
+fieldNames :: Map.Map String FieldAccessor -> AttrNameMap
+fieldNames accessors = Map.fromList
+    [ ((Some t, path), nm)
+    | (nm, FA t _ f) <- Map.toList accessors
+    , e <- [f $ Expr $ Var $ Variable "" t]
+    , let path = projections (view e)
+    , not (null path) -- a structure with a single attr is that attr
+    ]
+  where
+    projections :: ExprView a -> [Bool]
+    projections (First _ x) = projections x ++ [False]
+    projections (Second _ x) = projections x ++ [True]
+    projections _ = []
+
+-- | Two structures of the same type have their attrs in the same places, such a place gets both names.
+unionAttrNames :: AttrNameMap -> AttrNameMap -> AttrNameMap
+unionAttrNames = Map.unionWith (\a b -> if a == b then a else a <> "/" <> b)
 
 errIfUnequalAccessors :: FieldAccessor -> FieldAccessor -> FieldAccessor
 errIfUnequalAccessors x@(FA tbig1 tsmall1 f1) (FA tbig2 tsmall2 f2) = case geq tbig1 tbig2 of
@@ -528,14 +517,14 @@ instance JSON.FromJSON STSJsonFormat where
 
 -- STS elements builders
 
-buildVarMap :: Map.Map String VarDefJson -> Either String (VarMap, AccessorMap, EnumMap)
+buildVarMap :: Map.Map String VarDefJson -> Either String (VarMap, AccessorMap, EnumMap, AttrNameMap)
 buildVarMap defs = do
-  (varmap, unzip -> (accessorss, enumss)) <- unzip <$> forM (Map.toList defs)
-    (\(name, VarDefJson (Some t') accessors enums) -> return ((name, Some $ Variable name t'), (accessors, enums)))
+  (varmap, unzip3 -> (accessorss, enumss, fieldss)) <- unzip <$> forM (Map.toList defs)
+    (\(name, VarDefJson (Some t') accessors enums fields) -> return ((name, Some $ Variable name t'), (accessors, enums, fields)))
   let accessors = Map.unionsWith errIfUnequalAccessors accessorss
   let enums = Map.unionsWith errIfUnequalEnums enumss
   let varmap' = Map.fromList varmap
-  pure (varmap', accessors, enums)
+  pure (varmap', accessors, enums, foldr unionAttrNames mempty fieldss)
 
 buildGateMap
     :: (String -> IOAct String String)
@@ -628,7 +617,7 @@ buildValuation locVarCtx initVal enums =
     fmap (assignValues . map snd) $ forM (Map.toList locVarCtx) $ \(name, Some var) ->
         case Map.lookup name initVal of
             Just v -> case jsonToValue (varType var) v of
-                Just x  -> Right (name, insertIntoValuation var (Constant (varType var) x))
+                Just x  -> Right (name, insertIntoValuation var (withExprConstraints var $ Constant x))
                 Nothing -> Left $ "wrong type for initial value of '" ++ name ++ "', expected " ++ show (varType var)
             Nothing -> Debug.Trace.trace ("Missing initial valuation for " <> name <> ", assuming default: " <> withExprConstraints (varType var) show (defaultConst (varType var))) $ Right (name, insertIntoValuation var (defaultConst (varType var)))
     where
@@ -651,28 +640,26 @@ buildValuation locVarCtx initVal enums =
           Nothing -> Nothing
         jsonToValue _ _ = Nothing
 
-        -- TODO: for now give a default valuation if not present in the json, we can leave it blank and define
-        -- this by test in the future
         defaultConst :: Type t -> Constant t
-        defaultConst IntType    = CInt 0
-        defaultConst UnitType = CUnit
-        defaultConst FloatType  = CFloat 0.0
-        defaultConst RationalType = CRational 0.0
-        defaultConst RealType = CReal 0.0
-        defaultConst BoolType   = CBool False
-        defaultConst CharType = CChar 'a'
-        defaultConst (ListType t) = CList [] t
-        defaultConst (SetType t) = withExprConstraints t $ CSet (RegularSet mempty) t
-        defaultConst (TupleType a b) = CTuple (constValue $ defaultConst a) (constValue $ defaultConst b) a b
-        defaultConst (SumType a b) = CSum (Left $ constValue $ defaultConst a) a b
+        defaultConst IntType    = Constant 0
+        defaultConst UnitType = Constant ()
+        defaultConst FloatType  = Constant 0.0
+        defaultConst RationalType = Constant 0.0
+        defaultConst RealType = Constant 0.0
+        defaultConst BoolType   = Constant False
+        defaultConst CharType = Constant 'a'
+        defaultConst (ListType t) = withExprConstraints t $ Constant []
+        defaultConst t@(TupleType a b) = withExprConstraints t $ Constant (constValue $ defaultConst a, constValue $ defaultConst b)
+        defaultConst t@(SumType a _) = withExprConstraints t $ Constant (Left $ constValue $ defaultConst a)
 
--- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, and the initial valuation.
-type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation, EnumMap)
+-- | The IOSTS is the main result, but parsing also returns the ID, maps containing the guards and assignments for printing, the initial valuation,
+-- the enums, and the names of the fields of the structures for printing.
+type STSParseResult = (String, IOSTS FreeLattice String String String, Map.Map String (Expr Bool), Map.Map String VarModel, Valuation, EnumMap, AttrNameMap)
 
 convertSTSJson :: STSJsonFormat -> Either String STSParseResult
 convertSTSJson json = do
-    (locVarMap, accessors1, enums1) <- buildVarMap (stsJsonLocVars json)
-    (paramMap, accessors2, enums2)  <- buildVarMap (stsJsonParams json)
+    (locVarMap, accessors1, enums1, fields1) <- buildVarMap (stsJsonLocVars json)
+    (paramMap, accessors2, enums2, fields2)  <- buildVarMap (stsJsonParams json)
     let accMap = accessors1 <> accessors2
     let enums = enums1 <> enums2
     initVal    <- buildValuation locVarMap (stsJsonInitValuation json) enums
@@ -690,7 +677,7 @@ convertSTSJson json = do
     let transRel = buildTransitionRel switchList
         initCfg  = atom $ locId (stsJsonInitLoc json)
         sts      = automaton initCfg alphabet transRel
-    return (stsJsonId json, sts, guardMap, Map.map ($ noAssignment) assignMap, initVal, enums)
+    return (stsJsonId json, sts, guardMap, Map.map ($ noAssignment) assignMap, initVal, enums, unionAttrNames fields1 fields2)
 
 {-|
     Read a JSON file and parse an STS from it. Returns a tuple (ID, STS, Initial Valuation) if successful,
@@ -714,4 +701,5 @@ stsListFromJSONFile path = do
         Right stsJsons -> forM stsJsons convertSTSJson
 
 instance JSON.FromJSON AlgReal where
-  parseJSON x = fromRational . toRational <$> JSON.parseJSON @Double x
+  -- convert from the decimal JSON number directly
+  parseJSON = JSON.withScientific "real" (pure . fromRational . toRational)

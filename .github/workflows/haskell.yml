@@ -16,7 +16,8 @@ jobs:
         ghcversion: [9.8.4, 9.10.3, 9.12.4]
     name: testsuite
 
-    runs-on: ubuntu-latest
+    # note: since november 2026, ubuntu-latest points to ubuntu 26. For some reason the CI job keeps getting terminated without feedback on ubuntu 26 (always during the exact same SMT call; OOM?), so for now we just pin it to 24.04 until we fix that issue.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:

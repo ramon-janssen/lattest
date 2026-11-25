@@ -21,7 +21,6 @@ where
 import Lattest.Model.Symbolic.Internal.FreeMonoidX as FM
 import Lattest.Model.Symbolic.Expr
 import Lattest.Model.Symbolic.SolveSymPrim
-import qualified Lattest.SMT as SMT
 
 import qualified Data.Set as Set
 import qualified Debug.Trace as Trace
@@ -32,7 +31,6 @@ import Test.QuickCheck.Monadic
 import Data.Constraint.Extras (Has(..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr (..))
 import qualified Data.Dependent.Map as DMap
-import Data.SBV (RCSet(..))
 import Data.Some (Some (..))
 import Data.Maybe (isJust)
 import Data.GADT.Compare (GEq(..))
@@ -142,7 +140,6 @@ arbitraryVar t =
                     BoolType -> "b"
                     CharType -> "c"
                     ListType x -> "[" ++ prefix x ++ "]"
-                    SetType x -> "{" ++ prefix x ++ "}"
                     TupleType x y -> "(" ++ prefix x ++ "," ++ prefix y ++ ")"
                     SumType x y -> "<" ++ prefix x ++ "," ++ prefix y ++ ">"
     in CM.liftM (\n -> Var $ Variable (prefix t++n) t) (return <$> charExpr)
@@ -226,9 +223,6 @@ instance ConcreteEval Bool where
     concreteEval' (Not e) = concreteUnaryOp not e
     concreteEval' (And es) = and <$> mapM concreteEval' (Set.toList es)
     concreteEval' (LElem t x xs) = has @ConcreteEval t $ (\y ys -> has @Eq t $ y `elem` ys) <$> concreteEval' x <*> concreteEval' xs
-    concreteEval' (SElem t x xs) = withExprConstraints t $ has @ConcreteEval t $ (\y ys -> has @Eq t $ case ys of
-      RegularSet ys' -> y `Set.member` ys'
-      ComplementSet ys' -> not $ y `Set.member` ys') <$> concreteEval' x <*> concreteEval' xs
 
 instance ConcreteEval Char where
   concreteEval' (Var _) = Nothing
@@ -280,21 +274,6 @@ instance ConcreteEval (Either a b) where
     ELeft x -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ Left <$> concreteEval' x
     ERight x -> has @ExprType x $ has @ConcreteEval (typeOf' x) $ Right <$> concreteEval' x
 
-instance ConcreteEval (SMT.RCSet a) where
-  concreteEval' = \case
-    Var _ -> Nothing
-    Const c -> Just c
-    First _ x -> fst <$> concreteEval' x
-    Head xs -> head <$> concreteEval' xs
-    Second _ x -> snd <$> concreteEval' x
-    Either a b c d e -> concreteEither a b c d e
-    Ite i t e -> concreteIfThenElse i t e
-    SInsert x xs -> has @ConcreteEval (has @ExprType x $ typeOf' x) $ case concreteEval' xs of
-      Nothing -> Nothing
-      Just (RegularSet ys)    -> RegularSet    . flip Set.insert ys <$> concreteEval' x
-      Just (ComplementSet ys) -> ComplementSet . flip Set.delete ys <$> concreteEval' x
-
-
 instance Has ConcreteEval Type where
   has tp k = case tp of
     IntType -> k
@@ -302,7 +281,6 @@ instance Has ConcreteEval Type where
     CharType -> k
     BoolType -> k
     ListType _ -> k
-    SetType _ -> k
     TupleType _ _ -> k
     SumType _ _ -> k
 

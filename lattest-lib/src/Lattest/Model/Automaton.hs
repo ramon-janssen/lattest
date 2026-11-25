@@ -8,8 +8,8 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -67,7 +67,7 @@ prettyPrintFrom,
 prettyPrintIntrp,
 sanityCheckLTS,
 sanityCheckSTS,
-Q, T, Tdest, Act,
+Q, T, Tdest, Act, TCI, Foo
 )
 where
 
@@ -93,13 +93,13 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import GHC.Stack(CallStack,callStack, HasCallStack)
-import Lattest.Model.Symbolic.Expr(ConstType(..), Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, ConstType, Val(..), constType, withExprConstraints)
+import Lattest.Model.Symbolic.Expr(Valuation(..), VarModel, Variable(..),Expr(..), eval, constType, varType, substConst, assignedExpr, Constant(..), assignValues, insertIntoValuation, constType, withExprConstraints)
 import Data.Some (Some (..))
 import Data.EqP (EqP(..))
 import qualified Data.Dependent.Map as DMap
 import Unsafe.Coerce (unsafeCoerce)
-import Data.Constraint.Extras (Has(..))
 import Control.Monad.Extra (anyM)
+import Lattest.Model.Symbolic.Internal.ExprDefs (fromConst)
 
 ------------
 -- syntax --
@@ -153,6 +153,8 @@ type family Q a loc
 type family T a i o
 type family Tdest a
 type family Act a i o
+type family TCI foo i
+type Foo foo q t tdest act loc i o = (q ~ Q foo loc, t ~ T foo i o, tdest ~ Tdest foo, act ~ Act foo i o)
 
 ---------------
 -- interpret --
@@ -178,11 +180,11 @@ data AutIntrpr m loc i o foo = AutInterpretation {
     automaton is requested. This can be avoided by calling more specific, pre-typed variants of 'interpret' in
     "Lattest.Adapter.StandardAdapters".
 -}
-interpret :: (StepSemantics m loc q t tdest act, Ord q) => AutSyntax m loc t tdest -> (loc -> q) -> AutIntrpr m loc i o foo
+interpret :: (StepSemantics m loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), Ord (Q foo loc)) => AutSyntax m loc (T foo i o) (Tdest foo) -> (loc -> Q foo loc) -> AutIntrpr m loc i o foo
 interpret aut initState = AutInterpretation { stateConf = initState BM.<#> initConf aut, syntacticAutomaton = aut }
 
 -- | The given model, in the given configuration.
-inConfiguration :: AutIntrpr m loc i o foo -> m q -> AutIntrpr m loc i o foo
+inConfiguration :: AutIntrpr m loc i o foo -> m (Q foo loc) -> AutIntrpr m loc i o foo
 inConfiguration aut conf = aut {stateConf = conf}
 
 -- | The Completable typeclass defines which types can be used as labels on transitions.
@@ -215,7 +217,7 @@ class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) =>
         Nothing -> LocationMove $ BM.ordReturn $ asLoc q
         Just t -> TransitionMove (t, trans' t)
 
-class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act | t act -> tdest where
+class (Ord t, Completable act, TransitionMapping t act, StateSemantics loc q) => IOTransitionSemantics loc q t tdest act where
     {- |
         Find the syntactic transition that applies for the given semantic action value, or alternatively a move within the location.
         The function may be partial, following the given alphabet.
@@ -251,28 +253,31 @@ class (StateSemantics loc q, BoundedMonad m) => StepSemantics m loc q t tdest ac
     -}
     move :: q -> act -> Maybe (t, tdest) -> loc -> m q
 
-type After m loc q t tdest act = (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord t)
+type After m loc foo i o = (StepSemantics m loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), TransitionSemantics loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), Ord (T foo i o))
 
 {- |
     Take a step for the given action, according to the step semantics to move from one state configuration to another. May throw an AutomatonException.
 -}
-after :: (After m loc q t tdest act, Ord (m q), Ord q) => AutIntrpr m loc i o foo -> AutIntrpr m loc i o foo
+after :: forall m loc foo i o. (After m loc foo i o, Ord (m (Q foo loc)), Ord (Q foo loc))
+      => AutIntrpr m loc i o foo -> Act foo i o -> AutIntrpr m loc i o foo
 after aut act = runIdentity $ afterInternal takeTransitionId fmapId aut act
     where
-    takeTransitionId :: (BoundedMonad m, TransitionSemantics loc q t tdest act) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Identity (Move m t tdest loc)
+    takeTransitionId :: Q foo loc -> Set (T foo i o) -> Act foo i o -> (T foo i o -> m (Tdest foo, loc)) -> Identity (Move m (T foo i o) (Tdest foo) loc)
     takeTransitionId q alph act' trans' = Identity $ takeTransition q alph act' trans'
     fmapId :: (BM.OrdFunctor f, Ord y) => (x -> Identity y) -> f x -> Identity (f y)
     fmapId f = Identity . BM.ordMap (runIdentity . f)
 
-class IOAfter m loc q t tdest act where
-    ioAfter :: AutIntrpr m loc i o foo -> act -> IO (AutIntrpr m loc i o foo)
+-- note: this class needs 'tdest' as an argument to prevent the two instances below from counting as duplicates
+class (tdest ~ Tdest foo) => IOAfter m loc foo i o tdest where
+    ioAfter :: AutIntrpr m loc i o foo -> Act foo i o -> IO (AutIntrpr m loc i o foo)
 
 -- tdest ~ () <=> LTS
-instance (After m loc q t () act, Ord (m q), Ord q) => IOAfter m loc q t () act where
+instance (After m loc foo i o, Ord (m (Q foo loc)), Ord (Q foo loc), Tdest foo ~ ()) => IOAfter m loc foo i o () where
     ioAfter aut act = return $ after aut act
 
 -- tdest ~ STStdest <=> STS
-instance (StepSemantics m loc q t STStdest act, IOTransitionSemantics loc q t STStdest act, BooleanConfiguration m, Ord q, Ord t, Ord (m q), BM.OrdTraversable m) => IOAfter m loc q t STStdest act where
+instance (StepSemantics m loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), IOTransitionSemantics loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), BooleanConfiguration m, Ord (Q foo loc), Ord (T foo i o), Ord (m (Q foo loc)), BM.OrdTraversable m, Tdest foo ~ STStdest)
+      => IOAfter m loc foo i o STStdest where
     ioAfter = afterInternal ioTakeTransition BM.ordTraverse
 
 --takeTransition :: (BoundedMonad m) => q -> Set t -> act -> (t -> m (tdest, loc)) -> Move m t tdest loc
@@ -280,10 +285,10 @@ instance (StepSemantics m loc q t STStdest act, IOTransitionSemantics loc q t ST
 
 -- distributeMonadOverFoldable :: (Functor m, Foldable m, Monad execM, Ord x) => (x -> execM y) -> m x -> execM (m y)
 -- fmapInternal?? :: (Functor m, Monad execM) => (x -> execM y) -> m x -> execM (m y)
-afterInternal :: (StepSemantics m loc q t tdest act, Monad execM, Ord t, Ord q, Ord (m q)) =>
-    (q -> Set t -> act -> (t -> m (tdest, loc)) -> execM (Move m t tdest loc)) ->
-    ((q -> execM (m q)) -> m q -> execM (m (m q))) ->
-    AutIntrpr m loc i o foo -> act -> execM (AutIntrpr m loc i o foo)
+afterInternal :: (StepSemantics m loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), Monad execM, Ord (T foo i o), Ord (Q foo loc), Ord (m (Q foo loc))) =>
+    (Q foo loc -> Set (T foo i o) -> Act foo i o -> (T foo i o -> m (Tdest foo, loc)) -> execM (Move m (T foo i o) (Tdest foo) loc)) ->
+    ((Q foo loc -> execM (m (Q foo loc))) -> m (Q foo loc) -> execM (m (m (Q foo loc)))) ->
+    AutIntrpr m loc i o foo -> Act foo i o -> execM (AutIntrpr m loc i o foo)
 afterInternal internalTakeTransition fmapmq intrpr act' = do
     let aut = syntacticAutomaton intrpr
         toNewStateConfig = afterInternal' internalTakeTransition (alphabet aut) (transRel aut) act'
@@ -337,7 +342,8 @@ after' alph transMap act q = BM.ordJoin $ case takeTransition (asLoc q) alph act
 -}
 
 -- | Take a sequence of transitions for the given actions.
-afters :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Ord q, Ord (m q), Show t, Show (m (tdest, loc))) => AutIntrpr m loc i o foo -> [act] -> AutIntrpr m loc i o foo
+afters :: (StepSemantics m loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), TransitionSemantics loc (Q foo loc) (T foo i o) (Tdest foo) (Act foo i o), Ord (Q foo loc), Ord (m (Q foo loc)), Show (T foo i o), Show (m (Tdest foo, loc)))
+       => AutIntrpr m loc i o foo -> [Act foo i o] -> AutIntrpr m loc i o foo
 afters aut [] = aut
 afters aut (act:acts) = aut `after` act `afters` acts
 
@@ -375,7 +381,7 @@ actionMenu :: (Foldable m, Ord t, Ord act, FiniteMenu t act, BoundedMonad m) => 
 actionMenu aut = (locationActions aut ++) $ concat $ BM.ordMap asActions $ Set.toList $ transMenu aut
 
 -- | Menu of specified actions that are semantically present in the automaton.
-specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act)
+specifiedMenu :: (StepSemantics m loc q t tdest act, TransitionSemantics loc q t tdest act, Foldable m, Ord act, Ord q, Ord (m q), FiniteMenu t act, Foo foo q t tdest act loc i o)
     => AutIntrpr m loc i o foo -> [act]
 specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecified $ stateConf $ aut `after` act]
 
@@ -383,8 +389,10 @@ specifiedMenu aut = [act | act <- actionMenu $ syntacticAutomaton aut, isSpecifi
 -- special case where the semantic states and actions are directly represented syntactically --
 -----------------------------------------------------------------------------------------------
 
-instance {-# OVERLAPPABLE #-} (Completable act) where
-    implicitDestination _ = forbidden
+-- note: This seems undesireable to me, both because there are no guarantees that this gets
+-- overlapped when we want it to, and when using this straight-up.
+-- instance {-# OVERLAPPABLE #-} (Completable act) where
+--     implicitDestination _ = forbidden
 
 instance TransitionMapping act act where
     asTransition _ = Just
@@ -393,7 +401,7 @@ instance (Ord act, Completable act) => TransitionSemantics q q act () act
 
 instance FiniteMenu act act where
     asActions t = [t]
-    locationActions _ = []
+    locationActions _ = error "unknown what actions are possible"
 
 instance StateSemantics q q where
     asLoc = id
@@ -512,7 +520,7 @@ instance (Ord g, TransitionMapping g g') => TransitionMapping (SymInteract g) (G
                               "type of variable and value do not match. Variables: ["
                               <> List.intercalate ", " (map (\(Some v) -> show v) vars)
                               <> "], Values: ["
-                              <> List.intercalate ", " (map (\(Some (Constant t v)) -> has @Show t $ show v) vals)
+                              <> List.intercalate ", " (map (\(Some (Constant v)) -> show v) vals)
                               <> "]"
 
 instance (Completable (GateValue g'), Ord g, TransitionMapping g g') => TransitionSemantics loc (IntrpState loc) (SymInteract g) STStdest (GateValue g') where
@@ -527,17 +535,17 @@ instance (Completable (GateValue g'), BoundedMonad m) => StepSemantics m loc (In
             else let stateValuation2 = Valuation $ DMap.mapWithKey (\var val -> assignNewValue var val valuation assign) $ runValuation stateValuation
                  in BM.ordReturn $ IntrpState l2 stateValuation2
         where
-        assignNewValue :: Variable t -> Val t -> Valuation -> VarModel -> Val t
+        assignNewValue :: Variable t -> Constant t -> Valuation -> VarModel -> Constant t
         assignNewValue var oldVal val' assign' = withExprConstraints var
-                                               $ maybe oldVal (Val . fromConst . evalVal val') (assignedExpr var assign')
+                                               $ maybe oldVal (evalVal val') (assignedExpr var assign')
     move (IntrpState _ stateValuation) _ Nothing l2 = BM.ordReturn (IntrpState l2 stateValuation) -- TODO check if this is correct
 buildGateValuation :: [Some Variable] -> [Some Constant] -> Valuation
 --buildGateValuation gateVars gateVals = List.foldr (\(gateVar,gateVal) m -> insertIntoValuation gateVar gateVal m) (Map.empty) (zip gateVars gateVals)
                                               -------------- TODO: this unsafeCoerce should be replaced by a check, which means we need some type tag in Val
 buildGateValuation gateVars gateVals = assignValues $ (\(Some gateVar, Some gateVal) m -> insertIntoValuation gateVar (unsafeCoerce gateVal) m) <$> zip gateVars gateVals
-evalVal :: (ConstType t) => Valuation -> Expr t -> Constant t
+evalVal :: Valuation -> Expr t -> Constant t
 evalVal valuation e = case eval $ substConst valuation e of
-    Right v -> toConst v
+    Right v -> withExprConstraints e $ Constant v
     Left m -> error $ "evalVal: " ++ m
 evalBool :: Valuation -> Expr Bool -> Bool
 evalBool valuation = fromConst . evalVal valuation
@@ -553,10 +561,12 @@ instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInte
 --------------------
 instance (Ord i, Ord o) => IOTransitionSemantics loc (IntrpState loc) (IOSymInteract i o) STStdest (IOSuspGateValue i o) where
     -- TODO this takeTransition only detects plain 'forbidden', not if hidden in e.g. symbolic locations
-    -- TODO do something with the values (now "_"), even if just throwin an exception if non-empty
-    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) _) m = do
+    -- TODO I don't understand the above comment; nothing here is detecting any forbiddens (same goes for the other places with this exact comment)
+    ioTakeTransition (IntrpState loc stateVal) alph (GateValue (Out Quiescence) vs) m
+     | null vs = do
         qui <- hasSymbolicQuiescence stateVal (Map.fromSet m alph)
         return $ LocationMove $ if qui then BM.ordReturn loc else forbidden
+     | otherwise = error $ "Quiescence transition with values encountered: " <> show vs
     ioTakeTransition q alph act m = return $ takeTransition q alph (fromSuspended <$> act) m
 
 hasSymbolicQuiescence :: (BoundedMonad m, BooleanConfiguration m) => Valuation -> Map (IOSymInteract i o) (m (STStdest, loc)) -> IO Bool
@@ -659,7 +669,7 @@ prettyPrintFrom aut fromLocs = "initial location configuration: " ++ printInitia
     printTransitionsFrom q = List.intercalate "\n" (printTransition q <$> Map.toList (transRel aut q))
     printTransition q (t, mt) = show q ++ "  ――" ++ show t ++ "⟶  " ++ show mt
 
-prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m) => AutIntrpr m loc i o foo -> String
+prettyPrintIntrp :: (Show (m (tdest, loc)), Show (m loc), Show loc, Show (m q), Show t, Ord loc, Foldable m, Foo foo q t tdest act loc i o) => AutIntrpr m loc i o foo -> String
 prettyPrintIntrp intrp = "current state configuration: " ++ printStateConf ++ "\n" ++ printAut
     where
     printStateConf = show $ stateConf intrp
@@ -672,7 +682,7 @@ sanityCheckLTS = sanityCheckInternal isInput
 sanityCheckSTS :: (Show loc, Show i, Show o, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m, T foo i o ~ IOSymInteract i o, tdest ~ Tdest foo)
             => AutIntrpr m loc i o foo -> Bool
 sanityCheckSTS = sanityCheckInternal isInputInteract
-sanityCheckInternal :: (Show loc, Show t, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m)
+sanityCheckInternal :: (Show loc, Show t, Show (m (tdest, loc)), BM.BoundedConfiguration m, Ord loc, Foldable m, tdest ~ Tdest foo, t ~ T foo i o)
             => (t -> Bool) -> AutIntrpr m loc i o foo -> Bool
 sanityCheckInternal isIn intrpr = noInputToForbidden && noOutputToUnderspecified
   where

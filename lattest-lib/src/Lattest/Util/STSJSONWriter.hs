@@ -23,10 +23,11 @@ import Lattest.Model.Alphabet (SymInteract (..), IOAct, isOutputInteract, isInpu
 import Lattest.Model.Automaton (Valuation, AutSyntax (..), STStdest (..))
 import Lattest.Model.BoundedMonad
 import Lattest.Model.StandardAutomata (IOSTS, allLocations)
-import Lattest.Model.Symbolic.Expr (Variable (..), Val, Type (..), ExprType (..), VarModel, ExprView(..), enumIndex)
+import Lattest.Model.Symbolic.Expr (Variable (..), Type (..), ExprType (..), VarModel, ExprView(..), enumIndex, Constant (..))
 import Lattest.Model.Symbolic.Internal.ExprDefs (Expr(..))
-import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), Val (..), VarModel (..))
+import Lattest.Model.Symbolic.Internal.ExprImpls (Valuation(..), VarModel (..), sAnd)
 import Lattest.SMT (RCSet)
+import Lattest.Util.PrettyExpr (prettyExpr)
 import qualified Data.Aeson as JSON
 import qualified Data.Aeson.KeyMap as JSON
 import qualified Data.ByteString.Lazy as BSL
@@ -58,8 +59,8 @@ initValue valuation = JSON.toJSON m
     m :: Map.Map String JSON.Value
     m = Map.fromList $ map (\(var :=> val) -> (varName var, JSON.toJSON val)) $ DMap.assocs $ runValuation valuation
 
-instance JSON.ToJSON (Val a) where
-  toJSON (Val a) = valueToJSON (typeOf a) a
+instance JSON.ToJSON (Constant a) where
+  toJSON (Constant a) = valueToJSON (typeOf a) a
 
 -- | Enums are written as their position in the original range, also when nested in arrays or structures.
 valueToJSON :: Type a -> a -> JSON.Value
@@ -80,7 +81,6 @@ instance Has JSON.ToJSON Type where
     CharType -> k
     UnitType -> k
     ListType tp -> has @JSON.ToJSON tp k
-    SetType tp -> has @JSON.ToJSON tp k
     SumType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
     TupleType a b -> has @JSON.ToJSON a $ has @JSON.ToJSON b k
 
@@ -93,9 +93,12 @@ isEmptySwitch :: Switch -> Bool
 isEmptySwitch (Switch _ act gal) =
     (isForbidden gal && isOutputInteract act) || (isUnderspecified gal && isInputInteract act)
 
--- | Given ID, STS, the names of guards and assignments, and the initial valuation, make a JSON
-stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Map.Map String (Some Expr) -> Valuation -> JSON.Value
-stsToJSON sid sts guardmap assmap enums valuation =
+-- | Given ID, STS, the names of guards and assignments, the enums, the names of the fields of the structures (as given by
+-- the parser), and the initial valuation, make a JSON.
+-- A part of a guard that is not in the given guard map is named after its text ('prettyExpr'), so the file can not be
+-- loaded again.
+stsToJSON :: (Ord loc, Show loc) => String -> IOSTS FreeLattice loc String String -> Map.Map (Expr Bool) String -> Map.Map VarModel String -> Map.Map String (Some Expr) -> Map.Map (Some Type, [Bool]) String -> Valuation -> JSON.Value
+stsToJSON sid sts guardmap assmap enums fields valuation =
     object
         [ "id" .= sid
         , "initial_location" .= initLocationJSON locIds (initConf sts)
@@ -115,8 +118,13 @@ stsToJSON sid sts guardmap assmap enums valuation =
     locIds = assignLocationIds locs
     -- alph = alphabet sts
     switches = Set.toList $ Set.unions $ Set.map (\l -> Set.fromList $ map (l,) $ Map.toList $ transRel sts l) locs
-    switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (getGuard g guardmap, getassignment a)) (locIds Map.!) <#> ml)) switches
+    switches' = map (\(l,(act, ml)) -> Switch (locIds Map.! l) act (bimap (\(STSLoc (g,a)) -> (guardNames g, getassignment a)) (locIds Map.!) <#> ml)) switches
     switches'' = filter (not . isEmptySwitch) switches'
+
+    -- the conjuncts of a guard that are not in the guard map are named after their text
+    guardNames g
+      | Just nm <- guardmap Map.!? g = [nm]
+      | otherwise = let (nms, rest) = getGuard (sAnd (Set.fromList (conjuncts g))) guardmap in nms ++ map (prettyExpr enums fields) rest
     -- ws = buildSwitches locIds sts locs
 
     -- The assignment may be the union of several assignments
@@ -145,13 +153,23 @@ instance JSON.ToJSON Switch where
       ]
    | Right (Set.toList -> gals) <- asConjunction guardassignmentloc = JSON.toJSON $ map (Switch loc act . atom) gals
 
+-- | The conjuncts of a guard. An MC/DC row on a list is written as @if c then g else False@, which is the conjunction
+-- of @c@ and @g@.
+conjuncts :: Expr Bool -> [Expr Bool]
+conjuncts g = case view g of
+  And gs                -> concatMap (conjuncts . Expr) (Set.toList gs)
+  Ite c t (Const False) -> conjuncts (Expr c) ++ conjuncts (Expr t)
+  _                     -> [g]
+
 -- The guard may be a conjunction of guards in the map, and the guards in the map may also be conjunctions
 -- So we're looking for a subset of the guards in the map, such that their union is exactly this guard
 -- We fold over the map, taking any guards we're allowed to that make progress.
-getGuard :: Expr Bool -> Map.Map (Expr Bool) String -> [String]
+-- The result is the names of these guards, and the conjuncts of the guard that are not in the map.
+getGuard :: Expr Bool -> Map.Map (Expr Bool) String -> ([String], [Expr Bool])
 getGuard g guardmap
-  | Just nm <- guardmap Map.!? g = [nm]
-  | And gs <- view g = (\(req,_,nms) -> if Set.null req then nms else error ("couldn't find guard" ++ show g)) $ foldr combine (gs, mempty, []) $ Map.toList guardmap
+  | Just nm <- guardmap Map.!? g = ([nm], [])
+  | And gs <- view g = (\(req,_,nms) -> (nms, map Expr (Set.toList req))) $ foldr combine (gs, mempty, []) $ Map.toList guardmap
+  | otherwise = ([], [g])
     where
       combine (view -> x,nm) (required, allowed, nms)
         | x `elem` required = (Set.delete x required, Set.insert x allowed, nm:nms)
@@ -159,7 +177,6 @@ getGuard g guardmap
         , all (`elem` Set.union required allowed) xs
         , any (`elem` required) xs = (Set.difference required xs, Set.union allowed xs, nm:nms)
         | otherwise = (required, allowed, nms) -- skipping this guard
-getGuard _ _ = error "couldn't find guard"
 
 -- for params
 instance JSON.ToJSON (Some Type) where
@@ -167,12 +184,14 @@ instance JSON.ToJSON (Some Type) where
     IntType -> "int"
     BoolType -> "bool"
     FloatType -> "float"
+    RationalType -> "rational"
+    RealType -> "real"
     CharType -> "char"
     UnitType -> "()"
     ListType CharType -> "string"
     ListType _ -> "array"
     TupleType _ _ -> "structure"
-    _ -> error "todo: serialize sets and sumtypes"
+    SumType _ _ -> error "not (yet) implemented: toJson for sum types"
     )
     where
       addFields = case tp of
@@ -191,9 +210,10 @@ stsToJSONFile :: (Ord loc, Show loc)
               -> Map.Map (Expr Bool) String
               -> Map.Map VarModel String
               -> Map.Map String (Some Expr)
+              -> Map.Map (Some Type, [Bool]) String
               -> Valuation
               -> IO ()
-stsToJSONFile path sid sts gs as enums valuation = BSL.writeFile path (JSON.encode (stsToJSON sid sts gs as enums valuation))
+stsToJSONFile path sid sts gs as enums fields valuation = BSL.writeFile path (JSON.encode (stsToJSON sid sts gs as enums fields valuation))
 
 -- | Write a list of STSs to a single file containing a JSON array.
 stsListToJSONFile :: (Ord loc, Show loc)
@@ -202,5 +222,6 @@ stsListToJSONFile :: (Ord loc, Show loc)
                   -> Map.Map (Expr Bool) String
                   -> Map.Map VarModel String
                   -> Map.Map String (Some Expr)
+                  -> Map.Map (Some Type, [Bool]) String
                   -> IO ()
-stsListToJSONFile path stss gs as enums = BSL.writeFile path (JSON.encode [ stsToJSON sid sts gs as enums valuation | (sid, sts, valuation) <- stss ])
+stsListToJSONFile path stss gs as enums fields = BSL.writeFile path (JSON.encode [ stsToJSON sid sts gs as enums fields valuation | (sid, sts, valuation) <- stss ])
